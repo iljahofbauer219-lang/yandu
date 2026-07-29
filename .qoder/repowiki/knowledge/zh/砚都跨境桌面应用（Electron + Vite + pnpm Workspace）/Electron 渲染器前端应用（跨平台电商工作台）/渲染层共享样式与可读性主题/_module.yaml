@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: renderer_ui/shared_styles
+title: 渲染层共享样式与可读性主题
+scope:
+    - src/renderer/styles.css
+    - src/renderer/image-studio.css
+    - src/renderer/compliance*.css
+    - src/renderer/ebay-acceptance-readable.css
+    - src/renderer/ui-readability.css
+source_files: []
+depends_on: []
+related_to: []

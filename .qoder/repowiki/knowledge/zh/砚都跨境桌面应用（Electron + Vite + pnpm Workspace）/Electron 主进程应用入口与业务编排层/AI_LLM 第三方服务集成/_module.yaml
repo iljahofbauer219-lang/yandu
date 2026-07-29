@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: main_process/ai_llm_services
+title: AI/LLM 第三方服务集成
+scope:
+    - src/main/services/BailianImageService.ts
+    - src/main/services/BailianTranslationService.ts
+    - src/main/services/DeepSeekCommandService.ts
+    - src/main/services/RealShiftService.ts
+source_files: []
+depends_on: []
+related_to: []

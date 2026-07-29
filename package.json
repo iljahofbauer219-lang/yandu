@@ -1,0 +1,31 @@
+{
+  "name": "cross-border-sourcing-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/main/main/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite --port 5173 --strictPort\" \"tsc -p tsconfig.main.json --watch\" \"wait-on tcp:5173 file:dist/main/main/main.js && VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
+    "build": "vite build && tsc -p tsconfig.main.json",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit",
+    "start": "electron .",
+    "desktop": "pnpm build && pnpm start"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@larksuiteoapi/node-sdk": "^1.70.0",
+    "@vitejs/plugin-react": "latest",
+    "concurrently": "latest",
+    "electron": "43.1.0",
+    "iconv-lite": "^0.7.3",
+    "react": "latest",
+    "react-dom": "latest",
+    "typescript": "latest",
+    "vite": "8.1.4",
+    "wait-on": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest"
+  }
+}

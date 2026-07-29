@@ -1,0 +1,369 @@
+# UI组件库与样式系统
+
+<cite>
+**本文引用的文件**   
+- [package.json](file://package.json)
+- [vite.config.ts](file://vite.config.ts)
+- [src/renderer/main.tsx](file://src/renderer/main.tsx)
+- [src/renderer/App.tsx](file://src/renderer/App.tsx)
+- [src/renderer/styles.css](file://src/renderer/styles.css)
+- [src/renderer/compliance-gate.css](file://src/renderer/compliance-gate.css)
+- [src/renderer/compliance-phase3.css](file://src/renderer/compliance-phase3.css)
+- [src/renderer/compliance-stage8.css](file://src/renderer/compliance-stage8.css)
+- [src/renderer/compliance-v2-review.css](file://src/renderer/compliance-v2-review.css)
+- [src/renderer/ebay-acceptance-readable.css](file://src/renderer/ebay-acceptance-readable.css)
+- [src/renderer/ebay-collection.css](file://src/renderer/ebay-collection.css)
+- [src/renderer/ebay-local-listing-pricing.css](file://src/renderer/ebay-local-listing-pricing.css)
+- [src/renderer/ebay-local-listing-validation.css](file://src/renderer/ebay-local-listing-validation.css)
+- [src/renderer/ebay-video-studio.css](file://src/renderer/ebay-video-studio.css)
+- [src/renderer/image-studio.css](file://src/renderer/image-studio.css)
+- [src/renderer/ui-readability.css](file://src/renderer/ui-readability.css)
+- [browser-extension/content-script.css](file://browser-extension/content-script.css)
+- [browser-extension/popup.css](file://browser-extension/popup.css)
+</cite>
+
+## 目录
+1. [简介](#简介)
+2. [项目结构](#项目结构)
+3. [核心组件](#核心组件)
+4. [架构总览](#架构总览)
+5. [详细组件分析](#详细组件分析)
+6. [依赖分析](#依赖分析)
+7. [性能考虑](#性能考虑)
+8. [故障排查指南](#故障排查指南)
+9. [结论](#结论)
+10. [附录](#附录)
+
+## 简介
+本文件为砚都跨境项目的UI组件库与样式系统提供系统化文档，覆盖CSS架构设计、样式组织规范、主题系统与变量管理、响应式与移动端适配、跨浏览器兼容策略、可复用组件设计原则与命名约定、无障碍访问（a11y）、国际化（i18n）适配、样式测试策略以及使用示例与设计规范。目标是帮助开发者快速理解并高效扩展该项目的样式体系与组件库。
+
+## 项目结构
+本项目采用Electron + Vite的前端工程化方案，样式资源集中在渲染进程与浏览器插件两个子系统中：
+- 渲染进程样式位于 src/renderer，包含全局样式、业务模块样式与可读性增强样式。
+- 浏览器插件样式位于 browser-extension，包含内容脚本与弹出窗口的样式。
+
+```mermaid
+graph TB
+subgraph "渲染进程"
+R_main["main.tsx"]
+R_app["App.tsx"]
+R_styles["styles.css"]
+R_readability["ui-readability.css"]
+R_compliance_gate["compliance-gate.css"]
+R_compliance_phase3["compliance-phase3.css"]
+R_compliance_stage8["compliance-stage8.css"]
+R_compliance_v2["compliance-v2-review.css"]
+R_ebay_accept["ebay-acceptance-readable.css"]
+R_ebay_coll["ebay-collection.css"]
+R_ebay_local_price["ebay-local-listing-pricing.css"]
+R_ebay_local_val["ebay-local-listing-validation.css"]
+R_ebay_video["ebay-video-studio.css"]
+R_image_studio["image-studio.css"]
+end
+subgraph "浏览器插件"
+B_content["content-script.css"]
+B_popup["popup.css"]
+end
+R_main --> R_app
+R_main --> R_styles
+R_app --> R_readability
+R_app --> R_compliance_gate
+R_app --> R_compliance_phase3
+R_app --> R_compliance_stage8
+R_app --> R_compliance_v2
+R_app --> R_ebay_accept
+R_app --> R_ebay_coll
+R_app --> R_ebay_local_price
+R_app --> R_ebay_local_val
+R_app --> R_ebay_video
+R_app --> R_image_studio
+B_content -.-> R_styles
+B_popup -.-> R_styles
+```
+
+图表来源
+- [src/renderer/main.tsx](file://src/renderer/main.tsx)
+- [src/renderer/App.tsx](file://src/renderer/App.tsx)
+- [src/renderer/styles.css](file://src/renderer/styles.css)
+- [browser-extension/content-script.css](file://browser-extension/content-script.css)
+- [browser-extension/popup.css](file://browser-extension/popup.css)
+
+章节来源
+- [package.json](file://package.json)
+- [vite.config.ts](file://vite.config.ts)
+- [src/renderer/main.tsx](file://src/renderer/main.tsx)
+- [src/renderer/App.tsx](file://src/renderer/App.tsx)
+
+## 核心组件
+基于仓库中的样式文件，可将UI组件库划分为以下核心样式域：
+- 全局基础样式与主题变量：styles.css
+- 可读性与无障碍增强：ui-readability.css
+- 合规审查相关样式：compliance-gate.css、compliance-phase3.css、compliance-stage8.css、compliance-v2-review.css
+- eBay业务模块样式：ebay-acceptance-readable.css、ebay-collection.css、ebay-local-listing-pricing.css、ebay-local-listing-validation.css、ebay-video-studio.css
+- 图像工作室样式：image-studio.css
+- 浏览器插件样式：content-script.css、popup.css
+
+这些样式域通过入口文件按需加载，形成“全局基础 + 业务模块”的模块化组合。
+
+章节来源
+- [src/renderer/styles.css](file://src/renderer/styles.css)
+- [src/renderer/ui-readability.css](file://src/renderer/ui-readability.css)
+- [src/renderer/compliance-gate.css](file://src/renderer/compliance-gate.css)
+- [src/renderer/compliance-phase3.css](file://src/renderer/compliance-phase3.css)
+- [src/renderer/compliance-stage8.css](file://src/renderer/compliance-stage8.css)
+- [src/renderer/compliance-v2-review.css](file://src/renderer/compliance-v2-review.css)
+- [src/renderer/ebay-acceptance-readable.css](file://src/renderer/ebay-acceptance-readable.css)
+- [src/renderer/ebay-collection.css](file://src/renderer/ebay-collection.css)
+- [src/renderer/ebay-local-listing-pricing.css](file://src/renderer/ebay-local-listing-pricing.css)
+- [src/renderer/ebay-local-listing-validation.css](file://src/renderer/ebay-local-listing-validation.css)
+- [src/renderer/ebay-video-studio.css](file://src/renderer/ebay-video-studio.css)
+- [src/renderer/image-studio.css](file://src/renderer/image-studio.css)
+- [browser-extension/content-script.css](file://browser-extension/content-script.css)
+- [browser-extension/popup.css](file://browser-extension/popup.css)
+
+## 架构总览
+整体样式架构遵循“分层+分域”的组织方式：
+- 基础层：全局变量、重置、排版、颜色、间距等基础样式。
+- 主题层：主题变量、暗色模式、品牌色、语义色等。
+- 组件层：可复用UI组件样式（按钮、表单、卡片、表格、弹窗等）。
+- 业务层：eBay相关页面与功能模块的样式。
+- 增强层：可读性、无障碍、打印与导出优化。
+- 插件层：浏览器插件的内容脚本与弹出窗口样式。
+
+```mermaid
+flowchart TD
+A["入口 main.tsx"] --> B["应用 App.tsx"]
+B --> C["全局样式 styles.css"]
+B --> D["可读性 ui-readability.css"]
+B --> E["合规样式 compliance-*.css"]
+B --> F["eBay样式 ebay-*.css"]
+B --> G["图像工作室 image-studio.css"]
+H["浏览器插件 content-script.css"] -.-> C
+I["浏览器插件 popup.css"] -.-> C
+```
+
+图表来源
+- [src/renderer/main.tsx](file://src/renderer/main.tsx)
+- [src/renderer/App.tsx](file://src/renderer/App.tsx)
+- [src/renderer/styles.css](file://src/renderer/styles.css)
+- [src/renderer/ui-readability.css](file://src/renderer/ui-readability.css)
+- [src/renderer/compliance-gate.css](file://src/renderer/compliance-gate.css)
+- [src/renderer/ebay-collection.css](file://src/renderer/ebay-collection.css)
+- [browser-extension/content-script.css](file://browser-extension/content-script.css)
+- [browser-extension/popup.css](file://browser-extension/popup.css)
+
+## 详细组件分析
+
+### 全局样式与主题系统
+- 目标：统一视觉语言，集中管理颜色、字体、间距、阴影、圆角等设计令牌。
+- 建议实现：
+  - 使用CSS自定义属性定义主题变量（如颜色、字号、行高、间距、断点）。
+  - 提供明/暗主题切换能力，通过根节点类名或数据属性切换变量值。
+  - 将基础重置与排版规则置于全局样式中，确保一致性。
+- 最佳实践：
+  - 变量命名遵循语义化（如 --color-primary、--spacing-md、--font-size-base）。
+  - 避免在组件内硬编码具体数值，优先引用变量。
+  - 对关键断点进行集中管理，便于响应式调整。
+
+章节来源
+- [src/renderer/styles.css](file://src/renderer/styles.css)
+
+### 可读性与无障碍增强
+- 目标：提升文本可读性、对比度与键盘导航体验，满足WCAG要求。
+- 建议实现：
+  - 设置合适的行高、字重、字符间距与段落间距。
+  - 提供焦点可见样式与键盘操作反馈。
+  - 为屏幕阅读器提供语义化标签与ARIA属性。
+- 最佳实践：
+  - 使用语义HTML元素（button、nav、main、section等）。
+  - 避免仅用颜色传递信息，结合图标与文字说明。
+  - 提供跳过导航链接与清晰的标题层级。
+
+章节来源
+- [src/renderer/ui-readability.css](file://src/renderer/ui-readability.css)
+
+### 合规审查样式域
+- 目标：为合规检查流程提供一致的界面与状态展示。
+- 涉及文件：
+  - compliance-gate.css
+  - compliance-phase3.css
+  - compliance-stage8.css
+  - compliance-v2-review.css
+- 建议实现：
+  - 使用统一的步骤指示器、状态徽章与错误提示样式。
+  - 针对不同阶段提供差异化布局与信息密度。
+  - 保持与全局主题一致的颜色与交互反馈。
+
+章节来源
+- [src/renderer/compliance-gate.css](file://src/renderer/compliance-gate.css)
+- [src/renderer/compliance-phase3.css](file://src/renderer/compliance-phase3.css)
+- [src/renderer/compliance-stage8.css](file://src/renderer/compliance-stage8.css)
+- [src/renderer/compliance-v2-review.css](file://src/renderer/compliance-v2-review.css)
+
+### eBay业务模块样式
+- 目标：为eBay相关功能提供专用样式，保证业务场景下的可用性与一致性。
+- 涉及文件：
+  - ebay-acceptance-readable.css
+  - ebay-collection.css
+  - ebay-local-listing-pricing.css
+  - ebay-local-listing-validation.css
+  - ebay-video-studio.css
+- 建议实现：
+  - 列表与表格样式需支持排序、筛选与分页。
+  - 表单校验反馈清晰，错误定位准确。
+  - 视频工作室提供播放器控件与编辑面板的统一样式。
+
+章节来源
+- [src/renderer/ebay-acceptance-readable.css](file://src/renderer/ebay-acceptance-readable.css)
+- [src/renderer/ebay-collection.css](file://src/renderer/ebay-collection.css)
+- [src/renderer/ebay-local-listing-pricing.css](file://src/renderer/ebay-local-listing-pricing.css)
+- [src/renderer/ebay-local-listing-validation.css](file://src/renderer/ebay-local-listing-validation.css)
+- [src/renderer/ebay-video-studio.css](file://src/renderer/ebay-video-studio.css)
+
+### 图像工作室样式
+- 目标：为图像处理与编辑功能提供直观的操作界面。
+- 涉及文件：image-studio.css
+- 建议实现：
+  - 画布区域自适应缩放与拖拽。
+  - 工具栏与图层面板布局合理，操作反馈及时。
+  - 预览与导出流程的样式一致性。
+
+章节来源
+- [src/renderer/image-studio.css](file://src/renderer/image-studio.css)
+
+### 浏览器插件样式
+- 目标：为浏览器插件的内容脚本与弹出窗口提供独立且一致的样式。
+- 涉及文件：
+  - content-script.css
+  - popup.css
+- 建议实现：
+  - 内容脚本样式隔离，避免与宿主页面冲突。
+  - 弹出窗口尺寸自适应，信息层次清晰。
+  - 与主应用主题保持一致的品牌与交互风格。
+
+章节来源
+- [browser-extension/content-script.css](file://browser-extension/content-script.css)
+- [browser-extension/popup.css](file://browser-extension/popup.css)
+
+## 依赖分析
+样式依赖关系由入口文件控制加载顺序与范围，确保基础样式先于业务样式加载，避免样式覆盖问题。
+
+```mermaid
+sequenceDiagram
+participant M as "main.tsx"
+participant A as "App.tsx"
+participant S as "styles.css"
+participant U as "ui-readability.css"
+participant C as "compliance-*.css"
+participant E as "ebay-*.css"
+participant I as "image-studio.css"
+M->>A : 初始化应用
+A->>S : 加载全局样式
+A->>U : 加载可读性增强
+A->>C : 加载合规样式
+A->>E : 加载eBay业务样式
+A->>I : 加载图像工作室样式
+```
+
+图表来源
+- [src/renderer/main.tsx](file://src/renderer/main.tsx)
+- [src/renderer/App.tsx](file://src/renderer/App.tsx)
+- [src/renderer/styles.css](file://src/renderer/styles.css)
+- [src/renderer/ui-readability.css](file://src/renderer/ui-readability.css)
+- [src/renderer/compliance-gate.css](file://src/renderer/compliance-gate.css)
+- [src/renderer/ebay-collection.css](file://src/renderer/ebay-collection.css)
+- [src/renderer/image-studio.css](file://src/renderer/image-studio.css)
+
+章节来源
+- [src/renderer/main.tsx](file://src/renderer/main.tsx)
+- [src/renderer/App.tsx](file://src/renderer/App.tsx)
+
+## 性能考虑
+- 样式拆分与按需加载：将全局、组件与业务样式分离，减少首屏体积。
+- CSS变量与主题切换：通过变量切换避免重复样式计算。
+- 选择器优化：避免深层嵌套与复杂选择器，提升渲染性能。
+- 媒体查询与断点：集中管理断点，减少重复代码。
+- 插件样式隔离：内容脚本样式尽量局部作用域，避免全局污染。
+
+[本节为通用指导，不直接分析具体文件]
+
+## 故障排查指南
+- 样式覆盖问题：检查加载顺序，确保基础样式先于业务样式加载。
+- 主题切换失效：确认根节点类名或数据属性是否正确切换。
+- 插件样式冲突：检查内容脚本样式是否被宿主页面覆盖，必要时增加作用域限定。
+- 可读性问题：核对对比度、字体大小与行高是否符合无障碍标准。
+- 响应式异常：检查媒体查询断点与容器宽度限制。
+
+章节来源
+- [src/renderer/styles.css](file://src/renderer/styles.css)
+- [src/renderer/ui-readability.css](file://src/renderer/ui-readability.css)
+- [browser-extension/content-script.css](file://browser-extension/content-script.css)
+- [browser-extension/popup.css](file://browser-extension/popup.css)
+
+## 结论
+本样式系统以分层与分域为核心，结合主题变量与模块化加载，实现了可扩展、易维护的UI组件库基础。通过可读性与无障碍增强、响应式设计与插件样式隔离，保障了多端与多环境的用户体验。建议在后续迭代中持续完善组件库文档与测试策略，进一步提升开发效率与质量。
+
+[本节为总结性内容，不直接分析具体文件]
+
+## 附录
+
+### 样式变量管理建议
+- 变量分类：颜色、字体、间距、阴影、圆角、断点、动画时长等。
+- 命名规范：语义化前缀（如 --color-、--space-、--radius-）。
+- 主题切换：通过根节点类名或数据属性切换变量值。
+- 版本管理：在构建产物中保留变量映射，便于调试与回溯。
+
+[本节为通用指导，不直接分析具体文件]
+
+### 响应式设计策略
+- 移动优先：从移动端布局出发，逐步扩展到平板与桌面。
+- 断点管理：集中定义断点，避免碎片化。
+- 弹性布局：使用Flexbox与Grid，提高布局灵活性。
+- 图片与媒体：根据视口与设备像素比进行适配。
+
+[本节为通用指导，不直接分析具体文件]
+
+### 跨浏览器兼容性处理
+- 特性检测：使用现代CSS时提供降级方案。
+- 前缀与Polyfill：按需添加厂商前缀与必要Polyfill。
+- 插件环境：注意Electron与浏览器内核差异，针对性适配。
+
+[本节为通用指导，不直接分析具体文件]
+
+### 可复用组件设计原则
+- 单一职责：每个组件聚焦一个功能。
+- 配置化：通过属性与变量控制外观与行为。
+- 可组合：组件之间松耦合，易于拼装。
+- 可测试：提供单元测试与视觉回归测试用例。
+
+[本节为通用指导，不直接分析具体文件]
+
+### 命名约定与最佳实践
+- 类名前缀：按模块或组件划分前缀，避免冲突。
+- BEM方法：块-元素-修饰符，提升可读性。
+- 语义化：类名反映用途而非样式细节。
+- 注释规范：关键样式添加说明，便于协作与维护。
+
+[本节为通用指导，不直接分析具体文件]
+
+### 国际化（i18n）适配
+- 文本外置：所有用户可见文本通过i18n键值管理。
+- 布局适配：考虑不同语言长度变化对布局的影响。
+- 日期与数字：根据区域设置格式化显示。
+
+[本节为通用指导，不直接分析具体文件]
+
+### 样式测试策略
+- 单元与快照：对组件样式输出进行快照测试。
+- 视觉回归：使用截图对比工具检测样式变更。
+- 无障碍测试：自动化扫描与人工复核结合。
+
+[本节为通用指导，不直接分析具体文件]
+
+### 组件使用示例与设计规范
+- 按钮：提供默认、次要、危险等变体，支持禁用与加载状态。
+- 表单：统一输入框、下拉、校验提示与错误状态。
+- 列表与表格：支持排序、筛选、分页与空态展示。
+- 弹窗与抽屉：统一遮罩、关闭方式与键盘交互。
+
+[本节为通用指导，不直接分析具体文件]

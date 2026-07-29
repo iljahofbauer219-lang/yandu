@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: renderer_ui/app_shell
+title: 渲染器应用外壳与入口
+scope:
+    - src/renderer/App.tsx
+    - src/renderer/main.tsx
+    - src/renderer/index.html
+source_files: []
+depends_on: []
+related_to: []

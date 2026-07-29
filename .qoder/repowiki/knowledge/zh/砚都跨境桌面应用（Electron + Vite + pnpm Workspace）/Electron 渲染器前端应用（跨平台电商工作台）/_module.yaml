@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: renderer_ui
+title: Electron 渲染器前端应用（跨平台电商工作台）
+scope:
+    - src/renderer/
+source_files: []
+depends_on: []
+related_to: []

@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: main_process/ebay_integrations
+title: eBay 集成服务（商品同步、内容优化、图片合规与视频生成）
+scope:
+    - src/main/services/EbayService.ts
+    - src/main/services/EbayOptimizationService.ts
+    - src/main/services/EbayReportService.ts
+    - src/main/services/EbayImageComplianceVisionService.ts
+    - src/main/services/EbayImageGroundingService.ts
+    - src/main/services/EbayVideoService.ts
+source_files: []
+depends_on: []
+related_to: []

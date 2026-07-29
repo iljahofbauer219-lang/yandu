@@ -1,0 +1,6 @@
+.sourcing-collector-button { border:0!important; border-radius:8px!important; color:#fff!important; background:#087a75!important; box-shadow:0 4px 14px rgba(8,122,117,.28)!important; font:600 13px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important; cursor:pointer!important; }
+.sourcing-collector-button:hover { background:#066863!important; }
+.sourcing-collector-button:disabled { cursor:default!important; opacity:.75!important; }
+.sourcing-collector-button.is-collected { background:#647b77!important; }
+.sourcing-collector-floating { position:fixed!important; z-index:2147483647!important; right:22px!important; bottom:24px!important; padding:14px 18px!important; }
+.sourcing-collector-inline { position:relative!important; z-index:10!important; margin:6px!important; padding:9px 12px!important; }

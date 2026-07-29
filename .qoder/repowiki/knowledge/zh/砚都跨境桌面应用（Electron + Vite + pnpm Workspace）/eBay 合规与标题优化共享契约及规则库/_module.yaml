@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: shared_code
+title: eBay 合规与标题优化共享契约及规则库
+scope:
+    - src/shared/
+source_files: []
+depends_on: []
+related_to: []

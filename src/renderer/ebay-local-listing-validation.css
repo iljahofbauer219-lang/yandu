@@ -1,0 +1,22 @@
+.ebay-revise-validation{display:grid;grid-template-columns:1fr auto;gap:14px 24px;align-items:center;margin-bottom:22px;padding:20px 24px;border:1px solid #9bd8cf;border-radius:18px;background:#f4fffd;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.ebay-revise-validation.blocked{border-color:#e3a29f;background:#fff7f6}
+.ebay-revise-validation>div:first-child{display:flex;flex-direction:column;gap:4px}
+.ebay-revise-validation>div:first-child strong{font-size:18px;color:#08766d}
+.ebay-revise-validation.blocked>div:first-child strong{color:#b3261e}
+.ebay-revise-validation>div:first-child span,.ebay-revise-validation>small{font-size:13px;color:#666}
+.ebay-revise-validation>button{height:42px;padding:0 18px;border:1px solid #08766d;border-radius:21px;background:#fff;color:#08766d;font-weight:700}
+.ebay-revise-validation>button:disabled{opacity:.55}
+.ebay-revise-validation details{grid-column:1/-1;border-top:1px solid rgba(0,0,0,.08);padding-top:12px}
+.ebay-revise-validation summary{cursor:pointer;font-weight:700;color:#333}
+.ebay-revise-validation details>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+.ebay-revise-validation details button{display:flex;align-items:flex-start;gap:9px;text-align:left;padding:10px 12px;border:0;border-radius:10px;background:#fff;color:#333}
+.ebay-revise-validation details button b{flex:none;font-size:12px;color:#08766d}
+.ebay-revise-validation details button.error b{color:#b3261e}
+.ebay-revise-validation>small{grid-column:1/-1}
+.ebay-revise-specifics>div label{position:relative;min-width:0}
+.ebay-revise-specifics>div label input{width:100%;padding-right:56px}
+.ebay-revise-specifics>div label small{position:absolute;right:10px;top:50%;transform:translateY(-50%);padding:3px 7px;border-radius:10px;background:#e8f8f6;color:#08766d;font-size:11px;font-weight:700}
+.ebay-revise-specifics select{width:100%;height:50px;padding:0 15px;border:1px solid #999;border-radius:12px;background:#fff;font:inherit;box-sizing:border-box}
+.ebay-revise-specifics>div.required input,.ebay-revise-specifics>div.required select{border-color:#08766d}
+.ebay-revise-footer>span{margin-right:auto;color:#666;font-size:14px}
+@media(max-width:900px){.ebay-revise-validation{grid-template-columns:1fr}.ebay-revise-validation>button{justify-self:start}.ebay-revise-validation details>div{grid-template-columns:1fr}}

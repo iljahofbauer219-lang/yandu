@@ -1,0 +1,17 @@
+.compliance-recall-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.compliance-recall-actions a {
+  padding: 10px 12px;
+  border: 1px solid #cbd7d9;
+  border-radius: 10px;
+  color: #087b79;
+  text-decoration: none;
+  font-weight: 700;
+  white-space: nowrap;
+}

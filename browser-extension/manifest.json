@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "砚都跨境采集助手",
+  "version": "0.1.0",
+  "description": "在大健云仓筛选商品后，手动标记并采集到砚都跨境。",
+  "permissions": ["storage", "activeTab", "tabs"],
+  "host_permissions": [
+    "https://gigab2b.com/*",
+    "https://*.gigab2b.com/*",
+    "http://127.0.0.1:17321/*"
+  ],
+  "background": { "service_worker": "service-worker.js" },
+  "action": { "default_popup": "popup.html", "default_title": "砚都跨境采集助手" },
+  "content_scripts": [{
+    "matches": ["https://gigab2b.com/*", "https://*.gigab2b.com/*"],
+    "js": ["content-script.js"],
+    "css": ["content-script.css"],
+    "run_at": "document_idle"
+  }]
+}

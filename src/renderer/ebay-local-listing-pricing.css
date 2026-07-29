@@ -1,0 +1,65 @@
+.ebay-revise-pricing-form {
+  display: grid;
+  grid-template-columns: minmax(280px, 520px);
+  gap: 28px;
+}
+
+.ebay-revise-pricing-form label {
+  display: grid;
+  gap: 10px;
+}
+
+.ebay-revise-pricing-form label > span {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ebay-revise-format-field select {
+  width: 100%;
+  height: 58px;
+  padding: 0 18px;
+  border: 1px solid #b6b6b6;
+  border-radius: 12px;
+  background: #f7f7f7;
+  color: #777;
+  box-sizing: border-box;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.ebay-revise-price-field > div {
+  display: flex;
+  align-items: center;
+  width: min(380px, 100%);
+  height: 58px;
+  overflow: hidden;
+  border: 1px solid #767676;
+  border-radius: 12px;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.ebay-revise-price-field b {
+  padding-left: 20px;
+  color: #666;
+  font-size: 20px;
+}
+
+.ebay-revise-price-field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 18px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #191919;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.ebay-revise-price-field small {
+  color: #707070;
+  font-size: 13px;
+}

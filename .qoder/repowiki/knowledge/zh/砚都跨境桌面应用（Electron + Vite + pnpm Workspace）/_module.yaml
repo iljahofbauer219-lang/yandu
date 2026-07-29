@@ -1,0 +1,16 @@
+schema_version: 1
+module_path: ""
+title: 砚都跨境桌面应用（Electron + Vite + pnpm Workspace）
+scope:
+    - .gitignore
+    - package.json
+    - pnpm-lock.yaml
+    - pnpm-workspace.yaml
+    - tsconfig.json
+    - tsconfig.main.json
+    - vite.config.ts
+    - .env.example
+    - README.md
+source_files: []
+depends_on: []
+related_to: []

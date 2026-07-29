@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: tools
+title: RealShift 图像真实化工具与 Ark 视频能力验证脚本
+scope:
+    - tools/
+source_files: []
+depends_on: []
+related_to: []

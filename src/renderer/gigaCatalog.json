@@ -1,0 +1,1942 @@
+[
+  {
+    "id": "10013",
+    "name": "家具",
+    "children": [
+      {
+        "id": "10014",
+        "name": "卧室家具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/86d1e4cd4a004d6fb80e173f9877ab87.png",
+            "id": "10015",
+            "name": "床架及底座"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/7b4c4c5e509a4ee78e25686c8e1030a3.png",
+            "id": "10023",
+            "name": "卧室套装"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/e61698a6809a446f9840e1c4450f2de8.png",
+            "id": "10019",
+            "name": "化妆台"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260108/a0055aed864f44fd82076a53de11cef7.png",
+            "id": "11272",
+            "name": "化妆凳和化妆椅"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/5e76d09b6ea44422a09eead68b2431f6.png",
+            "id": "10018",
+            "name": "床头柜"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/8eb7f6a05b6f4929b473347ada1f3c96.png",
+            "id": "10016",
+            "name": "长凳及吧凳"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/9989805323f24252924b95367acda40c.png",
+            "id": "10021",
+            "name": "首饰收纳"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/361da74ec51b4ffdb2a9797c3897d888.png",
+            "id": "10024",
+            "name": "卧室收纳"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/4865c266ddd84feab39d492ba6fcd27c.png",
+            "id": "10025",
+            "name": "衣柜/五斗柜"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/d0b19a383ab14a348b53759c88074388.png",
+            "id": "10112",
+            "name": "床垫"
+          }
+        ]
+      },
+      {
+        "id": "10049",
+        "name": "餐厅家具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/99f02a607d82449f940d0e822836da12.png",
+            "id": "10052",
+            "name": "餐厅厨房套装"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260107/1abb1deaa526427ea28f28e5dda203f6.png",
+            "id": "11271",
+            "name": "吧台桌"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/0022e95fbf934966ad5590f0b47c3efe.png",
+            "id": "10055",
+            "name": "长椅"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/dac68e7f2e4340c5ae000e5df327d78d.png",
+            "id": "10053",
+            "name": "餐桌"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/4e9fec86db3545b687e4ee41a41270f1.png",
+            "id": "10050",
+            "name": "餐厅座椅"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/9263fee2d2b040c597f98a0b6886034b.png",
+            "id": "10054",
+            "name": "餐边柜及餐具柜"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/c691c14a4fe94c408231062d8a52e165.png",
+            "id": "10051",
+            "name": "厨房岛台及推车"
+          }
+        ]
+      },
+      {
+        "id": "10026",
+        "name": "主要起居空间家具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/6deedeb57b754bb48b0483085f223800.png",
+            "id": "10035",
+            "name": "组合沙发"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/4e3df2eae1494237b47b0b5b78a0d161.png",
+            "id": "10027",
+            "name": "沙发"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/b2aea40f7a074518a04068d7f473ecc2.png",
+            "id": "10036",
+            "name": "双人沙发"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/7c98ac74d6d24f059fa48c8414ad10a7.png",
+            "id": "10022",
+            "name": "沙发床"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/a7ca9c06dba74f31bb03cb486c5bd3fe.png",
+            "id": "10040",
+            "name": "脚凳"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/52d8eedd913d40b2bf4f0b8b25467898.png",
+            "id": "10037",
+            "name": "按摩椅及躺椅"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/53b792e2899c444cb6b6efd1bcc6150a.png",
+            "id": "10029",
+            "name": "特色座椅"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/cb57562be97a4db4b4f54803be08c14a.png",
+            "id": "10028",
+            "name": "桌子"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/a475650713be41a8908cd07c007fd01e.png",
+            "id": "10030",
+            "name": "懒人沙发"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/e62d434bb247437e992ad1106b7e2764.png",
+            "id": "10038",
+            "name": "摇椅"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/7f2c6b3a9c194e86bd0976d9a49df962.png",
+            "id": "10031",
+            "name": "电视娱乐家具"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/e30db0d5e5504ae2ab9fa8ea32ae3ca8.png",
+            "id": "10033",
+            "name": "储物长凳"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/a2b1ee9d11d4468495ac03fb8a628411.png",
+            "id": "10032",
+            "name": "室内壁炉及配件"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/bd153c9152004b00811f6726c8407816.png",
+            "id": "10034",
+            "name": "垃圾桶"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/aa2623f1055f4a8d8b0475fa986edd49.png",
+            "id": "10043",
+            "name": "展示架及层架"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/b86559a9eb974fb8b6c00c866edcd971.png",
+            "id": "10039",
+            "name": "储物柜"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/5beb12576d284702b20a05675f917df4.png",
+            "id": "10041",
+            "name": "衣帽架"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20250319/a776944d64d7433086e0ad5566ec34d7.png",
+            "id": "11227",
+            "name": "客厅家具套装"
+          }
+        ]
+      },
+      {
+        "id": "10042",
+        "name": "办公用品",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/b9daf12ac0e84e2fb3c581797ddee245.png",
+            "id": "10047",
+            "name": "办公桌及工作台"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/cc17c564b9ec4c5d8430a319cd1560dd.png",
+            "id": "10045",
+            "name": "办公椅"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/30160010e214439ca8186330c9661750.png",
+            "id": "10046",
+            "name": "文件柜及储物柜"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/e65f69f56ff94a5fb7b62ebf65d48479.png",
+            "id": "10048",
+            "name": "保险箱"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260412/5711fed94e5e48b7a06fb11055e7873d.png",
+            "id": "11282",
+            "name": "桌垫与吸墨垫"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260412/bacbed7df25741dcb3f46167d0d21eb0.png",
+            "id": "11283",
+            "name": "办公椅地毯垫"
+          }
+        ]
+      },
+      {
+        "id": "10057",
+        "name": "游戏娱乐设备",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/1b289b50e24c4fedaabe22e20cdc5aae.png",
+            "id": "10059",
+            "name": "座椅"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/35f89579e1f5484aa51c0fce925bf59c.png",
+            "id": "10058",
+            "name": "游戏桌"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/10e14329df2944a0b0764f3e265cbd89.png",
+            "id": "10060",
+            "name": "按摩床"
+          }
+        ]
+      },
+      {
+        "id": "10056",
+        "name": "青少年儿童家具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Youth,%20Kids%20&%20Baby%20Furniture.png",
+            "id": "10056",
+            "name": "青少年儿童家具"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "10155",
+    "name": "花园与户外",
+    "children": [
+      {
+        "id": "10157",
+        "name": "户外庭院家具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/1270a4b6345f47f2bd547cf1c7f8d386.png",
+            "id": "10159",
+            "name": "庭院家具套装"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/52e6fbea27af49a2a51e38b51f1f18f8.png",
+            "id": "10158",
+            "name": "庭院座椅"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/55ff9544c5bf443a9a723036dea92498.png",
+            "id": "10160",
+            "name": "户外桌"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/e48d4996cb514b4c87245489dc91b25d.png",
+            "id": "10161",
+            "name": "围栏"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240620/afca4691f1be4a97a7d25013a09a7ccf.png",
+            "id": "10931",
+            "name": "甲板箱及庭院储物"
+          }
+        ]
+      },
+      {
+        "id": "10162",
+        "name": "遮阳蓬与凉亭",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20250303/a844c29b294e429eadebb1a9048b9ca8.png",
+            "id": "10163",
+            "name": "遮阳伞/遮阳棚"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260113/b7619e86c30741ec98f6769a34ed1370.png",
+            "id": "11264",
+            "name": "伞支架和底座"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/a3855aa49dd948c593a86fa76e5b9b0d.png",
+            "id": "10164",
+            "name": "车棚"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20250303/b2493fdcfc264e5c8bc12f8193505162.png",
+            "id": "11218",
+            "name": "绿廊"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20250225/2988766fa0dc4c3d836daffeae7f245f.png",
+            "id": "11219",
+            "name": "凉亭"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20250303/20aaf930c0054046a9a4f82b7f9ca117.png",
+            "id": "11220",
+            "name": "遮阳蓬"
+          }
+        ]
+      },
+      {
+        "id": "10165",
+        "name": "户外取暖设备",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Outdoor%20Heating.png",
+            "id": "10165",
+            "name": "户外取暖设备"
+          }
+        ]
+      },
+      {
+        "id": "10928",
+        "name": "储物棚",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Sheds.png",
+            "id": "10928",
+            "name": "储物棚"
+          }
+        ]
+      },
+      {
+        "id": "10947",
+        "name": "帐篷",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Tents.png",
+            "id": "10947",
+            "name": "帐篷"
+          }
+        ]
+      },
+      {
+        "id": "11243",
+        "name": "户外装饰",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Water%20Fountains.png",
+            "id": "10156",
+            "name": "喷泉水景"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20250829/f168c9131a8140fba5af804181d838c5.png",
+            "id": "11245",
+            "name": "雕像与雕塑"
+          }
+        ]
+      },
+      {
+        "id": "11279",
+        "name": "户外烹饪工具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260410/05419c73247f4508ab9899ee01026ffe.png",
+            "id": "11280",
+            "name": "烧烤炉和户外烹饪工具"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260410/80c0abf9b3f4400bb217f6107cf64c3d.png",
+            "id": "11281",
+            "name": "冷藏箱"
+          }
+        ]
+      },
+      {
+        "id": "10167",
+        "name": "园艺用品",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/0f09a67e3cbe454ab9a7a37f24e6afb6.png",
+            "id": "10168",
+            "name": "园艺手推车"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/68cf6a35e64a42edbb2cf22dab06ecfe.png",
+            "id": "10169",
+            "name": "花盆/花槽"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/106f6219fbc6478fb355fb5a4ac7bca3.png",
+            "id": "10170",
+            "name": "花园拱门及棚架"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20250304/03d3de917b3b4b5e9ed0c61e2af0608e.png",
+            "id": "11221",
+            "name": "温室大棚"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20250325/dc4f7d66e4c3436197fb94c775a43309.png",
+            "id": "11229",
+            "name": "花园桥"
+          }
+        ]
+      },
+      {
+        "id": "10171",
+        "name": "泳池设备",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Pools.png",
+            "id": "10171",
+            "name": "泳池设备"
+          }
+        ]
+      },
+      {
+        "id": "10172",
+        "name": "草坪设备",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/b2f210c589524cbcacdbc57990cd2361.png",
+            "id": "10173",
+            "name": "防草布"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240805/8ebd749c44954fbe94f93ec9ca886efb.png",
+            "id": "10937",
+            "name": "草坪打孔机"
+          }
+        ]
+      },
+      {
+        "id": "10175",
+        "name": "配件",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Accessories.png",
+            "id": "10175",
+            "name": "配件"
+          }
+        ]
+      },
+      {
+        "id": "10174",
+        "name": "户外发电机",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Outdoor%20Generators%20&%20Portable%20Power.png",
+            "id": "10174",
+            "name": "户外发电机"
+          }
+        ]
+      },
+      {
+        "id": "11265",
+        "name": "户外清洁与卫生",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260113/081b30d10b9442499633e60d942537d8.png",
+            "id": "11265",
+            "name": "户外清洁与卫生"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "10073",
+    "name": "健身与运动",
+    "children": [
+      {
+        "id": "10074",
+        "name": "健身",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/3dc74334131b4024a98efd0c20741821.png",
+            "id": "10076",
+            "name": "椭圆机"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/65304650e9ab4a34a8d138411589b906.png",
+            "id": "10082",
+            "name": "健身单车"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/889a13d94c8d48ee95491773e065b189.png",
+            "id": "10077",
+            "name": "倒立机"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/31ba6a3884bc4abb93f877d08ca9a8cb.png",
+            "id": "10078",
+            "name": "划船机"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/462c263be04244f786876dcd15022ac4.png",
+            "id": "10080",
+            "name": "踏步机"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/119550d40c164f2f8d20effc0426cf3e.png",
+            "id": "10079",
+            "name": "蹦床"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/d242215e39e94755ba4093d51a60c1c4.png",
+            "id": "10081",
+            "name": "跑步机"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/0150bf4d7c9747189a76a2c23ae10d2b.png",
+            "id": "10075",
+            "name": "震动机"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/d137d037fa1940a287f28c3beccabae1.png",
+            "id": "10083",
+            "name": "钓鱼皮划艇"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/8eaaf1fbe3af4af7ba00cccee9f7fc40.png",
+            "id": "10084",
+            "name": "举重椅"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/5b574f328b994203a497d0bdff619698.png",
+            "id": "10085",
+            "name": "水上运动器材"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/cb1d0f97ba7a4b42b5eab9189399a77d.png",
+            "id": "10086",
+            "name": "杠铃架"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/15fb03326e524f9287f80363699d3863.png",
+            "id": "10087",
+            "name": "其他健身器材"
+          }
+        ]
+      },
+      {
+        "id": "10088",
+        "name": "运动",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/fc3286d9030a443dbbed9b6ccd7263b4.png",
+            "id": "10089",
+            "name": "户外自行车"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/874d5a4bf00f45beb559cafefed23e60.png",
+            "id": "10090",
+            "name": "滑板"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/53217f74d78949aa85223ee16a3d642f.png",
+            "id": "10091",
+            "name": "乒乓球桌"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/afc44d1b2fd5432c8eaff9add798310a.png",
+            "id": "10092",
+            "name": "健身垫"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/a5362204ccbf4e04a5b8e7d57d72341b.png",
+            "id": "10094",
+            "name": "高尔夫推车"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/88c1dd87017643eab8b9e09613bd1456.png",
+            "id": "10095",
+            "name": "高尔夫套装"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/e4d79c0f89ff4ee393394ec6ebe946e1.png",
+            "id": "10097",
+            "name": "冲浪板"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/0d965babf20748708d5b6d1144478a98.png",
+            "id": "10093",
+            "name": "篮球架"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/a38c6041b7d54ee99fb4d19257681497.png",
+            "id": "10098",
+            "name": "滑板车"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/ede727600f7f499b8d0ccf7fce7cff20.png",
+            "id": "10099",
+            "name": "桌上足球台"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/f94d76a6c45241ad94239c227c18293f.png",
+            "id": "10100",
+            "name": "台球桌"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260113/90af5ccbd96549139b9e36d7178779fc.png",
+            "id": "11252",
+            "name": "杆架"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "10137",
+    "name": "卫浴与水龙头",
+    "children": [
+      {
+        "id": "10140",
+        "name": "浴缸",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Bathtubs.png",
+            "id": "10140",
+            "name": "浴缸"
+          }
+        ]
+      },
+      {
+        "id": "10141",
+        "name": "淋浴房",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/9c044232703d4af6b6772a8e22b54e35.png",
+            "id": "10142",
+            "name": "淋浴房"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240929/3b319ef070364cb9a62fd805cb5a043b.png",
+            "id": "10954",
+            "name": "淋浴房四围"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240929/6cf3f0fb7a3143d7838c36b06261c335.png",
+            "id": "10955",
+            "name": "淋浴房底座"
+          }
+        ]
+      },
+      {
+        "id": "10144",
+        "name": "马桶与坐浴盆",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Toilets%20&%20Bidets.png",
+            "id": "10144",
+            "name": "马桶与坐浴盆"
+          }
+        ]
+      },
+      {
+        "id": "11286",
+        "name": "浴室洗手盆",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260428/edc3f577c42e45da99dfddc8842fb82a.png",
+            "id": "11286",
+            "name": "浴室洗手盆"
+          }
+        ]
+      },
+      {
+        "id": "10143",
+        "name": "浴室柜",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Bathroom%20Vanities.png",
+            "id": "10143",
+            "name": "浴室柜"
+          }
+        ]
+      },
+      {
+        "id": "10147",
+        "name": "独立浴缸水龙头",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Freestanding%20Tub%20Faucets.png",
+            "id": "10147",
+            "name": "独立浴缸水龙头"
+          }
+        ]
+      },
+      {
+        "id": "10145",
+        "name": "桑拿房",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Saunas.png",
+            "id": "10145",
+            "name": "桑拿房"
+          }
+        ]
+      },
+      {
+        "id": "10146",
+        "name": "浴室水槽水龙头",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Bathroom%20Sink%20Faucets.png",
+            "id": "10146",
+            "name": "浴室水槽水龙头"
+          }
+        ]
+      },
+      {
+        "id": "10138",
+        "name": "洗衣干衣机",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/f303c428e7434a12b5aec278fe9a2c8a.png",
+            "id": "10139",
+            "name": "烘干机"
+          }
+        ]
+      },
+      {
+        "id": "10148",
+        "name": "浴室收纳",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Bathroom%20Storage.png",
+            "id": "10148",
+            "name": "浴室收纳"
+          }
+        ]
+      },
+      {
+        "id": "10149",
+        "name": "浴室配件",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Bathroom%20Accessories.png",
+            "id": "10149",
+            "name": "浴室配件"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "10120",
+    "name": "厨房用品",
+    "children": [
+      {
+        "id": "10124",
+        "name": "厨房水槽",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Kitchen%20Sinks.png",
+            "id": "10124",
+            "name": "厨房水槽"
+          }
+        ]
+      },
+      {
+        "id": "10127",
+        "name": "厨房水龙头",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Kitchen%20Faucets.png",
+            "id": "10127",
+            "name": "厨房水龙头"
+          }
+        ]
+      },
+      {
+        "id": "10123",
+        "name": "冰箱",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Refrigerators.png",
+            "id": "10123",
+            "name": "冰箱"
+          }
+        ]
+      },
+      {
+        "id": "11251",
+        "name": "绞肉机",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260113/0144e41af4b4439eb633a3aa9a20c9ec.png",
+            "id": "11251",
+            "name": "绞肉机"
+          }
+        ]
+      },
+      {
+        "id": "10125",
+        "name": "碗碟沥水架",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Dish%20Drying%20Racks.png",
+            "id": "10125",
+            "name": "碗碟沥水架"
+          }
+        ]
+      },
+      {
+        "id": "10121",
+        "name": "温控酒柜",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Wine%20Cellars.png",
+            "id": "10121",
+            "name": "温控酒柜"
+          }
+        ]
+      },
+      {
+        "id": "10126",
+        "name": "调料架",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Spice%20Racks.png",
+            "id": "10126",
+            "name": "调料架"
+          }
+        ]
+      },
+      {
+        "id": "10128",
+        "name": "食品消毒机",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Food%20Sanitizer.png",
+            "id": "10128",
+            "name": "食品消毒机"
+          }
+        ]
+      },
+      {
+        "id": "10129",
+        "name": "酒架",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Wine%20Racks.png",
+            "id": "10129",
+            "name": "酒架"
+          }
+        ]
+      },
+      {
+        "id": "10130",
+        "name": "意式咖啡机",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Espresso%20Machines.png",
+            "id": "10130",
+            "name": "意式咖啡机"
+          }
+        ]
+      },
+      {
+        "id": "10135",
+        "name": "厨房电器",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/8fc81681eb05462d8352437dba487a28.png",
+            "id": "10136",
+            "name": "电磁炉/燃气灶"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Ovens.png",
+            "id": "10183",
+            "name": "烤面包机与烤箱"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260506/57a31e55326746c29aab1d534c6ede56.png",
+            "id": "11287",
+            "name": "冰淇淋机"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260506/43c08f3a61de4732b50982b7acd2d32c.png",
+            "id": "11288",
+            "name": "厨师机"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Ice%20Makers.png",
+            "id": "10122",
+            "name": "制冰机"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260514/366183019d46434b92bc215362c47b3d.png",
+            "id": "11292",
+            "name": "榨汁机"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260514/5914e676ee7d4b51b0403a506f0d71db.png",
+            "id": "11293",
+            "name": "搅拌机"
+          }
+        ]
+      },
+      {
+        "id": "10131",
+        "name": "配件",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Accessories.png",
+            "id": "10131",
+            "name": "配件"
+          }
+        ]
+      },
+      {
+        "id": "10932",
+        "name": "置物架",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Baker's%20Racks.png",
+            "id": "10932",
+            "name": "置物架"
+          }
+        ]
+      },
+      {
+        "id": "10133",
+        "name": "通风设备",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/a08adb882f434a7f853e0e32747c3a7e.png",
+            "id": "10134",
+            "name": "抽油烟机"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "10000",
+    "name": "宠物用品",
+    "children": [
+      {
+        "id": "10004",
+        "name": "宠物床与家具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Pet%20Beds%20&%20Furniture.png",
+            "id": "10004",
+            "name": "宠物床与家具"
+          }
+        ]
+      },
+      {
+        "id": "10003",
+        "name": "宠物美容",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Grooming.png",
+            "id": "10003",
+            "name": "宠物美容"
+          }
+        ]
+      },
+      {
+        "id": "10001",
+        "name": "宠物笼舍",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Pens%20&%20Hutches.png",
+            "id": "10001",
+            "name": "宠物笼舍"
+          }
+        ]
+      },
+      {
+        "id": "10002",
+        "name": "猫爬架",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Trees%20&%20Condos.png",
+            "id": "10002",
+            "name": "猫爬架"
+          }
+        ]
+      },
+      {
+        "id": "10934",
+        "name": "宠物推车",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Pet%20Strollers.png",
+            "id": "10934",
+            "name": "宠物推车"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "10005",
+    "name": "玩具",
+    "children": [
+      {
+        "id": "10006",
+        "name": "儿童自行车与骑乘玩具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Kids%20Bikes%20&%20Riding%20Toys.png",
+            "id": "10006",
+            "name": "儿童自行车与骑乘玩具"
+          }
+        ]
+      },
+      {
+        "id": "10007",
+        "name": "摇椅",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Rockers.png",
+            "id": "10007",
+            "name": "摇椅"
+          }
+        ]
+      },
+      {
+        "id": "10008",
+        "name": "秋千组合",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Swing%20Sets.png",
+            "id": "10008",
+            "name": "秋千组合"
+          }
+        ]
+      },
+      {
+        "id": "10009",
+        "name": "户外运动",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Outdoor%20Sports.png",
+            "id": "10009",
+            "name": "户外运动"
+          }
+        ]
+      },
+      {
+        "id": "10010",
+        "name": "儿童厨房玩具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Kids%20Kitchen%20Playsets.png",
+            "id": "10010",
+            "name": "儿童厨房玩具"
+          }
+        ]
+      },
+      {
+        "id": "10011",
+        "name": "儿童滑梯",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Kids%20Slides.png",
+            "id": "10011",
+            "name": "儿童滑梯"
+          }
+        ]
+      },
+      {
+        "id": "10012",
+        "name": "儿童软体游乐设备",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Soft%20Play.png",
+            "id": "10012",
+            "name": "儿童软体游乐设备"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "10064",
+    "name": "汽车配件与运输",
+    "children": [
+      {
+        "id": "10067",
+        "name": "电动代步车",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Mobile%20Scooters.png",
+            "id": "10067",
+            "name": "电动代步车"
+          }
+        ]
+      },
+      {
+        "id": "10065",
+        "name": "零部件",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Parts.png",
+            "id": "10065",
+            "name": "零部件"
+          }
+        ]
+      },
+      {
+        "id": "10068",
+        "name": "绞盘",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Winches.png",
+            "id": "10068",
+            "name": "绞盘"
+          }
+        ]
+      },
+      {
+        "id": "10069",
+        "name": "车顶帐篷",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Car%20Roof%20Tents.png",
+            "id": "10069",
+            "name": "车顶帐篷"
+          }
+        ]
+      },
+      {
+        "id": "10070",
+        "name": "手推车",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Hand%20Trucks%20&%20Dollies.png",
+            "id": "10070",
+            "name": "手推车"
+          }
+        ]
+      },
+      {
+        "id": "10071",
+        "name": "车载冰箱",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Automotive%20Interior%20Coolers.png",
+            "id": "10071",
+            "name": "车载冰箱"
+          }
+        ]
+      },
+      {
+        "id": "10072",
+        "name": "汽车千斤顶",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Car%20Jacks.png",
+            "id": "10072",
+            "name": "汽车千斤顶"
+          }
+        ]
+      },
+      {
+        "id": "11248",
+        "name": "坡道",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260113/7807130a2a394209945559638c02ef54.png",
+            "id": "11248",
+            "name": "坡道"
+          }
+        ]
+      },
+      {
+        "id": "11250",
+        "name": "货物载具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260113/4921f84a7a0443d2a53014e657d1c19b.png",
+            "id": "11250",
+            "name": "货物载具"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "10206",
+    "name": "照明",
+    "children": [
+      {
+        "id": "10207",
+        "name": "餐厅灯具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Dining%20Room%20Lighting.png",
+            "id": "10207",
+            "name": "餐厅灯具"
+          }
+        ],
+        "error": ""
+      },
+      {
+        "id": "10210",
+        "name": "客厅灯具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Living%20Room%20Lighting.png",
+            "id": "10210",
+            "name": "客厅灯具"
+          }
+        ],
+        "error": ""
+      },
+      {
+        "id": "10211",
+        "name": "卧室灯具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Bedroom%20Lighting.png",
+            "id": "10211",
+            "name": "卧室灯具"
+          }
+        ],
+        "error": ""
+      },
+      {
+        "id": "10208",
+        "name": "浴室灯具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Bathroom%20Lighting.png",
+            "id": "10208",
+            "name": "浴室灯具"
+          }
+        ],
+        "error": ""
+      },
+      {
+        "id": "10212",
+        "name": "户外照明灯具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Outdoor%20Lighting.png",
+            "id": "10212",
+            "name": "户外照明灯具"
+          }
+        ],
+        "error": ""
+      },
+      {
+        "id": "10213",
+        "name": "灯具配件",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Lighting%20Accessories.png",
+            "id": "10213",
+            "name": "灯具配件"
+          }
+        ],
+        "error": ""
+      },
+      {
+        "id": "10209",
+        "name": "照明灯具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Lighting%20&%20Lamps.png",
+            "id": "10209",
+            "name": "照明灯具"
+          }
+        ],
+        "error": ""
+      }
+    ]
+  },
+  {
+    "id": "10101",
+    "name": "家居用品与装饰",
+    "children": [
+      {
+        "id": "10102",
+        "name": "圣诞树",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Christmas%20Trees.png",
+            "id": "10102",
+            "name": "圣诞树"
+          }
+        ],
+        "error": ""
+      },
+      {
+        "id": "10109",
+        "name": "墙面装饰",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Wall%20D%C3%A9cor.png",
+            "id": "10109",
+            "name": "墙面装饰"
+          }
+        ],
+        "error": ""
+      },
+      {
+        "id": "10110",
+        "name": "花卉绿植",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Flowers%20&%20Plants.png",
+            "id": "10110",
+            "name": "花卉绿植"
+          }
+        ],
+        "error": ""
+      },
+      {
+        "id": "10108",
+        "name": "地毯",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Rugs.png",
+            "id": "10108",
+            "name": "地毯"
+          }
+        ],
+        "error": ""
+      },
+      {
+        "id": "10106",
+        "name": "时钟",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Clocks.png",
+            "id": "10106",
+            "name": "时钟"
+          }
+        ],
+        "error": ""
+      },
+      {
+        "id": "10103",
+        "name": "镜子",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/5f500b986aea4588a3eb8a4c18935c26.png",
+            "id": "10104",
+            "name": "浴室镜"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/5a99ade84ce94e0aa226148f1325ab20.png",
+            "id": "10105",
+            "name": "全身镜"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240730/0ac0a2c5e3014b34aa4d67f3b4aa6025.png",
+            "id": "10935",
+            "name": "梳妆台镜"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240730/664358616ba94b969753ffb5dd852977.png",
+            "id": "10936",
+            "name": "壁挂镜"
+          }
+        ],
+        "error": ""
+      },
+      {
+        "id": "10107",
+        "name": "配件",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Accessories.png",
+            "id": "10107",
+            "name": "配件"
+          }
+        ],
+        "error": ""
+      },
+      {
+        "id": "10118",
+        "name": "窗帘",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Curtains.png",
+            "id": "10118",
+            "name": "窗帘"
+          }
+        ],
+        "error": ""
+      },
+      {
+        "id": "10111",
+        "name": "床上用品",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/3c01222006584547afdb0368ad666fec.png",
+            "id": "10114",
+            "name": "床品套装"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/44aa2ec1d0004650ab4bbd73b3aa551c.png",
+            "id": "10115",
+            "name": "床单枕套"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260113/aa2020f85bf841afabfeec26ee5379a4.png",
+            "id": "11253",
+            "name": "床垫辅垫"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/3042006e04b54b239e913cb80d680f48.png",
+            "id": "10116",
+            "name": "床垫保护罩"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/3cfb8d527c5e457d8db282e33e0fa79d.png",
+            "id": "10117",
+            "name": "被子"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/b57fe34a35c849c49ab481d638519d87.png",
+            "id": "10113",
+            "name": "毯子及枕头"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260412/a333168070aa484b9601c34c82324a7d.png",
+            "id": "11284",
+            "name": "阅读/电脑枕"
+          }
+        ],
+        "error": ""
+      },
+      {
+        "id": "10119",
+        "name": "隐私屏风",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Privacy%20Screens.png",
+            "id": "10119",
+            "name": "隐私屏风"
+          }
+        ],
+        "error": ""
+      },
+      {
+        "id": "11260",
+        "name": "毛巾梯子置物架",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260113/c57fd57f79744595b6b3fb0f82429b86.png",
+            "id": "11260",
+            "name": "毛巾梯子置物架"
+          }
+        ],
+        "error": ""
+      },
+      {
+        "id": "11294",
+        "name": "花瓶和罐子",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260514/cd91e7313ded4ca0a70915bc4ce8ca1a.png",
+            "id": "11294",
+            "name": "花瓶和罐子"
+          }
+        ],
+        "error": ""
+      }
+    ]
+  },
+  {
+    "id": "10185",
+    "name": "旅行用品",
+    "children": [
+      {
+        "id": "10186",
+        "name": "箱包",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/765b7e43c4b544689133ee7f85c0d4ab.png",
+            "id": "10188",
+            "name": "硬壳行李箱"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/d9620ed3df70445fabdc17f7d27d5b59.png",
+            "id": "10187",
+            "name": "软壳行李箱"
+          }
+        ]
+      },
+      {
+        "id": "10189",
+        "name": "背包",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Backpacks.png",
+            "id": "10189",
+            "name": "背包"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "10176",
+    "name": "家用电器",
+    "children": [
+      {
+        "id": "10180",
+        "name": "家居清洁",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Home%20Cleaning.png",
+            "id": "10180",
+            "name": "家居清洁"
+          }
+        ]
+      },
+      {
+        "id": "10181",
+        "name": "烘干机",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Dryers.png",
+            "id": "10181",
+            "name": "烘干机"
+          }
+        ]
+      },
+      {
+        "id": "10182",
+        "name": "除湿机",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Dehumidifiers.png",
+            "id": "10182",
+            "name": "除湿机"
+          }
+        ]
+      },
+      {
+        "id": "10184",
+        "name": "办公电子设备",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Office%20Electronics.png",
+            "id": "10184",
+            "name": "办公电子设备"
+          }
+        ]
+      },
+      {
+        "id": "10178",
+        "name": "空调",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Air%20Conditioners.png",
+            "id": "10178",
+            "name": "空调"
+          }
+        ]
+      },
+      {
+        "id": "10177",
+        "name": "吸尘清洁设备",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Vacuums%20&%20Floor%20Cleaning%20Machines.png",
+            "id": "10177",
+            "name": "吸尘清洁设备"
+          }
+        ]
+      },
+      {
+        "id": "10179",
+        "name": "风扇",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Fans.png",
+            "id": "10179",
+            "name": "风扇"
+          }
+        ]
+      },
+      {
+        "id": "11269",
+        "name": "家用音响",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20251229/36ec03071ae148869d0001ad9c8e7cbe.png",
+            "id": "11270",
+            "name": "音响系统"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "10192",
+    "name": "工具与工具收纳",
+    "children": [
+      {
+        "id": "10195",
+        "name": "梯子",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Ladders.png",
+            "id": "10195",
+            "name": "梯子"
+          }
+        ]
+      },
+      {
+        "id": "10193",
+        "name": "通风扇",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Ventilation%20Fans.png",
+            "id": "10193",
+            "name": "通风扇"
+          }
+        ]
+      },
+      {
+        "id": "10194",
+        "name": "铁丝网",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Wire%20Fencing.png",
+            "id": "10194",
+            "name": "铁丝网"
+          }
+        ]
+      },
+      {
+        "id": "10196",
+        "name": "工具箱",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Tool%20Boxes.png",
+            "id": "10196",
+            "name": "工具箱"
+          }
+        ]
+      },
+      {
+        "id": "10197",
+        "name": "工具柜",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Tool%20Cabinets.png",
+            "id": "10197",
+            "name": "工具柜"
+          }
+        ]
+      },
+      {
+        "id": "10941",
+        "name": "工具推车",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Tool%20Carts.png",
+            "id": "10941",
+            "name": "工具推车"
+          }
+        ]
+      },
+      {
+        "id": "10198",
+        "name": "除雪工具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Snow%20Removal%20Tools.png",
+            "id": "10198",
+            "name": "除雪工具"
+          }
+        ]
+      },
+      {
+        "id": "10201",
+        "name": "电动气动工具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Power%20&%20Pneumatic%20Tools.png",
+            "id": "10201",
+            "name": "电动气动工具"
+          }
+        ]
+      },
+      {
+        "id": "10202",
+        "name": "鼓风机",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Blowers.png",
+            "id": "10202",
+            "name": "鼓风机"
+          }
+        ]
+      },
+      {
+        "id": "10930",
+        "name": "工业设备与重型机械",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260113/b929486cd8ea4821ad750aa0f7360290.png",
+            "id": "11267",
+            "name": "木材削片机"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260113/b6c16f5e2b6645b0b6a24cd849629337.png",
+            "id": "11268",
+            "name": "迷你自卸车"
+          }
+        ]
+      },
+      {
+        "id": "10199",
+        "name": "农用建筑设备",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240606/d11c6e9c29e44184a5d4bc9265c189c9.png",
+            "id": "10200",
+            "name": "滑移装载机驱动装置"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20240927/101b1eb773cb4e729cbaa2546c723ae0.png",
+            "id": "10953",
+            "name": "全地形车属具"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20250721/6403e8502c1144f8a64ae411f18fff43.png",
+            "id": "11240",
+            "name": "拖拉机属具"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "10203",
+    "name": "家装建材",
+    "children": [
+      {
+        "id": "10205",
+        "name": "门及五金件",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Doors%20&%20Door%20Hardware.png",
+            "id": "10205",
+            "name": "门及五金件"
+          }
+        ]
+      },
+      {
+        "id": "10204",
+        "name": "墙面处理与材料",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Wall%20Treatment%20&%20Supplies.png",
+            "id": "10204",
+            "name": "墙面处理与材料"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "10150",
+    "name": "商用设备",
+    "children": [
+      {
+        "id": "10154",
+        "name": "美容与个护",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Beauty%20&%20Personal%20Care.png",
+            "id": "10154",
+            "name": "美容与个护"
+          }
+        ]
+      },
+      {
+        "id": "10151",
+        "name": "热转印机",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Heat%20Press%20Machines.png",
+            "id": "10151",
+            "name": "热转印机"
+          }
+        ]
+      },
+      {
+        "id": "10153",
+        "name": "冷藏展示柜",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Display%20Freezers%20&%20Refrigerators.png",
+            "id": "10153",
+            "name": "冷藏展示柜"
+          }
+        ]
+      },
+      {
+        "id": "10152",
+        "name": "空气压缩机",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Air%20Compressors.png",
+            "id": "10152",
+            "name": "空气压缩机"
+          }
+        ]
+      },
+      {
+        "id": "11205",
+        "name": "自动售货机",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20250102/02a409d721c94a2a97b74efc43fc8290.png",
+            "id": "11205",
+            "name": "自动售货机"
+          }
+        ]
+      },
+      {
+        "id": "11254",
+        "name": "餐厅用具及设备",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20251111/7b15cb497fc84fd4a9d5cbc6a7541279.png",
+            "id": "11255",
+            "name": "商用油炸锅"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20251111/37c365fb8a0f4d1d9b16b40fbea6a9fc.png",
+            "id": "11256",
+            "name": "商用面火炉"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20251111/d3502289197a41ccaf5dad98b423cd50.png",
+            "id": "11257",
+            "name": "食物保温台"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20251111/bee21e60440043ce80ccdd7afb6b2982.png",
+            "id": "11258",
+            "name": "商用炉灶"
+          },
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20251111/fa8441789b764eafadea70295a1ada71.png",
+            "id": "11259",
+            "name": "商用炭烤炉"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "11289",
+    "name": "工业与科学",
+    "children": [
+      {
+        "id": "11290",
+        "name": "医护家具",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20260514/b42898793f5c40c891dc6236380f7269.png",
+            "id": "11291",
+            "name": "病床"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "10190",
+    "name": "其他",
+    "children": [
+      {
+        "id": "10190",
+        "name": "其他",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Other.png",
+            "id": "10190",
+            "name": "其他"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "10946",
+    "name": "配件",
+    "children": [
+      {
+        "id": "10946",
+        "name": "配件",
+        "children": [
+          {
+            "icon": "https://b2bfiles1.gigab2b.cn/category/image20241105/Part.png",
+            "id": "10946",
+            "name": "配件"
+          }
+        ]
+      }
+    ]
+  }
+]

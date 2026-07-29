@@ -1,0 +1,164 @@
+{
+  "summary": {
+    "projectName": "砚都跨境",
+    "locale": "zh-CN",
+    "modelId": "agent-work-loop-v4",
+    "reportContractVersion": 25,
+    "overview": "砚都跨境是一个基于 Electron + React + Vite 的桌面应用。项目当前无 Git 版本控制（.gitignore 存在但仓库未初始化），无测试框架，无 Agent 指令层；5 条项目 Memory 提供了基础上下文，但会话源根配置受限导致学习捕获评估无法完成。",
+    "aiAgentPractice": {
+      "inspectedSurfaces": [
+        "Memories"
+      ],
+      "coverageRows": [
+        {
+          "surface": "Memories",
+          "scopes": [
+            "Project"
+          ],
+          "count": 5
+        },
+        {
+          "surface": "Rules",
+          "scopes": [
+            "Project"
+          ],
+          "count": 0
+        },
+        {
+          "surface": "Skills",
+          "scopes": [
+            "Project"
+          ],
+          "count": 0
+        },
+        {
+          "surface": "Custom Agents",
+          "scopes": [
+            "Project"
+          ],
+          "count": 0
+        },
+        {
+          "surface": "Hooks",
+          "scopes": [
+            "Project"
+          ],
+          "count": 0
+        },
+        {
+          "surface": "MCP",
+          "scopes": [
+            "Project"
+          ],
+          "count": 0
+        }
+      ]
+    },
+    "assignmentSummaries": [],
+    "dimensions": [
+      {
+        "id": "task-understanding",
+        "label": "任务理解",
+        "score": 62,
+        "summary": "5 条项目 Memory 提供构建、技术栈与环境的基础上下文；无 AGENTS.md 或架构文档，Agent 任务路由依赖临时推断，范围边界无显式约束。",
+        "findingRefs": [
+          "no-agent-instruction-layer"
+        ]
+      },
+      {
+        "id": "controlled-execution",
+        "label": "可控执行",
+        "score": 58,
+        "summary": "dev/build/typecheck 脚本与 pnpm 锁文件支持基本启动；多个核心依赖使用 \"latest\" 标签，无 doctor/health 命令，无权限边界配置。",
+        "findingRefs": [
+          "no-agent-instruction-layer",
+          "latest-dependency-versions"
+        ]
+      },
+      {
+        "id": "change-validation",
+        "label": "改动验证",
+        "score": 52,
+        "summary": "TypeScript typecheck 是当前唯一的自动化验证；无测试框架、无 lint 工具，行为回归与逻辑错误无法被自动检测。",
+        "findingRefs": [
+          "no-test-or-lint-validation"
+        ]
+      },
+      {
+        "id": "reliable-delivery",
+        "label": "可靠交付",
+        "score": 50,
+        "summary": "项目无 Git 仓库，无版本历史、代码审查、交付验收或回滚机制；任何变更均无恢复路径。",
+        "findingRefs": [
+          "no-git-repository"
+        ]
+      },
+      {
+        "id": "learning-capture",
+        "label": "经验沉淀",
+        "score": 42,
+        "summary": "会话源根配置受限（disabled-source-root / missing-optional-root），0 个任务事件被保留；无法检测重复工作模式，无法验证改进效果。",
+        "findingRefs": []
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "no-git-repository",
+      "title": "项目无 Git 仓库，变更无版本控制与回滚路径",
+      "severity": "High",
+      "reason": "core-change-watch evidence-pack 执行失败，确认工作区不是 Git 仓库（.gitignore 存在但 .git 目录不存在）。无版本历史意味着：无法追踪变更、无法进行代码审查或 PR 验收、无法回滚错误变更。对于包含 API 密钥（.env.local）和多个外部服务集成的项目，任何误操作均无恢复路径。",
+      "expectedOutput": [
+        "项目具备版本历史、基本分支保护和可回滚的变更管理基础。"
+      ],
+      "expectedArtifact": "Git 仓库",
+      "aiFixPrompt": "/better-harness fix this issue\n\n在项目根目录初始化 Git 仓库，建立基础版本控制：\n\n1. 运行 git init\n2. 确认 .gitignore 已包含 node_modules/、dist/、.env.local（当前已有）\n3. 创建初始提交\n4. 配置远程仓库（GitHub/GitLab）并推送\n\n## Validation\n\n- 运行 git log --oneline 确认初始提交存在\n- 运行 git status 确认工作区状态干净",
+      "dimensionRefs": [
+        "reliable-delivery"
+      ]
+    },
+    {
+      "id": "no-test-or-lint-validation",
+      "title": "除 TypeScript 类型检查外无任何自动化验证机制",
+      "severity": "Medium",
+      "reason": "package.json 中仅有 typecheck 脚本（tsc --noEmit），无测试框架（无 vitest/jest 依赖或配置）、无 lint 工具（无 eslint/biome）、无 pre-commit hook。src/main/services/ 下有 12 个服务文件（EbayService、BailianImageService 等），均无对应测试。行为回归、逻辑错误或 API 集成故障无法被自动检测，只能依赖运行时发现。",
+      "expectedOutput": [
+        "核心服务有初始测试覆盖，lint 可检测基本代码质量问题，typecheck 之外的行为回归可被自动发现。"
+      ],
+      "expectedArtifact": "测试与 lint 基础设施",
+      "aiFixPrompt": "/better-harness fix this issue\n\n为项目添加最小化测试与 lint 基础设施：\n\n1. 安装 vitest（pnpm add -D vitest）并在 package.json 添加 test 脚本\n2. 安装 eslint 或 biome 并添加 lint 脚本\n3. 为 src/main/services/ 中最核心的 1-2 个服务编写初始单元测试\n\n## Validation\n\n- 运行 pnpm test 确认测试框架可执行且有测试通过\n- 运行 pnpm lint 确认 lint 工具可运行",
+      "dimensionRefs": [
+        "change-validation"
+      ]
+    },
+    {
+      "id": "no-agent-instruction-layer",
+      "title": "无 AGENTS.md 或项目规则，Agent 操作无显式范围与权限边界",
+      "severity": "Low",
+      "reason": "项目根目录无 AGENTS.md，.qoder/ 目录下无 rules 配置（仅有 better-harness 输出目录）。harness analyze 报告 1/5 个源根存在，无项目级 Rules、Skills、Hooks 或自定义 Agent。Agent 每次任务均需重新推断文件范围、外部服务操作约束（eBay API、飞书 Bot、百炼 AI 等）和敏感配置保护规则（.env.local 含 API 密钥），无持久化的操作边界约束。",
+      "expectedOutput": [
+        "Agent 在每次任务开始时可读取显式的项目边界、权限约束和操作规范，无需临时推断。"
+      ],
+      "expectedArtifact": "AGENTS.md",
+      "aiFixPrompt": "/better-harness fix this issue\n\n创建项目根目录 AGENTS.md，包含以下最小内容：\n\n1. 项目简介（砚都跨境桌面应用，Electron + React + Vite）\n2. 关键目录说明（src/main/services/ 为核心服务层，src/renderer/ 为 UI 层）\n3. 始终需要的约束：.env.local 含 API 密钥不得输出或提交；外部服务调用（eBay、飞书、百炼）需确认操作范围\n4. 启动命令：pnpm dev（开发）、pnpm build（构建）、pnpm typecheck（类型检查）\n\n## Validation\n\n- 确认 AGENTS.md 存在于项目根目录\n- 内容涵盖项目结构、关键约束和启动命令",
+      "dimensionRefs": [
+        "task-understanding",
+        "controlled-execution"
+      ]
+    },
+    {
+      "id": "latest-dependency-versions",
+      "title": "多个核心依赖使用 \"latest\" 版本标签，构建不可重现",
+      "severity": "Low",
+      "reason": "package.json 中 10 个依赖项（含 react、react-dom、typescript、vite、electron 构建工具链及 @types/* 系列）使用 \"latest\" 而非固定语义版本。pnpm-lock.yaml 在当前安装中提供了一定锁定，但 package.json 的 \"latest\" 意图声明意味着：新环境安装或锁文件重新生成时可能拉取不同主版本，导致构建结果不可重现，版本回归难以定位。",
+      "expectedOutput": [
+        "不同时间、不同环境的安装结果一致，构建可重现，版本回归可追踪。"
+      ],
+      "expectedArtifact": "固定版本的 package.json",
+      "aiFixPrompt": "/better-harness fix this issue\n\n将 package.json 中所有 \"latest\" 替换为当前 pnpm-lock.yaml 中实际解析的语义版本范围：\n\n1. 运行 pnpm list --depth 0 查看当前解析版本\n2. 将每个 \"latest\" 替换为对应的 ^major.minor.patch 形式\n3. 运行 pnpm install 确认锁文件无冲突\n\n## Validation\n\n- package.json 中不再包含 \"latest\" 字符串\n- 运行 pnpm build 确认构建成功",
+      "dimensionRefs": [
+        "controlled-execution"
+      ]
+    }
+  ]
+}

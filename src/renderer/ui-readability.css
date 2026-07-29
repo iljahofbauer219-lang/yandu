@@ -1,0 +1,461 @@
+/*
+ * Unified readability layer
+ * Visual-only overrides: typography, control targets, spacing and responsive
+ * layout. Business state and interaction logic remain in the existing modules.
+ */
+:root{
+  --ui-text-xs:11px;
+  --ui-text-sm:12px;
+  --ui-text-md:13px;
+  --ui-text-lg:15px;
+  --ui-title-sm:17px;
+  --ui-title-md:20px;
+  --ui-control-height:40px;
+  --ui-control-height-lg:44px;
+  --ui-radius:12px;
+  --ui-card-gap:12px;
+  --ui-card-padding:16px;
+  --ui-line-height:1.55;
+}
+
+body{
+  color:#202927;
+  font-size:var(--ui-text-md);
+  line-height:var(--ui-line-height);
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+
+button,input,select,textarea{
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei","Helvetica Neue",sans-serif;
+}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{
+  outline:3px solid rgba(10,186,181,.2);
+  outline-offset:2px;
+}
+
+/* Application frame and global navigation */
+.app-shell{grid-template-columns:96px minmax(0,1fr)}
+.sidebar{padding:14px 8px 12px}
+.brand{gap:6px;padding-bottom:14px}
+.brand-mark{width:44px;height:44px;border-radius:14px;font-size:18px}
+.brand strong{font-size:12px;line-height:17px}
+.brand small{font-size:10px;line-height:14px}
+nav{gap:5px}
+nav button{min-height:64px;flex-basis:64px;padding:7px 4px;border-radius:12px}
+.nav-icon{width:28px;height:28px}
+.nav-icon svg{width:22px;height:22px}
+.nav-active .nav-icon{width:32px;height:32px}
+.nav-label{font-size:12px;line-height:16px}
+nav button em{min-width:19px;padding:2px 5px;font-size:10px}
+.status-card{padding:10px 8px;font-size:11px;line-height:16px}
+.status-card small{font-size:10px;line-height:15px}
+
+main>header{min-height:82px;height:auto;padding:15px 24px}
+main>header h1{font-size:22px;line-height:29px}
+main>header p{font-size:12px;line-height:18px}
+
+button{
+  min-height:38px;
+  padding:8px 14px;
+  font-size:13px;
+  line-height:18px;
+}
+button.primary{font-weight:750}
+input:not([type="checkbox"]):not([type="radio"]),select{
+  min-height:var(--ui-control-height);
+  padding-left:12px;
+  padding-right:12px;
+  font-size:13px;
+}
+textarea{font-size:13px;line-height:1.65}
+input[type="checkbox"],input[type="radio"]{min-width:18px;width:18px;height:18px}
+
+.workspace{grid-template-columns:360px minmax(0,1fr);gap:12px;padding:12px}
+.task-panel{padding:18px}
+.section-title{gap:12px;padding-bottom:16px}
+.section-title>span{font-size:12px}
+.section-title b{font-size:15px;line-height:21px}
+.section-title small{font-size:11px;line-height:16px}
+form label{font-size:12px;line-height:17px}
+.mode-switch button b{font-size:13px}
+.mode-switch button small,.mode-description span,.platform-select-field>small,.network-summary small{font-size:11px;line-height:16px}
+.mode-description b,.network-summary{font-size:12px}
+.collection-methods button,.url-input-row button,.account-row button{font-size:12px}
+
+/* Cross-module top navigation and cards */
+.selection-module-nav,.legacy-module-nav{
+  min-height:62px;
+  height:auto;
+  padding:0 20px;
+}
+.selection-module-nav button,.legacy-module-nav button{
+  min-width:112px;
+  min-height:56px;
+  height:56px;
+  padding:0 18px;
+  font-size:13px;
+}
+.selection-module-nav button em{font-size:10px}
+.legacy-module-title{width:120px}
+.legacy-module-title b{font-size:14px}
+.legacy-module-title small{font-size:11px}
+
+.warehouse-module-nav{
+  min-height:78px;
+  height:auto;
+  grid-template-columns:repeat(4,minmax(190px,1fr));
+  gap:10px;
+  padding:10px 18px;
+}
+.warehouse-module-nav>button{min-height:58px;padding:10px 14px}
+.warehouse-module-nav b{font-size:14px;line-height:19px}
+.warehouse-module-nav small{font-size:11px;line-height:16px}
+.warehouse-module-nav em{font-size:11px}
+.warehouse-context-banner{padding:13px 15px}
+.warehouse-context-banner>span{font-size:11px}
+.warehouse-context-banner b{font-size:14px}
+.warehouse-context-banner small{font-size:11px;line-height:16px}
+
+.publishing-page,.supply-warehouse-page{padding:14px;gap:12px}
+.publishing-top{min-height:86px;height:auto;padding:14px 20px}
+.publishing-top>div>small,.warehouse-heading small,.platform-library-heading small,.platform-media-queue>div:first-child>small{font-size:10px}
+.publishing-top h2,.warehouse-heading h2,.platform-library-heading h3,.platform-media-queue h3{font-size:21px;line-height:28px}
+.publishing-top p,.warehouse-heading p,.platform-library-heading p,.platform-media-queue p{font-size:12px;line-height:18px}
+.publishing-top>span,.publishing-platform-tabs em{font-size:11px}
+.publishing-platform-tabs button{min-height:70px;padding:12px 15px}
+.publishing-platform-tabs b{font-size:14px}
+.publishing-platform-tabs small{font-size:11px;line-height:16px}
+.publishing-layout{grid-template-columns:300px minmax(520px,1fr) 300px;gap:12px}
+.publishing-control,.publishing-workspace,.publishing-checklist{border-radius:var(--ui-radius)}
+.publishing-control,.publishing-workspace,.publishing-checklist{padding:var(--ui-card-padding)}
+.publish-card{padding:14px;margin-bottom:12px}
+.publish-card>b,.publishing-heading b,.publishing-checklist>div:first-child b{font-size:14px}
+.publish-card label,.publish-card>span,.publishing-heading small,.publishing-checklist>div:first-child small{font-size:11px;line-height:16px}
+.publish-card select,.publish-card>button,.publishing-heading button{font-size:12px}
+.publish-connect b,.publishing-checklist li b{font-size:12px}
+.publish-connect small,.publishing-checklist li small,.publishing-checklist li em{font-size:11px;line-height:16px}
+.publishing-stats b{font-size:18px}
+.publishing-stats small{font-size:11px}
+.publishing-filters input,.publishing-filters select{min-height:40px;font-size:12px}
+.publishing-empty h3{font-size:18px}
+.publishing-empty p,.publishing-note p,.publishing-note b{font-size:12px;line-height:18px}
+
+.warehouse-heading{padding:19px 22px}
+.warehouse-source-tabs>button{min-height:82px;padding:14px}
+.warehouse-source-tabs b{font-size:14px}
+.warehouse-source-tabs small,.warehouse-toolbar span,.warehouse-toolbar input{font-size:12px}
+.warehouse-product-grid{grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
+.warehouse-product-grid>article>div{padding:14px}
+.warehouse-product-grid small,.warehouse-product-grid p,.warehouse-product-grid>article>div>span{font-size:11px;line-height:16px}
+.warehouse-product-grid b{height:42px;font-size:14px;line-height:21px}
+.warehouse-product-grid strong{font-size:18px}
+.warehouse-product-grid>article>div>div button{font-size:12px}
+
+/* eBay platform shell */
+.ebay-store-bar{min-height:82px;height:auto;gap:12px;padding:10px 20px}
+.ebay-platform-identity{width:190px;gap:12px}
+.ebay-platform-identity>span{width:48px;height:48px;border-radius:13px;font-size:25px}
+.ebay-platform-identity b{font-size:17px;line-height:23px}
+.ebay-platform-identity small{font-size:11px;line-height:16px}
+.ebay-store-scopes{gap:9px}
+.ebay-store-scopes button{min-width:176px;height:60px;padding:10px 13px}
+.ebay-store-scopes b{font-size:13px}
+.ebay-store-scopes small{font-size:11px;line-height:15px}
+.ebay-add-store{min-height:44px;height:44px;font-size:13px}
+
+.ebay-business-nav{
+  min-height:70px;
+  height:auto;
+  gap:4px;
+  padding:0 20px;
+  overflow-x:auto;
+}
+.ebay-business-nav button{min-width:150px;min-height:68px;padding:0 18px}
+.ebay-business-nav b{font-size:14px;line-height:19px}
+.ebay-business-nav small{font-size:11px;line-height:16px}
+.ebay-workspace{padding:14px}
+.ebay-page-heading{
+  min-height:88px;
+  height:auto;
+  padding:15px 20px;
+}
+.ebay-page-heading small{font-size:10px;line-height:15px}
+.ebay-page-heading h2{font-size:23px;line-height:30px}
+.ebay-page-heading p{font-size:12px;line-height:18px}
+.ebay-page-heading>span{font-size:11px;line-height:16px}
+.ebay-scope-notice,.ebay-config-notice,.ebay-success-notice,.ebay-error-notice,.ebay-report-notice{
+  min-height:46px;
+  padding:12px 14px;
+  font-size:12px;
+  line-height:18px;
+}
+
+/* eBay lists, sidebars and editing surfaces */
+.ebay-metrics{gap:12px;margin-top:12px}
+.ebay-metrics article{padding:16px}
+.ebay-metrics small,.ebay-metrics span{font-size:11px;line-height:16px}
+.ebay-metrics b{font-size:24px}
+.ebay-overview-grid,.ebay-library-layout,.ebay-optimize-layout{gap:14px;margin-top:14px}
+.ebay-library-layout,.ebay-optimize-layout{grid-template-columns:260px minmax(0,1fr)}
+.ebay-library-layout>aside,.ebay-optimize-layout>aside,.ebay-library-layout>section,.ebay-optimize-layout>section{padding:18px}
+.ebay-section-title b{font-size:15px}
+.ebay-section-title small{font-size:11px;line-height:16px}
+.ebay-section-title button{font-size:12px}
+.ebay-store-list article{padding:12px}
+.ebay-store-list b{font-size:13px}
+.ebay-store-list small,.ebay-store-list em,.ebay-store-list button{font-size:11px;line-height:16px}
+.ebay-flow-list b{font-size:13px}
+.ebay-flow-list small{font-size:11px;line-height:16px}
+
+.ebay-library-layout>aside>b,.ebay-optimize-layout>aside>b{font-size:15px;line-height:21px}
+.ebay-library-layout>aside>button,.ebay-optimize-layout>aside>button{
+  min-height:52px;
+  margin-top:6px;
+  padding:10px 12px;
+  font-size:13px;
+  line-height:18px;
+}
+.ebay-optimize-layout>aside>button::before{width:32px;height:32px;font-size:11px}
+.ebay-library-layout>aside em,.ebay-optimize-layout>aside em{font-size:11px;line-height:15px}
+.ebay-toolbar{grid-template-columns:minmax(240px,1fr) 180px auto;gap:10px;padding-bottom:14px}
+.ebay-toolbar input,.ebay-toolbar select,.ebay-toolbar button{min-height:40px;font-size:12px}
+
+.ebay-selected-product{grid-template-columns:100px minmax(0,1fr);column-gap:18px;padding:16px}
+.ebay-selected-product img,.ebay-selected-product>span{width:100px;height:100px;max-width:100%;justify-self:start}
+.ebay-selected-title-pair{min-width:0}
+.ebay-selected-title-pair>.ebay-title-label{font-size:11px}
+.ebay-selected-title-pair>b{font-size:17px;line-height:24px}
+.ebay-title-translation{font-size:14px;line-height:21px}
+.ebay-selected-source-meta{font-size:11px;line-height:17px}
+
+/* Readable text baseline inside all eBay workspaces */
+.ebay-platform-page :where(label,summary){font-size:12px;line-height:18px}
+.ebay-platform-page :where(p){font-size:12px;line-height:18px}
+.ebay-platform-page :where(small){font-size:11px;line-height:16px}
+.ebay-platform-page :where(input:not([type="checkbox"]):not([type="radio"]),select,textarea){font-size:13px}
+.ebay-platform-page :where(article,section,aside,details,header,footer)>b{font-size:14px;line-height:20px}
+
+.ebay-diagnosis-panel>header b,.ebay-specifics-workbench>header b{font-size:15px}
+.ebay-diagnosis-panel>header small,.ebay-specifics-workbench>header small{font-size:11px}
+.ebay-score-dimensions,.ebay-compliance-dimensions{gap:10px}
+.ebay-score-dimensions span,.ebay-compliance-dimensions span{min-height:64px;padding:13px}
+.ebay-score-dimensions b{font-size:17px}
+.ebay-score-dimensions small,.ebay-compliance-dimensions small{font-size:11px}
+.ebay-compliance-dimensions b{font-size:13px}
+.ebay-issue-list{gap:8px}
+.ebay-issue-list article{padding:12px}
+.ebay-issue-list b{font-size:13px}
+.ebay-issue-list small,.ebay-compliance-findings p,.ebay-compliance-findings footer span,.ebay-compliance-findings footer a{font-size:11px;line-height:17px}
+.ebay-issue-list em{width:38px;font-size:10px}
+.ebay-compliance-actions button{font-size:12px}
+.ebay-compliance-knowledge{font-size:11px;line-height:17px}
+
+/* Market research and title review */
+.ebay-market-research{gap:14px;padding:16px}
+.ebay-market-controls{grid-template-columns:minmax(240px,1fr) 180px auto;gap:10px}
+.ebay-market-controls input,.ebay-market-controls select,.ebay-market-controls button{height:42px;font-size:13px}
+.ebay-market-summary{gap:9px}
+.ebay-market-summary span{min-height:68px;padding:12px}
+.ebay-market-summary b{font-size:14px}
+.ebay-market-summary small{font-size:11px}
+.ebay-market-findings{padding:13px}
+.ebay-market-findings>b{font-size:13px}
+.ebay-market-findings>div{gap:10px}
+.ebay-market-findings article{padding:12px}
+.ebay-market-findings span,.ebay-market-findings small{font-size:11px;line-height:16px}
+.ebay-market-findings strong{font-size:13px;line-height:18px}
+.ebay-market-evidence{gap:12px}
+.ebay-market-evidence>div{padding:13px}
+.ebay-market-evidence>div>b,.ebay-market-evidence p strong{font-size:12px}
+.ebay-market-evidence p{gap:7px;padding:8px 0}
+.ebay-market-evidence p span,.ebay-market-evidence p small{font-size:11px}
+.ebay-market-evidence p em,.ebay-market-term-actions button{font-size:10px}
+.ebay-market-term-actions button{min-height:32px}
+.ebay-market-samples,.ebay-market-history,.ebay-market-keyword-review{padding:0}
+.ebay-market-samples summary,.ebay-market-history>summary,.ebay-market-keyword-review summary{padding:11px 13px;font-size:12px}
+.ebay-market-samples article,.ebay-market-history-list article,.ebay-market-keyword-review article{padding:10px 12px}
+.ebay-market-samples article b,.ebay-market-history-list article b,.ebay-market-keyword-review article b{font-size:12px}
+.ebay-market-samples article small,.ebay-market-history-list article small,.ebay-market-keyword-review article small{font-size:11px}
+.ebay-market-source,.ebay-market-stale,.ebay-market-decision-summary b,.ebay-market-decision-summary span,.ebay-market-decision-summary small{font-size:11px;line-height:17px}
+
+.ebay-title-review>header{padding:15px 16px}
+.ebay-title-review>header small{font-size:10px}
+.ebay-title-review>header b{font-size:16px}
+.ebay-title-review>header p,.ebay-title-review>header>span{font-size:11px;line-height:17px}
+.ebay-title-review .ebay-title-variants{gap:11px;padding:14px}
+.ebay-title-variants label{padding:14px}
+.ebay-title-variants span b{font-size:12px}
+.ebay-title-variants span em,.ebay-title-variants small{font-size:11px;line-height:16px}
+.ebay-title-variants strong{font-size:14px;line-height:20px}
+.ebay-title-chinese p{font-size:12px;line-height:18px}
+.ebay-title-audit-badges em{font-size:10px}
+.ebay-title-comparison article{padding:12px}
+.ebay-title-comparison small{font-size:11px}
+.ebay-title-comparison b{font-size:13px;line-height:19px}
+.ebay-title-review>footer{padding:12px 14px}
+.ebay-title-review>footer b{font-size:13px}
+.ebay-title-review>footer small,.ebay-title-stale{font-size:11px;line-height:17px}
+.ebay-ai-placeholder{padding:24px;font-size:12px;line-height:18px}
+
+/* Attribute, image, description, pricing and final handoff */
+.ebay-specifics-workbench label{
+  grid-template-columns:190px minmax(220px,1fr) 90px;
+  gap:12px;
+  padding:12px;
+}
+.ebay-specifics-workbench label span b{font-size:13px}
+.ebay-specifics-workbench label span em,.ebay-specifics-workbench label>small{font-size:11px;line-height:16px}
+.ebay-specifics-workbench input,.ebay-specifics-workbench label>button{min-height:40px;font-size:12px}
+.ebay-image-checks{gap:9px;padding:13px}
+.ebay-image-checks b{font-size:13px}
+.ebay-image-checks span{padding:7px 9px;font-size:11px}
+.ebay-description-workbench label{font-size:12px}
+.ebay-description-workbench textarea{line-height:1.65}
+.ebay-description-rules{font-size:12px;line-height:18px}
+.ebay-optimization-footer{padding:15px 17px;bottom:12px}
+.ebay-optimization-footer small{font-size:11px}
+.ebay-optimization-footer b{font-size:14px}
+.ebay-optimization-footer>button{min-width:210px;min-height:46px;font-size:15px}
+
+.ebay-title-save-state{grid-template-columns:38px minmax(0,1fr) auto;gap:12px;padding:14px 15px}
+.ebay-title-save-state>span{width:36px;height:36px;font-size:14px}
+.ebay-title-save-state b{font-size:13px}
+.ebay-title-save-state p,.ebay-title-save-state>em{font-size:11px;line-height:17px}
+.ebay-final-handoff-heading{padding:17px 18px}
+.ebay-final-handoff-heading small{font-size:10px}
+.ebay-final-handoff-heading b{font-size:18px}
+.ebay-final-handoff-heading p,.ebay-final-handoff-heading>span{font-size:11px;line-height:17px}
+.ebay-final-publish-checklist{gap:9px}
+.ebay-final-publish-checklist>span{grid-template-columns:28px minmax(0,1fr);padding:10px}
+.ebay-final-publish-checklist i{width:28px;height:28px;font-size:10px}
+.ebay-final-publish-checklist b{font-size:12px}
+.ebay-final-publish-checklist small{font-size:11px}
+
+.ebay-premium-grid{gap:12px;padding:16px}
+.ebay-premium-grid article{grid-template-columns:92px minmax(0,1fr) auto;padding:13px}
+.ebay-premium-grid img,.ebay-premium-grid article>span{width:92px;height:92px}
+.ebay-premium-grid small,.ebay-premium-grid p{font-size:11px;line-height:17px}
+.ebay-premium-grid b{font-size:14px;line-height:20px}
+.ebay-premium-grid em{font-size:12px}
+.ebay-premium-tags span{font-size:10px}
+.ebay-premium-card-body>button,.ebay-publish-actions button{font-size:12px}
+.ebay-publish-readiness{padding:16px}
+.ebay-publish-readiness small,.ebay-publish-readiness p,.ebay-publish-readiness>span{font-size:11px;line-height:17px}
+.ebay-publish-readiness b,.ebay-publish-readiness>span strong{font-size:15px}
+.ebay-publish-task-status{padding:10px 11px}
+.ebay-publish-task-status strong,.ebay-publish-task-status span,.ebay-publish-task-status small{font-size:11px;line-height:17px}
+.ebay-publish-details summary{padding:11px 12px;font-size:12px}
+.ebay-publish-details>div{gap:9px;padding:10px 12px}
+.ebay-publish-details>div b,.ebay-publish-details>div span,.ebay-publish-details>div i,.ebay-publish-details>div em{font-size:11px;line-height:16px}
+
+/* Dialogs, support and compliance knowledge pages */
+.ebay-store-dialog{width:min(560px,100%);padding:22px}
+.ebay-store-dialog header small{font-size:10px}
+.ebay-store-dialog header h3{font-size:22px}
+.ebay-store-dialog header p{font-size:12px;line-height:18px}
+.ebay-store-dialog header>button{width:38px;height:38px}
+.ebay-store-dialog label{font-size:12px}
+
+.support-subnav{min-height:58px;height:auto}
+.support-subnav button{height:50px;font-size:13px}
+.support-workspace{grid-template-columns:310px minmax(460px,1fr) 320px}
+.pane-title,.chat-header{min-height:70px;height:auto}
+.pane-title b,.chat-header b,.context-section>b{font-size:14px}
+.pane-title small,.chat-header small,.context-section small{font-size:11px;line-height:17px}
+.queue-tabs button,.support-status{font-size:11px}
+.support-empty b{font-size:15px}
+.support-empty small,.chat-onboarding p,.context-row,.context-section ul,.composer-disabled{font-size:12px;line-height:19px}
+.language-cloud span{font-size:11px}
+
+.compliance-page :where(small,p,label,li,td,th),
+.compliance-knowledge-page :where(small,p,label,li,td,th),
+.compliance-v2-page :where(small,p,label,li,td,th){
+  font-size:12px;
+  line-height:18px;
+}
+.compliance-page :where(button,input,select,textarea),
+.compliance-knowledge-page :where(button,input,select,textarea),
+.compliance-v2-page :where(button,input,select,textarea){
+  min-height:40px;
+  font-size:13px;
+}
+
+/* Responsive density: preserve readability before preserving column count. */
+@media (max-width:1440px){
+  .warehouse-module-nav{grid-template-columns:repeat(2,minmax(220px,1fr))}
+  .publishing-layout{grid-template-columns:260px minmax(440px,1fr)}
+  .publishing-checklist{grid-column:1/-1}
+  .ebay-title-review .ebay-title-variants{grid-template-columns:repeat(2,minmax(0,1fr))}
+.ebay-market-findings>div{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+.ebay-optimize-empty small,
+.ebay-optimize-layout .ebay-empty small{
+  font-size:12px;
+  line-height:18px;
+}
+
+.ebay-optimize-empty button,
+.ebay-optimize-layout .ebay-empty button{
+  min-height:40px;
+  padding-inline:18px;
+  font-size:13px;
+}
+
+@media (max-width:1180px){
+  .app-shell{grid-template-columns:88px minmax(0,1fr)}
+  .workspace{grid-template-columns:330px minmax(0,1fr)}
+  .ebay-platform-identity{width:170px}
+  .ebay-business-nav button{min-width:138px}
+  .ebay-library-layout,.ebay-optimize-layout{grid-template-columns:230px minmax(0,1fr)}
+  .ebay-market-controls,.ebay-toolbar{grid-template-columns:1fr 160px}
+  .ebay-market-controls button,.ebay-toolbar button{grid-column:1/-1}
+  .ebay-market-findings>div,.ebay-market-evidence{grid-template-columns:1fr}
+  .support-workspace{grid-template-columns:280px minmax(420px,1fr)}
+  .context-pane{display:none}
+}
+
+@media (max-width:900px){
+  .app-shell{grid-template-columns:78px minmax(0,1fr)}
+  .sidebar{padding-inline:5px}
+  .brand strong,.brand small{display:none}
+  nav button{min-height:58px;flex-basis:58px}
+  .nav-label{font-size:10px}
+  .workspace,.publishing-layout,.ebay-library-layout,.ebay-optimize-layout{grid-template-columns:1fr}
+  .task-panel{max-height:45vh}
+  .warehouse-module-nav{grid-template-columns:1fr 1fr}
+  .ebay-store-bar{align-items:flex-start;flex-wrap:wrap}
+  .ebay-platform-identity{width:100%}
+  .ebay-business-nav{padding-inline:8px}
+  .ebay-business-nav button{min-width:126px;padding-inline:12px}
+  .ebay-library-layout>aside,.ebay-optimize-layout>aside{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:6px;
+  }
+  .ebay-library-layout>aside>b,.ebay-optimize-layout>aside>b{grid-column:1/-1}
+  .ebay-title-review .ebay-title-variants,.ebay-title-comparison,.ebay-final-publish-checklist{grid-template-columns:1fr}
+  .ebay-specifics-workbench label{grid-template-columns:1fr}
+  .ebay-specifics-workbench label>small{grid-column:1}
+  .ebay-score-dimensions,.ebay-compliance-dimensions{grid-template-columns:repeat(2,1fr)}
+  .ebay-metrics{grid-template-columns:repeat(2,1fr)}
+  .support-workspace{grid-template-columns:1fr}
+  .conversation-pane{display:none}
+}
+
+/* eBay product catalog readability (线上产品/本地产品/优品仓库 共用侧边栏) */
+.ebay-product-catalog>header b{font-size:14px;line-height:20px}
+.ebay-product-catalog>header small{margin-top:5px;color:#6b7377;font-size:11px;line-height:16px}
+.ebay-store-category-tree{max-height:min(48vh,420px)}
+.ebay-store-category-node>button{min-height:36px;gap:8px;padding-top:6px;padding-right:8px;padding-bottom:6px;font-size:12px;line-height:17px}
+.ebay-store-category-node span{font-size:12px;line-height:17px}
+.ebay-store-category-node em{min-width:24px;padding:2px 7px;color:#656c70;font-size:11px;line-height:15px}
+.ebay-store-category-node i{width:14px;font-size:12px}
+.ebay-catalog-filters>b{color:#6f767a;font-size:11px;line-height:16px}
+.ebay-catalog-filters>button{min-height:36px;padding:6px 8px;color:#6f767a;border-radius:7px;font-size:12px;line-height:17px}
+.ebay-category-empty{margin:10px 0;padding:12px 10px;color:#6a7175;font-size:12px;line-height:18px}
+
+@media (max-width:1180px){
+.ebay-store-category-node>button{padding-top:6px;padding-right:6px;padding-bottom:6px}
+}

@@ -1,0 +1,117 @@
+/* Readable typography for the eBay publish acceptance workspace. */
+.ebay-acceptance-center{
+  margin:16px 16px 0;
+  padding:20px;
+  border-radius:14px;
+}
+.ebay-acceptance-center>header{
+  align-items:flex-start;
+  gap:20px;
+}
+.ebay-acceptance-center>header small{
+  font-size:11px;
+  line-height:16px;
+}
+.ebay-acceptance-center>header b{
+  margin-top:5px;
+  font-size:18px;
+  line-height:25px;
+}
+.ebay-acceptance-center>header p{
+  max-width:720px;
+  margin-top:5px;
+  font-size:12px;
+  line-height:18px;
+}
+.ebay-acceptance-center>header>div:last-child{
+  gap:9px;
+}
+.ebay-acceptance-center button{
+  min-height:38px;
+  padding:0 14px;
+  font-size:13px;
+}
+.ebay-acceptance-summary{
+  gap:10px;
+  margin-top:16px;
+}
+.ebay-acceptance-summary span{
+  min-height:68px;
+  display:grid;
+  align-content:center;
+  padding:12px;
+  border-radius:10px;
+}
+.ebay-acceptance-summary small{
+  font-size:11px;
+  line-height:16px;
+}
+.ebay-acceptance-summary b{
+  margin-top:4px;
+  font-size:16px;
+  line-height:22px;
+}
+.ebay-acceptance-columns{
+  grid-template-columns:minmax(0,1.45fr) minmax(360px,1fr);
+  gap:12px;
+  margin-top:12px;
+}
+.ebay-acceptance-columns details{
+  border-radius:11px;
+}
+.ebay-acceptance-columns summary{
+  padding:12px 14px;
+  font-size:13px;
+  line-height:18px;
+}
+.ebay-acceptance-columns article{
+  grid-template-columns:64px minmax(0,1fr);
+  gap:12px;
+  padding:14px;
+}
+.ebay-acceptance-columns article>span{
+  min-width:56px;
+  padding:5px 8px;
+  border-radius:8px;
+  font-size:11px;
+  line-height:16px;
+}
+.ebay-acceptance-columns article b{
+  font-size:14px;
+  line-height:20px;
+}
+.ebay-acceptance-columns article small{
+  margin-top:3px;
+  font-size:11px;
+  line-height:16px;
+}
+.ebay-acceptance-columns article p{
+  margin:7px 0 0;
+  font-size:12px;
+  line-height:18px;
+}
+.ebay-acceptance-columns article p strong{
+  min-width:120px;
+  margin-right:8px;
+}
+.ebay-acceptance-center>footer{
+  margin-top:12px;
+  font-size:11px;
+  line-height:16px;
+}
+.ebay-acceptance-empty{
+  margin-top:14px;
+  padding:24px;
+  font-size:13px;
+  line-height:20px;
+}
+@media (max-width:1200px){
+  .ebay-acceptance-summary{grid-template-columns:repeat(3,1fr)}
+  .ebay-acceptance-columns{grid-template-columns:1fr}
+}
+@media (max-width:760px){
+  .ebay-acceptance-center>header{flex-direction:column}
+  .ebay-acceptance-center>header>div:last-child{width:100%;flex-wrap:wrap}
+  .ebay-acceptance-center>header>div:last-child button{flex:1}
+  .ebay-acceptance-summary{grid-template-columns:repeat(2,1fr)}
+}

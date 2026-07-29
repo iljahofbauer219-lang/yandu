@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: browser_extension
+title: 砚都跨境采集助手浏览器扩展
+scope:
+    - browser-extension/
+source_files: []
+depends_on: []
+related_to: []

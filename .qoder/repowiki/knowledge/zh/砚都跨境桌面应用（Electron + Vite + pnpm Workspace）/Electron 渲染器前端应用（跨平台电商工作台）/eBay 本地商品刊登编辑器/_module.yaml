@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: renderer_ui/ebay_local_listing_editor
+title: eBay 本地商品刊登编辑器
+scope:
+    - src/renderer/EbayLocalListingEditor.tsx
+    - src/renderer/ebay-local-listing-pricing.css
+    - src/renderer/ebay-local-listing-validation.css
+source_files: []
+depends_on: []
+related_to: []

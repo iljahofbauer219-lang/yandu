@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: main_process/core_runtime
+title: 主进程核心运行时（应用入口、数据库与浏览器工作区）
+scope:
+    - src/main/main.ts
+    - src/main/database/AppDatabase.ts
+    - src/main/browser/BrowserWorkspace.ts
+source_files: []
+depends_on: []
+related_to: []

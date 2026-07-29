@@ -1,0 +1,152 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: Q0DeR-MaG1C-BrAnCh-Fo2-NoN-GiT-Or-No-C0MmIt
+nodes_managed: true
+exported_at: "2026-07-29T07:06:11Z"
+modules:
+    "":
+        dir_name: 砚都跨境桌面应用（Electron + Vite + pnpm Workspace）
+        title: 砚都跨境桌面应用（Electron + Vite + pnpm Workspace）
+        scope:
+            - .gitignore
+            - package.json
+            - pnpm-lock.yaml
+            - pnpm-workspace.yaml
+            - tsconfig.json
+            - tsconfig.main.json
+            - vite.config.ts
+            - .env.example
+            - README.md
+        source_files: []
+        children:
+            - browser_extension
+            - main_process
+            - renderer_ui
+            - shared_code
+            - tools
+        depends_on: []
+        related_to: []
+    browser_extension:
+        dir_name: 砚都跨境采集助手浏览器扩展
+        title: 砚都跨境采集助手浏览器扩展
+        scope:
+            - browser-extension/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    main_process:
+        dir_name: Electron 主进程应用入口与业务编排层
+        title: Electron 主进程应用入口与业务编排层
+        scope:
+            - src/main/
+        source_files: []
+        children:
+            - main_process/ai_llm_services
+            - main_process/core_runtime
+            - main_process/ebay_integrations
+        depends_on: []
+        related_to: []
+    main_process/ai_llm_services:
+        dir_name: AI_LLM 第三方服务集成
+        title: AI/LLM 第三方服务集成
+        scope:
+            - src/main/services/BailianImageService.ts
+            - src/main/services/BailianTranslationService.ts
+            - src/main/services/DeepSeekCommandService.ts
+            - src/main/services/RealShiftService.ts
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    main_process/core_runtime:
+        dir_name: 主进程核心运行时（应用入口、数据库与浏览器工作区）
+        title: 主进程核心运行时（应用入口、数据库与浏览器工作区）
+        scope:
+            - src/main/main.ts
+            - src/main/database/AppDatabase.ts
+            - src/main/browser/BrowserWorkspace.ts
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    main_process/ebay_integrations:
+        dir_name: eBay 集成服务（商品同步、内容优化、图片合规与视频生成）
+        title: eBay 集成服务（商品同步、内容优化、图片合规与视频生成）
+        scope:
+            - src/main/services/EbayService.ts
+            - src/main/services/EbayOptimizationService.ts
+            - src/main/services/EbayReportService.ts
+            - src/main/services/EbayImageComplianceVisionService.ts
+            - src/main/services/EbayImageGroundingService.ts
+            - src/main/services/EbayVideoService.ts
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    renderer_ui:
+        dir_name: Electron 渲染器前端应用（跨平台电商工作台）
+        title: Electron 渲染器前端应用（跨平台电商工作台）
+        scope:
+            - src/renderer/
+        source_files: []
+        children:
+            - renderer_ui/app_shell
+            - renderer_ui/ebay_local_listing_editor
+            - renderer_ui/shared_styles
+        depends_on: []
+        related_to: []
+    renderer_ui/app_shell:
+        dir_name: 渲染器应用外壳与入口
+        title: 渲染器应用外壳与入口
+        scope:
+            - src/renderer/App.tsx
+            - src/renderer/main.tsx
+            - src/renderer/index.html
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    renderer_ui/ebay_local_listing_editor:
+        dir_name: eBay 本地商品刊登编辑器
+        title: eBay 本地商品刊登编辑器
+        scope:
+            - src/renderer/EbayLocalListingEditor.tsx
+            - src/renderer/ebay-local-listing-pricing.css
+            - src/renderer/ebay-local-listing-validation.css
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    renderer_ui/shared_styles:
+        dir_name: 渲染层共享样式与可读性主题
+        title: 渲染层共享样式与可读性主题
+        scope:
+            - src/renderer/styles.css
+            - src/renderer/image-studio.css
+            - src/renderer/compliance*.css
+            - src/renderer/ebay-acceptance-readable.css
+            - src/renderer/ui-readability.css
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    shared_code:
+        dir_name: eBay 合规与标题优化共享契约及规则库
+        title: eBay 合规与标题优化共享契约及规则库
+        scope:
+            - src/shared/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    tools:
+        dir_name: RealShift 图像真实化工具与 Ark 视频能力验证脚本
+        title: RealShift 图像真实化工具与 Ark 视频能力验证脚本
+        scope:
+            - tools/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []

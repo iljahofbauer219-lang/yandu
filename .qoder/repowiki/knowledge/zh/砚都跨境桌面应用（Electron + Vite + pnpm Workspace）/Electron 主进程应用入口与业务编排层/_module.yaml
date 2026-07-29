@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: main_process
+title: Electron 主进程应用入口与业务编排层
+scope:
+    - src/main/
+source_files: []
+depends_on: []
+related_to: []
