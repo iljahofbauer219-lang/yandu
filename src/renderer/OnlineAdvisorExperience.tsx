@@ -712,8 +712,10 @@ export default function OnlineAdvisorExperience() {
   }
 
   /**
-   * 主动连接 harness gateway。可用则 chip 进入 harness 模式,
-   * 不可用则 chip 保持 unavailable 并把错误显示给用户。
+   * 主动连接 harness gateway。
+   * - signed-out  :JWT 未配置,属用户态,使用中性提示而非错误横幅
+   * - unavailable :网关故障,显示错误详情供排查
+   * - harness     :连接成功,chip 状态由主进程推送
    */
   async function connectHarness() {
     setConnection((current) => ({ ...current, label: "连接受限隔离执行器…", detail: "" }));
@@ -723,6 +725,16 @@ export default function OnlineAdvisorExperience() {
       setConnection(status);
     } catch (error) {
       const message = error instanceof Error ? error.message : "连接失败";
+      if (message.startsWith("ADVISOR_SIGNED_OUT")) {
+        // JWT 未配置 / 已过期:用户态,不展示错误横幅,仅以中性 chip 提示
+        setConnection({
+          connected: false,
+          mode: "signed-out",
+          label: "受限隔离执行器未启用",
+          detail: message.replace(/^ADVISOR_SIGNED_OUT:\s*/, "") || "未配置 YANDU_USER_JWT"
+        });
+        return;
+      }
       setConnection({
         connected: false,
         mode: "unavailable",
@@ -1177,6 +1189,17 @@ export default function OnlineAdvisorExperience() {
               title="断开受限隔离执行器,使用本地 Codex app-server"
             >
               断开
+            </button>
+          ) : connection.mode === "signed-out" ? (
+            // 未配置 JWT:该按钮需修改 .env 后重启才生效,
+            // 这里点击仅重新检查,可能依然处于 signed-out
+            <button
+              type="button"
+              className="connection-action"
+              onClick={() => void connectHarness()}
+              title="受限隔离执行器需在 .env 中配置 YANDU_USER_JWT 后重启应用,点击重试检查"
+            >
+              启用
             </button>
           ) : (
             <button
@@ -1721,10 +1744,19 @@ export default function OnlineAdvisorExperience() {
                 title="跳转到最新消息"
                 onClick={() => scrollToLatest()}
               >
-                <span aria-hidden="true">↓</span>
+                <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                  <path
+                    d="M10 3.5v10.4m0 0l-4.2-4.2M10 13.9l4.2-4.2"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
                 {pendingNewCount > 0 && (
                   <span className="message-scroll-to-latest-badge">
-                    {pendingNewCount} 条新消息
+                    {pendingNewCount}
                   </span>
                 )}
               </button>
@@ -1745,6 +1777,8 @@ export default function OnlineAdvisorExperience() {
             onDrop={handleDrop}
           >
             {connection.mode === "unavailable" && !connection.connected && (
+              // 仅在故障态(unavailable)显示错误横幅;
+              // signed-out 是用户态,本地 Codex 仍可用,不展示错误。
               <p className="composer-harness-notice" role="status">
                 受限隔离执行器不可用:当前将使用本地 Codex app-server
                 {connection.detail ? `（${connection.detail}）` : ""}。{" "}

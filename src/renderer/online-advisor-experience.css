@@ -989,32 +989,58 @@ button:disabled {
 }
 
 .message-scroll-to-latest {
-  position: sticky;
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  z-index: 8;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin: 8px auto 0;
-  padding: 7px 14px;
-  border: 1px solid rgba(55, 86, 62, 0.22);
-  border-radius: 999px;
-  color: #1f241f;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 6px 18px rgba(31, 36, 31, 0.14);
-  font-size: 12px;
-  font-weight: 700;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-md);
   cursor: pointer;
-  float: right;
-  clear: both;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  animation: ds-scroll-appear 0.2s ease-out;
 }
-.message-scroll-to-latest:hover { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(31, 36, 31, 0.2); }
-.message-scroll-to-latest > span:first-child { font-size: 16px; line-height: 1; color: #2f5d36; }
+
+@keyframes ds-scroll-appear {
+  from { opacity: 0; transform: translateY(6px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+.message-scroll-to-latest:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg);
+}
+
+.message-scroll-to-latest svg {
+  width: 18px;
+  height: 18px;
+}
+
 .message-scroll-to-latest-badge {
-  padding: 1px 8px;
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
   border-radius: 999px;
   color: #fff;
-  background: #2f5d36;
-  font-size: 11px;
+  background: var(--color-danger, #f56565);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 20px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--color-bg);
 }
 
 .empty-state {
