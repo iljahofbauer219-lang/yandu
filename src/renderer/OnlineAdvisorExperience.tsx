@@ -99,6 +99,30 @@ const projectAliasesStorageKey = "deepseek-codex.project-aliases";
 const registeredProjectsStorageKey = "deepseek-codex.registered-projects";
 const hiddenProjectsStorageKey = "deepseek-codex.hidden-projects";
 const hiddenTasksStorageKey = "deepseek-codex.hidden-tasks";
+const messageFeedbackStorageKey = "deepseek-codex.message-feedback";
+
+const promptSuggestions: Array<{ id: string; title: string; body: string }> = [
+  {
+    id: "research-product",
+    title: "选品调研",
+    body: "请调研美国站 Amazon 的「宠物美容刷」类目，给出前 10 个销量/评分/差评关键词，附竞品截图。"
+  },
+  {
+    id: "draft-listing",
+    title: "撰写 Listing",
+    body: "基于现有卖点草稿，写一份 5 段式 Listing：标题 / 五点 / 描述 / A+ / 关键词,字数符合 Amazon 美国站规范。"
+  },
+  {
+    id: "analyze-image",
+    title: "分析图片",
+    body: "我会上传 4 张产品图，请先做 OCR + 视觉结构分析,识别卖点 / 风险点 / 合规问题,并给出改进建议。"
+  },
+  {
+    id: "review-policies",
+    title: "合规审查",
+    body: "检查 eBay 美国站「美容护理」类目最新政策,总结我们 Listing 容易踩雷的 5 个点。"
+  }
+];
 
 const modelOptions: Array<{ id: ModelId; name: string; hint: string }> = [
   { id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash", hint: "更快" },
@@ -187,6 +211,9 @@ export default function OnlineAdvisorExperience() {
   const [personalizationNotice, setPersonalizationNotice] = useState("");
   const [messageEdit, setMessageEdit] = useState<MessageEditState | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [messageFeedback, setMessageFeedback] = useState<Record<string, "up" | "down">>(
+    () => readMessageFeedback()
+  );
   // 消息流主动跟随底部的开关（仅在用户主动滚上去后关闭）
   const messageListRef = useRef<HTMLDivElement>(null);
   const [autoFollow, setAutoFollow] = useState(true);
@@ -823,6 +850,25 @@ export default function OnlineAdvisorExperience() {
     );
   }
 
+  /**
+   * 对一条 assistant 消息打正/负反馈,写本地存储供后续上报。
+   * 再次点同一项取消,点另一项切换。任务在流式状态不接受反馈。
+   */
+  function rateMessage(message: Message, rating: "up" | "down") {
+    if (message.state === "streaming") return;
+    if (message.role !== "assistant") return;
+    setMessageFeedback((current) => {
+      const next = { ...current };
+      if (next[message.id] === rating) {
+        delete next[message.id];
+      } else {
+        next[message.id] = rating;
+      }
+      saveStoredValue(messageFeedbackStorageKey, next);
+      return next;
+    });
+  }
+
   async function beginMessageEdit(message: Message) {
     if (isBusy || !message.turnId || !message.id.endsWith(":user")) return;
     const sourceRequestId = message.id.slice(0, -":user".length);
@@ -1412,6 +1458,26 @@ export default function OnlineAdvisorExperience() {
                     ? `当前项目：${selectedProjectName}`
                     : "API Key 不会进入渲染进程。"}
                 </p>
+                {workspacePath && (
+                  <ul className="prompt-suggestions" aria-label="推荐任务">
+                    {promptSuggestions.map((suggestion) => (
+                      <li key={suggestion.id}>
+                        <button
+                          type="button"
+                          className="prompt-suggestion"
+                          onClick={() => {
+                            setDraft(suggestion.body);
+                            draftRef.current?.focus();
+                          }}
+                          title="填入到对话框并可直接编辑"
+                        >
+                          <strong>{suggestion.title}</strong>
+                          <span>{suggestion.body}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             ) : (
               messages.map((message) => (
@@ -1540,6 +1606,39 @@ export default function OnlineAdvisorExperience() {
                   )}
                   {message.state === "stopped" && <small>任务已停止</small>}
                   {message.state === "error" && <small>请求失败</small>}
+                  {message.role === "assistant" &&
+                    !messageEdit &&
+                    message.state !== "streaming" &&
+                    message.text && (
+                      <div className="message-actions message-feedback">
+                        <button
+                          type="button"
+                          className={`feedback-up ${
+                            messageFeedback[message.id] === "up" ? "active" : ""
+                          }`}
+                          aria-label="这条回答有帮助"
+                          aria-pressed={messageFeedback[message.id] === "up"}
+                          title="这条回答有帮助"
+                          onClick={() => rateMessage(message, "up")}
+                        >
+                          <span aria-hidden="true">👍</span>
+                          有帮助
+                        </button>
+                        <button
+                          type="button"
+                          className={`feedback-down ${
+                            messageFeedback[message.id] === "down" ? "active" : ""
+                          }`}
+                          aria-label="这条回答需要改进"
+                          aria-pressed={messageFeedback[message.id] === "down"}
+                          title="这条回答需要改进"
+                          onClick={() => rateMessage(message, "down")}
+                        >
+                          <span aria-hidden="true">👎</span>
+                          需要改进
+                        </button>
+                      </div>
+                    )}
                   {message.role === "user" && !messageEdit && (
                     <div className="message-actions">
                       <time dateTime={message.createdAt}>
@@ -1741,6 +1840,115 @@ export default function OnlineAdvisorExperience() {
               </div>
             )}
             {imageError && <p className="image-error">{imageError}</p>}
+            <div className="composer-toolbar">
+              <div
+                className={`composer-permission-picker ${
+                  permissionMenuOpen ? "open" : ""
+                }`}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") setPermissionMenuOpen(false);
+                }}
+              >
+                {permissionMenuOpen && (
+                  <div
+                    className="permission-menu"
+                    role="menu"
+                    aria-label="选择访问权限"
+                  >
+                    <span>如何批准 DeepSeek 操作？</span>
+                    {permissionOptions.map((option) => (
+                      <button
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={permissionMode === option.id}
+                        key={option.id}
+                        onClick={() => selectPreferredPermission(option.id)}
+                      >
+                        <span className="permission-menu-check" aria-hidden="true">
+                          {permissionMode === option.id ? "✓" : ""}
+                        </span>
+                        <span>
+                          <strong>{option.name}</strong>
+                          <small>{option.hint}</small>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className={`composer-permission-button ${
+                    permissionMode === "fullAccess" ? "danger" : ""
+                  }`}
+                  disabled={isBusy}
+                  aria-haspopup="menu"
+                  aria-expanded={permissionMenuOpen}
+                  title="选择如何批准 DeepSeek 操作"
+                  onClick={() => {
+                    setModelMenuOpen(false);
+                    setPermissionMenuOpen((current) => !current);
+                  }}
+                >
+                  <span aria-hidden="true">!</span>
+                  <span>{selectedPermission.name}</span>
+                  <span aria-hidden="true">⌄</span>
+                </button>
+              </div>
+              <div
+                className={`composer-model-picker ${
+                  modelMenuOpen ? "open" : ""
+                }`}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") setModelMenuOpen(false);
+                }}
+              >
+                {modelMenuOpen && (
+                  <div
+                    className="model-menu"
+                    role="menu"
+                    aria-label="选择推理模型"
+                  >
+                    <span>推理模型</span>
+                    {modelOptions.map((option) => (
+                      <button
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={model === option.id}
+                        key={option.id}
+                        onClick={() => selectPreferredModel(option.id)}
+                      >
+                        <span
+                          className="model-menu-check"
+                          aria-hidden="true"
+                        >
+                          {model === option.id ? "✓" : ""}
+                        </span>
+                        <span>
+                          <strong>{option.name}</strong>
+                          <small>{option.hint}</small>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="composer-model-button"
+                  disabled={isBusy}
+                  aria-haspopup="menu"
+                  aria-expanded={modelMenuOpen}
+                  title="选择推理模型"
+                  onClick={() => {
+                    setPermissionMenuOpen(false);
+                    setModelMenuOpen((current) => !current);
+                  }}
+                >
+                  <span>{selectedModel.name}</span>
+                  <small>{selectedModel.hint}</small>
+                  <span aria-hidden="true">⌄</span>
+                </button>
+              </div>
+            </div>
             <textarea
               ref={draftRef}
               rows={1}
@@ -1779,114 +1987,11 @@ export default function OnlineAdvisorExperience() {
                     ? "附件已保存"
                     : "可拖放或粘贴图片"}
                 </small>
+                <small className="composer-hint-shortcut">
+                  Enter 发送 · Shift + Enter 换行
+                </small>
               </div>
               <div className="composer-submit">
-                <span>Enter 发送 · Shift + Enter 换行</span>
-                <div
-                  className={`composer-permission-picker ${
-                    permissionMenuOpen ? "open" : ""
-                  }`}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") setPermissionMenuOpen(false);
-                  }}
-                >
-                  {permissionMenuOpen && (
-                    <div
-                      className="permission-menu"
-                      role="menu"
-                      aria-label="选择访问权限"
-                    >
-                      <span>如何批准 DeepSeek 操作？</span>
-                      {permissionOptions.map((option) => (
-                        <button
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={permissionMode === option.id}
-                          key={option.id}
-                          onClick={() => selectPreferredPermission(option.id)}
-                        >
-                          <span className="permission-menu-check" aria-hidden="true">
-                            {permissionMode === option.id ? "✓" : ""}
-                          </span>
-                          <span>
-                            <strong>{option.name}</strong>
-                            <small>{option.hint}</small>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    className={`composer-permission-button ${
-                      permissionMode === "fullAccess" ? "danger" : ""
-                    }`}
-                    disabled={isBusy}
-                    aria-haspopup="menu"
-                    aria-expanded={permissionMenuOpen}
-                    onClick={() => {
-                      setModelMenuOpen(false);
-                      setPermissionMenuOpen((current) => !current);
-                    }}
-                  >
-                    <span aria-hidden="true">!</span>
-                    <span>{selectedPermission.name}</span>
-                    <span aria-hidden="true">⌄</span>
-                  </button>
-                </div>
-                <div
-                  className={`composer-model-picker ${
-                    modelMenuOpen ? "open" : ""
-                  }`}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") setModelMenuOpen(false);
-                  }}
-                >
-                  {modelMenuOpen && (
-                    <div
-                      className="model-menu"
-                      role="menu"
-                      aria-label="选择推理模型"
-                    >
-                      <span>推理模型</span>
-                      {modelOptions.map((option) => (
-                        <button
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={model === option.id}
-                          key={option.id}
-                          onClick={() => selectPreferredModel(option.id)}
-                        >
-                          <span
-                            className="model-menu-check"
-                            aria-hidden="true"
-                          >
-                            {model === option.id ? "✓" : ""}
-                          </span>
-                          <span>
-                            <strong>{option.name}</strong>
-                            <small>{option.hint}</small>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    className="composer-model-button"
-                    disabled={isBusy}
-                    aria-haspopup="menu"
-                    aria-expanded={modelMenuOpen}
-                    onClick={() => {
-                      setPermissionMenuOpen(false);
-                      setModelMenuOpen((current) => !current);
-                    }}
-                  >
-                    <span>{selectedModel.name}</span>
-                    <small>{selectedModel.hint}</small>
-                    <span aria-hidden="true">⌄</span>
-                  </button>
-                </div>
                 {isBusy ? (
                   <>
                     <button
@@ -2583,6 +2688,23 @@ function readRegisteredProjects(): RegisteredProject[] {
 
 function saveStoredValue(key: string, value: unknown) {
   window.localStorage.setItem(key, JSON.stringify(value));
+}
+
+function readMessageFeedback(): Record<string, "up" | "down"> {
+  try {
+    const raw = window.localStorage.getItem(messageFeedbackStorageKey);
+    if (!raw) return {};
+    const value = JSON.parse(raw);
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return Object.fromEntries(
+      Object.entries(value).filter(
+        (entry): entry is [string, "up" | "down"] =>
+          entry[1] === "up" || entry[1] === "down"
+      )
+    );
+  } catch {
+    return {};
+  }
 }
 
 function readPreferredModel(): ModelId {

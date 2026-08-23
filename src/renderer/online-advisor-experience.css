@@ -934,6 +934,48 @@ button:disabled {
   font-size: 11px;
 }
 
+.prompt-suggestions {
+  display: grid;
+  width: min(640px, 100%);
+  margin: 18px auto 0;
+  padding: 0;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  list-style: none;
+}
+
+.prompt-suggestion {
+  display: grid;
+  width: 100%;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(48, 57, 48, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.78);
+  text-align: left;
+  color: #2b332c;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.prompt-suggestion:hover {
+  transform: translateY(-1px);
+  border-color: rgba(47, 93, 54, 0.5);
+  box-shadow: 0 6px 18px rgba(35, 43, 37, 0.08);
+}
+
+.prompt-suggestion strong {
+  color: #2f5d36;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.prompt-suggestion span {
+  color: #59675d;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .message {
   max-width: 78%;
   margin-bottom: 14px;
@@ -984,6 +1026,49 @@ button:disabled {
 .message-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.35;
+}
+
+.message-feedback {
+  justify-content: flex-start;
+  margin: 4px 0 -4px;
+  gap: 6px;
+}
+
+.message-feedback button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid rgba(48, 57, 48, 0.18);
+  border-radius: 999px;
+  color: #4a554d;
+  background: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.message-feedback button:hover {
+  border-color: rgba(47, 93, 54, 0.45);
+  color: #2f5d36;
+}
+
+.message-feedback button > span[aria-hidden] {
+  font-size: 12px;
+}
+
+.message-feedback button.feedback-up.active,
+.message-feedback button.feedback-down.active {
+  border-color: transparent;
+  color: #fff;
+  background: #2f5d36;
+}
+
+.message-feedback button.feedback-down.active {
+  background: #c85d2d;
 }
 
 .message-branch-switcher {
@@ -1961,6 +2046,22 @@ button:disabled {
   gap: 12px;
 }
 
+.composer-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0 6px;
+  border-bottom: 1px dashed rgba(48, 57, 48, 0.12);
+  margin-bottom: 6px;
+}
+
+.composer-toolbar .composer-permission-picker,
+.composer-toolbar .composer-model-picker {
+  position: relative;
+  flex: 0 0 auto;
+}
+
 .composer-tools,
 .composer-submit {
   display: flex;
@@ -1988,6 +2089,12 @@ button:disabled {
 .composer-submit > span {
   color: #92968f;
   font-size: 8px;
+}
+
+.composer-hint-shortcut {
+  margin-left: auto;
+  color: #92968f !important;
+  font-size: 8px !important;
 }
 
 .composer-model-picker {
