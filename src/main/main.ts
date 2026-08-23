@@ -25,7 +25,6 @@ import { EbayImageGroundingService } from './services/EbayImageGroundingService'
 import { importProductUrl } from './services/ImageSourceService'
 import { parseEbayListingsReport } from './services/EbayReportService'
 import { ServerProcessManager } from './services/ServerProcessManager'
-import { DeepSeekHarnessProcessManager } from './services/DeepSeekHarnessProcessManager'
 import { RagflowKnowledgeService } from './services/RagflowKnowledgeService'
 import type { KbAgentKey } from './services/RagflowKnowledgeService'
 import { KbGuardianService } from './services/KbGuardianService'
@@ -2834,33 +2833,6 @@ const YANDU_SERVER_CERT_FINGERPRINTS = new Set([
   '46:5C:54:0A:F9:ED:69:F5:10:46:21:51:09:D8:8E:A8:AF:FA:91:F1:8D:A6:3E:41:B3:8D:87:C1:6F:C5:04:CA',
   'sha256/RlxUCvntafUQRiFRCdiOqK/6kfGNpj5Bs42HwW/FBMo='
 ])
-const deepSeekHarnessSourceDir = app.isPackaged
-  ? path.join(process.resourcesPath, 'deepseek-harness')
-  : path.join(app.getAppPath(), 'vendor', 'deepseek-harness')
-const deepSeekHarnessProcessManager = new DeepSeekHarnessProcessManager(deepSeekHarnessSourceDir, app.getPath('userData'))
-ipcMain.handle('deepseek-harness:status', () => deepSeekHarnessProcessManager.status())
-ipcMain.handle('deepseek-harness:start', () => deepSeekHarnessProcessManager.start())
-ipcMain.handle('deepseek-harness:connect', async (_event, ticket: unknown) => {
-  if (typeof ticket !== 'string' || !ticket) throw new Error('缺少 Harness 访问票据')
-  const origin = new URL(readServerUrl())
-  if (origin.hostname !== YANDU_SERVER_HOST) throw new Error('Harness 仅支持已配置的中央服务器')
-  origin.protocol = 'https:'
-  const response = await net.fetch(new URL('/harness/session', origin).toString(), {
-    method: 'POST', headers: { authorization: `Bearer ${ticket}` }, signal: AbortSignal.timeout(15_000)
-  })
-  if (!response.ok) throw new Error(`Harness 网关拒绝访问（HTTP ${response.status}）`)
-  const setCookie = response.headers.get('set-cookie')
-  const cookie = setCookie?.match(/^([^=]+)=([^;]+)/)
-  if (!cookie) throw new Error('Harness 网关未返回会话 Cookie')
-  const maxAge = Number(setCookie?.match(/(?:^|;)\s*Max-Age=(\d+)/i)?.[1] ?? 0)
-  await session.defaultSession.cookies.set({
-    url: origin.toString(), name: cookie[1], value: cookie[2], path: '/', secure: true, httpOnly: true,
-    sameSite: 'no_restriction', expirationDate: Math.floor(Date.now() / 1000) + Math.max(1, maxAge)
-  })
-  const harnessUrl = new URL('/harness/', origin)
-  harnessUrl.searchParams.set('session', String(Date.now()))
-  return { url: harnessUrl.toString(), message: '已建立受限云端会话' }
-})
 // 服务器地址配置 IPC（S2 远程模式）：渲染层启动时同步 localStorage 值，登录页保存时写回
 ipcMain.handle('server-config:get', () => readServerUrl())
 ipcMain.handle('server-config:set', (_event, url: unknown) => {
@@ -3027,7 +2999,6 @@ app.on('will-quit', event => {
   event.preventDefault()
   Promise.all([
     serverProcessManager.stop().catch(error => console.error('[server-manager] 关闭本地服务失败：', error)),
-    deepSeekHarnessProcessManager.stop().catch(error => console.error('[deepseek-harness] 关闭本地服务失败：', error)),
     shutdownAdvisorRuntime().catch(error => console.error('[advisor] 关闭在线参谋运行时失败：', error))
   ]).finally(() => {
     serverShutdownDone = true
