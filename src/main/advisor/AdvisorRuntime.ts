@@ -7,6 +7,14 @@ import {
   type AppServerRequest
 } from "./AppServerClient";
 import {
+  HarnessGatewayClient
+} from "./HarnessGatewayClient";
+import type {
+  AdvisorConnectionStatus,
+  AdvisorConnectionMode,
+  AdvisorRemoteSession
+} from "../../shared/advisor";
+import {
   analyzeSession,
   cloneAttachmentSession,
   listAttachments,
@@ -169,6 +177,52 @@ const appServer = new AppServerClient();
 const activeRequests = new Map<string, RunContext>();
 const contextsByThread = new Map<string, RunContext>();
 const pendingApprovals = new Map<string, PendingApproval>();
+
+/**
+ * harness 网关客户端：当前阶段仅作为在线参谋执行器健康探针。
+ * Codex 业务流仍走 AppServerClient (stdio RPC)。
+ * - 连接成功：mode = 'harness'，供 UI 顶栏 chip 展示
+ * - 连接失败/断开：mode = 'unavailable'，UI 可选择禁用 composer
+ * - 未尝试：mode = 'unknown'
+ *
+ * 通过 .env 注入：APP_SERVER_BASE_URL / HARNESS_GATEWAY_BASE_URL
+ * 实际未来如需把业务流迁到 worker HTTP 容器，可扩展为可切换的 transport。
+ */
+const harnessClient = new HarnessGatewayClient({
+  appServerBaseUrl: process.env.APP_SERVER_BASE_URL ?? "http://127.0.0.1:8787",
+  gatewayBaseUrl: process.env.HARNESS_GATEWAY_BASE_URL ?? "http://127.0.0.1:8788",
+  getAccessToken: async () => {
+    const accessToken = process.env.YANDU_USER_JWT ?? "";
+    if (!accessToken) throw new Error("ADVISOR_UNAUTHORIZED: 当前未登录");
+    return accessToken;
+  }
+});
+
+let harnessLastSession: AdvisorRemoteSession | null = null;
+const harnessListeners = new Set<(state: AdvisorConnectionStatus) => void>();
+
+/**
+ * 把当前状态推送给所有 UI 订阅者，同时确保 lastSession 与 mode 字段一致。
+ * - 'harness'         : harness 通话已建立，业务流可选用 worker (本阶段仅探针)
+ * - 'app-server'      : Codex app-server 直连模式 (stdio RPC)
+ * - 'unavailable'     : harness 网关探测失败
+ * - 'unknown'         : 启动后尚未探测
+ */
+function buildHarnessState(overrides: Partial<AdvisorConnectionStatus> = {}): AdvisorConnectionStatus {
+  const base: AdvisorConnectionStatus = {
+    connected: Boolean(harnessLastSession),
+    mode: harnessLastSession ? "harness" : "unavailable",
+    label: harnessLastSession ? "受限隔离执行器已就绪" : "本地执行器",
+    detail: harnessLastSession ? harnessLastSession.message : "Codex app-server · 本机模型代理"
+  };
+  return { ...base, ...overrides };
+}
+
+function emitHarnessState(state: AdvisorConnectionStatus) {
+  for (const listener of harnessListeners) {
+    try { listener(state) } catch { /* 监听器异常不向上传播 */ }
+  }
+}
 
 
 function emitChatEvent(sender: Electron.WebContents, payload: ChatEvent) {
@@ -1173,18 +1227,59 @@ app.whenReady().then(() => {
   );
 
   ipcMain.handle("advisor:connection:status", async () => {
+    const mode: AdvisorConnectionMode = harnessLastSession
+      ? "harness"
+      : "unavailable";
     try {
       await ensureProxyRunning();
       await appServer.start();
-      return {
+      const state: AdvisorConnectionStatus = {
         connected: true,
-        label: "执行引擎已连接",
-        detail: "Codex app-server · 本机模型代理"
+        mode,
+        label: harnessLastSession ? "受限隔离执行器已就绪" : "本地执行器",
+        detail: harnessLastSession
+          ? harnessLastSession.message
+          : "Codex app-server · 本机模型代理"
       };
+      return state;
     } catch (error) {
       const detail = error instanceof Error ? error.message : "连接失败";
-      return { connected: false, label: "未连接", detail };
+      return {
+        connected: false,
+        mode: harnessLastSession ? "harness" : "app-server",
+        label: harnessLastSession ? "受限隔离执行器已就绪" : "执行引擎未就绪",
+        detail
+      };
     }
+  });
+
+  /**
+   * 主动建立 harness 网关会话。
+   * - 成功：emit harness 状态,返回会话
+   * - 失败：emit unavailable,抛出 ADVISOR_HARNESS_UNAVAILABLE 错误供渲染层降级
+   */
+  ipcMain.handle("advisor:connect", async () => {
+    try {
+      const session = await harnessClient.connect();
+      harnessLastSession = session;
+      const state = buildHarnessState();
+      emitHarnessState(state);
+      return session;
+    } catch (error) {
+      harnessLastSession = null;
+      const message = error instanceof Error ? error.message : String(error);
+      emitHarnessState(buildHarnessState({ connected: false }));
+      throw new Error(`ADVISOR_HARNESS_UNAVAILABLE: ${message}`);
+    }
+  });
+
+  /**
+   * 主动断开 harness 网关会话 (保留本地 Codex app-server)。
+   */
+  ipcMain.handle("advisor:disconnect", async () => {
+    await harnessClient.disconnect();
+    harnessLastSession = null;
+    emitHarnessState(buildHarnessState({ connected: false }));
   });
 
   ipcMain.handle("advisor:chat:send", (event, request: ChatRequest) => {
@@ -1296,7 +1391,8 @@ export async function shutdownAdvisorRuntime() {
     cancelPendingApprovals(context);
     await cleanupContextProcesses(context).catch(() => undefined);
   }
-  await Promise.all([appServer.stop(), stopManagedProxy()]);
+  await Promise.all([appServer.stop(), stopManagedProxy(), harnessClient.disconnect()]);
+  harnessLastSession = null;
 }
 
 

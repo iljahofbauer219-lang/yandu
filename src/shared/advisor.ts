@@ -150,10 +150,20 @@ export interface AdvisorStoredTask {
   events: AdvisorStoredTaskEvent[]
 }
 
+export type AdvisorConnectionMode = 'app-server' | 'harness' | 'unavailable' | 'unknown'
+
+/**
+ * Advisor 连接状态。供 UI 顶栏 chip 与 composer 启用判断。
+ * - app-server: Codex app-server 模式 (默认，stdio RPC)
+ * - harness: harness gateway 已就绪，可选执行器
+ * - unavailable: harness gateway 不可用
+ * - unknown: 未尝试连接
+ */
 export interface AdvisorConnectionStatus {
   connected: boolean
+  mode: AdvisorConnectionMode
   label: string
-  detail?: string
+  detail: string
 }
 
 export type AdvisorPersonality = 'pragmatic' | 'concise' | 'friendly' | 'professional'
@@ -199,4 +209,14 @@ export interface AdvisorDesktopApi {
   removeImage(sessionId: string, id: string): Promise<boolean>
   resolveApproval(approvalId: string, decision: AdvisorApprovalDecision): Promise<boolean>
   onChatEvent(listener: (event: AdvisorChatEvent) => void): () => void
+  /** 主动建立 harness 网关会话 */
+  connect(): Promise<AdvisorRemoteSession>
+  /** 主动断开 harness 网关会话 */
+  disconnect(): Promise<void>
+}
+
+export interface AdvisorRemoteSession {
+  url: string
+  message: string
+  expiresAt: number
 }

@@ -137,6 +137,7 @@ export default function OnlineAdvisorExperience() {
   const [permissionMenuOpen, setPermissionMenuOpen] = useState(false);
   const [connection, setConnection] = useState<ConnectionStatus>({
     connected: false,
+    mode: "unknown",
     label: "检查中",
     detail: ""
   });
