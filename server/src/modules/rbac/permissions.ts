@@ -17,7 +17,6 @@ export const PERMISSIONS = [
   'menu.crossborder.image',
   'menu.advisor',
   'menu.advisor.online',
-  'menu.advisor.harness',
   'menu.collect',
   'menu.collect.gigacloud',
   'menu.collect.1688',
@@ -62,7 +61,6 @@ export const PERMISSION_LABELS: Record<PermissionCode, string> = {
   'menu.crossborder.image': 'AI跨境·图片优化',
   'menu.advisor': 'AI参谋',
   'menu.advisor.online': 'AI参谋·在线参谋',
-  'menu.advisor.harness': 'AI参谋·DeepSeek Harness',
   'menu.collect': 'AI采集',
   'menu.collect.gigacloud': 'AI采集·大健云仓',
   'menu.collect.1688': 'AI采集·1688',
@@ -82,7 +80,8 @@ export const PERMISSION_LABELS: Record<PermissionCode, string> = {
   'menu.hq.support': 'AI总部·AI客服',
   'menu.hq.feishu': 'AI总部·AI飞书',
   'menu.hq.vpn': 'AI总部·翻墙管理',
-  'menu.hq.admin': 'AI总部·系统管理'
+  'menu.hq.admin': 'AI总部·系统管理',
+  'dashboard.view': '团队工作台首页'
 }
 
 export const PERMISSION_CODE_SET: ReadonlySet<string> = new Set(PERMISSIONS)
@@ -95,7 +94,7 @@ export interface PresetRole {
 
 export const PRESET_ROLES: PresetRole[] = [
   { key: 'OWNER', name: '主帐号', permissions: [...PERMISSIONS] },
-  { key: 'OPERATOR', name: '运营', permissions: ['dashboard.view', 'collection.run', 'product.edit', 'ai.use', 'compliance.manage', 'report.view:self', 'menu.crossborder', 'menu.crossborder.login', 'menu.crossborder.title', 'menu.crossborder.desc', 'menu.crossborder.image', 'menu.collect', 'menu.collect.gigacloud', 'menu.collect.1688', 'menu.collect.aliexpress', 'menu.collect.ozon', 'menu.art', 'menu.art.studio', 'menu.art.realshift', 'menu.advisor', 'menu.advisor.online', 'menu.advisor.harness', 'menu.planet', 'menu.planet.ops', 'menu.planet.compliance', 'menu.employee', 'menu.video', 'menu.tasks'] },
+  { key: 'OPERATOR', name: '运营', permissions: ['dashboard.view', 'collection.run', 'product.edit', 'ai.use', 'compliance.manage', 'report.view:self', 'menu.crossborder', 'menu.crossborder.login', 'menu.crossborder.title', 'menu.crossborder.desc', 'menu.crossborder.image', 'menu.collect', 'menu.collect.gigacloud', 'menu.collect.1688', 'menu.collect.aliexpress', 'menu.collect.ozon', 'menu.art', 'menu.art.studio', 'menu.art.realshift', 'menu.advisor', 'menu.advisor.online', 'menu.planet', 'menu.planet.ops', 'menu.planet.compliance', 'menu.employee', 'menu.video', 'menu.tasks'] },
   { key: 'PUBLISHER', name: '发布员', permissions: ['dashboard.view', 'publish.run', 'report.view:self', 'menu.crossborder', 'menu.crossborder.login', 'menu.crossborder.title', 'menu.crossborder.desc', 'menu.crossborder.image'] },
   { key: 'VIEWER', name: '只读', permissions: ['dashboard.view', 'menu.planet', 'menu.planet.ops', 'menu.planet.compliance'] }
 ]
