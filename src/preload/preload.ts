@@ -5,7 +5,7 @@ import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts
 import type { EbayLocalListingRequirements, EbayLocalRevisionPreparationResult } from '../shared/contracts'
 import type { EbayTitleDecision, EbayTitleDecisionInput } from '../shared/contracts'
 import type { ImagePackageTextExtractionRequest, ImagePackageTextExtractionResult } from '../shared/contracts'
-import type { AdvisorApprovalDecision, AdvisorChatEvent, AdvisorChatRequest, AdvisorIncomingImage, AdvisorPersonalizationSettings } from '../shared/advisor'
+import type { AdvisorApprovalDecision, AdvisorChatEvent, AdvisorChatRequest, AdvisorIncomingImage, AdvisorPersonalizationSettings, AdvisorRemoteSession } from '../shared/advisor'
 import type { AiEmployeeAskRequest, AiEmployeeChatModelProfile, AiEmployeePickResult } from '../shared/aiEmployee'
 import type { ExtractedProductInfo } from '../shared/selectionExtract'
 import type { AmazonDataSourceSearchResult, AmazonListingEvidence, AmazonMarketSample, AmazonReviewEvidence, AmazonSearchIntent } from '../shared/amazonScraper'
@@ -407,6 +407,8 @@ contextBridge.exposeInMainWorld('desktop', {
     selectProject: () => ipcRenderer.invoke('advisor:project:select'),
     revealProject: (projectPath: string) => ipcRenderer.invoke('advisor:project:reveal', projectPath),
     getConnectionStatus: () => ipcRenderer.invoke('advisor:connection:status'),
+    connect: (): Promise<AdvisorRemoteSession> => ipcRenderer.invoke('advisor:connect'),
+    disconnect: (): Promise<void> => ipcRenderer.invoke('advisor:disconnect'),
     getPersonalization: () => ipcRenderer.invoke('advisor:personalization:get'),
     savePersonalization: (settings: Partial<AdvisorPersonalizationSettings>) => ipcRenderer.invoke('advisor:personalization:save', settings),
     resetMemory: () => ipcRenderer.invoke('advisor:personalization:reset-memory'),
