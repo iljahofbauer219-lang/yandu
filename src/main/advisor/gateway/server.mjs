@@ -145,7 +145,7 @@ async function stopIdleWorkers() {
 async function createSession(request, reply) {
   const authorization = request.headers.authorization
   if (!authorization?.startsWith('Bearer ')) return json(reply, 401, { error: 'UNAUTHORIZED' })
-  const validation = await fetch(`${appOrigin}/api/deepseek-harness/gateway/validate`, {
+  const validation = await fetch(`${appOrigin}/api/codex-harness/gateway/validate`, {
     method: 'POST',
     headers: { authorization }
   })

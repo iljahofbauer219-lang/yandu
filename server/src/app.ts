@@ -15,7 +15,7 @@ import { memberRoutes } from './modules/members/routes.js'
 import { roleRoutes } from './modules/roles/routes.js'
 import { storeRoutes } from './modules/stores/routes.js'
 import { authPlugin } from './plugins/auth.js'
-import { deepSeekHarnessRoutes } from './modules/deepseek-harness/routes.js'
+import { codexHarnessRoutes } from './modules/codex-harness/routes.js'
 import { dashboardRoutes } from './modules/dashboard/routes.js'
 
 export async function buildApp() {
@@ -63,7 +63,7 @@ export async function buildApp() {
   await app.register(ebayRoutes, { prefix: '/api/ebay' })
   await app.register(mediaRoutes, { prefix: '/api/media' })
   await app.register(aiRoutes, { prefix: '/api/ai' })
-  await app.register(deepSeekHarnessRoutes, { prefix: '/api/deepseek-harness' })
+  await app.register(codexHarnessRoutes, { prefix: '/api/codex-harness' })
   // 公共下载路由（local 驱动，HMAC 签名即授权；OSS 驱动下返回 404）
   await app.register(mediaPublicRoutes)
 

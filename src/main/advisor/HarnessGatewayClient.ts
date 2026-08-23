@@ -85,7 +85,7 @@ export class HarnessGatewayClient {
     }
     let res: Response
     try {
-      res = await fetch(`${this.config.appServerBaseUrl}/api/deepseek-harness/access-ticket`, {
+      res = await fetch(`${this.config.appServerBaseUrl}/api/codex-harness/access-ticket`, {
         method: 'GET',
         headers: { authorization: `Bearer ${accessToken}` }
       })
