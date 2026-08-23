@@ -49,11 +49,6 @@ declare global {
         get(): Promise<string>
         set(url: string): Promise<string>
       }
-      deepSeekHarness: {
-        status(): Promise<{ running: boolean; url: string; message: string }>
-        start(): Promise<{ running: boolean; url: string; message: string }>
-        connect(ticket: string): Promise<{ url: string; message: string }>
-      }
       appInfo: {
         checkUpdate(): Promise<{ current: string; latest: string; isLatest: boolean; error: string }>
         openDownload(): Promise<boolean>
