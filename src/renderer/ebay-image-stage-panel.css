@@ -1,0 +1,712 @@
+/* ─── 阶段式图片优化面板 ─────────────────────────────────────────────────── */
+
+.ebay-stage-panel {
+  --bg-primary: var(--yd-surface);
+  --bg-secondary: var(--yd-surface-muted);
+  --bg-tertiary: color-mix(in srgb, var(--yd-text-muted) 16%, var(--yd-surface));
+  --bg-hover: var(--yd-brand-soft);
+  --text-primary: var(--yd-text);
+  --text-secondary: var(--yd-text-secondary);
+  --text-tertiary: var(--yd-text-muted);
+  --border: var(--yd-border);
+  --accent: var(--yd-brand);
+  --accent-light: var(--yd-brand-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0 4px;
+}
+
+.ebay-stage-task {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 540px);
+  gap: 20px;
+  align-items: center;
+  padding: 16px 18px;
+  border: 1px solid var(--yd-border);
+  border-left: 4px solid var(--yd-brand);
+  border-radius: var(--yd-radius-card);
+  color: var(--yd-text);
+  background: var(--yd-surface);
+}
+.ebay-stage-task--running { border-left-color: var(--yd-info); background: var(--yd-info-soft); }
+.ebay-stage-task--blocked { border-left-color: var(--yd-warning); background: var(--yd-warning-soft); }
+.ebay-stage-task--done { border-left-color: var(--yd-success); background: var(--yd-success-soft); }
+.ebay-stage-task > div > span { color: var(--yd-brand-contrast); font-size: 12px; font-weight: 750; letter-spacing: .08em; }
+.ebay-stage-task h3 { margin: 4px 0; font-size: 18px; line-height: 26px; }
+.ebay-stage-task p { margin: 0; color: var(--yd-text-secondary); font-size: 13px; line-height: 20px; }
+.ebay-stage-task ul { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 540px; margin: 0; padding: 0; list-style: none; }
+.ebay-stage-task li { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 3px 9px; border-radius: 999px; color: var(--yd-text-secondary); background: var(--yd-surface-muted); font-size: 12px; }
+.ebay-stage-task li.met { color: var(--yd-success); background: var(--yd-success-soft); }
+.ebay-stage-live { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+.ebay-stage-advanced { border: 1px solid var(--yd-border); border-radius: var(--yd-radius-control); background: var(--yd-surface-muted); }
+.ebay-stage-advanced summary { min-height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 12px; color: var(--yd-text-secondary); font-size: 13px; font-weight: 650; cursor: pointer; }
+.ebay-stage-advanced summary span { margin-left: auto; color: var(--yd-text-muted); font-size: 12px; font-weight: 400; }
+.ebay-stage-advanced[open] summary { border-bottom: 1px solid var(--yd-border); }
+
+/* ── 阶段进度条 ── */
+.ebay-stage-stepper {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  overflow-x: auto;
+  padding: 12px 0;
+  border-bottom: 2px solid var(--border, #e0e0e0);
+}
+
+.ebay-stage-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 24px;
+  background: var(--bg-secondary, #f8f9fa);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+  font-size: 13px;
+}
+
+.ebay-stage-step:hover:not(:disabled) {
+  border-color: var(--accent, #2563eb);
+  background: var(--bg-hover, #eef2ff);
+}
+
+.ebay-stage-step:focus-visible,
+.ebay-stage-source-item:focus-visible,
+.ebay-stage-gen-item:focus-visible,
+.ebay-stage-advanced summary:focus-visible {
+  outline: 2px solid var(--yd-brand);
+  outline-offset: 2px;
+  box-shadow: var(--yd-focus-ring);
+}
+
+.ebay-stage-step:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ebay-stage-step.current {
+  border-color: var(--accent, #2563eb);
+  background: var(--accent-light, #dbeafe);
+  font-weight: 600;
+}
+
+.ebay-stage-step.done {
+  border-color: #22c55e;
+  background: #f0fdf4;
+}
+
+.ebay-stage-number {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--bg-tertiary, #e2e8f0);
+  color: var(--text-secondary, #64748b);
+  flex-shrink: 0;
+}
+
+.ebay-stage-step.done .ebay-stage-number {
+  color: #fff;
+}
+
+.ebay-stage-label {
+  color: var(--text-primary, #1e293b);
+}
+
+.ebay-stage-step.done .ebay-stage-label {
+  color: #16a34a;
+}
+
+/* ── 并发设置条 ── */
+.ebay-stage-concurrency-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 8px 4px;
+}
+
+.ebay-stage-concurrency-bar small {
+  font-size: 12px;
+  color: var(--text-tertiary, #94a3b8);
+}
+
+/* ── 阶段标题 ── */
+.ebay-stage-header {
+  padding: 12px 16px;
+  border-left: 4px solid var(--accent, #2563eb);
+  background: var(--bg-secondary, #f8f9fa);
+  border-radius: 0 8px 8px 0;
+}
+
+.ebay-stage-header b {
+  font-size: 16px;
+  display: block;
+}
+
+.ebay-stage-header small {
+  color: var(--text-secondary, #64748b);
+  font-size: 12px;
+}
+
+/* ── 错误提示 ── */
+.ebay-stage-error {
+  padding: 10px 16px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #dc2626;
+  font-size: 13px;
+}
+.ebay-stage-error b,.ebay-stage-error span { display: block; }
+.ebay-stage-error span { margin-top: 3px; }
+
+/* ── 阶段操作区域 ── */
+.ebay-stage-section {
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--bg-primary, #fff);
+}
+
+.ebay-stage-section > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.ebay-stage-section > header b {
+  font-size: 14px;
+}
+
+.ebay-stage-section > header small {
+  color: var(--text-secondary, #64748b);
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+.ebay-stage-placeholder {
+  color: var(--text-tertiary, #94a3b8);
+  font-size: 13px;
+  padding: 16px;
+  text-align: center;
+  background: var(--bg-secondary, #f8f9fa);
+  border-radius: 8px;
+}
+
+/* ── 原图选择网格 ── */
+.ebay-stage-source-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
+}
+
+.ebay-stage-source-item {
+  position: relative;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0;
+  background: var(--bg-secondary, #f1f5f9);
+  transition: all 0.15s;
+}
+
+.ebay-stage-source-item:hover {
+  border-color: var(--accent, #2563eb);
+}
+
+.ebay-stage-source-item.selected {
+  border-color: var(--accent, #2563eb);
+  box-shadow: 0 0 0 2px var(--accent-light, #bfdbfe);
+}
+
+.ebay-stage-source-item img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  display: block;
+}
+
+.ebay-stage-source-item span {
+  display: block;
+  font-size: 12px;
+  padding: 4px 6px;
+  color: var(--text-secondary, #64748b);
+}
+
+.ebay-stage-source-item .check {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent, #2563eb);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ── 事实卡（全局信息 + 每张原图 1 张紧凑小卡） ── */
+.ebay-stage-fact-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ebay-stage-fact-global {
+  padding: 10px 12px;
+  background: var(--bg-secondary, #f8f9fa);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ebay-stage-fact-global p {
+  margin: 2px 0;
+}
+
+.ebay-stage-fact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.ebay-stage-fact-mini {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 8px;
+  background: var(--bg-primary, #fff);
+}
+
+.ebay-stage-fact-mini img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+  background: var(--bg-secondary, #f1f5f9);
+}
+
+.ebay-stage-fact-mini-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ebay-stage-fact-mini-body small {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary, #64748b);
+}
+
+.ebay-stage-fact-mini-title {
+  color: var(--text-primary, #1e293b);
+}
+
+.ebay-stage-fact-mini-warn {
+  color: #d97706;
+}
+
+/* ── 分镜卡 ── */
+.ebay-stage-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ebay-stage-card {
+  border: 2px solid var(--border, #e0e0e0);
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ebay-stage-card:hover {
+  border-color: var(--accent, #2563eb);
+}
+
+.ebay-stage-card.selected {
+  border-color: var(--accent, #2563eb);
+  background: var(--accent-light, #eff6ff);
+}
+
+.ebay-stage-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ebay-stage-card-header em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--bg-tertiary, #e2e8f0);
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: var(--text-secondary, #64748b);
+}
+
+.ebay-stage-card-header b {
+  flex: 1;
+  font-size: 13px;
+}
+
+.ebay-stage-card-header .edit-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 6px;
+  background: var(--bg-primary, #fff);
+  cursor: pointer;
+}
+
+.ebay-stage-card-header .edit-btn:hover {
+  background: var(--bg-hover, #f1f5f9);
+}
+
+.ebay-stage-card-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+}
+
+.ebay-stage-card-preview small {
+  line-height: 1.5;
+}
+
+.ebay-stage-card-preview .prohibited {
+  color: #dc2626;
+}
+
+.ebay-stage-card-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ebay-stage-card-edit label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #64748b);
+}
+
+.ebay-stage-card-edit textarea,
+.ebay-stage-card-edit input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+/* ── 模型选择 ── */
+.ebay-stage-model-select {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ebay-stage-model-select select {
+  padding: 8px 12px;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 8px;
+  font-size: 13px;
+  background: var(--bg-primary, #fff);
+}
+
+.ebay-stage-model-recommend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+}
+
+.ebay-stage-model-recommend button {
+  padding: 4px 10px;
+  border: 1px solid var(--accent, #2563eb);
+  border-radius: 6px;
+  background: var(--accent-light, #eff6ff);
+  color: var(--accent, #2563eb);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* ── 生成结果 ── */
+.ebay-stage-gen-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ebay-stage-generated {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ebay-stage-gen-item {
+  border: 2px solid transparent;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0;
+  background: var(--bg-secondary, #f1f5f9);
+  transition: all 0.15s;
+  max-width: 200px;
+}
+
+.ebay-stage-gen-item:hover {
+  border-color: var(--accent, #2563eb);
+}
+
+.ebay-stage-gen-item.selected {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 2px #bbf7d0;
+}
+
+.ebay-stage-gen-item img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  display: block;
+  background: #fff;
+}
+
+.ebay-stage-gen-item span {
+  display: block;
+  padding: 6px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--text-secondary, #64748b);
+}
+
+.ebay-stage-gen-item.selected span {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+/* ── 生成图归属分镜卡标签 ── */
+.ebay-stage-gen-card-tag {
+  display: block;
+  padding: 4px 6px 0;
+  font-style: normal;
+  font-size: 12px;
+  text-align: center;
+  color: var(--text-tertiary, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 生成图单元（图片 + 单独重生成按钮） ── */
+.ebay-stage-gen-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 200px;
+}
+
+.ebay-stage-gen-regen {
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 6px;
+  background: var(--bg-primary, #fff);
+  color: var(--text-secondary, #64748b);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ebay-stage-gen-regen:hover:not(:disabled) {
+  border-color: var(--accent, #2563eb);
+  color: var(--accent, #2563eb);
+  background: var(--accent-light, #eff6ff);
+}
+
+.ebay-stage-gen-regen:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── 确认栏 ── */
+.ebay-stage-confirm-bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  background: var(--bg-secondary, #f8f9fa);
+  border-radius: 10px;
+  border: 1px solid var(--border, #e0e0e0);
+}
+
+.ebay-stage-confirm {
+  flex: 1;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+/* ── 已确认状态 ── */
+.ebay-stage-confirmed {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 16px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+}
+
+.ebay-stage-confirmed img {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.ebay-stage-confirmed b {
+  color: #16a34a;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.ebay-stage-confirmed button {
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+  text-decoration: underline;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* ── 自然化网格 ── */
+.ebay-stage-naturalize-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ebay-stage-naturalize-item {
+  text-align: center;
+}
+
+.ebay-stage-naturalize-item b {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 6px;
+  color: var(--text-secondary, #64748b);
+}
+
+.ebay-stage-naturalize-item img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border-radius: 8px;
+  background: var(--bg-secondary, #f1f5f9);
+}
+
+/* ── 生成张数输入 ── */
+.ebay-stage-count-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+  white-space: nowrap;
+}
+
+.ebay-stage-count-input input {
+  width: 56px;
+  padding: 6px 8px;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 6px;
+  font-size: 13px;
+  text-align: center;
+  background: var(--bg-primary, #fff);
+  color: var(--text-primary, #1e293b);
+}
+
+/* ── 多选提示 ── */
+.ebay-stage-gen-hint {
+  width: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+}
+
+/* ── 已确认多图网格 ── */
+.ebay-stage-confirmed-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ebay-stage-confirmed-grid img {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #bbf7d0;
+}
+
+/* ── 自然化档位选择 ── */
+.ebay-stage-naturalize-profile {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--text-secondary, #64748b);
+}
+
+.ebay-stage-naturalize-profile label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+@media (max-width: 1180px) {
+  .ebay-stage-task { grid-template-columns: 1fr; gap: 12px; }
+  .ebay-stage-task ul { justify-content: flex-start; max-width: none; }
+  .ebay-stage-section > header { align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+  .ebay-stage-gen-actions { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ebay-stage-step,.ebay-stage-source-item,.ebay-stage-card,.ebay-stage-gen-item,.ebay-stage-gen-regen { transition: none; }
+}
+
+/* ── 02 选择原图 子区块（合并进 01 初步检查卡片）── */
+.ebay-remediation-heading.ebay-source-select-heading {
+  border-left-color: #14b8b1;
+  background: #eefaf9;
+}

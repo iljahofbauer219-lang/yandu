@@ -1,0 +1,124 @@
+{
+  "checkedAt": "2026-08-09T16:28:17.720Z",
+  "runtime": {
+    "appPath": "/Users/zyc/Desktop/砚都跨境",
+    "version": "1.0.11",
+    "packaged": false
+  },
+  "expectedAssets": [
+    "./assets/index-BC6lY0fv.js",
+    "./assets/index--Lyd2PCs.css"
+  ],
+  "loadedAssets": [
+    "./assets/index-BC6lY0fv.js",
+    "./assets/index--Lyd2PCs.css"
+  ],
+  "minLayout": {
+    "viewport": {
+      "width": 1100,
+      "height": 720
+    },
+    "card": {
+      "left": 99,
+      "right": 1069,
+      "width": 970,
+      "scrollWidth": 968
+    },
+    "actions": [
+      {
+        "text": "已确认",
+        "left": 853,
+        "right": 901,
+        "top": 215.5,
+        "bottom": 253.5
+      },
+      {
+        "text": "重新提取",
+        "left": 908,
+        "right": 966,
+        "top": 215.5,
+        "bottom": 253.5
+      },
+      {
+        "text": "清除",
+        "left": 973,
+        "right": 1011,
+        "top": 215.5,
+        "bottom": 253.5
+      },
+      {
+        "text": "收起",
+        "left": 1018,
+        "right": 1056,
+        "top": 215.5,
+        "bottom": 253.5
+      }
+    ]
+  },
+  "checks": [
+    {
+      "id": "latest-assets",
+      "passed": true,
+      "detail": "实际加载 ./assets/index-BC6lY0fv.js, ./assets/index--Lyd2PCs.css"
+    },
+    {
+      "id": "extract-complete-card",
+      "passed": true,
+      "detail": "商品A标题、详情页、OCR、视觉识别、待确认状态和4个操作均可见"
+    },
+    {
+      "id": "collapse-preserves-facts",
+      "passed": true,
+      "detail": "收起仅改变 collapsed=true，完整商品事实仍保存在草稿状态并可再次展开"
+    },
+    {
+      "id": "confirm-lock",
+      "passed": true,
+      "detail": "商品A确认状态、锁定按钮与确认时间均生效"
+    },
+    {
+      "id": "replacement-cancel",
+      "passed": true,
+      "detail": "异品URL触发确认框；取消后仍保留商品A"
+    },
+    {
+      "id": "replacement-accept",
+      "passed": true,
+      "detail": "确认后商品B完整替换商品A，并重置为待确认"
+    },
+    {
+      "id": "extract-failure-preserves",
+      "passed": true,
+      "detail": "重新提取失败时商品B仍完整保留"
+    },
+    {
+      "id": "draft-restore",
+      "passed": true,
+      "detail": "离开选品分析师再返回，商品B和确认状态均从草稿存储恢复"
+    },
+    {
+      "id": "minimum-window-actions",
+      "passed": true,
+      "detail": "1100×720下4个操作按钮均在卡片内，无横向溢出"
+    },
+    {
+      "id": "send-migrates-state",
+      "passed": true,
+      "detail": "发送后商品状态迁移到 conv-1786292896710，草稿键已删除，确认状态保留且仅自动收起"
+    },
+    {
+      "id": "archive-restores-state",
+      "passed": true,
+      "detail": "从工作档案打开会话后，商品B、OCR、展开状态和确认锁定均恢复"
+    },
+    {
+      "id": "confirmed-clear",
+      "passed": true,
+      "detail": "已确认商品清除前二次确认；清除存储后重开档案不再恢复"
+    }
+  ],
+  "passed": 12,
+  "failed": 0,
+  "total": 12,
+  "completionRate": 100
+}

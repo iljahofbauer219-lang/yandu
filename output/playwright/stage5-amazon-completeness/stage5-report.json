@@ -1,0 +1,97 @@
+{
+  "generatedAt": "2026-08-18T01:56:04.950Z",
+  "endpoint": "http://127.0.0.1:52770/amazon/search",
+  "expectedAssets": [
+    "./assets/index-9JoZhPdG.js",
+    "./assets/index-B7upcNzT.css"
+  ],
+  "loadedAssets": [
+    "./assets/index-9JoZhPdG.js",
+    "./assets/index-B7upcNzT.css"
+  ],
+  "checks": [
+    {
+      "id": "configuration-saved",
+      "passed": true,
+      "detail": "{\"configured\":true,\"site\":\"US\",\"pages\":2,\"maxSamples\":48,\"cacheHours\":12}"
+    },
+    {
+      "id": "two-pages-and-limit",
+      "passed": true,
+      "detail": "{\"source\":\"api\",\"pagesRequested\":2,\"pagesFetched\":2,\"rawCount\":60,\"uniqueCount\":48,\"truncated\":true,\"cacheHit\":false}"
+    },
+    {
+      "id": "cross-page-dedupe",
+      "passed": true,
+      "detail": "samples=48"
+    },
+    {
+      "id": "cache-hit-no-network",
+      "passed": true,
+      "detail": "{\"source\":\"api\",\"pagesRequested\":2,\"pagesFetched\":2,\"rawCount\":60,\"uniqueCount\":48,\"truncated\":true,\"cacheHit\":true}"
+    },
+    {
+      "id": "api-key-transmitted",
+      "passed": true,
+      "detail": "[{\"query\":\"cache verification product\",\"page\":1,\"apiKey\":\"stage5-key\"},{\"query\":\"cache verification product\",\"page\":2,\"apiKey\":\"stage5-key\"}]"
+    },
+    {
+      "id": "complete-audit-counts",
+      "passed": true,
+      "detail": "Amazon 样本可比性 结论置信度：可决策 原始样本 54 自然位 48 赞助位 6 ASIN 去重 48 DIRECT 36 ADJACENT 6 已排除 6 样本完整率 100% 检索词成功 3/3 核心字段覆盖 100% 研究样本 已达标，可评估竞争力 模型生成并经身份规则清洗 waterless pet shampoo no rinse pet cleanser waterless pet body wash"
+    },
+    {
+      "id": "decision-grade-coverage",
+      "passed": true,
+      "detail": "Amazon 样本可比性 结论置信度：可决策 原始样本 54 自然位 48 赞助位 6 ASIN 去重 48 DIRECT 36 ADJACENT 6 已排除 6 样本完整率 100% 检索词成功 3/3 核心字段覆盖 100% 研究样本 已达标，可评估竞争力 模型生成并经身份规则清洗 waterless pet shampoo no rinse pet cleanser waterless pet body wash"
+    },
+    {
+      "id": "controlled-model-receives-readonly-fact-package",
+      "passed": true,
+      "detail": "模型补充必须基于只读事实包，价格与门禁由确定性渲染器处理"
+    },
+    {
+      "id": "decision-grade-report-accepted",
+      "passed": true,
+      "detail": "AI 宠物免洗擦浴精华 · Amazon美国站选品分析报告 报告状态：正式｜数据截止：2026-08-18｜目标平台：Amazon美国站｜履约：FBA｜币种：USD 说明：所有“待验证”字段均未被系统事实包证实，不能据此推导确定性市场、合规或利润结论。 第一部分：本品基础信息解析 本品基础信息表 表格 复制 CSV 展开 信息分类 明细项 本品数据 备注 货源基础 商品链接 / 产品图 https://detail.1688.com/offer/stage5.html 来源：1688 商品页 货源基础 采购单价、起订量、交期 待验证 待验证 产品参数 材质、产品尺寸、净重 包装尺寸：10×8×2cm；包装重量：40g 来源：详情模块DOM 产品参数 包装尺寸、毛重、装箱数 待验证 待验证 产品参数 款式、颜色、变体数 待验证 来源：1688 商品页属性 需求价值 可解决核心痛点 待验证 分析师补充；无证据不得写成事实 需求价值 用户核心购买理由 待验证 分析师补充；无证据不得写成事实 本品自评 核心优势 液体精华 来源：人工锁定/商品图片 本品自评 现存劣势 待验证 待与DIRECT样本比较 证据状态 身份与信息完整性 以包装出液口、详情说明和实物形态为准 系统锁定商品身份 第二部分：目标平台细分市场大盘调研 2.1 细分市场大盘数据 表格 复制 CSV 展开 统计指标 大盘数据 区间分布 市场判断 DIRECT样本数量 36 待验证 仅统计同一核心用途、形态、对象的DIRECT样本 三组检索词成功率 3/3 waterless pet shampoo；no rinse pet cleanser；waterless pet body wash 检索覆盖达成 DIRECT价格/评分/评论字段覆盖 100% 待验证 可用于方向性比较 样本完整率 100% 待验证 可决策 购买信号 待验证 待验证 仅为搜索页购买徽标，不得改写为精确月销量 数据源状态 已取得样本 待验证 OmkarCloud API 优先；Amazon 页面仅补充缺失字段 2.2 类目推荐 表格 复制 CSV 展开 推荐类目 类目路径 推荐理由 竞争程度 机会判断 备注 Pet Supplies（候选） 待验证 商品身份/页面文字含宠物用途，且为液体/喷雾形态 待验证 候选，待实际Listing类目确认 中 2.3 合规与IP风险 表格 复制 CSV 展开 核验项 本品情况 平台/法规要求 证据与来源 处理建议 产品安全/标签 待验证 待核验目标市场标签及成分要求 来源：1688 商品页 人工核验 危险品/运输 待验证 待核验运输与FBA限制 来源：商品属性/详情 人工核验 商标/专利/IP 待验证 待检索 待验证 人工核验 第三部分：本品与核心竞品多维对比 核心竞品对比表 表格 复制 CSV 展开 对比维度 本品 竞品1 竞品2 竞品3 结论 标题/ASIN 宠物免洗擦浴精华 D01000000 Waterless Pet Shampoo No Rinse Body Cleanser for Dogs and Cats 01-0 D01000001 Waterless Pet Shampoo No Rinse Body Cleanser for Dogs and Cats 01-1 D01000002 Waterless Pet Shampoo No Rinse Body Cleanser for Dogs and Cats 01-2 DIRECT样本仅作可比竞品 标准化售价 待验证 $15.00 $16.00 $17.00 待按零售单位复核 评分 待验证 4.1 4.199999999999999 4.3 系统抓取字段 评论量 待验证 140 151 162 系统抓取字段 差异化/痛点 形态：液体精华；使用方式：挤出液体后免洗擦浴 待验证 待验证 待验证 详情页卖点与评论页原文样本；不得外推为高频结论 第四部分：头部竞店竞争实力拆解 头部竞店拆解表 表格 复制 CSV 展开 竞店/品牌 核心产品 价格带 评分/评论 流量/销量线索 差异化卖点 运营动作 可借鉴点 待验证 D01000000 Waterless Pet Shampoo No Rinse Body Cleanser for Dogs and Cats 01-0 $15.00 4.1/140 待验证 待验证 待验证 待验证 待验证 D01000001 Waterless Pet Shampoo No Rinse Body Cleanser for Dogs and Cats 01-1 $16.00 4.199999999999999/151 待验证 待验证 待验证 待验证 待验证 D01000002 Waterless Pet Shampoo No Rinse Body Cleanser for Dogs and Cats 01-2 $17.00 4.3/162 待验证 待验证 待验证 待验证 待验证 D01000003 Waterless Pet Shampoo No Rinse Body Cleanser for Dogs and Cats 01-3 $18.00 4.3999999999999995/173 待验证 待验证 待验证 待验证 待验证 D01000004 Waterless Pet Shampoo No Rinse Body Cleanser for Dogs and Cats 01-4 $19.00 4.5/184 待验证 待验证 待验证 待验证 待验证 D01000005 Waterless Pet Shampoo No Rinse Body Cleanser for Dogs and Cats 01-5 $20.00 4.1/195 待验证 待验证 待验证 待验证 待验证 D02000000 Waterless Pet Shampoo No Rinse Body Cleanser for Dogs and Cats 02-0 $18.00 4.1/160 待验证 待验证 待验证 待验证 待验证 D02000001 Waterless Pet Shampoo No Rinse Body Cleanser for Dogs and Cats 02-1 $19.00 4.199999999999999/171 待验证 待验证 待验证 待验证 第五部分：入市机会与盈利可行性判定 5.1 利润测算表 表格 复制 CSV 展开 测算项目 快速市场口径 全成本口径 证据/说明 采购价 待验证 待验证 待验证 Amazon佣金 15% 15% 来源：Amazon US 标准销售费率：https://sell.amazon.com/pricing?mons_sel_locale=en_US（Pet Supplies 15%，兽医处方饮食例外 22%） FBA履约费 $0.00 $0.00 来源：待接入 Amazon Revenue Calculator（尺寸、重量、类目、售价） 广告/优惠券 10% / $5.00 待验证 系统预设或用户修改 全成本物流/税费 待验证 待验证 未知项不可按真实成本参与正向结论 5.2 入市机会评估表 表格 复制 CSV 展开 评估维度 证据与结果 风险 建议动作 市场样本基线 36 DIRECT；完整率100% 可决策 补齐三组检索词和DIRECT字段 差异化 形态：液体精华；使用方式：挤出液体后免洗擦浴 待核验 提供样品/竞品对比/买家证据 合规/IP 液体/喷雾形态：需核验运输、标签及适用监管要求 待核验 完成官方检索与测试/标签核验 5.3 最终入市判定 表格 复制 CSV 展开 决策项 结论 系统入市结论 ❓ 数据不足，不能判定 目标贡献利润率 20% 30天验证计划 补齐FBA、全成本、合规/IP和DIRECT样本，复算全成本贡献利润 停止条件 全成本贡献利润为负、合规/IP硬门禁失败或无法形成可核验差异化 第六部分：产品改良方案与长期市场机会 6.1 本品改良优化清单表 表格 复制 CSV 展开 改良方向 具体优化方案 对应痛点/竞品 改造成本 预期效果 外观/结构改良 待验证 待与DIRECT竞品对比 待验证 待验证 规格/SKU拓展 待验证 待与DIRECT竞品对比 待验证 待验证 合规资质补齐 完成成分、标签、运输与IP核验 平台与法规要求 待验证 降低上架风险 6.2 长期市场机会 表格 复制 CSV 展开 机会方向 验证与落地建议 细分需求机会 待完成30天验证后，以DIRECT价格、购买信号和全成本贡献利润复盘 报告结论与待办 系统入市结论：❓ 数据不足，不能判定 必做验证：补齐包装尺寸/毛重、Amazon FBA履约费、全成本物流税费区间、合规/IP检索，以及同一核心用途、同一形态、同一对象的DIRECT竞品证据。 复制回答 ✎ 转为文档编辑 ••• 更多"
+    },
+    {
+      "id": "progress-cleared",
+      "passed": true,
+      "detail": "报告返回后无停滞进度"
+    },
+    {
+      "id": "low-audit-visible",
+      "passed": true,
+      "detail": "Amazon 样本可比性 结论置信度：低 原始样本 3 自然位 3 赞助位 0 ASIN 去重 3 DIRECT 3 ADJACENT 0 已排除 0 样本完整率 33% 检索词成功 3/3 核心字段覆盖 33% 研究样本 需补数 模型生成并经身份规则清洗 waterless pet shampoo no rinse pet cleanser waterless pet body wash DIRECT 少于 15 个：仅作方向性参考，不得写成 TOP50 或完整市场结论。"
+    },
+    {
+      "id": "unsupported-market-claims-rejected",
+      "passed": true,
+      "detail": "AI 宠物免洗擦浴精华 · Amazon美国站选品分析报告 报告状态：预备｜数据截止：2026-08-18｜目标平台：Amazon美国站｜履约：FBA｜币种：USD 说明：所有“待验证”字段均未被系统事实包证实，不能据此推导确定性市场、合规或利润结论。 第一部分：本品基础信息解析 本品基础信息表 表格 复制 CSV 展开 信息分类 明细项 本品数据 备注 货源基础 商品链接 / 产品图 https://detail.1688.com/offer/stage5.html 来源：1688 商品页 货源基础 采购单价、起订量、交期 待验证 待验证 产品参数 材质、产品尺寸、净重 包装尺寸：10×8×2cm；包装重量：40g 来源：详情模块DOM 产品参数 包装尺寸、毛重、装箱数 待验证 待验证 产品参数 款式、颜色、变体数 待验证 来源：1688 商品页属性 需求价值 可解决核心痛点 待验证 分析师补充；无证据不得写成事实 需求价值 用户核心购买理由 待验证 分析师补充；无证据不得写成事实 本品自评 核心优势 液体精华 来源：人工锁定/商品图片 本品自评 现存劣势 待验证 待与DIRECT样本比较 证据状态 身份与信息完整性 以包装出液口、详情说明和实物形态为准 系统锁定商品身份 第二部分：目标平台细分市场大盘调研 2.1 细分市场大盘数据 表格 复制 CSV 展开 统计指标 大盘数据 区间分布 市场判断 DIRECT样本数量 3 待验证 仅统计同一核心用途、形态、对象的DIRECT样本 三组检索词成功率 3/3 waterless pet shampoo；no rinse pet cleanser；waterless pet body wash 检索覆盖达成 DIRECT价格/评分/评论字段覆盖 33% 待验证 字段覆盖不足 样本完整率 33% 待验证 低 购买信号 待验证 待验证 仅为搜索页购买徽标，不得改写为精确月销量 数据源状态 已取得样本 待验证 OmkarCloud API 优先；Amazon 页面仅补充缺失字段 2.2 类目推荐 表格 复制 CSV 展开 推荐类目 类目路径 推荐理由 竞争程度 机会判断 备注 Pet Supplies（候选） 待验证 商品身份/页面文字含宠物用途，且为液体/喷雾形态 待验证 候选，待实际Listing类目确认 中 2.3 合规与IP风险 表格 复制 CSV 展开 核验项 本品情况 平台/法规要求 证据与来源 处理建议 产品安全/标签 待验证 待核验目标市场标签及成分要求 来源：1688 商品页 人工核验 危险品/运输 待验证 待核验运输与FBA限制 来源：商品属性/详情 人工核验 商标/专利/IP 待验证 待检索 待验证 人工核验 第三部分：本品与核心竞品多维对比 核心竞品对比表 表格 复制 CSV 展开 对比维度 本品 竞品1 竞品2 竞品3 结论 标题/ASIN 宠物免洗擦浴精华 LOW0000000 Waterless Pet Shampoo No Rinse Body Cleanser waterless pet shampoo LOW1000000 Waterless Pet Shampoo No Rinse Body Cleanser no rinse pet cleanser LOW2000000 Waterless Pet Shampoo No Rinse Body Cleanser waterless pet body wash DIRECT样本仅作可比竞品 标准化售价 待验证 $15.00 $15.00 $15.00 待按零售单位复核 评分 待验证 待验证 待验证 待验证 系统抓取字段 评论量 待验证 待验证 待验证 待验证 系统抓取字段 差异化/痛点 形态：液体精华；使用方式：挤出液体后免洗擦浴 待验证 待验证 待验证 详情页卖点与评论页原文样本；不得外推为高频结论 第四部分：头部竞店竞争实力拆解 头部竞店拆解表 表格 复制 CSV 展开 竞店/品牌 核心产品 价格带 评分/评论 流量/销量线索 差异化卖点 运营动作 可借鉴点 待验证 LOW0000000 Waterless Pet Shampoo No Rinse Body Cleanser waterless pet shampoo $15.00 待验证/待验证 待验证 待验证 待验证 待验证 待验证 LOW1000000 Waterless Pet Shampoo No Rinse Body Cleanser no rinse pet cleanser $15.00 待验证/待验证 待验证 待验证 待验证 待验证 待验证 LOW2000000 Waterless Pet Shampoo No Rinse Body Cleanser waterless pet body wash $15.00 待验证/待验证 待验证 待验证 待验证 待验证 第五部分：入市机会与盈利可行性判定 5.1 利润测算表 表格 复制 CSV 展开 测算项目 快速市场口径 全成本口径 证据/说明 采购价 待验证 待验证 待验证 Amazon佣金 15% 15% 来源：Amazon US 标准销售费率：https://sell.amazon.com/pricing?mons_sel_locale=en_US（Pet Supplies 15%，兽医处方饮食例外 22%） FBA履约费 $0.00 $0.00 来源：待接入 Amazon Revenue Calculator（尺寸、重量、类目、售价） 广告/优惠券 10% / $5.00 待验证 系统预设或用户修改 全成本物流/税费 待验证 待验证 未知项不可按真实成本参与正向结论 5.2 入市机会评估表 表格 复制 CSV 展开 评估维度 证据与结果 风险 建议动作 市场样本基线 3 DIRECT；完整率33% 低 补齐三组检索词和DIRECT字段 差异化 形态：液体精华；使用方式：挤出液体后免洗擦浴 待核验 提供样品/竞品对比/买家证据 合规/IP 液体/喷雾形态：需核验运输、标签及适用监管要求 待核验 完成官方检索与测试/标签核验 5.3 最终入市判定 表格 复制 CSV 展开 决策项 结论 系统入市结论 ❓ 数据不足，不能判定 目标贡献利润率 20% 30天验证计划 补齐FBA、全成本、合规/IP和DIRECT样本，复算全成本贡献利润 停止条件 全成本贡献利润为负、合规/IP硬门禁失败或无法形成可核验差异化 第六部分：产品改良方案与长期市场机会 6.1 本品改良优化清单表 表格 复制 CSV 展开 改良方向 具体优化方案 对应痛点/竞品 改造成本 预期效果 外观/结构改良 待验证 待与DIRECT竞品对比 待验证 待验证 规格/SKU拓展 待验证 待与DIRECT竞品对比 待验证 待验证 合规资质补齐 完成成分、标签、运输与IP核验 平台与法规要求 待验证 降低上架风险 6.2 长期市场机会 表格 复制 CSV 展开 机会方向 验证与落地建议 细分需求机会 待完成30天验证后，以DIRECT价格、购买信号和全成本贡献利润复盘 报告结论与待办 系统入市结论：❓ 数据不足，不能判定 必做验证：补齐包装尺寸/毛重、Amazon FBA履约费、全成本物流税费区间、合规/IP检索，以及同一核心用途、同一形态、同一对象的DIRECT竞品证据。 复制回答 ✎ 转为文档编辑 ••• 更多"
+    },
+    {
+      "id": "narrow-layout-no-overflow",
+      "passed": true,
+      "detail": "{\"width\":923,\"scrollWidth\":923,\"right\":1039,\"viewport\":1100}"
+    },
+    {
+      "id": "latest-assets",
+      "passed": true,
+      "detail": "实际加载 ./assets/index-9JoZhPdG.js, ./assets/index-B7upcNzT.css"
+    }
+  ],
+  "counters": {
+    "derive": 2,
+    "ask": 8,
+    "httpRequests": 11
+  },
+  "completeAuditText": "Amazon 样本可比性 结论置信度：可决策 原始样本 54 自然位 48 赞助位 6 ASIN 去重 48 DIRECT 36 ADJACENT 6 已排除 6 样本完整率 100% 检索词成功 3/3 核心字段覆盖 100% 研究样本 已达标，可评估竞争力 模型生成并经身份规则清洗 waterless pet shampoo no rinse pet cleanser waterless pet body wash",
+  "lowAuditText": "Amazon 样本可比性 结论置信度：低 原始样本 3 自然位 3 赞助位 0 ASIN 去重 3 DIRECT 3 ADJACENT 0 已排除 0 样本完整率 33% 检索词成功 3/3 核心字段覆盖 33% 研究样本 需补数 模型生成并经身份规则清洗 waterless pet shampoo no rinse pet cleanser waterless pet body wash DIRECT 少于 15 个：仅作方向性参考，不得写成 TOP50 或完整市场结论。",
+  "layout": {
+    "width": 923,
+    "scrollWidth": 923,
+    "right": 1039,
+    "viewport": 1100
+  }
+}

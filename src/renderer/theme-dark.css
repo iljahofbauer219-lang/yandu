@@ -1,0 +1,207 @@
+/* ============================================================
+   深色主题（荧光绿 / 纯黑磨砂）—— 全部规则限定在 [data-theme="dark"] 前缀内。
+   默认（无 data-theme 属性）完全不生效，浅色主题零改动零回归。
+   ============================================================ */
+
+/* ---------- (a) 语义变量覆盖 ---------- */
+[data-theme="dark"] { --bg-app:#000; --bg-panel:rgba(255,255,255,.07); --bg-soft:rgba(255,255,255,.05); --bg-sidebar:rgba(255,255,255,.04); --text-primary:#f2f5f4; --text-secondary:#b7c0bc; --text-muted:#8a938f; --border-strong:rgba(255,255,255,.16); --border-soft:rgba(255,255,255,.10); --accent:#00e08a; --accent-soft:rgba(0,224,138,.12); --accent-contrast:#7cf0c4; --danger:#ff6b5b; --danger-bg:rgba(255,107,91,.12); --warn:#ffc45e; --ok:#00e08a; --card-blur:14px; --glow:0 0 18px rgba(0,224,138,.18); --shadow-card:0 8px 28px rgba(0,0,0,.5); color-scheme:dark; }
+
+/* ---------- (b) 定点覆盖：应用壳 ---------- */
+:root[data-theme="dark"] { color:var(--text-primary); background:var(--bg-app); }
+[data-theme="dark"] body { background:var(--bg-app); color:var(--text-primary); }
+[data-theme="dark"] .app-shell { background:var(--bg-app); }
+[data-theme="dark"] .sidebar { color:var(--text-secondary); background:var(--bg-sidebar); border-right:1px solid var(--border-soft); }
+[data-theme="dark"] .brand strong { color:var(--text-primary); } [data-theme="dark"] .brand small { color:var(--text-muted); }
+[data-theme="dark"] .brand-mark { color:#03130c; background:linear-gradient(145deg,#4ff2b2,#00b26e); border-color:rgba(0,224,138,.5); box-shadow:0 0 14px rgba(0,224,138,.28); }
+[data-theme="dark"] nav button { color:var(--text-muted); }
+[data-theme="dark"] nav button:hover { color:var(--accent-contrast); background:rgba(255,255,255,.07); }
+[data-theme="dark"] nav .nav-active { color:var(--accent-contrast); background:var(--accent-soft); box-shadow:inset 3px 0 0 var(--accent); }
+[data-theme="dark"] .app-titlebar-actions button:hover { color:var(--accent-contrast); background:rgba(255,255,255,.07); }
+[data-theme="dark"] .titlebar-theme-menu { box-shadow:0 10px 30px rgba(0,0,0,.5); }
+[data-theme="dark"] .titlebar-theme-menu button.active { color:var(--accent-contrast); background:var(--accent-soft); }
+[data-theme="dark"] nav button em { color:#03130c; background:var(--accent); }
+[data-theme="dark"] .app-shell > main { background:var(--bg-app); }
+[data-theme="dark"] .app-shell > main > header { background:rgba(255,255,255,.05); border-bottom:1px solid var(--border-soft); backdrop-filter:blur(var(--card-blur)); }
+[data-theme="dark"] h1 { color:var(--text-primary); } [data-theme="dark"] header p { color:var(--text-muted); }
+[data-theme="dark"] .workspace { background:transparent; }
+[data-theme="dark"] .status-card { background:rgba(255,255,255,.06); border-color:var(--border-soft); color:var(--text-secondary); } [data-theme="dark"] .status-card small { color:var(--text-muted); } [data-theme="dark"] .status-card .dot,[data-theme="dark"] .dot { background:var(--accent); }
+
+/* ---------- (b) 定点覆盖：一级玻璃拟态面板（含 backdrop-filter，总量受控 ≤10 个选择器） ---------- */
+[data-theme="dark"] .task-panel,[data-theme="dark"] .browser-panel { background:rgba(255,255,255,.06); border-color:var(--border-strong); backdrop-filter:blur(var(--card-blur)); box-shadow:var(--glow); }
+[data-theme="dark"] .content-page,[data-theme="dark"] .support-page { background:rgba(255,255,255,.06); border-color:var(--border-strong); backdrop-filter:blur(var(--card-blur)); box-shadow:var(--glow); }
+[data-theme="dark"] .catalog-panel,[data-theme="dark"] .selection-main { background:rgba(255,255,255,.06); border-color:var(--border-strong); backdrop-filter:blur(var(--card-blur)); box-shadow:var(--glow); }
+[data-theme="dark"] .ebay-store-bar,[data-theme="dark"] .ebay-business-nav { background:rgba(255,255,255,.05); border-bottom:1px solid var(--border-soft); backdrop-filter:blur(var(--card-blur)); box-shadow:none; }
+[data-theme="dark"] .ebay-page-heading { background:rgba(255,255,255,.07); border-color:var(--border-strong); backdrop-filter:blur(var(--card-blur)); box-shadow:var(--glow); }
+
+/* ---------- (b) 定点覆盖：通用控件 ---------- */
+[data-theme="dark"] button { color:var(--text-secondary); background:rgba(255,255,255,.07); border-color:var(--border-strong); }
+[data-theme="dark"] button:hover { border-color:rgba(0,224,138,.45); }
+[data-theme="dark"] .primary { color:#03130c; background:var(--accent); border-color:var(--accent); box-shadow:0 0 16px rgba(0,224,138,.3); }
+[data-theme="dark"] .primary:hover { background:#22e89b; border-color:#22e89b; }
+[data-theme="dark"] input,[data-theme="dark"] select,[data-theme="dark"] textarea,[data-theme="dark"] .platform-select-field select,[data-theme="dark"] .marketplace-config select,[data-theme="dark"] .compact-select-field select { color:var(--text-primary); background:rgba(255,255,255,.06); border-color:var(--border-strong); }
+[data-theme="dark"] input::placeholder,[data-theme="dark"] textarea::placeholder { color:var(--text-muted); }
+[data-theme="dark"] input:focus,[data-theme="dark"] select:focus,[data-theme="dark"] textarea:focus,[data-theme="dark"] .platform-select-field select:focus,[data-theme="dark"] .marketplace-config select:focus,[data-theme="dark"] .compact-select-field select:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(0,224,138,.16); }
+[data-theme="dark"] select option { color:#f2f5f4; background:#101513; }
+[data-theme="dark"] form label { color:var(--text-secondary); }
+[data-theme="dark"] .tabs { background:rgba(255,255,255,.03); border-bottom-color:var(--border-soft); }
+[data-theme="dark"] .tabs button { color:var(--text-muted); background:transparent; border-right-color:var(--border-soft); }
+[data-theme="dark"] .tabs button.active { color:var(--text-primary); background:rgba(255,255,255,.08); border-bottom:2px solid var(--accent); }
+[data-theme="dark"] .tabs button i:hover { background:rgba(255,255,255,.14); }
+[data-theme="dark"] .tabs .new-browser-tab { color:var(--accent-contrast); background:var(--accent-soft); border-color:rgba(0,224,138,.4); }
+[data-theme="dark"] .address-bar { border-bottom-color:var(--border-soft); } [data-theme="dark"] .address-bar input { background:rgba(255,255,255,.06); }
+[data-theme="dark"] .browser-slot { background:#0b0d0c; } [data-theme="dark"] .browser-placeholder { color:var(--text-muted); }
+[data-theme="dark"] .runbar { background:rgba(255,255,255,.03); border-top-color:var(--border-soft); } [data-theme="dark"] .runbar .dot { background:var(--accent); } [data-theme="dark"] .runbar .amber,[data-theme="dark"] .amber { background:var(--warn); } [data-theme="dark"] .runbar small,[data-theme="dark"] .run-state { color:var(--text-muted); }
+[data-theme="dark"] .mode-segment { background:rgba(255,255,255,.06); }
+[data-theme="dark"] .mode-segment button { color:var(--text-muted); background:transparent; }
+[data-theme="dark"] .mode-segment button:hover { color:var(--accent-contrast); background:rgba(255,255,255,.07); }
+[data-theme="dark"] .mode-segment button.active { color:var(--accent-contrast); background:rgba(0,224,138,.16); box-shadow:inset 0 -2px 0 var(--accent); }
+[data-theme="dark"] .section-title { border-bottom-color:var(--border-soft); } [data-theme="dark"] .section-title>span { color:var(--accent-contrast); background:var(--accent-soft); } [data-theme="dark"] .section-title small { color:var(--text-muted); }
+[data-theme="dark"] .mode-switch button.selected,[data-theme="dark"] .collection-methods button.selected { color:var(--accent-contrast); background:var(--accent-soft); border-color:rgba(0,224,138,.5); box-shadow:0 0 0 1px rgba(0,224,138,.4); }
+[data-theme="dark"] .mode-description,[data-theme="dark"] .network-summary { background:var(--bg-soft); } [data-theme="dark"] .mode-description span,[data-theme="dark"] .network-summary small { color:var(--text-muted); }
+[data-theme="dark"] .task-config-card,[data-theme="dark"] .task-filter-card,[data-theme="dark"] .task-summary-card { background:rgba(255,255,255,.05); border-color:var(--border-soft); box-shadow:none; }
+[data-theme="dark"] .config-card-title,[data-theme="dark"] .task-filter-card[open] summary { border-bottom-color:var(--border-soft); } [data-theme="dark"] .config-card-title>span { color:var(--accent-contrast); background:var(--accent-soft); }
+[data-theme="dark"] .task-summary-card dl>div { border-bottom-color:var(--border-soft); } [data-theme="dark"] .task-summary-card dd { color:var(--text-primary); }
+[data-theme="dark"] .identity-summary { color:var(--accent-contrast); background:var(--accent-soft); border-color:rgba(0,224,138,.3); } [data-theme="dark"] .identity-summary .dot { background:var(--accent); }
+[data-theme="dark"] .legacy-module-nav,[data-theme="dark"] .selection-module-nav,[data-theme="dark"] .warehouse-module-nav { background:rgba(255,255,255,.04); border-bottom-color:var(--border-soft); box-shadow:none; }
+[data-theme="dark"] .selection-module-nav button.active,[data-theme="dark"] .warehouse-module-nav button.active { color:var(--accent-contrast); background:var(--accent-soft); border-color:rgba(0,224,138,.4); }
+[data-theme="dark"] .page-toolbar { border-bottom-color:var(--border-soft); } [data-theme="dark"] .page-toolbar small { color:var(--text-muted); }
+[data-theme="dark"] .empty-state { color:var(--text-secondary); } [data-theme="dark"] .empty-state h2 { color:var(--text-primary); } [data-theme="dark"] .empty-state>span { color:var(--accent-contrast); background:var(--accent-soft); }
+
+/* ---------- (b) 定点覆盖：网格小卡片（纯 rgba 背景，禁止 backdrop-filter） ---------- */
+[data-theme="dark"] .product-card,[data-theme="dark"] .selection-card,[data-theme="dark"] .candidate-group-card,[data-theme="dark"] .compare-record,[data-theme="dark"] .market-warehouse-grid article,[data-theme="dark"] .warehouse-dashboard-card,[data-theme="dark"] .warehouse-dashboard-metrics article,[data-theme="dark"] .warehouse-dashboard-heading,[data-theme="dark"] .warehouse-dashboard-bottom>section { background:rgba(255,255,255,.06); border-color:var(--border-soft); box-shadow:none; }
+[data-theme="dark"] .product-info b,[data-theme="dark"] .selection-card-body>b { color:var(--text-primary); } [data-theme="dark"] .product-info small,[data-theme="dark"] .selection-card-body>small { color:var(--text-muted); }
+[data-theme="dark"] .product-info strong,[data-theme="dark"] .selection-card-body>strong,[data-theme="dark"] .market-warehouse-grid strong { color:#ffb28a; }
+[data-theme="dark"] .product-tags span,[data-theme="dark"] .selection-tags span,[data-theme="dark"] .compare-product span { color:var(--text-secondary); background:rgba(255,255,255,.08); }
+[data-theme="dark"] .product-actions .search-1688 { color:#03130c; background:var(--accent); border-color:var(--accent); }
+[data-theme="dark"] .score-badge { color:#03130c; background:var(--accent); }
+[data-theme="dark"] .selection-stats button,[data-theme="dark"] .publishing-stats button,[data-theme="dark"] .compare-mini-stats span,[data-theme="dark"] .compare-money span { background:var(--bg-soft); } [data-theme="dark"] .selection-stats b,[data-theme="dark"] .publishing-stats button b { color:var(--accent-contrast); }
+[data-theme="dark"] .selection-heading,[data-theme="dark"] .selection-filters,[data-theme="dark"] .catalog-heading,[data-theme="dark"] .compare-toolbar { border-bottom-color:var(--border-soft); }
+[data-theme="dark"] .publishing-control,[data-theme="dark"] .publishing-workspace,[data-theme="dark"] .publishing-checklist,[data-theme="dark"] .warehouse-comparison-page>aside,[data-theme="dark"] .warehouse-comparison-page>main { background:rgba(255,255,255,.06); border-color:var(--border-soft); }
+[data-theme="dark"] .catalog-all { background:var(--bg-soft); } [data-theme="dark"] .catalog-panel button.active,[data-theme="dark"] .catalog-group>div button.active { color:var(--accent-contrast); background:var(--accent-soft); } [data-theme="dark"] .catalog-panel button em { color:var(--text-muted); background:rgba(255,255,255,.08); }
+
+/* ---------- (b) 定点覆盖：eBay 平台高频区 ---------- */
+[data-theme="dark"] .ebay-platform-page { background:var(--bg-app); }
+[data-theme="dark"] .ebay-business-nav button { background:transparent; } [data-theme="dark"] .ebay-business-nav b { color:var(--text-secondary); } [data-theme="dark"] .ebay-business-nav small { color:var(--text-muted); }
+[data-theme="dark"] .ebay-business-nav button.active { background:var(--accent-soft); box-shadow:inset 0 -3px 0 var(--accent); } [data-theme="dark"] .ebay-business-nav button.active b { color:var(--accent-contrast); }
+[data-theme="dark"] .ebay-page-heading small { color:var(--accent); } [data-theme="dark"] .ebay-page-heading p { color:var(--text-muted); }
+[data-theme="dark"] .ebay-metrics article,[data-theme="dark"] .ebay-login-workbench,[data-theme="dark"] .ebay-browser-panel { background:rgba(255,255,255,.06); border-color:var(--border-strong); } [data-theme="dark"] .ebay-metrics b { color:var(--accent-contrast); }
+[data-theme="dark"] .ebay-library-layout>aside,[data-theme="dark"] .ebay-optimize-layout>aside,[data-theme="dark"] .ebay-library-layout>section,[data-theme="dark"] .ebay-optimize-layout>section { background:rgba(255,255,255,.05); border-color:var(--border-soft); }
+[data-theme="dark"] .ebay-optimize-layout>aside>button::before { color:var(--text-secondary); background:rgba(255,255,255,.1); }
+[data-theme="dark"] .ebay-optimize-layout>aside>button.active { color:var(--accent-contrast); background:var(--accent-soft); border-left-color:var(--accent); box-shadow:none; }
+[data-theme="dark"] .ebay-optimize-layout>aside>button.active::before { color:#03130c; background:var(--accent); }
+[data-theme="dark"] .ebay-selected-product { background:var(--bg-soft); border-color:var(--border-soft); }
+[data-theme="dark"] .ebay-image-settings>section { background:rgba(255,255,255,.05); border-color:var(--border-soft); }
+[data-theme="dark"] .ebay-image-models>button { color:var(--text-secondary); background:rgba(255,255,255,.05); border-color:var(--border-soft); }
+[data-theme="dark"] .ebay-image-models>button.active { color:var(--accent-contrast); background:var(--accent-soft); border-color:rgba(0,224,138,.5); }
+[data-theme="dark"] .model-picker-trigger,[data-theme="dark"] .model-picker-menu,[data-theme="dark"] .model-picker-menu>button { color:var(--text-primary); background:#101513; border-color:var(--border-strong); }
+[data-theme="dark"] .model-picker-menu { box-shadow:0 14px 40px rgba(0,0,0,.7); }
+[data-theme="dark"] .model-picker-menu>button:hover { background:rgba(0,224,138,.1); }
+[data-theme="dark"] .model-picker-trigger.open { border-color:var(--accent); box-shadow:0 0 0 3px rgba(0,224,138,.16); }
+[data-theme="dark"] .image-source-dialog { color:var(--text-primary); background:#101513; border-color:var(--border-strong); box-shadow:0 20px 60px rgba(0,0,0,.7); }
+[data-theme="dark"] .image-source-dialog header,[data-theme="dark"] .image-source-dialog footer { background:transparent; border-color:var(--border-soft); }
+[data-theme="dark"] .image-source-dialog header h3,[data-theme="dark"] .image-source-options b { color:var(--text-primary); }
+[data-theme="dark"] .image-source-dialog header p,[data-theme="dark"] .image-source-options small { color:var(--text-muted); }
+[data-theme="dark"] .image-source-options>button { background:rgba(255,255,255,.05); border-color:var(--border-soft); }
+[data-theme="dark"] .image-source-options>button:hover { background:var(--accent-soft); border-color:rgba(0,224,138,.45); }
+[data-theme="dark"] .image-source-options i { color:var(--accent-contrast); background:var(--accent-soft); }
+[data-theme="dark"] .image-reference-dialog { color:var(--text-primary); background:#101513; border-color:var(--border-strong); box-shadow:0 20px 60px rgba(0,0,0,.7); }
+[data-theme="dark"] .image-reference-dialog header,[data-theme="dark"] .image-reference-dialog footer { background:transparent; border-color:var(--border-soft); }
+[data-theme="dark"] .image-reference-dialog header p,[data-theme="dark"] .image-reference-dialog footer span { color:var(--text-muted); }
+[data-theme="dark"] .image-reference-list article { background:rgba(255,255,255,.05); border-color:var(--border-soft); }
+[data-theme="dark"] .image-reference-list article.primary { background:var(--accent-soft); border-color:rgba(0,224,138,.45); }
+[data-theme="dark"] .ebay-image-grounding { background:rgba(0,224,138,.05); border-color:rgba(0,224,138,.28); } [data-theme="dark"] .ebay-image-grounding>header b { color:var(--accent-contrast); }
+[data-theme="dark"] .ebay-image-storyboard-cards { background:rgba(0,224,138,.05); border-color:rgba(0,224,138,.28); } [data-theme="dark"] .ebay-image-storyboard-cards>header b { color:var(--accent-contrast); }
+[data-theme="dark"] .ebay-image-quality-gate { background:rgba(255,196,94,.07); border-color:rgba(255,196,94,.35); } [data-theme="dark"] .ebay-image-quality-gate>header b { color:var(--warn); }
+[data-theme="dark"] .ebay-image-candidates { background:rgba(255,255,255,.05); border-color:var(--border-soft); }
+[data-theme="dark"] .ebay-image-purpose-stats { color:var(--text-secondary,#999); }
+[data-theme="dark"] .ebay-image-accepted,[data-theme="dark"] .ebay-image-adoption { background:rgba(0,224,138,.05); border-color:rgba(0,224,138,.28); }
+[data-theme="dark"] .ebay-image-accepted article,[data-theme="dark"] .ebay-generated-images>article { background:rgba(255,255,255,.06); border-color:var(--border-soft); }
+[data-theme="dark"] .ebay-generated-images>article.passed { border-color:rgba(0,224,138,.5); }
+[data-theme="dark"] .ebay-image-model-warning { background:var(--danger-bg); border-color:rgba(255,107,91,.4); border-left-color:var(--danger); }
+[data-theme="dark"] .ebay-image-model-warning b { color:#ff8d80; } [data-theme="dark"] .ebay-image-model-warning span { color:#f0b0a8; }
+[data-theme="dark"] .ebay-original-gallery-extra article { background:rgba(255,255,255,.06); border-color:var(--border-soft); }
+[data-theme="dark"] .ebay-original-gallery-extra select,[data-theme="dark"] .ebay-original-gallery-extra button,[data-theme="dark"] .ebay-original-gallery-heading button { color:var(--accent-contrast); background:var(--accent-soft); border-color:rgba(0,224,138,.35); }
+[data-theme="dark"] .ebay-original-gallery-extra button:hover { background:rgba(0,224,138,.2); }
+[data-theme="dark"] .ebay-original-gallery-extra span,[data-theme="dark"] .ebay-role-suggestion { color:var(--text-muted); }
+[data-theme="dark"] .ebay-visual-compliance { background:rgba(255,255,255,.05); border-color:var(--border-strong); } [data-theme="dark"] .ebay-visual-compliance>header { border-bottom-color:var(--border-soft); } [data-theme="dark"] .ebay-visual-compliance>header small,[data-theme="dark"] .ebay-visual-compliance>footer { color:var(--text-muted); }
+[data-theme="dark"] .ebay-visual-empty { color:var(--text-secondary); background:var(--bg-soft); }
+[data-theme="dark"] .ebay-visual-results article { background:rgba(255,255,255,.05); border-color:var(--border-soft); }
+[data-theme="dark"] .ebay-visual-results article.failed { border-color:rgba(255,107,91,.45); } [data-theme="dark"] .ebay-visual-results article.review { border-color:rgba(255,196,94,.45); }
+[data-theme="dark"] .ebay-visual-results article small,[data-theme="dark"] .ebay-visual-results li p { color:var(--text-muted); } [data-theme="dark"] .ebay-visual-results li { border-top-color:var(--border-soft); }
+[data-theme="dark"] .ebay-visual-results li strong { color:var(--accent-contrast); } [data-theme="dark"] .ebay-visual-results li.failed strong { color:var(--danger); } [data-theme="dark"] .ebay-visual-results li.review strong { color:var(--warn); }
+[data-theme="dark"] .ebay-visual-summary.passed { color:var(--accent-contrast); background:var(--accent-soft); } [data-theme="dark"] .ebay-visual-summary.failed { color:var(--danger); background:var(--danger-bg); } [data-theme="dark"] .ebay-visual-summary.review { color:var(--warn); background:rgba(255,196,94,.12); }
+[data-theme="dark"] .ebay-visual-curation select,[data-theme="dark"] .ebay-visual-curation button { color:var(--accent-contrast); background:var(--accent-soft); border-color:rgba(0,224,138,.35); }
+[data-theme="dark"] .ebay-visual-curation button:hover { background:rgba(0,224,138,.2); border-color:rgba(0,224,138,.55); }
+[data-theme="dark"] .ebay-visual-curation button.active { color:#03130c; background:var(--accent); border-color:var(--accent); }
+[data-theme="dark"] .ebay-role-source { color:var(--text-muted); background:rgba(255,255,255,.06); border-color:var(--border-soft); }
+[data-theme="dark"] .ebay-role-source.manual,[data-theme="dark"] .ebay-visual-reference-count { color:var(--accent-contrast); background:var(--accent-soft); border-color:rgba(0,224,138,.35); }
+[data-theme="dark"] .ebay-visual-reference-warning { color:var(--warn); background:rgba(255,196,94,.12); border-color:rgba(255,196,94,.4); }
+[data-theme="dark"] .ebay-visual-results article.reference-selected { border-color:var(--accent); box-shadow:0 0 0 2px rgba(0,224,138,.22); }
+[data-theme="dark"] .ebay-content-sections article,[data-theme="dark"] .ebay-content-validation article,[data-theme="dark"] .ebay-content-facts,[data-theme="dark"] .ebay-final-description,[data-theme="dark"] .ebay-compare-grid article,[data-theme="dark"] .ebay-video-storyboard article { background:rgba(255,255,255,.05); border-color:var(--border-soft); }
+[data-theme="dark"] .ebay-content-sections article b,[data-theme="dark"] .ebay-content-validation b,[data-theme="dark"] .ebay-content-facts summary,[data-theme="dark"] .ebay-final-description summary { color:var(--accent-contrast); }
+[data-theme="dark"] .ebay-content-sections article p { color:var(--text-secondary); }
+[data-theme="dark"] .ebay-content-validation article.passed { background:var(--accent-soft); border-color:rgba(0,224,138,.4); } [data-theme="dark"] .ebay-content-validation article.failed { background:var(--danger-bg); border-color:rgba(255,107,91,.4); }
+[data-theme="dark"] .ebay-content-facts article { background:var(--bg-soft); } [data-theme="dark"] .ebay-content-facts em { color:var(--accent-contrast); } [data-theme="dark"] .ebay-content-facts small { color:var(--text-muted); }
+[data-theme="dark"] .ebay-content-language-bar { background:rgba(0,224,138,.06); border-color:rgba(0,224,138,.25); } [data-theme="dark"] .ebay-content-language-bar>div:first-child b { color:var(--accent-contrast); } [data-theme="dark"] .ebay-content-language-bar>div:first-child small { color:var(--text-muted); }
+[data-theme="dark"] .ebay-final-description textarea { color:var(--text-primary); background:rgba(255,255,255,.05); border-color:var(--border-strong); }
+[data-theme="dark"] .ebay-final-description>label { color:var(--text-primary); }
+[data-theme="dark"] .ebay-description-rules { color:var(--text-secondary); background:var(--bg-soft); border-color:var(--border-soft); } [data-theme="dark"] .ebay-description-rules b { color:var(--accent-contrast); }
+[data-theme="dark"] .ebay-image-purpose button.active { color:var(--accent-contrast); border-color:var(--accent); background:var(--accent-soft); box-shadow:inset 0 -3px var(--accent); }
+[data-theme="dark"] .ebay-content-v2>header small,[data-theme="dark"] .ebay-video-storyboard>header small,[data-theme="dark"] .ebay-version-compare>header small { color:var(--text-muted); }
+
+/* ---------- (c) 特殊区补丁：商品图/生成图保留浅色衬底（白底商品图不能垫黑） ---------- */
+[data-theme="dark"] .product-image,[data-theme="dark"] .selection-image,[data-theme="dark"] .compare-market-image,[data-theme="dark"] .ebay-visual-image,[data-theme="dark"] .preview-product-open,[data-theme="dark"] .ebay-selected-product>img,[data-theme="dark"] .ebay-selected-product>span,[data-theme="dark"] .ebay-original-gallery-extra img,[data-theme="dark"] .market-warehouse-grid img,[data-theme="dark"] .ozon-publish-list img,[data-theme="dark"] .ebay-compare-grid article img { background:#f5f7f5; }
+[data-theme="dark"] .product-image { border-bottom-color:rgba(255,255,255,.08); }
+
+/* ---------- (c) 特殊区补丁：滚动条深色配色 ---------- */
+[data-theme="dark"] ::-webkit-scrollbar { width:11px; height:11px; }
+[data-theme="dark"] ::-webkit-scrollbar-track { background:rgba(255,255,255,.03); }
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background:rgba(255,255,255,.18); border:2px solid transparent; border-radius:8px; background-clip:padding-box; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,.3); background-clip:padding-box; }
+[data-theme="dark"] ::-webkit-scrollbar-corner { background:transparent; }
+[data-theme="dark"] .ebay-login-workbench { scrollbar-color:rgba(255,255,255,.25) rgba(255,255,255,.05); }
+[data-theme="dark"] .ebay-login-workbench::-webkit-scrollbar-track { background:rgba(255,255,255,.05); }
+[data-theme="dark"] .ebay-login-workbench::-webkit-scrollbar-thumb { background:rgba(255,255,255,.22); border-color:transparent; }
+
+/* ---------- (c) 特殊区补丁：低配降级开关（关闭磨砂与发光） ---------- */
+[data-theme="dark"][data-effects="off"] * { backdrop-filter:none!important; }
+[data-theme="dark"][data-effects="off"] { --card-blur:0px; --glow:none; }
+
+/* ---------- (c) 特殊区补丁：主题切换器深色态 ---------- */
+[data-theme="dark"] .sidebar-admin { color:var(--text-muted); border-color:var(--border-soft); background:transparent; }
+[data-theme="dark"] .sidebar-admin:hover { color:var(--accent-contrast); border-color:rgba(0,224,138,.4); background:rgba(0,224,138,.08); }
+[data-theme="dark"] .sidebar-admin.active { color:var(--accent-contrast); border-color:rgba(0,224,138,.45); background:var(--accent-soft); }
+[data-theme="dark"] .sysadmin-header h2 { color:var(--text-primary); }
+[data-theme="dark"] .sysadmin-tabs { background:rgba(255,255,255,.06); }
+[data-theme="dark"] .sysadmin-tabs button { color:var(--text-muted); }
+[data-theme="dark"] .sysadmin-tabs button.active { background:rgba(255,255,255,.1); color:var(--accent-contrast); }
+[data-theme="dark"] .sysadmin-table th { color:var(--text-muted); border-bottom-color:var(--border-soft); }
+[data-theme="dark"] .sysadmin-table td { border-bottom-color:var(--border-soft); color:var(--text-secondary); }
+[data-theme="dark"] .sysadmin-table td b { color:var(--text-primary); }
+[data-theme="dark"] .owner-badge { background:var(--accent-soft); color:var(--accent-contrast); }
+[data-theme="dark"] .pwd-badge { background:rgba(255,196,94,.15); color:var(--warn); }
+[data-theme="dark"] .sysadmin-actions button { background:transparent; border-color:var(--border-soft); color:var(--text-muted); }
+[data-theme="dark"] .sysadmin-actions button:hover { border-color:rgba(0,224,138,.4); color:var(--accent-contrast); }
+[data-theme="dark"] .sysadmin-actions button.danger { color:#ff6b5b; border-color:rgba(255,107,91,.35); }
+[data-theme="dark"] .sysadmin-edit-panel { background:rgba(255,255,255,.04); }
+[data-theme="dark"] .edit-panel-grid input[type=text],[data-theme="dark"] .edit-panel-grid input[type=password],[data-theme="dark"] .edit-panel-grid input:not([type]) { background:rgba(255,255,255,.06); border-color:var(--border-soft); color:var(--text-primary); }
+[data-theme="dark"] .edit-panel-grid fieldset,[data-theme="dark"] .create-form-grid fieldset { border-color:var(--border-soft); }
+[data-theme="dark"] .role-check { color:var(--text-secondary); }
+[data-theme="dark"] .review-perms { border-color:var(--border); }
+[data-theme="dark"] .review-perms legend { color:var(--text-tertiary); }
+[data-theme="dark"] .sysadmin-org-info .org-item { background:rgba(255,255,255,.04); border-color:var(--border-soft); }
+[data-theme="dark"] .sysadmin-org-info dt { color:var(--text-muted); }
+[data-theme="dark"] .sysadmin-org-info dd { color:var(--text-primary); }
+[data-theme="dark"] .sysadmin-create-form { background:rgba(255,255,255,.04); border-color:var(--border-soft); }
+[data-theme="dark"] .create-form-grid input { background:rgba(255,255,255,.06); border-color:var(--border-soft); color:var(--text-primary); }
+[data-theme="dark"] .create-form-actions button:not(.sysadmin-primary) { background:transparent; border-color:var(--border-soft); color:var(--text-muted); }
+[data-theme="dark"] .sysadmin-org-info dt { color:var(--text-muted); }
+[data-theme="dark"] .sysadmin-org-info dd { color:var(--text-primary); }
+[data-theme="dark"] .sysadmin-error { color:#ff6b5b; background:rgba(255,107,91,.1); border-color:rgba(255,107,91,.3); }
+
+/* ---------- (c) 末尾兜底：未覆盖区域文字可读性 ---------- */
+[data-theme="dark"] .content-page small,[data-theme="dark"] .task-panel small,[data-theme="dark"] .support-page small,[data-theme="dark"] .ebay-workspace small { color:var(--text-muted); }
+[data-theme="dark"] .content-page b,[data-theme="dark"] .task-panel b,[data-theme="dark"] .support-page b { color:var(--text-primary); }
+[data-theme="dark"] .content-page p,[data-theme="dark"] .task-panel p { color:var(--text-secondary); }
+[data-theme="dark"] dt { color:var(--text-muted); } [data-theme="dark"] dd { color:var(--text-primary); }
+[data-theme="dark"] .error { color:var(--danger); background:var(--danger-bg); }

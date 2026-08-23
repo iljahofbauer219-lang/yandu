@@ -1,0 +1,61 @@
+{
+  "generatedAt": "2026-08-10T09:12:57.507Z",
+  "source": "captured real RAGFlow report",
+  "checks": [
+    {
+      "id": "captured-real-report-replayed",
+      "passed": true,
+      "detail": "asks=1"
+    },
+    {
+      "id": "formal-report-accepted",
+      "passed": true,
+      "detail": "length=10944"
+    },
+    {
+      "id": "identity-title-correct",
+      "passed": true,
+      "detail": "# 宠物免洗擦浴精华 · Amazon美国站选品分析报告\n\n> 报告编号：｜版本：｜分析日期：2026-08-10｜数据截止：2026-08-10｜目标平台：A"
+    },
+    {
+      "id": "unsupported-risk-redacted",
+      "passed": true,
+      "detail": "专利投诉和监管新规已降级"
+    },
+    {
+      "id": "data-insufficient-selected",
+      "passed": true,
+      "detail": "缺包装尺寸和毛重时未输出正向入场"
+    },
+    {
+      "id": "transparent-system-correction",
+      "passed": true,
+      "detail": "报告标记确定性降级"
+    },
+    {
+      "id": "report-actions-visible",
+      "passed": true,
+      "detail": "复制回答 ✎ 转为文档编辑 ••• 更多"
+    },
+    {
+      "id": "convert-to-document-operable",
+      "passed": true,
+      "detail": "真实报告已生成文档卡片"
+    },
+    {
+      "id": "latest-assets-loaded",
+      "passed": true,
+      "detail": "expected=./assets/index-CMUcSCku.js,./assets/index-ChUd0jgO.css loaded=./assets/index-CMUcSCku.js,./assets/index-ChUd0jgO.css"
+    }
+  ],
+  "askCount": 1,
+  "rawLength": 10944,
+  "expectedAssets": [
+    "./assets/index-CMUcSCku.js",
+    "./assets/index-ChUd0jgO.css"
+  ],
+  "loadedAssets": [
+    "./assets/index-CMUcSCku.js",
+    "./assets/index-ChUd0jgO.css"
+  ]
+}

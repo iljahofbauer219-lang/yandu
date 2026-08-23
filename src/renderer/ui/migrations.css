@@ -1,0 +1,32 @@
+/* 第二阶段：已迁移入口的兼容覆盖。始终在旧业务样式和主题之后加载。 */
+
+.auth-card .yd-field { gap: 6px; color: #9fc8c3; font-size: 12px; }
+.auth-card .yd-field input { min-height: 40px; color: #eef8f7; background: rgb(255 255 255 / 7%); border-color: rgb(255 255 255 / 18%); }
+.auth-card .yd-field input:focus-visible { border-color: var(--yd-brand); outline: 2px solid var(--yd-brand); outline-offset: 1px; box-shadow: 0 0 0 3px rgb(10 186 181 / 18%); }
+.auth-card .yd-field__hint { color: #8fb8b3; }
+.auth-card .auth-error,.auth-card .auth-notice { margin: 0; font-size: 12px; }
+.auth-card .auth-submit { min-height: 42px; margin-top: 4px; padding: 0 16px; font-size: 14px; }
+.auth-card .auth-server-toggle { min-height: 32px; font-size: 12px; }
+.auth-tabs button:focus-visible,.auth-server-toggle:focus-visible { outline: 2px solid var(--yd-brand); outline-offset: 2px; box-shadow: var(--yd-focus-ring); }
+
+.sysadmin-page { color: var(--yd-text); }
+.sysadmin-header h2 { color: var(--yd-text); }
+.sysadmin-page .yd-button { min-height: 34px; font-size: 12px; }
+.sysadmin-page .yd-status { margin-left: 6px; font-size: 12px; font-style: normal; }
+.sysadmin-page .sysadmin-error,.sysadmin-page .sysadmin-msg.yd-notice { margin: 6px 0; font-size: 12px; }
+.sysadmin-table,.sysadmin-table th,.sysadmin-table td { font-size: 12px; }
+.sysadmin-actions button { min-height: 32px; padding: 4px 9px; font-size: 12px; }
+.edit-panel-grid label,.edit-panel-grid legend,.role-check,.review-perms legend,.create-form-grid label,.create-form-grid legend,.sysadmin-msg { font-size: 12px; }
+.edit-panel-grid input[type=text],.edit-panel-grid input[type=password],.edit-panel-grid input:not([type]),.create-form-grid input { min-height: 36px; font-size: 13px; }
+.sysadmin-tabs button { min-height: 34px; }
+.sysadmin-tabs button:focus-visible,.sysadmin-actions button:focus-visible,.create-form-grid input:focus-visible { outline: 2px solid var(--yd-brand); outline-offset: 2px; box-shadow: var(--yd-focus-ring); }
+
+[data-theme="dark"] .auth-card .yd-field input { color: var(--yd-text); background: rgb(255 255 255 / 7%); border-color: var(--yd-border-strong); }
+[data-theme="dark"] .sysadmin-tabs { background: var(--yd-surface-muted); }
+[data-theme="dark"] .sysadmin-tabs button.active { color: var(--yd-brand-contrast); background: var(--yd-surface); }
+
+@media (max-width: 1180px) {
+  .sysadmin-page { max-width: none; padding: 20px; overflow: auto; }
+  .sysadmin-header { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .sysadmin-table { min-width: 820px; }
+}

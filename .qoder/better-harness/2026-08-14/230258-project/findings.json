@@ -1,0 +1,291 @@
+{
+  "summary": {
+    "projectName": "砚都跨境",
+    "locale": "zh-CN",
+    "modelId": "agent-work-loop-v4",
+    "reportContractVersion": 26,
+    "overview": "项目有可用的启动和构建路由，但在编辑后验证、项目级指导、交付验收和回滚恢复方面存在基础性缺口。330 次编辑后零验证命令、零测试文件、无 AGENTS.md，使得变更正确性完全依赖用户手动检查。",
+    "aiAgentPractice": {
+      "inspectedSurfaces": [],
+      "coverageRows": [
+        {
+          "surface": "Rules",
+          "scopes": [
+            "Global",
+            "Plugin"
+          ],
+          "count": 3,
+          "paths": [
+            "~/.qoder/rules/yandu.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/rules/postman-best-practices.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/cloudflare/1.0.0/rules/workers.md"
+          ]
+        },
+        {
+          "surface": "Skills",
+          "scopes": [
+            "Global",
+            "Plugin"
+          ],
+          "count": 217,
+          "paths": [
+            "~/.agents/skills/embedded-captions/SKILL.md",
+            "~/.agents/skills/faceless-explainer/SKILL.md",
+            "~/.agents/skills/figma/SKILL.md",
+            "~/.agents/skills/figma-generate-design/SKILL.md",
+            "~/.agents/skills/figma-implement-design/SKILL.md",
+            "~/.agents/skills/general-video/SKILL.md",
+            "~/.agents/skills/gh-address-comments/SKILL.md",
+            "~/.agents/skills/gh-fix-ci/SKILL.md",
+            "~/.agents/skills/hyperframes/SKILL.md",
+            "~/.agents/skills/hyperframes-animation/SKILL.md",
+            "~/.agents/skills/hyperframes-cli/SKILL.md",
+            "~/.agents/skills/hyperframes-core/SKILL.md"
+          ]
+        },
+        {
+          "surface": "Hooks",
+          "scopes": [
+            "Plugin"
+          ],
+          "count": 11,
+          "paths": [
+            "~/.qoder/plugins/cache/qoder-marketplace/alibabacloud-spec-ops/0.1.4/hooks/qoderwork-hooks.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/alibabacloud-core/1.0.20/hooks/qoderwork-hooks.json",
+            "~/.qoder/plugins/cache/qoder-bundler/security-scan/.qoder-plugin/qoder-hooks.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/superpowers/5.1.0/hooks/hooks.json"
+          ]
+        },
+        {
+          "surface": "Commands",
+          "scopes": [
+            "Plugin"
+          ],
+          "count": 25,
+          "paths": [
+            "~/.qoder/plugins/cache/qoder-marketplace/cloudflare/1.0.0/commands/build-agent.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/cloudflare/1.0.0/commands/build-mcp.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/commands/codegen.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/context7/1.0.0/commands/docs.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/commands/docs.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/commands/mock.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/commands/search.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/commands/security.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/commands/setup.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/slack/1.0.0/commands/channel-digest.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/slack/1.0.0/commands/draft-announcement.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/slack/1.0.0/commands/find-discussions.md"
+          ]
+        },
+        {
+          "surface": "Custom Agents",
+          "scopes": [
+            "Plugin"
+          ],
+          "count": 7,
+          "paths": [
+            "~/.qoder/plugins/cache/qoder-marketplace/vercel/0.44.0/agents/ai-architect.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/agents/readiness-analyzer.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/alibabacloud-spec-ops/0.1.4/agents/code-quality-reviewer.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/vercel/0.44.0/agents/deployment-expert.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/context7/1.0.0/agents/docs-researcher.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/vercel/0.44.0/agents/performance-optimizer.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/alibabacloud-spec-ops/0.1.4/agents/spec-reviewer.md"
+          ]
+        },
+        {
+          "surface": "MCP",
+          "scopes": [
+            "Plugin"
+          ],
+          "count": 18,
+          "paths": [
+            "~/.qoder/plugins/cache/qoder-marketplace/alibabacloud-core/1.0.20/.mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/alibabacloud-spec-ops/0.1.4/.mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/atlassian-mcp-server/1.0.0/.mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/chrome-devtools-mcp/1.2.0/.mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/cloudflare/1.0.0/mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/context7/1.0.0/.mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/datadog/0.7.13/mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/apollographql-skills/1.2.2/.mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/mongodb-agent-skills/1.1.0/mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/slack/1.0.0/.mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/sourcegraph/0.1.0/mcp.json"
+          ]
+        },
+        {
+          "surface": "Plugins",
+          "scopes": [
+            "Plugin"
+          ],
+          "count": 29,
+          "paths": [
+            "~/.qoder/plugins/cache/qoder-marketplace/alibabacloud-spec-ops/0.1.4/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/alibabacloud-core/1.0.20/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/apollographql-skills/1.2.2/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/architecture-visualization/0.1.0/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/atlassian-mcp-server/1.0.0/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-bundler/better-harness/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/cangjie-skills/1.0.0/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/chrome-devtools-mcp/1.2.0/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/cloudflare/1.0.0/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/context7/1.0.0/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/datadog/0.7.13/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/design-review/0.1.0/.qoder-plugin/plugin.json"
+          ]
+        },
+        {
+          "surface": "Memories",
+          "scopes": [
+            "Project",
+            "Global"
+          ],
+          "count": 112
+        },
+        {
+          "surface": "Workflows",
+          "scopes": [
+            "Project"
+          ],
+          "count": 0
+        }
+      ],
+      "repositorySourceRows": []
+    },
+    "assignmentSummaries": [],
+    "dimensions": [
+      {
+        "id": "task-understanding",
+        "label": "任务理解",
+        "score": 42,
+        "summary": "42 个源文件的项目缺少 AGENTS.md 和项目级 Rule，Agent 无法获取项目特定的上下文和约束。",
+        "findingRefs": [
+          "missing-agents-md"
+        ]
+      },
+      {
+        "id": "controlled-execution",
+        "label": "可控执行",
+        "score": 56,
+        "summary": "启动和构建脚本可用（pnpm dev/build/typecheck），但无项目级 Hook 或权限边界约束。",
+        "findingRefs": []
+      },
+      {
+        "id": "change-validation",
+        "label": "改动验证",
+        "score": 32,
+        "summary": "330 次编辑后零验证命令，42 个源文件零测试文件，变更验证完全缺失。",
+        "findingRefs": [
+          "post-edit-validation-gap",
+          "zero-test-files"
+        ]
+      },
+      {
+        "id": "reliable-delivery",
+        "label": "可靠交付",
+        "score": 38,
+        "summary": "186 个会话中零结构化完成信号，单次提交历史无文档化回滚程序，交付可靠性不可评估。",
+        "findingRefs": [
+          "no-acceptance-signals",
+          "no-rollback-procedure"
+        ]
+      },
+      {
+        "id": "learning-capture",
+        "label": "经验沉淀",
+        "score": 35,
+        "summary": "有界审查无法达到 clean no-candidate 或 supported-match 结论；112 条 Memory 存在标题碰撞。",
+        "findingRefs": [
+          "memory-title-collision"
+        ]
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "post-edit-validation-gap",
+      "title": "Edits go unverified because no validation command runs after changes",
+      "severity": "Medium",
+      "reason": "In 40 analyzed sessions, 330 edit events were observed with zero subsequent validation commands. Population coverage shows 0 of 186 sessions contained any check. The diagnostic flag 'no-reviewed-relevant-check-evidence' is present. The project has available validation commands (pnpm typecheck, pnpm build) but they are never invoked after edits. The sole candidate with actual code changes (1 edit, 1 file) closed as 'changed-without-check'. Zero project-level Hooks exist to trigger validation automatically. This means changes may introduce undetected regressions and the user is the sole validation mechanism.",
+      "expectedOutput": [
+        "Update the existing Rule owner identified by the reviewed evidence and retain a focused validation result."
+      ],
+      "expectedArtifact": "Rule",
+      "aiFixPrompt": "/better-harness fix this issue\n\nAdd the smallest owned validation route for post-edit verification.\n\n## What to do\n\nCreate a project-level Rule or AGENTS.md instruction that requires running `pnpm typecheck` after any source file edit. The project already has this command in package.json.\n\n## Validation\n\n- After making edits, run `pnpm typecheck` and confirm it exits 0\n- If typecheck fails, fix the error before handing off to the user",
+      "dimensionRefs": [
+        "change-validation"
+      ]
+    },
+    {
+      "id": "zero-test-files",
+      "title": "No test files exist to verify source behavior",
+      "severity": "Low",
+      "reason": "The project has 42 source files across TypeScript, JavaScript, Python, and TSX, but zero test files. No 'test' script exists in package.json. Even if validation commands were run after edits, there are no behavioral tests to catch logic regressions. The available validation is limited to type checking (pnpm typecheck) and build verification (pnpm build), which cannot detect behavioral defects.",
+      "expectedOutput": [
+        "Update the existing Test owner identified by the reviewed evidence and retain a focused validation result."
+      ],
+      "expectedArtifact": "Test",
+      "aiFixPrompt": "/better-harness fix this issue\n\nEstablish baseline test infrastructure for the project.\n\n## What to do\n\nAdd a test runner and at least one test file for a core module (e.g., src/shared/contracts.ts or src/main/services/EbayService.ts). Add a 'test' script to package.json.\n\n## Validation\n\n- Run the new test script and confirm it passes\n- Run pnpm typecheck to confirm no type errors were introduced",
+      "dimensionRefs": [
+        "change-validation"
+      ]
+    },
+    {
+      "id": "missing-agents-md",
+      "title": "Agent lacks scoped project instructions for a 42-source-file codebase",
+      "severity": "Medium",
+      "reason": "The project profile shows agentInstructions.status='missing' with zero AGENTS.md files for a repository with 42 source files. The suggested minimum is 1. The project has complex business logic spanning eBay, Amazon, and Shopee integrations, Electron desktop framework, and Prisma backend, but no scoped instructions guide the agent on project structure, validation commands, safety boundaries, or coding conventions. Zero project-level Rules exist (all 3 Rules are global or plugin scope). The project has accumulated 111 project-level Memory entries including 12 common pitfalls and 12 code specifications, but these are not formalized as deterministic project-level instructions.",
+      "expectedOutput": [
+        "Update the existing Document owner identified by the reviewed evidence and retain a focused validation result."
+      ],
+      "expectedArtifact": "Document",
+      "aiFixPrompt": "/better-harness fix this issue\n\nCreate the smallest useful AGENTS.md for this project.\n\n## What to do\n\nCreate a root AGENTS.md that covers: project structure (src/main, src/renderer, src/shared, server), available commands (pnpm install, pnpm dev, pnpm typecheck, pnpm build), safety boundaries (do not modify .env files, do not push without typecheck), and key conventions from existing Memory entries.\n\n## Validation\n\n- Confirm AGENTS.md exists at the project root\n- Run pnpm typecheck to confirm no issues\n- Verify the file references only commands that exist in package.json",
+      "dimensionRefs": [
+        "task-understanding"
+      ]
+    },
+    {
+      "id": "no-acceptance-signals",
+      "title": "Task completion cannot be confirmed at any acceptance boundary",
+      "severity": "Low",
+      "reason": "Population coverage shows 0 of 186 sessions with structured completion signals and 0 with user correction signals. The only acceptance signal observed is 'assistant-handoff' in 16 of 186 sessions (8.6%). All 5 emitted candidates have acceptanceEvidenceCeiling='lead', meaning acceptance is inferred from agent behavior, not confirmed by user decision. In 287 task episodes, 0 were closed and 0 were recovered. This means the agent never formally confirms task completion and the user never provides correction signals, making delivery reliability unobservable.",
+      "expectedOutput": [
+        "Update the existing Rule owner identified by the reviewed evidence and retain a focused validation result."
+      ],
+      "expectedArtifact": "Rule",
+      "aiFixPrompt": "/better-harness fix this issue\n\nAdd an explicit completion confirmation step to the agent workflow.\n\n## What to do\n\nAdd a project-level Rule that requires the agent to explicitly ask the user to confirm task completion before handing off, and to request correction if the result does not meet expectations.\n\n## Validation\n\n- In the next task episode, confirm the agent asks for completion confirmation before handoff",
+      "dimensionRefs": [
+        "reliable-delivery"
+      ]
+    },
+    {
+      "id": "no-rollback-procedure",
+      "title": "No documented rollback procedure exists for recovering from a bad change",
+      "severity": "Low",
+      "reason": "The repository has a single-commit history ('Initial commit'), low history confidence, and no documented rollback or recovery procedure. While git itself provides reset and revert commands, the project has no runbook, script, or instruction that names the recovery owner, entrypoint, or postcondition. The project profile shows no recovery evidence, and 0 of 287 task episodes were recovered. In case of a bad change, the operator has no documented path to restore service.",
+      "expectedOutput": [
+        "Update the existing Runbook owner identified by the reviewed evidence and retain a focused validation result."
+      ],
+      "expectedArtifact": "Runbook",
+      "aiFixPrompt": "/better-harness fix this issue\n\nDocument the smallest owned recovery route for failed changes.\n\n## What to do\n\nAdd a recovery section to AGENTS.md or a RUNBOOK.md that names: the recovery owner, the rollback command (git revert or git reset), the validation step after rollback (pnpm typecheck && pnpm build), and the postcondition (service restored to last known good state).\n\n## Validation\n\n- Confirm the recovery procedure is documented\n- Verify the rollback command works by running git log --oneline -1",
+      "dimensionRefs": [
+        "reliable-delivery"
+      ]
+    },
+    {
+      "id": "memory-title-collision",
+      "title": "Duplicate Memory title creates retrieval ambiguity",
+      "severity": "Low",
+      "reason": "Asset integrity review found 1 exact title collision: two project-scope Memory entries share the same normalized title. The review covered all 112 Memory titles without truncation. The integrity finding is advisory and explicitly states the collision proves only title metadata naming collision, not body duplication or current impact. However, exact same-scope title collisions can cause retrieval to return conflicting entries, and the quality gates require an ordinary Low governance finding for exact collisions. A separate similarity candidate (80% title match) was found but remains deferred per quality gate policy on near matches.",
+      "expectedOutput": [
+        "Update the existing Memory owner identified by the reviewed evidence and retain a focused validation result."
+      ],
+      "expectedArtifact": "Memory",
+      "aiFixPrompt": "/better-harness fix this issue\n\nResolve the exact Memory title collision.\n\n## What to do\n\nUse SearchMemory to locate the two entries with the same normalized title. Review their content to determine if they are duplicates or distinct entries with a naming conflict. If duplicates, update one to merge content and delete the other. If distinct, rename one to be unique.\n\n## Validation\n\n- Re-run the asset integrity review and confirm 0 exact collision groups",
+      "dimensionRefs": [
+        "learning-capture"
+      ]
+    }
+  ]
+}

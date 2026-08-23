@@ -1,0 +1,60 @@
+{
+  "checkedAt": "2026-08-17T16:25:20.920Z",
+  "settings": {
+    "configured": true,
+    "site": "US",
+    "pages": 1,
+    "maxSamples": 24,
+    "cacheHours": 24
+  },
+  "connection": {
+    "ok": false,
+    "message": "OmkarCloud 当月请求额度已用尽；请升级套餐或等待额度重置。系统将继续尝试 Amazon 页面补充，未补齐字段仍为“待验证”。"
+  },
+  "searches": [
+    {
+      "keyword": "waterless pet shampoo",
+      "error": "Amazon 数据接口第1页：OmkarCloud 当月请求额度已用尽；请升级套餐或等待额度重置。系统将继续尝试 Amazon 页面补充，未补齐字段仍为“待验证”。",
+      "count": 0,
+      "meta": null,
+      "preview": []
+    },
+    {
+      "keyword": "no rinse pet cleanser",
+      "error": "Amazon 数据接口第1页：OmkarCloud 当月请求额度已用尽；请升级套餐或等待额度重置。系统将继续尝试 Amazon 页面补充，未补齐字段仍为“待验证”。",
+      "count": 0,
+      "meta": null,
+      "preview": []
+    },
+    {
+      "keyword": "waterless pet body wash",
+      "error": "Amazon 数据接口第1页：OmkarCloud 当月请求额度已用尽；请升级套餐或等待额度重置。系统将继续尝试 Amazon 页面补充，未补齐字段仍为“待验证”。",
+      "count": 0,
+      "meta": null,
+      "preview": []
+    }
+  ],
+  "browserFallback": {
+    "keyword": "waterless pet shampoo",
+    "count": 24,
+    "preview": [
+      {
+        "asin": "B07M8DL34T",
+        "title": "Begley’s No Rinse Waterless Pet Shampoo, Bathless Cleaning, Deodorizing, and Odor Removal for a Shiny, Fresh Smelling Coat - Effective for Dogs, Puppies, and Cats - Fresh Oatmeal Mango Scent",
+        "price": 19.98,
+        "rating": null,
+        "reviews": 49,
+        "source": "browser"
+      },
+      {
+        "asin": "B08CL3CJQW",
+        "title": "Arm & Hammer Ultra Fresh Waterless Dog Bath Spray, White Jasmine, 10 Fl Oz | No-rinse baking soda formula for dogs that resist bathing, freshens coat between full baths or after outdoor activity",
+        "price": 4.67,
+        "rating": null,
+        "reviews": 24,
+        "source": "browser"
+      }
+    ]
+  },
+  "cachedMeta": null
+}

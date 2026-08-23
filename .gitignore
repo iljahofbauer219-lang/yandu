@@ -3,3 +3,18 @@ dist/
 .DS_Store
 *.log
 .env.local
+
+# AI视频本地运行时与可再生成大文件
+.tools/**/.venv/
+.tools/python-official-expanded-3119/
+.tools/python-watch-312/
+.tools/watch-skill/vision-ocr
+output/resource2skill-input/
+output/playwright/resource2skill/
+output/playwright/watch-skill/
+release/
+
+# Vendored DeepSeek Harness build artifacts. Source is tracked under vendor/deepseek-harness.
+vendor/deepseek-harness/**/lib/
+vendor/deepseek-harness/**/types/
+vendor/deepseek-harness/apps/web/dist/

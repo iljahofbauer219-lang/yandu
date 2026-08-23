@@ -1712,7 +1712,7 @@ export class AppDatabase {
   }
 
   private normalizeEbayMarketResearchSnapshot(snapshot:EbayMarketResearchSnapshot):EbayMarketResearchSnapshot|undefined {
-    if(!['EBAY_PRODUCT_RESEARCH','EBAY_SOLD_SEARCH'].includes(snapshot.source))return undefined
+    if(!['EBAY_PRODUCT_RESEARCH','EBAY_SOLD_SEARCH','OMKAR_EBAY_SCRAPER'].includes(snapshot.source))return undefined
     if(snapshot.captureMode&&!['MANUAL_RESEARCH_PAGE','AUTOMATIC'].includes(snapshot.captureMode))return undefined
     const valid=snapshot.samples.filter(item=>!/^(shop on ebay|sign in|register|see all|view item|research)$/i.test(item.title.trim()))
     const unique=new Map<string,EbayMarketResearchSnapshot['samples'][number]>()
@@ -1788,6 +1788,11 @@ export class AppDatabase {
       const now=new Date().toISOString();this.database.prepare(`UPDATE ebay_stores SET last_sync_at=?,sync_error=NULL,status='CONNECTED',updated_at=? WHERE id=?`).run(now,now,storeId)
       this.database.exec('COMMIT')
     } catch(error){this.database.exec('ROLLBACK');throw error}
+  }
+
+  upsertEbayListing(storeId:string,listing:EbayListing) {
+    this.database.prepare(`INSERT INTO ebay_listings (id,store_id,marketplace_id,listing_id,sku,title,price,currency,quantity,image_url,category_id,category_name,status,view_url,payload,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET sku=excluded.sku,title=excluded.title,price=excluded.price,currency=excluded.currency,quantity=excluded.quantity,image_url=excluded.image_url,category_id=excluded.category_id,category_name=excluded.category_name,status='ACTIVE',view_url=excluded.view_url,payload=excluded.payload,updated_at=excluded.updated_at`)
+      .run(listing.id,listing.storeId,listing.marketplaceId,listing.listingId,listing.sku,listing.title,listing.price,listing.currency,listing.quantity,listing.imageUrl,listing.categoryId,listing.categoryName,listing.status,listing.viewUrl,JSON.stringify(listing),listing.updatedAt)
   }
 
   importEbayListingsReport(storeId:string,listings:EbayListing[]) {

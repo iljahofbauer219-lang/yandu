@@ -1,3 +1,5 @@
+import { buildListingGlossaryDirective, findListingLanguage } from '../../shared/listingLocales'
+
 type TranslationPayload = {
   choices?: { message?: { content?: string } }[]
   error?: { message?: string }
@@ -17,22 +19,22 @@ export class BailianTranslationService {
 
   constructor(private readonly apiKey: string, private readonly baseUrl: string) {}
 
-  async translateTexts(texts: string[]) {
+  async translateTexts(texts: string[],targetLanguage='Chinese',domain='跨境电商商品页面。保留品牌名、型号、SKU、货币符号、产品编号和平台专有名称。') {
     if (!this.apiKey) throw new Error('未配置百炼 API Key')
     const unique = [...new Set(texts.map(text => text.trim()).filter(Boolean))]
     const result = new Map<string, string>()
     const pending = unique.filter(text => {
-      const cached = this.cache.get(text)
+      const cached = this.cache.get(`${targetLanguage}:${text}`)
       if (cached) result.set(text, cached)
       return !cached
     })
 
     for (let offset = 0; offset < pending.length; offset += BATCH_SIZE) {
       const batch = pending.slice(offset, offset + BATCH_SIZE)
-      const translated = await this.translateBatch(batch)
+      const translated = await this.translateBatch(batch,targetLanguage,domain)
       batch.forEach((source, index) => {
         const target = translated[index] || source
-        this.cache.set(source, target)
+        this.cache.set(`${targetLanguage}:${source}`, target)
         result.set(source, target)
       })
     }
@@ -40,11 +42,23 @@ export class BailianTranslationService {
     return result
   }
 
-  private async translateBatch(texts: string[]) {
-    if (texts.length === 1) return [await this.requestTranslation(texts[0])]
+  /**
+   * Listing 文案本地化（平台×语言矩阵单元）：按目标语言代码走 qwen-mt，
+   * domain 注入术语库硬门禁（命中术语强制按映射翻译）与保留词规则。
+   */
+  async translateListingTexts(texts: string[], languageCode: string) {
+    const language = findListingLanguage(languageCode)
+    if (!language) throw new Error(`不支持的 Listing 目标语言：${languageCode}`)
+    const glossary = buildListingGlossaryDirective(languageCode)
+    const domain = `跨境电商 Listing 文案本地化。按目标市场母语习惯表达，避免直译腔。${glossary}保留品牌名、型号、SKU、货币符号、产品编号和平台专有名称。`
+    return this.translateTexts(texts, language.mtName, domain)
+  }
+
+  private async translateBatch(texts: string[],targetLanguage:string,domain:string) {
+    if (texts.length === 1) return [await this.requestTranslation(texts[0],targetLanguage,domain)]
 
     const source = texts.map((text, index) => `<translate_${index}>${text}</translate_${index}>`).join('\n')
-    const combined = await this.requestTranslation(source)
+    const combined = await this.requestTranslation(source,targetLanguage,`${domain} 保留所有 translate_N XML 标签。`)
     const translated = new Map<number, string>()
     const pattern = /<translate_(\d+)>\s*([\s\S]*?)\s*<\/translate_\1>/gi
     for (const match of combined.matchAll(pattern)) translated.set(Number(match[1]), match[2].trim())
@@ -53,17 +67,17 @@ export class BailianTranslationService {
 
     // 部分模型响应可能没有保留分段标签；此时串行回退，避免错配网页文案。
     const fallback: string[] = []
-    for (const text of texts) fallback.push(await this.requestTranslation(text))
+    for (const text of texts) fallback.push(await this.requestTranslation(text,targetLanguage,domain))
     return fallback
   }
 
-  private requestTranslation(text: string) {
-    const scheduled = this.requestQueue.then(() => this.requestWithRetry(text))
+  private requestTranslation(text: string,targetLanguage:string,domain:string) {
+    const scheduled = this.requestQueue.then(() => this.requestWithRetry(text,targetLanguage,domain))
     this.requestQueue = scheduled.then(() => undefined, () => undefined)
     return scheduled
   }
 
-  private async requestWithRetry(text: string) {
+  private async requestWithRetry(text: string,targetLanguage:string,domain:string) {
     for (let attempt = 0; ; attempt += 1) {
       const waitForRateSlot = Math.max(0, this.lastRequestStartedAt + MIN_REQUEST_INTERVAL_MS - Date.now())
       if (waitForRateSlot) await delay(waitForRateSlot)
@@ -77,8 +91,8 @@ export class BailianTranslationService {
           messages: [{ role: 'user', content: text }],
           translation_options: {
             source_lang: 'auto',
-            target_lang: 'Chinese',
-            domains: '跨境电商商品页面。保留品牌名、型号、SKU、货币符号、产品编号、平台专有名称以及所有 translate_N XML 标签。'
+            target_lang: targetLanguage,
+            domains: domain
           }
         })
       })

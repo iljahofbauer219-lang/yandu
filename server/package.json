@@ -1,0 +1,45 @@
+{
+  "name": "@sourcing/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate deploy",
+    "migrate:menu-perms": "tsx --env-file=.env scripts/migrate-menu-permissions.ts",
+    "db:dev": "tsx scripts/dev-db.ts",
+    "verify": "tsx scripts/verify-phase1.ts",
+    "verify:compliance": "tsx scripts/verify-compliance.ts",
+    "verify:ebay": "tsx scripts/verify-ebay.ts",
+    "verify:collection": "tsx scripts/verify-collection.ts",
+    "import:sqlite": "tsx scripts/import-sqlite.ts",
+    "verify:import": "tsx scripts/verify-import.ts",
+    "verify:media": "tsx scripts/verify-media.ts",
+    "verify:full-flow": "tsx scripts/verify-full-flow.ts",
+    "verify:ai": "tsx scripts/verify-ai.ts"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.1",
+    "@fastify/jwt": "^9.0.1",
+    "@prisma/client": "^6.2.1",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.0",
+    "fastify-plugin": "^5.0.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.4",
+    "@electric-sql/pglite-socket": "^0.2.7",
+    "@types/node": "^22.10.5",
+    "prisma": "^6.2.1",
+    "tsx": "^4.19.2",
+    "typescript": "~5.7.2"
+  }
+}

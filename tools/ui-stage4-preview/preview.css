@@ -1,0 +1,12 @@
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--yd-canvas); font-family: Inter, system-ui, sans-serif; }
+.stage4-preview { min-height: 100vh; padding: 20px; color: var(--yd-text); background: var(--yd-canvas); }
+.stage4-preview > header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border: 1px solid var(--yd-border); border-radius: 12px; background: var(--yd-surface); }
+.stage4-preview h1 { margin: 0; font-size: 22px; }.stage4-preview header p { margin: 4px 0 0; color: var(--yd-text-secondary); font-size: 13px; }
+.stage4-preview > nav { display: flex; gap: 8px; margin: 12px 0; }.stage4-preview > nav button[aria-current="page"] { color: var(--yd-brand-contrast); background: var(--yd-brand-soft); border-color: var(--yd-brand); }
+.stage4-preview .catalog-manager, .stage4-preview .publishing-page, .stage4-preview .compliance-page { min-height: 540px; margin: 0; }
+.advisor-sample { display: grid; grid-template: 64px 1fr / 220px 1fr; min-height: 540px; overflow: hidden; border: 1px solid var(--yd-border); border-radius: 14px; background: var(--yd-surface); }
+.advisor-sample header { grid-column: 1 / -1; padding: 14px 18px; border-bottom: 1px solid var(--yd-border); background: var(--yd-surface); }.advisor-sample header small { display: block; margin-top: 4px; color: var(--yd-text-secondary); font-size: 12px; }
+.advisor-sample aside { display: grid; align-content: start; gap: 8px; padding: 14px; border-right: 1px solid var(--yd-border); background: var(--yd-surface-muted); }.advisor-sample aside button[aria-current="page"] { color: var(--yd-brand-contrast); background: var(--yd-brand-soft); }
+.advisor-sample article { padding: 48px; }.advisor-sample article small { color: var(--yd-brand-contrast); font-size: 12px; }.advisor-sample textarea { display: block; width: 100%; min-height: 120px; margin: 24px 0 10px; padding: 12px; color: var(--yd-text); background: var(--yd-surface); border: 1px solid var(--yd-border); border-radius: 10px; }.advisor-sample :is(button, textarea):focus-visible { outline: 2px solid var(--yd-brand); outline-offset: 2px; box-shadow: var(--yd-focus-ring); }
+@media (max-width: 900px) { .stage4-preview { padding: 10px; }.advisor-sample { grid-template-columns: 160px 1fr; }.advisor-sample article { padding: 24px; } }

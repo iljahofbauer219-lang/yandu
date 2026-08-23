@@ -1,0 +1,132 @@
+{
+  "mode": "REAL_MODEL_REVIEW_RETRY",
+  "generatedAt": "2026-08-04T16:37:15.946Z",
+  "sample": {
+    "product": "蓝色宠物训练尿垫",
+    "referenceCount": 7,
+    "taskCount": 3
+  },
+  "model": "doubao-seedream-5-0-260128",
+  "visionModel": "qwen3.6-flash",
+  "accepted": 0,
+  "review": 2,
+  "rejected": 1,
+  "errors": 0,
+  "automaticPassRate": 0,
+  "estimatedGenerationCostCny": 0.66,
+  "cumulativeGenerationCostCny": 0.66,
+  "reviewRetryGenerationCostCny": 0,
+  "results": [
+    {
+      "code": "H01",
+      "title": "平台合规首图",
+      "status": "REVIEW",
+      "summary": "事实复核(85) · 任务通过(90) · 风格通过(95) · 语言通过(90)",
+      "layers": {
+        "facts": {
+          "status": "REVIEW",
+          "score": 85,
+          "reason": "候选图包含包装文字，但商品事实卡没有已确认的包装原文，必须人工逐字复核。候选图完美还原了原图参照2和3中的商品主体（蓝色宠物训练尿垫包装），背景已处理为纯白，符合平台首图要求。结构、轮廓、颜色均一致，无新增或丢失部件。包装文字清晰可见且与原图一致，未出现AI生成的营销伪文字。"
+        },
+        "task": {
+          "status": "PASSED",
+          "score": 90,
+          "reason": "已完成预定主图/详情页任务"
+        },
+        "style": {
+          "status": "PASSED",
+          "score": 95,
+          "reason": "视觉模板必须项与禁止项检查通过"
+        },
+        "language": {
+          "status": "PASSED",
+          "score": 90,
+          "reason": "无字底图检查通过；包装原文允许保留"
+        }
+      },
+      "reviewReason": "候选图包含包装文字，但商品事实卡没有已确认的包装原文，必须人工逐字复核。候选图完美还原了原图参照2和3中的商品主体（蓝色宠物训练尿垫包装），背景已处理为纯白，符合平台首图要求。结构、轮廓、颜色均一致，无新增或丢失部件。包装文字清晰可见且与原图一致，未出现AI生成的营销伪文字。",
+      "newStructures": [],
+      "missingStructures": [],
+      "geometryMismatch": false,
+      "durationMs": 4092,
+      "estimatedCostCny": 0,
+      "localPath": "/Users/zyc/Desktop/砚都跨境/output/production-acceptance-phase8/H01.jpg",
+      "candidateUrl": "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-5-0/021785860593674ffa368fe9ac51d90198cd5026e9cf3e3840f0b_0.jpeg?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260804%2Fcn-beijing%2Ftos%2Frequest&X-Tos-Date=20260804T162343Z&X-Tos-Expires=86400&X-Tos-Signature=d73994462d20f89618e70f017a5567b40cb3d638ed24377dd042f578087ed148&X-Tos-SignedHeaders=host"
+    },
+    {
+      "code": "H03",
+      "title": "真实使用场景",
+      "status": "REJECTED",
+      "summary": "事实不通过(60) · 任务通过(75) · 风格复核(70) · 语言不通过(40)",
+      "layers": {
+        "facts": {
+          "status": "REJECTED",
+          "score": 60,
+          "reason": "商品身份、结构、事实或轮廓存在硬错误"
+        },
+        "task": {
+          "status": "PASSED",
+          "score": 75,
+          "reason": "已完成预定主图/详情页任务"
+        },
+        "style": {
+          "status": "REVIEW",
+          "score": 70,
+          "reason": "视觉模板命中不足"
+        },
+        "language": {
+          "status": "REJECTED",
+          "score": 40,
+          "reason": "底图出现错误营销文字或乱码"
+        }
+      },
+      "reviewReason": "包装文字与原图不一致（30/100）：候选图出现原图不存在的结构：柯基犬（Corgi dog）、展开的尿垫（Unfolded pad on floor）。包装文字出现乱码/伪字（如品牌名模糊不清，规格信息不可读），且包含AI生成的营销元素（狗和展开的尿垫），导致语言分和事实分不达标。虽然镜头任务H03要求真实使用场景，但包装文字的准确性是硬性指标，此处严重失真。",
+      "newStructures": [
+        "柯基犬（Corgi dog）",
+        "展开的尿垫（Unfolded pad on floor）"
+      ],
+      "missingStructures": [],
+      "geometryMismatch": false,
+      "durationMs": 5224,
+      "estimatedCostCny": 0,
+      "localPath": "/Users/zyc/Desktop/砚都跨境/output/production-acceptance-phase8/H03.jpg",
+      "candidateUrl": "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-5-0/021785860627964a1b170fc911988aa69fdfa08a353ab27a0dbf3_0.jpeg?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260804%2Fcn-beijing%2Ftos%2Frequest&X-Tos-Date=20260804T162419Z&X-Tos-Expires=86400&X-Tos-Signature=e7d9d9cbd1e3d809e3be9920b3f2a90d9f24af88b5d7648763b4dad3486aeabe&X-Tos-SignedHeaders=host"
+    },
+    {
+      "code": "D04",
+      "title": "核心利益信息图底图",
+      "status": "REVIEW",
+      "summary": "事实复核(90) · 任务通过(85) · 风格通过(85) · 语言通过(90)",
+      "layers": {
+        "facts": {
+          "status": "REVIEW",
+          "score": 90,
+          "reason": "候选图包含包装文字，但商品事实卡没有已确认的包装原文，必须人工逐字复核。候选图成功保留了原图参照中的核心结构（包装袋、堆叠尿垫、卷状尿垫），且未引入任何新增或丢失的关键结构。产品轮廓与原图一致，无明显几何失真。背景处理为纯白/浅灰，符合商业底图要求，并预留了排版区域。包装文字清晰可辨，与参照图一致。与已生成候选图相比，构图和展示焦点有明显差异（增加了散落的卷状尿垫和堆叠展示）。"
+        },
+        "task": {
+          "status": "PASSED",
+          "score": 85,
+          "reason": "已完成预定主图/详情页任务"
+        },
+        "style": {
+          "status": "PASSED",
+          "score": 85,
+          "reason": "视觉模板必须项与禁止项检查通过"
+        },
+        "language": {
+          "status": "PASSED",
+          "score": 90,
+          "reason": "无字底图检查通过；包装原文允许保留"
+        }
+      },
+      "reviewReason": "候选图包含包装文字，但商品事实卡没有已确认的包装原文，必须人工逐字复核。候选图成功保留了原图参照中的核心结构（包装袋、堆叠尿垫、卷状尿垫），且未引入任何新增或丢失的关键结构。产品轮廓与原图一致，无明显几何失真。背景处理为纯白/浅灰，符合商业底图要求，并预留了排版区域。包装文字清晰可辨，与参照图一致。与已生成候选图相比，构图和展示焦点有明显差异（增加了散落的卷状尿垫和堆叠展示）。",
+      "newStructures": [],
+      "missingStructures": [],
+      "geometryMismatch": false,
+      "durationMs": 5018,
+      "estimatedCostCny": 0,
+      "localPath": "/Users/zyc/Desktop/砚都跨境/output/production-acceptance-phase8/D04.jpg",
+      "candidateUrl": "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-5-0/0217858606645111c12c50526669d4890a5bd737834c86ac50e59_0.jpeg?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260804%2Fcn-beijing%2Ftos%2Frequest&X-Tos-Date=20260804T162508Z&X-Tos-Expires=86400&X-Tos-Signature=b0533cdd03b343758cae1f1818ad74a43541d81516629a4c94db8c55dad90b70&X-Tos-SignedHeaders=host"
+    }
+  ]
+}

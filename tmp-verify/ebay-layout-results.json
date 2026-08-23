@@ -1,0 +1,170 @@
+[
+  {
+    "key": "CHECK1_COLLECTION",
+    "workbench": {
+      "x": 82,
+      "y": 360,
+      "width": 330,
+      "height": 510,
+      "right": 412,
+      "bottom": 870
+    },
+    "panel": {
+      "x": 422,
+      "y": 360,
+      "width": 1004,
+      "height": 510,
+      "right": 1426,
+      "bottom": 870
+    },
+    "main": {
+      "x": 68,
+      "y": 56,
+      "width": 1372,
+      "height": 844,
+      "right": 1440,
+      "bottom": 900
+    },
+    "mainGridArea": "main",
+    "panelGridRows": "54px 42px 43px 369px",
+    "rowsPresent": [
+      true,
+      true,
+      true,
+      true
+    ],
+    "slot": {
+      "x": 423,
+      "y": 500,
+      "width": 1002,
+      "height": 369
+    },
+    "webviews": [],
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    }
+  },
+  {
+    "key": "CHECK2_SUPPORT",
+    "workspace": {
+      "x": 79,
+      "y": 125,
+      "width": 1350,
+      "height": 764
+    },
+    "gridColumns": "310px 720px 320px",
+    "conversation": {
+      "x": 79,
+      "y": 125,
+      "width": 310,
+      "right": 389
+    },
+    "chat": {
+      "x": 389,
+      "y": 125,
+      "width": 720,
+      "height": 764,
+      "right": 1109,
+      "bottom": 889
+    },
+    "context": {
+      "x": 1109,
+      "y": 125,
+      "width": 320,
+      "right": 1429
+    },
+    "sameTop": true,
+    "chatInMiddleColumn": true,
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    }
+  },
+  {
+    "key": "CHECK3_TAB_ONLINE",
+    "tabTitle": "线上产品",
+    "pageBox": {
+      "x": 68,
+      "y": 56,
+      "width": 1372,
+      "height": 844,
+      "bottom": 900
+    },
+    "mainBox": {
+      "x": 68,
+      "y": 56,
+      "width": 1372,
+      "height": 844
+    },
+    "noHScroll": true,
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    }
+  },
+  {
+    "key": "CHECK3_TAB_LOCAL",
+    "tabTitle": "本地产品",
+    "pageBox": {
+      "x": 68,
+      "y": 56,
+      "width": 1372,
+      "height": 844,
+      "bottom": 900
+    },
+    "noHScroll": true
+  },
+  {
+    "key": "CHECK3_DARK",
+    "theme": "dark",
+    "workbench": {
+      "x": 82,
+      "y": 288,
+      "width": 330,
+      "height": 582,
+      "right": 412,
+      "bottom": 870,
+      "bg": "rgba(255, 255, 255, 0.06)"
+    },
+    "panel": {
+      "x": 422,
+      "y": 288,
+      "width": 1004,
+      "height": 582,
+      "right": 1426,
+      "bottom": 870,
+      "bg": "rgba(255, 255, 255, 0.06)"
+    },
+    "mainBg": "rgb(0, 0, 0)",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    }
+  },
+  {
+    "key": "CHECK3_NARROW",
+    "layoutColumns": "285px 659px",
+    "workbench": {
+      "x": 82,
+      "width": 285,
+      "right": 367,
+      "bottom": 730,
+      "height": 442
+    },
+    "panel": {
+      "x": 377,
+      "width": 659,
+      "right": 1036,
+      "bottom": 730,
+      "height": 442
+    },
+    "mainRight": 1050,
+    "docHScroll": false,
+    "docScrollWidth": 1050,
+    "viewport": {
+      "width": 1050,
+      "height": 760
+    }
+  }
+]

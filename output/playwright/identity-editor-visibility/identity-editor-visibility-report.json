@@ -1,0 +1,120 @@
+{
+  "generatedAt": "2026-08-10T16:56:56.118Z",
+  "checks": [
+    {
+      "id": "long-card-is-independently-scrollable",
+      "passed": true,
+      "detail": "{\"viewport\":{\"width\":1100,\"height\":720},\"card\":{\"x\":99,\"y\":278,\"width\":955,\"height\":315,\"top\":278,\"right\":1054,\"bottom\":593,\"left\":99},\"composer\":{\"x\":84,\"y\":175,\"width\":1000,\"height\":545,\"top\":175,\"right\":1084,\"bottom\":720,\"left\":84},\"editor\":{\"x\":100,\"y\":355,\"width\":938,\"height\":326.046875,\"top\":355,\"right\":1038,\"bottom\":681.046875,\"left\":100},\"save\":{\"x\":913,\"y\":563,\"width\":113,\"height\":29,\"top\":563,\"right\":1026,\"bottom\":592,\"left\":913},\"details\":{\"x\":100,\"y\":681.046875,\"width\":938,\"height\":543.390625,\"top\":681.046875,\"right\":1038,\"bottom\":1224.4375,\"left\":100},\"cardScrollHeight\":1252,\"cardClientHeight\":313,\"cardOverflowY\":\"auto\",\"composerOverflowY\":\"auto\"}"
+    },
+    {
+      "id": "identity-editor-precedes-long-details",
+      "passed": true,
+      "detail": "{\"viewport\":{\"width\":1100,\"height\":720},\"card\":{\"x\":99,\"y\":278,\"width\":955,\"height\":315,\"top\":278,\"right\":1054,\"bottom\":593,\"left\":99},\"composer\":{\"x\":84,\"y\":175,\"width\":1000,\"height\":545,\"top\":175,\"right\":1084,\"bottom\":720,\"left\":84},\"editor\":{\"x\":100,\"y\":355,\"width\":938,\"height\":326.046875,\"top\":355,\"right\":1038,\"bottom\":681.046875,\"left\":100},\"save\":{\"x\":913,\"y\":563,\"width\":113,\"height\":29,\"top\":563,\"right\":1026,\"bottom\":592,\"left\":913},\"details\":{\"x\":100,\"y\":681.046875,\"width\":938,\"height\":543.390625,\"top\":681.046875,\"right\":1038,\"bottom\":1224.4375,\"left\":100},\"cardScrollHeight\":1252,\"cardClientHeight\":313,\"cardOverflowY\":\"auto\",\"composerOverflowY\":\"auto\"}"
+    },
+    {
+      "id": "save-button-visible-in-card",
+      "passed": true,
+      "detail": "{\"viewport\":{\"width\":1100,\"height\":720},\"card\":{\"x\":99,\"y\":278,\"width\":955,\"height\":315,\"top\":278,\"right\":1054,\"bottom\":593,\"left\":99},\"composer\":{\"x\":84,\"y\":175,\"width\":1000,\"height\":545,\"top\":175,\"right\":1084,\"bottom\":720,\"left\":84},\"editor\":{\"x\":100,\"y\":355,\"width\":938,\"height\":326.046875,\"top\":355,\"right\":1038,\"bottom\":681.046875,\"left\":100},\"save\":{\"x\":913,\"y\":563,\"width\":113,\"height\":29,\"top\":563,\"right\":1026,\"bottom\":592,\"left\":913},\"details\":{\"x\":100,\"y\":681.046875,\"width\":938,\"height\":543.390625,\"top\":681.046875,\"right\":1038,\"bottom\":1224.4375,\"left\":100},\"cardScrollHeight\":1252,\"cardClientHeight\":313,\"cardOverflowY\":\"auto\",\"composerOverflowY\":\"auto\"}"
+    },
+    {
+      "id": "composer-stays-inside-viewport",
+      "passed": true,
+      "detail": "{\"viewport\":{\"width\":1100,\"height\":720},\"card\":{\"x\":99,\"y\":278,\"width\":955,\"height\":315,\"top\":278,\"right\":1054,\"bottom\":593,\"left\":99},\"composer\":{\"x\":84,\"y\":175,\"width\":1000,\"height\":545,\"top\":175,\"right\":1084,\"bottom\":720,\"left\":84},\"editor\":{\"x\":100,\"y\":355,\"width\":938,\"height\":326.046875,\"top\":355,\"right\":1038,\"bottom\":681.046875,\"left\":100},\"save\":{\"x\":913,\"y\":563,\"width\":113,\"height\":29,\"top\":563,\"right\":1026,\"bottom\":592,\"left\":913},\"details\":{\"x\":100,\"y\":681.046875,\"width\":938,\"height\":543.390625,\"top\":681.046875,\"right\":1038,\"bottom\":1224.4375,\"left\":100},\"cardScrollHeight\":1252,\"cardClientHeight\":313,\"cardOverflowY\":\"auto\",\"composerOverflowY\":\"auto\"}"
+    },
+    {
+      "id": "composer-has-overflow-fallback",
+      "passed": true,
+      "detail": "{\"viewport\":{\"width\":1100,\"height\":720},\"card\":{\"x\":99,\"y\":278,\"width\":955,\"height\":315,\"top\":278,\"right\":1054,\"bottom\":593,\"left\":99},\"composer\":{\"x\":84,\"y\":175,\"width\":1000,\"height\":545,\"top\":175,\"right\":1084,\"bottom\":720,\"left\":84},\"editor\":{\"x\":100,\"y\":355,\"width\":938,\"height\":326.046875,\"top\":355,\"right\":1038,\"bottom\":681.046875,\"left\":100},\"save\":{\"x\":913,\"y\":563,\"width\":113,\"height\":29,\"top\":563,\"right\":1026,\"bottom\":592,\"left\":913},\"details\":{\"x\":100,\"y\":681.046875,\"width\":938,\"height\":543.390625,\"top\":681.046875,\"right\":1038,\"bottom\":1224.4375,\"left\":100},\"cardScrollHeight\":1252,\"cardClientHeight\":313,\"cardOverflowY\":\"auto\",\"composerOverflowY\":\"auto\"}"
+    },
+    {
+      "id": "manual-identity-click-succeeds",
+      "passed": true,
+      "detail": "{\"info\":{\"url\":\"https://detail.1688.com/offer/1006746849261.html\",\"analysisDate\":\"2026-08-11\",\"title\":\"跨境猫狗通用宠物免洗擦拭精华清洁套装宠物免水洗除臭留香定制\",\"price\":\"¥2.50\",\"seller\":\"广州宠本生物科技有限公司\",\"moq\":\"\",\"shipFrom\":\"\",\"deals\":\"\",\"images\":[\"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22240%22%20height%3D%22180%22%3E%3Crect%20width%3D%22240%22%20height%3D%22180%22%20fill%3D%22%23f5d6e8%22%2F%3E%3Ctext%20x%3D%2220%22%20y%3D%2295%22%20font-size%3D%2224%22%3E%E5%95%86%E5%93%81%E5%9B%BE%201%3C%2Ftext%3E%3C%2Fsvg%3E\",\"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22240%22%20height%3D%22180%22%3E%3Crect%20width%3D%22240%22%20height%3D%22180%22%20fill%3D%22%23f5d6e8%22%2F%3E%3Ctext%20x%3D%2220%22%20y%3D%2295%22%20font-size%3D%2224%22%3E%E5%95%86%E5%93%81%E5%9B%BE%202%3C%2Ftext%3E%3C%2Fsvg%3E\",\"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22240%22%20height%3D%22180%22%3E%3Crect%20width%3D%22240%22%20height%3D%22180%22%20fill%3D%22%23f5d6e8%22%2F%3E%3Ctext%20x%3D%2220%22%20y%3D%2295%22%20font-size%3D%2224%22%3E%E5%95%86%E5%93%81%E5%9B%BE%203%3C%2Ftext%3E%3C%2Fsvg%3E\",\"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22240%22%20height%3D%22180%22%3E%3Crect%20width%3D%22240%22%20height%3D%22180%22%20fill%3D%22%23f5d6e8%22%2F%3E%3Ctext%20x%3D%2220%22%20y%3D%2295%22%20font-size%3D%2224%22%3E%E5%95%86%E5%93%81%E5%9B%BE%204%3C%2Ftext%3E%3C%2Fsvg%3E\",\"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22240%22%20height%3D%22180%22%3E%3Crect%20width%3D%22240%22%20height%3D%22180%22%20fill%3D%22%23f5d6e8%22%2F%3E%3Ctext%20x%3D%2220%22%20y%3D%2295%22%20font-size%3D%2224%22%3E%E5%95%86%E5%93%81%E5%9B%BE%205%3C%2Ftext%3E%3C%2Fsvg%3E\"],\"imageEvidence\":[{\"url\":\"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22240%22%20height%3D%22180%22%3E%3Crect%20width%3D%22240%22%20height%3D%22180%22%20fill%3D%22%23f5d6e8%22%2F%3E%3Ctext%20x%3D%2220%22%20y%3D%2295%22%20font-size%3D%2224%22%3E%E5%95%86%E5%93%81%E5%9B%BE%201%3C%2Ftext%3E%3C%2Fsvg%3E\",\"role\":\"主图\",\"source\":\"商品主图区域\"},{\"url\":\"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22240%22%20height%3D%22180%22%3E%3Crect%20width%3D%22240%22%20height%3D%22180%22%20fill%3D%22%23f5d6e8%22%2F%3E%3Ctext%20x%3D%2220%22%20y%3D%2295%22%20font-size%3D%2224%22%3E%E5%95%86%E5%93%81%E5%9B%BE%202%3C%2Ftext%3E%3C%2Fsvg%3E\",\"role\":\"详情图\",\"source\":\"商品详情区域\"},{\"url\":\"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22240%22%20height%3D%22180%22%3E%3Crect%20width%3D%22240%22%20height%3D%22180%22%20fill%3D%22%23f5d6e8%22%2F%3E%3Ctext%20x%3D%2220%22%20y%3D%2295%22%20font-size%3D%2224%22%3E%E5%95%86%E5%93%81%E5%9B%BE%203%3C%2Ftext%3E%3C%2Fsvg%3E\",\"role\":\"详情图\",\"source\":\"商品详情区域\"},{\"url\":\"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22240%22%20height%3D%22180%22%3E%3Crect%20width%3D%22240%22%20height%3D%22180%22%20fill%3D%22%23f5d6e8%22%2F%3E%3Ctext%20x%3D%2220%22%20y%3D%2295%22%20font-size%3D%2224%22%3E%E5%95%86%E5%93%81%E5%9B%BE%204%3C%2Ftext%3E%3C%2Fsvg%3E\",\"role\":\"详情图\",\"source\":\"商品详情区域\"},{\"url\":\"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22240%22%20height%3D%22180%22%3E%3Crect%20width%3D%22240%22%20height%3D%22180%22%20fill%3D%22%23f5d6e8%22%2F%3E%3Ctext%20x%3D%2220%22%20y%3D%2295%22%20font-size%3D%2224%22%3E%E5%95%86%E5%93%81%E5%9B%BE%205%3C%2Ftext%3E%3C%2Fsvg%3E\",\"role\":\"详情图\",\"source\":\"商品详情区域\"}],\"detailText\":\"品牌 其他 功效 身体除臭 容量 小于200ml 产地 广东 规格30ml一袋 主要下游平台 Amazon。商品为袋装液体免洗擦浴精华，挤出液体后擦拭猫狗身体，无需水洗。 品牌 其他 功效 身体除臭 容量 小于200ml 产地 广东 规格30ml一袋 主要下游平台 Amazon。商品为袋装液体免洗擦浴精华，挤出液体后擦拭猫狗身体，无需水洗。 品牌 其他 功效 身体除臭 容量 小于200ml 产地 广东 规格30ml一袋 主要下游平台 Amazon。商品为袋装液体免洗擦浴精华，挤出液体后擦拭猫狗身体，无需水洗。 品牌 其他 功效 身体除臭 容量 小于200ml 产地 广东 规格30ml一袋 主要下游平台 Amazon。商品为袋装液体免洗擦浴精华，挤出液体后擦拭猫狗身体，无需水洗。 品牌 其他 功效 身体除臭 容量 小于200ml 产地 广东 规格30ml一袋 主要下游平台 Amazon。商品为袋装液体免洗擦浴精华，挤出液体后擦拭猫狗身体，无需水洗。 品牌 其他 功效 身体除臭 容量 小于200ml 产地 广东 规格30ml一袋 主要下游平台 Amazon。商品为袋装液体免洗擦浴精华，挤出液体后擦拭猫狗身体，无需水洗。 品牌 其他 功效 身体除臭 容量 小于200ml 产地 广东 规格30ml一袋 主要下游平台 Amazon。商品为袋装液体免洗擦浴精华，挤出液体后擦拭猫狗身体，无需水洗。 品牌 其他 功效 身体除臭 容量 小于200ml 产地 广东 规格30ml一袋 主要下游平台 Amazon。商品为袋装液体免洗擦浴精华，挤出液体后擦拭猫狗身体，无需水洗。 品牌 其他 功效 身体除臭 容量 小于200ml 产地 广东 规格30ml一袋 主要下游平台 Amazon。商品为袋装液体免洗擦浴精华，挤出液体后擦拭猫狗身体，无需水洗。 品牌 其他 功效 身体除臭 容量 小于200ml 产地 广东 规格30ml一袋 主要下游平台 Amazon。商品为袋装液体免洗擦浴精华，挤出液体后擦拭猫狗身体，无需水洗。 品牌 其他 功效 身体除臭 容量 小于200ml 产地 广东 规格30ml一袋 主要下游平台 Amazon。商品为袋装液体免洗擦浴精华，挤出液体后擦拭猫狗身体，无需水洗。 品牌 其他 功效 身体除臭 容量 小于200ml 产地 广东 规格30ml一袋 主要下游平台 Amazon。商品为袋装液体免洗擦浴精华，挤出液体后擦拭猫狗身体，无需水洗。 品牌 其他 功效 身体除臭 容量 小于200ml 产地 广东 规格30ml一袋 主要下游平台 Amazon。商品为袋装液体免洗擦浴精华，挤出液体后擦拭猫狗身体，无需水洗。 品牌 其他 功效 身体除臭 容量 小于200ml 产地 广东 规格30ml一袋 主要下游平台 Amazon。商品为袋装液体免洗擦浴精华，挤出液体后擦拭猫狗身体，无需水洗。\",\"detailSource\":\"详情模块DOM\",\"imageOcrText\":\"PET WASH FREE SCRUB ESSENCE 30ml White peach flavor cat Romantic Tea Aroma dog 长效留香 抑菌除螨。 PET WASH FREE SCRUB ESSENCE 30ml White peach flavor cat Romantic Tea Aroma dog 长效留香 抑菌除螨。 PET WASH FREE SCRUB ESSENCE 30ml White peach flavor cat Romantic Tea Aroma dog 长效留香 抑菌除螨。 PET WASH FREE SCRUB ESSENCE 30ml White peach flavor cat Romantic Tea Aroma dog 长效留香 抑菌除螨。 PET WASH FREE SCRUB ESSENCE 30ml White peach flavor cat Romantic Tea Aroma dog 长效留香 抑菌除螨。 PET WASH FREE SCRUB ESSENCE 30ml White peach flavor cat Romantic Tea Aroma dog 长效留香 抑菌除螨。 PET WASH FREE SCRUB ESSENCE 30ml White peach flavor cat Romantic Tea Aroma dog 长效留香 抑菌除螨。 PET WASH FREE SCRUB ESSENCE 30ml White peach flavor cat Romantic Tea Aroma dog 长效留香 抑菌除螨。 PET WASH FREE SCRUB ESSENCE 30ml White peach flavor cat Romantic Tea Aroma dog 长效留香 抑菌除螨。 PET WASH FREE SCRUB ESSENCE 30ml White peach flavor cat Romantic Tea Aroma dog 长效留香 抑菌除螨。\",\"imageOcrWarnings\":[\"不同参考图存在字段冲突：otherText，必须人工选择正确规格\"],\"visualProductForm\":\"液体精华\",\"visualUseMethod\":\"免洗擦浴\",\"visualTargetObject\":\"猫狗\",\"visualConfidence\":95,\"attributes\":[\"属性1：验收长内容\",\"属性2：验收长内容\",\"属性3：验收长内容\",\"属性4：验收长内容\",\"属性5：验收长内容\",\"属性6：验收长内容\",\"属性7：验收长内容\",\"属性8：验收长内容\",\"属性9：验收长内容\",\"属性10：验收长内容\",\"属性11：验收长内容\",\"属性12：验收长内容\",\"属性13：验收长内容\",\"属性14：验收长内容\",\"属性15：验收长内容\",\"属性16：验收长内容\",\"属性17：验收长内容\",\"属性18：验收长内容\"],\"confirmedProductName\":\"宠物免洗擦浴精华\",\"confirmedProductForm\":\"液体精华\",\"confirmedUseMethod\":\"挤出液体后免洗擦浴\",\"confirmedTargetObject\":\"猫狗\",\"identityResolutionNote\":\"以包装出液口、详情文字和实物形态为准\"},\"collapsed\":false,\"confirmed\":true,\"confirmedAt\":\"2026-08-10T16:56:55.927Z\",\"updatedAt\":\"2026-08-10T16:56:55.927Z\"}"
+    },
+    {
+      "id": "card-header-remains-sticky",
+      "passed": true,
+      "detail": "{\"cardTop\":278,\"headerTop\":279,\"delta\":1}"
+    },
+    {
+      "id": "latest-production-assets-loaded",
+      "passed": true,
+      "detail": "expected=./assets/index-hyQJY8bY.js,./assets/index-DYwSI9at.css loaded=./assets/index-hyQJY8bY.js,./assets/index-DYwSI9at.css"
+    }
+  ],
+  "openedLayout": {
+    "viewport": {
+      "width": 1100,
+      "height": 720
+    },
+    "card": {
+      "x": 99,
+      "y": 278,
+      "width": 955,
+      "height": 315,
+      "top": 278,
+      "right": 1054,
+      "bottom": 593,
+      "left": 99
+    },
+    "composer": {
+      "x": 84,
+      "y": 175,
+      "width": 1000,
+      "height": 545,
+      "top": 175,
+      "right": 1084,
+      "bottom": 720,
+      "left": 84
+    },
+    "editor": {
+      "x": 100,
+      "y": 355,
+      "width": 938,
+      "height": 326.046875,
+      "top": 355,
+      "right": 1038,
+      "bottom": 681.046875,
+      "left": 100
+    },
+    "save": {
+      "x": 913,
+      "y": 563,
+      "width": 113,
+      "height": 29,
+      "top": 563,
+      "right": 1026,
+      "bottom": 592,
+      "left": 913
+    },
+    "details": {
+      "x": 100,
+      "y": 681.046875,
+      "width": 938,
+      "height": 543.390625,
+      "top": 681.046875,
+      "right": 1038,
+      "bottom": 1224.4375,
+      "left": 100
+    },
+    "cardScrollHeight": 1252,
+    "cardClientHeight": 313,
+    "cardOverflowY": "auto",
+    "composerOverflowY": "auto"
+  },
+  "stickyHeader": {
+    "cardTop": 278,
+    "headerTop": 279,
+    "delta": 1
+  },
+  "expectedAssets": [
+    "./assets/index-hyQJY8bY.js",
+    "./assets/index-DYwSI9at.css"
+  ],
+  "loadedAssets": [
+    "./assets/index-hyQJY8bY.js",
+    "./assets/index-DYwSI9at.css"
+  ],
+  "passed": 8,
+  "total": 8
+}

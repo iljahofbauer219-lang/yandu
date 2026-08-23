@@ -1,3 +1,17 @@
+packages:
+  - 'server'
+
 allowBuilds:
   '@ffmpeg-installer/darwin-x64': true
+  '@prisma/client': set this to true or false
+  '@prisma/engines': set this to true or false
+  electron: set this to true or false
+  electron-winstaller: set this to true or false
+  esbuild: set this to true or false
+  prisma: set this to true or false
   protobufjs: true
+
+# electron-builder 26.15 需要 @electron/get ≥3.1（ElectronDownloadCacheMode 枚举），
+# 锁定文件曾解析到 3.0.0 导致打包报 Cannot read properties of undefined (reading 'ReadWrite')
+overrides:
+  'app-builder-lib>@electron/get': ^3.1.0

@@ -1,15 +1,185 @@
-import type { BrowserBounds, BrowserState, BrowserTab, BrowserTranslationMode, BrowserTranslationStatus, BuiltInCollectorState, CandidateUpdateRequest, CandidateWorkspace, CollectedOzonProduct, CollectedSupplyProduct, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonRecordView, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, EbayAcceptanceBatch, EbayAcceptanceRunRequest, EbayBrowserPluginState, EbayCategoryWorkspace, EbayCollectionImportResult, EbayConfigurationStatus, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentOptimizationResult, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDeliveryLocationResult, EbayDirectoryProductSyncCheckpoint, EbayDirectoryProductSyncProgress, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReview, EbayImageCandidateReviewRequest, EbayImageGroundingPlan, EbayImageGroundingRequest, EbayListing, EbayLocalProduct, EbayLocalProductSnapshot, EbayLocalProductUpdateInput, EbayLoginResult, EbayMarketResearchDecisionRequest, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayOptimizationExportResult, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayReportImportResult, EbayStore, EbaySyncResult, EbayTitleOptimizationRequest, EbayTitleOptimizationResult, EbayVideoStudioConfiguration, EbayVideoStudioProgress, EbayVideoStudioProject, EbayVideoStudioRequest, ImageGenerationRequest, ImageGenerationResult, ImageModelConnection, MarketplaceAccountProfile, MarketplaceCredentialInput, MarketplaceCredentialStatus, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, Platform, RealShiftRequest, RealShiftResult, SelectionCatalogItem, SelectionDecision, SelectionImportRequest, SelectionTask, SelectionTaskDraft, SupplyActivationResult, SupplyWarehouseProduct, TaskProgress, WorkflowCounts } from '../shared/contracts'
+import type { BrowserBounds, BrowserState, BrowserTab, BrowserTranslationMode, BrowserTranslationStatus, BuiltInCollectorState, CandidateUpdateRequest, CandidateWorkspace, CollectedOzonProduct, CollectedSupplyProduct, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonRecordView, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, EbayAcceptanceBatch, EbayAcceptanceRunRequest, EbayBrowserPluginState, EbayCategoryWorkspace, EbayCollectionImportResult, EbayConfigurationStatus, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentOptimizationResult, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDeliveryLocationResult, EbayDirectoryProductSyncCheckpoint, EbayDirectoryProductSyncProgress, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReview, EbayImageCandidateReviewRequest, EbayImageGroundingPlan, EbayImageGroundingRequest, EbayImageRoleSuggestionRequest, EbayImageRoleSuggestionResult, EbayListing, EbayLocalProduct, EbayLocalProductSnapshot, EbayLocalProductUpdateInput, EbayLoginResult, EbayMarketResearchDecisionRequest, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayOptimizationExportResult, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayReportImportResult, EbayStore, EbaySyncResult, EbayTitleOptimizationRequest, EbayTitleOptimizationResult, EbayVideoStudioConfiguration, EbayVideoStudioProgress, EbayVideoStudioProject, EbayVideoStudioRequest, ImageGenerationRequest, ImageGenerationResult, ImageMarketingTranslationRequest, ImageMarketingTranslationResult, ImageModelConnection, ImportedProductSource, MarketplaceAccountProfile, MarketplaceCredentialInput, MarketplaceCredentialStatus, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, Platform, RealShiftRequest, RealShiftResult, SelectionCatalogItem, SelectionDecision, SelectionImportRequest, SelectionTask, SelectionTaskDraft, SupplyActivationResult, SupplyWarehouseProduct, TaskProgress, WorkflowCounts } from '../shared/contracts'
 import type { ComplianceBatchRecheckResult } from '../shared/contracts'
 import type { EbayImageInspectionReport, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayLocalProductMedia, EbayLocalProductMediaUploadInput } from '../shared/contracts'
 import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
 import type { EbayLocalListingRequirements, EbayLocalRevisionPreparationResult } from '../shared/contracts'
-import type { EbayTitleDecision, EbayTitleDecisionInput } from '../shared/contracts'
+import type { EbayTitleDecision, EbayTitleDecisionInput, EbayImageStage, EbayStageFactCard, EbayStageGroundingRequest, EbayStageModelRecommendation, EbayStageStoryboardCard, EbayStageStoryboardRequest } from '../shared/contracts'
+import type { AdvisorDesktopApi } from '../shared/advisor'
+import type { AiEmployeeAskRequest, AiEmployeeChatModelProfile, AiEmployeePickResult } from '../shared/aiEmployee'
+import type { KbAgentKey, KbDocsView, KbListView, KbView } from '../shared/knowledge'
+import type { GuardianRunEvent, GuardianRunLog, GuardianSkill, GuardianSkillInput, GuardianState } from '../shared/kbGuardian'
+import type { ImagePackageTextExtractionRequest, ImagePackageTextExtractionResult } from '../shared/contracts'
+import type { AmazonDataSourceSearchResult, AmazonListingEvidence, AmazonMarketSample, AmazonReviewEvidence, AmazonSearchIntent } from '../shared/amazonScraper'
 
 declare module '*.css'
+
+export interface LlmKeyStatus { id: string; configured: boolean; maskedKey: string }
 
 declare global {
   interface Window {
     desktop: {
+      platform: string
+      windowControls: {
+        minimize(): Promise<void>
+        toggleMaximize(): Promise<boolean>
+        close(): Promise<void>
+        isMaximized(): Promise<boolean>
+        onMaximized(callback: (maximized: boolean) => void): () => void
+      }
+      system: {
+        openVpnPanel(): Promise<void>
+        openExternal(url: string): Promise<void>
+        watchSkillStatus(): Promise<{ checks: Record<string, boolean>; root: string; version: string }>
+        watchSkillPickVideo(): Promise<string | null>
+        watchSkillAnalyze(videoPath: string): Promise<{ id:string; videoPath:string; createdAt:string; status:'COMPLETED'|'FAILED'; report:string; framePaths:string[]; error?:string }>
+        watchSkillTasks(): Promise<Array<{ id:string; videoPath:string; createdAt:string; status:'COMPLETED'|'FAILED'; report:string; framePaths:string[]; error?:string }>>
+        watchSkillDownloadYoutube(url:string): Promise<string>
+        resource2SkillStatus(): Promise<{sourceReady:boolean;officialRuntimeReady:boolean;python311Ready:boolean;adapterReady:boolean;domains:string[];note:string}>
+        resource2SkillDrafts(): Promise<Array<{id:string;sourceTaskId:string;name:string;content:string;createdAt:string;updatedAt:string}>>
+        resource2SkillGenerate(taskId:string,domain:string): Promise<{id:string;sourceTaskId:string;name:string;content:string;createdAt:string;updatedAt:string}>
+        resource2SkillModelSettings(): Promise<{configured:boolean;baseUrl:string}>
+        resource2SkillModelSettingsSave(input:{apiKey:string;baseUrl:string}): Promise<{configured:boolean;baseUrl:string}>
+        resource2SkillModelSettingsClear(): Promise<{configured:boolean}>
+        resource2SkillOfficialAnalyze(input:{url:string;domain:string}): Promise<{id:string;sourceTaskId:string;name:string;content:string;createdAt:string;updatedAt:string}>
+        resource2SkillTextDistill(input:{reportPath:string;domain:string;sourceUrl?:string}): Promise<{analysis:string;domain:string;sourceUrl:string;reportPath:string}>
+        resource2SkillDistillWatch(input:{taskId:string;domain:string}): Promise<{id:string;sourceTaskId:string;name:string;content:string;createdAt:string;updatedAt:string}>
+        resource2SkillSave(input:{id:string;name:string;content:string}): Promise<{id:string;sourceTaskId:string;name:string;content:string;createdAt:string;updatedAt:string;filePath:string}>
+      }
+      serverConfig: {
+        get(): Promise<string>
+        set(url: string): Promise<string>
+      }
+      deepSeekHarness: {
+        status(): Promise<{ running: boolean; url: string; message: string }>
+        start(): Promise<{ running: boolean; url: string; message: string }>
+        connect(ticket: string): Promise<{ url: string; message: string }>
+      }
+      appInfo: {
+        checkUpdate(): Promise<{ current: string; latest: string; isLatest: boolean; error: string }>
+        openDownload(): Promise<boolean>
+        installUpdate(): Promise<boolean>
+        onUpdateStatus(callback: (status: { phase: 'downloading' | 'downloaded' | 'error'; version: string; percent?: number; message?: string }) => void): () => void
+      }
+      ragflow: {
+        presetLanguage(): Promise<boolean>
+      }
+      llmKeys: {
+        list(): Promise<LlmKeyStatus[]>
+        save(id: string, value: string): Promise<{ ok: boolean; error?: string }>
+        test(id: string): Promise<{ ok: boolean; latencyMs?: number; error?: string }>
+        restart(): Promise<void>
+      }
+      kb: {
+        list(): Promise<KbListView>
+        createCustom(request: { name: string; description: string }): Promise<KbView>
+        ensureAgent(agentKey: KbAgentKey): Promise<KbView>
+        remove(kbId: string): Promise<void>
+        docs(kbId: string): Promise<KbDocsView>
+        upload(request: { kbId: string; filePaths: string[]; category?: string }): Promise<string[]>
+        createCategory(request: { kbId: string; name: string; parent?: string }): Promise<void>
+        renameCategory(request: { kbId: string; oldName: string; newName: string }): Promise<void>
+        deleteCategory(request: { kbId: string; name: string }): Promise<void>
+        assignDocs(request: { kbId: string; docIds: string[]; category: string | null }): Promise<void>
+        parse(request: { kbId: string; docIds: string[] }): Promise<void>
+        stopParse(request: { kbId: string; docIds: string[] }): Promise<void>
+        deleteDocs(request: { kbId: string; docIds: string[] }): Promise<void>
+      }
+      kbGuardian: {
+        state(): Promise<GuardianState>
+        create(input: GuardianSkillInput): Promise<GuardianSkill>
+        update(id: string, input: GuardianSkillInput): Promise<GuardianSkill>
+        remove(id: string): Promise<void>
+        runNow(id: string): Promise<{ queued: boolean; reason?: string }>
+        logs(skillId?: string): Promise<GuardianRunLog[]>
+        pickDir(): Promise<string | null>
+        retryFailed(request: { skillId: string; logId: string }): Promise<{ retried: number; succeeded: number; skipped: number; failed: number; failures: Array<{ name: string; reason: string }> }>
+        getLogDetail(logId: string): Promise<GuardianRunLog | null>
+        onRunEvent(callback: (event: GuardianRunEvent) => void): () => void
+      }
+      aiEmployee: {
+        ask(request: AiEmployeeAskRequest): Promise<{ ok: boolean; content: string }>
+        models(): Promise<AiEmployeeChatModelProfile[]>
+        pickAttachments(): Promise<AiEmployeePickResult>
+        materializeMarkdownReport(content: string): Promise<{ content: string; materialized: boolean }>
+        browserShow(bounds: BrowserBounds): Promise<void>
+        browserHide(): Promise<void>
+        browserNavigate(url: string): Promise<void>
+        browserBack(): Promise<void>
+        browserForward(): Promise<void>
+        browserReload(): Promise<void>
+        browserUrl(): Promise<string>
+        extractCurrent(): Promise<{ ok: boolean; info?: Record<string, unknown>; prompt?: string; message?: string }>
+        cnyUsdRate(): Promise<{ usdPerCny: number; fetchedAt: string; source: string } | null>
+        amazonResolve(keyword: string): Promise<{ asin: string; title: string } | null>
+                amazonMarketStats(keyword: string): Promise<AmazonMarketSample[] | null>
+        amazonListingEvidence(asins: string[]): Promise<AmazonListingEvidence[]>
+        amazonReviewEvidence(asins: string[]): Promise<AmazonReviewEvidence[]>
+        deriveAmazonKeywords(intent: AmazonSearchIntent): Promise<string[]>
+        inferEvidence(input: { intent: AmazonSearchIntent; listingEvidence: AmazonListingEvidence[]; reviewEvidence: AmazonReviewEvidence[]; sourceText: { title: string; productForm: string; useMethod: string; targetObject: string; attributes: string[]; detailText: string } }): Promise<{ differentiation: string; compliance: string; model: string; provider: string } | null>
+        amazonDataSource: {
+          get(): Promise<{ configured: boolean; site: string; pages: number; maxSamples: number; cacheHours: number }>
+          save(input: { apiKey?: string; site: string; pages: number; maxSamples: number; cacheHours: number }): Promise<{ configured: boolean; site: string; pages: number; maxSamples: number; cacheHours: number }>
+          clear(): Promise<void>
+          test(): Promise<{ ok: boolean; message: string; samples?: number }>
+          search(keyword: string): Promise<AmazonDataSourceSearchResult>
+        }
+        exportDocument(request: { title: string; roleName: string; createdAt: number; messages: Array<{ role: 'user' | 'assistant'; content: string }>; format: 'word' | 'pdf' | 'markdown' }): Promise<{ canceled: boolean; filePath?: string }>
+        exportWordReport(request: { title: string; markdown: string; roleName?: string }): Promise<{ canceled: boolean; filePath?: string; byteSize?: number; error?: string }>
+        sampleLibrary: {
+          list(): Promise<{ ok: boolean; samples?: Array<{
+            letter: 'A' | 'B' | 'C' | 'D'
+            decision: '✅ 建议入场' | '⚠️ 有条件谨慎入场' | '❌ 不建议入场' | '❓ 数据不足，不能判定'
+            title: string
+            subtitle: string
+            reason: string
+            keyMetrics: { baseMargin: number | null; downsideProfit: number | null; directCount: number | null; coveragePercent: number | null }
+            markdownFile: string
+            docxFile: string
+            markdownSize: number
+            docxSize: number
+            failedGates: string[]
+            markdownPath: string
+            docxPath: string
+          }>; error?: string }>
+          openDocx(request: { filePath: string }): Promise<{ ok: boolean; filePath?: string; error?: string }>
+        }
+        sampleLibraryKb: {
+          describe(): Promise<{ agentName: string; agentRole: string; kbName: string; description: string; categoryRoot: string }>
+          preview(): Promise<{
+            kb: KbView
+            plan: Array<{
+              name: string
+              filePath: string
+              category: string
+              meta: { kind: 'sample' | 'gates' | 'traceability'; letter?: 'A' | 'B' | 'C' | 'D'; size: number }
+            }>
+            summary: {
+              agentKey: KbAgentKey
+              kbName: string
+              description: string
+              categoryRoot: string
+              totalDocs: number
+              totalBytes: number
+              byCategory: Record<string, number>
+            }
+          }>
+          ingest(options?: { parse?: boolean }): Promise<{
+            kbId: string
+            plan: Array<{ name: string; filePath: string; category: string; meta: { kind: 'sample' | 'gates' | 'traceability'; letter?: 'A' | 'B' | 'C' | 'D'; size: number } }>
+            uploaded: Array<{ name: string; filePath: string; category: string; meta: { kind: 'sample' | 'gates' | 'traceability'; letter?: 'A' | 'B' | 'C' | 'D'; size: number } }>
+            skipped: Array<{ name: string; filePath: string; category: string; meta: { kind: 'sample' | 'gates' | 'traceability'; letter?: 'A' | 'B' | 'C' | 'D'; size: number } }>
+            parsed: string[]
+            errors: Array<{ file: string; error: string }>
+            durationMs: number
+          }>
+          // I.2 阶段新增：守卫自动同步预置技能 IPC
+          launch(): Promise<{ present: boolean; skill: GuardianSkill | null; ranNow: boolean; runNowReason?: string }>
+          guardianStatus(): Promise<{ present: boolean; skill: GuardianSkill | null; state: GuardianState }>
+        }
+        exportListing(request: { title: string; format: 'word' | 'markdown' | 'csv'; material: string; packages: Array<{ siteLabel: string; languageCode: string; conclusion: string; content: string }> }): Promise<{ canceled: boolean; filePath?: string }>
+        onBrowserUrl(callback: (url: string) => void): () => void
+        onBrowserLoading(callback: (loading: boolean) => void): () => void
+      }
       browser: {
         show(platform: Platform): Promise<void>
         hide(): Promise<void>
@@ -120,6 +290,7 @@ declare global {
         localProducts(storeId?:string):Promise<EbayLocalProduct[]>
         localProductSnapshots(localProductId:string):Promise<EbayLocalProductSnapshot[]>
         downloadLocalProduct(storeId:string,listingId:string):Promise<EbayLocalProduct>
+        readProductByUrl(storeId:string,url:string):Promise<EbayLocalProduct>
         updateLocalProduct(localProductId:string,changes:EbayLocalProductUpdateInput):Promise<EbayLocalProduct>
         localProductMediaData(localProductId:string,mediaId:string):Promise<string>
         addLocalProductMedia(localProductId:string,input:EbayLocalProductMediaUploadInput):Promise<EbayLocalProductMedia>
@@ -177,11 +348,21 @@ declare global {
         models(): Promise<ImageModelConnection>
         generate(request: ImageGenerationRequest): Promise<ImageGenerationResult>
         ground(request:EbayImageGroundingRequest):Promise<EbayImageGroundingPlan>
+        extractPackageText(request:ImagePackageTextExtractionRequest):Promise<ImagePackageTextExtractionResult>
         reviewCandidate(request:EbayImageCandidateReviewRequest):Promise<EbayImageCandidateReview>
+        suggestRoles(request:EbayImageRoleSuggestionRequest):Promise<EbayImageRoleSuggestionResult>
+        stageGrounding(request:EbayStageGroundingRequest):Promise<EbayStageFactCard>
+        stageStoryboard(request:EbayStageStoryboardRequest):Promise<EbayStageStoryboardCard[]>
+        stageModelRecommend(stage:EbayImageStage):Promise<EbayStageModelRecommendation>
         realshift(request: RealShiftRequest): Promise<RealShiftResult>
+                realshiftPreflight(): Promise<{ ok: boolean; message: string }>
         selectRealshift(reportPath: string, choice: 'original' | 'processed'): Promise<{ selectionPath: string }>
         pickRealshiftImage(): Promise<string | null>
+        pickProductImages():Promise<ImportedProductSource|null>
+        readProductUrl(url:string):Promise<ImportedProductSource>
+        translateMarketing(request:ImageMarketingTranslationRequest):Promise<ImageMarketingTranslationResult>
       }
+      advisor: AdvisorDesktopApi
       marketplace: {
         profiles(): Promise<{ platforms: MarketplacePlatformProfile[]; accounts: MarketplaceAccountProfile[] }>
         addAccount(platformCode: MarketplacePlatformCode, name: string): Promise<MarketplaceAccountProfile>

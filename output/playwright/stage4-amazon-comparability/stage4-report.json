@@ -1,0 +1,95 @@
+{
+  "generatedAt": "2026-08-18T01:55:45.113Z",
+  "expectedAssets": [
+    "./assets/index-9JoZhPdG.js",
+    "./assets/index-B7upcNzT.css"
+  ],
+  "loadedAssets": [
+    "./assets/index-9JoZhPdG.js",
+    "./assets/index-B7upcNzT.css"
+  ],
+  "checks": [
+    {
+      "id": "identity-lock-visible",
+      "passed": true,
+      "detail": "界面显示人工锁定的液体形态"
+    },
+    {
+      "id": "audit-counts-visible",
+      "passed": true,
+      "detail": "Amazon 样本可比性 结论置信度：低 原始样本 8 自然位 8 赞助位 0 ASIN 去重 7 DIRECT 3 ADJACENT 2 已排除 2 样本完整率 46% 检索词成功 3/3 核心字段覆盖 100% 研究样本 需补数 模型生成并经身份规则清洗 waterless pet shampoo no rinse pet cleanser waterless pet body wash DIRECT 少于 15 个：仅作方向性参考，不得写成 TOP50 或完整市场结论。"
+    },
+    {
+      "id": "three-clean-keywords-visible",
+      "passed": true,
+      "detail": "Amazon 样本可比性 结论置信度：低 原始样本 8 自然位 8 赞助位 0 ASIN 去重 7 DIRECT 3 ADJACENT 2 已排除 2 样本完整率 46% 检索词成功 3/3 核心字段覆盖 100% 研究样本 需补数 模型生成并经身份规则清洗 waterless pet shampoo no rinse pet cleanser waterless pet body wash DIRECT 少于 15 个：仅作方向性参考，不得写成 TOP50 或完整市场结论。"
+    },
+    {
+      "id": "low-confidence-visible",
+      "passed": true,
+      "detail": "Amazon 样本可比性 结论置信度：低 原始样本 8 自然位 8 赞助位 0 ASIN 去重 7 DIRECT 3 ADJACENT 2 已排除 2 样本完整率 46% 检索词成功 3/3 核心字段覆盖 100% 研究样本 需补数 模型生成并经身份规则清洗 waterless pet shampoo no rinse pet cleanser waterless pet body wash DIRECT 少于 15 个：仅作方向性参考，不得写成 TOP50 或完整市场结论。"
+    },
+    {
+      "id": "locked-intent-sent",
+      "passed": true,
+      "detail": "{\"productName\":\"宠物免洗擦浴精华\",\"productForm\":\"液体精华\",\"useMethod\":\"挤出液体后免洗擦浴\",\"targetObject\":\"猫狗\",\"excludedTerms\":[\"pet wipes\",\"grooming wipes\",\"wet wipes\",\"pre-moistened wipes\"]}"
+    },
+    {
+      "id": "three-queries-only",
+      "passed": true,
+      "detail": "waterless pet shampoo | no rinse pet cleanser | waterless pet body wash"
+    },
+    {
+      "id": "direct-only-statistics",
+      "passed": true,
+      "detail": "DIRECT 价格统计为 20/30/40，湿巾未混入直接竞品表"
+    },
+    {
+      "id": "adjacent-and-excluded-policy",
+      "passed": true,
+      "detail": "替代方案和不可比样本不混入DIRECT结论"
+    },
+    {
+      "id": "report-finished-no-stale-progress",
+      "passed": true,
+      "detail": "报告返回后无抓取中提示"
+    },
+    {
+      "id": "empty-sample-audited",
+      "passed": true,
+      "detail": "Amazon 样本可比性 结论置信度：低 原始样本 0 自然位 0 赞助位 0 ASIN 去重 0 DIRECT 0 ADJACENT 0 已排除 0 样本完整率 0% 检索词成功 0/3 核心字段覆盖 0% 研究样本 需补数 模型生成并经身份规则清洗 waterless pet shampoo no rinse pet cleanser waterless pet body wash DIRECT 少于 15 个：仅作方向性参考，不得写成 TOP50 或完整市场结论。"
+    },
+    {
+      "id": "empty-sample-fallback-tried",
+      "passed": true,
+      "detail": "waterless pet shampoo | no rinse pet cleanser | waterless pet body wash | waterless pet shampoo | no rinse pet cleanser | waterless pet body wash"
+    },
+    {
+      "id": "empty-query-explicit-limit",
+      "passed": true,
+      "detail": "零样本时仍发送受控补充请求，报告由系统事实包降级"
+    },
+    {
+      "id": "narrow-layout-no-overflow",
+      "passed": true,
+      "detail": "{\"width\":923,\"scrollWidth\":923,\"right\":1039,\"viewport\":1100}"
+    },
+    {
+      "id": "latest-assets",
+      "passed": true,
+      "detail": "实际加载 ./assets/index-9JoZhPdG.js, ./assets/index-B7upcNzT.css"
+    }
+  ],
+  "counters": {
+    "derive": 2,
+    "search": 6,
+    "browserFallback": 6,
+    "ask": 8
+  },
+  "layout": {
+    "width": 923,
+    "scrollWidth": 923,
+    "right": 1039,
+    "viewport": 1100
+  }
+}

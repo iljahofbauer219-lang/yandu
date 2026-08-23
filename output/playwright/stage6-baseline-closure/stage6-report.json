@@ -1,0 +1,110 @@
+{
+  "generatedAt": "2026-08-18T01:50:28.687Z",
+  "launchedViewport": {
+    "innerWidth": 1440,
+    "innerHeight": 900,
+    "scrollWidth": 1440,
+    "scrollHeight": 900
+  },
+  "minViewport": {
+    "innerWidth": 1100,
+    "innerHeight": 720,
+    "scrollWidth": 1100,
+    "scrollHeight": 720,
+    "heading": {
+      "x": 530,
+      "y": 192.1171875,
+      "width": 108,
+      "height": 34.09375,
+      "top": 192.1171875,
+      "right": 638,
+      "bottom": 226.2109375,
+      "left": 530
+    },
+    "card": {
+      "x": 416,
+      "y": 444.34375,
+      "width": 160,
+      "height": 139.5390625,
+      "top": 444.34375,
+      "right": 576,
+      "bottom": 583.8828125,
+      "left": 416
+    },
+    "overflows": []
+  },
+  "expectedAssets": [
+    "./assets/index-9JoZhPdG.js",
+    "./assets/index-B7upcNzT.css"
+  ],
+  "loadedAssets": [
+    "./assets/index-9JoZhPdG.js",
+    "./assets/index-B7upcNzT.css"
+  ],
+  "checks": [
+    {
+      "id": "launched-window-fit",
+      "passed": true,
+      "detail": "{\"innerWidth\":1440,\"innerHeight\":900,\"scrollWidth\":1440,\"scrollHeight\":900}"
+    },
+    {
+      "id": "report-title-preserved",
+      "passed": true,
+      "detail": "报告保持“宠物免洗擦浴精华”"
+    },
+    {
+      "id": "real-more-menu-visible",
+      "passed": true,
+      "detail": "下载 Word 下载 Markdown 收藏回复"
+    },
+    {
+      "id": "placeholder-removed",
+      "passed": true,
+      "detail": "旧占位文案不存在"
+    },
+    {
+      "id": "favorite-persisted",
+      "passed": true,
+      "detail": "favorite keys=1"
+    },
+    {
+      "id": "favorite-full-cycle",
+      "passed": true,
+      "detail": "favorite keys=0"
+    },
+    {
+      "id": "more-menu-escape-close",
+      "passed": true,
+      "detail": "Esc 后菜单关闭"
+    },
+    {
+      "id": "more-menu-exports-work",
+      "passed": true,
+      "detail": "[\"word\",\"markdown\"]"
+    },
+    {
+      "id": "document-flow-regression",
+      "passed": true,
+      "detail": "请优先核验这份报告中的待验证数据，并按重要性排序。"
+    },
+    {
+      "id": "hq-minimum-window-fit",
+      "passed": true,
+      "detail": "{\"innerWidth\":1100,\"innerHeight\":720,\"scrollWidth\":1100,\"scrollHeight\":720,\"heading\":{\"x\":530,\"y\":192.1171875,\"width\":108,\"height\":34.09375,\"top\":192.1171875,\"right\":638,\"bottom\":226.2109375,\"left\":530},\"card\":{\"x\":416,\"y\":444.34375,\"width\":160,\"height\":139.5390625,\"top\":444.34375,\"right\":576,\"bottom\":583.8828125,\"left\":416},\"overflows\":[]}"
+    },
+    {
+      "id": "amazon-card-round-trip",
+      "passed": true,
+      "detail": "通过大模型API Key进入Amazon配置页并返回AI总部正常"
+    },
+    {
+      "id": "latest-assets",
+      "passed": true,
+      "detail": "实际加载 ./assets/index-9JoZhPdG.js, ./assets/index-B7upcNzT.css"
+    }
+  ],
+  "counters": {
+    "asks": 4,
+    "exports": 2
+  }
+}

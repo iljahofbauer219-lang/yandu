@@ -1,0 +1,95 @@
+{
+  "model": "qwen3.6-flash",
+  "observations": [
+    {
+      "sourceIndex": 0,
+      "rawText": "宠物训导垫 超级工厂 贴牌定制 OEM & FOB 碧舒柔 PET DIAPERS 训导导垫 S 100片 33x45cm 多种规格 源头工厂 品质保证",
+      "fields": {
+        "brand": "碧舒柔",
+        "productName": "宠物训导垫",
+        "specification": "S 33x45cm",
+        "quantity": "100片",
+        "otherText": "超级工厂 贴牌定制 OEM & FOB 多种规格 源头工厂 品质保证"
+      },
+      "confidence": 95
+    },
+    {
+      "sourceIndex": 1,
+      "rawText": "宠物训导垫 超级工厂 贴牌定制 OEM & FOB 碧舒柔 宠物训导垫 多种规格 源头工厂 品质保证",
+      "fields": {
+        "brand": "碧舒柔",
+        "productName": "宠物训导垫",
+        "otherText": "超级工厂 贴牌定制 OEM & FOB 多种规格 源头工厂 品质保证"
+      },
+      "confidence": 90
+    },
+    {
+      "sourceIndex": 2,
+      "rawText": "S码 100片 33X45cm M码 50片 45X60cm L码 40片 60X60cm XL码 20片 60X90cm 碧舒柔 宠物训导垫 多种规格 源头工厂 品质保证",
+      "fields": {
+        "brand": "碧舒柔",
+        "productName": "宠物训导垫",
+        "specification": "S/M/L/XL",
+        "quantity": "100/50/40/20片",
+        "otherText": "多种规格 源头工厂 品质保证"
+      },
+      "confidence": 95
+    },
+    {
+      "sourceIndex": 3,
+      "rawText": "幼犬 S 100片装 45*33cm 小型犬 M 50片装 60*45 中型犬 L 40片装 60*60cm 大型犬 XL 20片装 90*60cm",
+      "fields": {
+        "productName": "宠物训导垫",
+        "specification": "S(45*33cm)/M(60*45)/L(60*60cm)/XL(90*60cm)",
+        "quantity": "100/50/40/20片装",
+        "otherText": "幼犬 小型犬 中型犬 大型犬"
+      },
+      "confidence": 95
+    },
+    {
+      "sourceIndex": 4,
+      "rawText": "经济款-XL码 60X90cm 20片 碧舒柔 宠物训导垫",
+      "fields": {
+        "brand": "碧舒柔",
+        "productName": "宠物训导垫",
+        "model": "经济款",
+        "specification": "XL 60X90cm",
+        "quantity": "20片"
+      },
+      "confidence": 95
+    },
+    {
+      "sourceIndex": 5,
+      "rawText": "加厚款-M码 45X60cm 50片",
+      "fields": {
+        "productName": "宠物训导垫",
+        "model": "加厚款",
+        "specification": "M 45X60cm",
+        "quantity": "50片"
+      },
+      "confidence": 95
+    },
+    {
+      "sourceIndex": 6,
+      "rawText": "体验款-S码 33X45cm 20片",
+      "fields": {
+        "productName": "宠物训导垫",
+        "model": "体验款",
+        "specification": "S 33X45cm",
+        "quantity": "20片"
+      },
+      "confidence": 95
+    }
+  ],
+  "conflicts": [
+    "model",
+    "specification",
+    "quantity",
+    "otherText"
+  ],
+  "combinedText": "图1：宠物训导垫 超级工厂 贴牌定制 OEM & FOB 碧舒柔 PET DIAPERS 训导导垫 S 100片 33x45cm 多种规格 源头工厂 品质保证\n图2：宠物训导垫 超级工厂 贴牌定制 OEM & FOB 碧舒柔 宠物训导垫 多种规格 源头工厂 品质保证\n图3：S码 100片 33X45cm M码 50片 45X60cm L码 40片 60X60cm XL码 20片 60X90cm 碧舒柔 宠物训导垫 多种规格 源头工厂 品质保证\n图4：幼犬 S 100片装 45*33cm 小型犬 M 50片装 60*45 中型犬 L 40片装 60*60cm 大型犬 XL 20片装 90*60cm\n图5：经济款-XL码 60X90cm 20片 碧舒柔 宠物训导垫\n图6：加厚款-M码 45X60cm 50片\n图7：体验款-S码 33X45cm 20片",
+  "warnings": [
+    "不同参考图存在字段冲突：model、specification、quantity、otherText，必须人工选择正确规格"
+  ],
+  "analyzedAt": "2026-08-05T00:40:04.968Z"
+}

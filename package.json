@@ -1,31 +1,48 @@
 {
   "name": "cross-border-sourcing-desktop",
-  "version": "0.1.0",
+  "version": "1.0.14",
   "private": true,
+  "description": "砚都跨境·跨境电商选品与素材工作台",
+  "author": "砚都跨境",
   "main": "dist/main/main/main.js",
   "scripts": {
     "dev": "concurrently -k \"vite --port 5173 --strictPort\" \"tsc -p tsconfig.main.json --watch\" \"wait-on tcp:5173 file:dist/main/main/main.js && VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
     "build": "vite build && tsc -p tsconfig.main.json",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit",
+    "verify:j": "tsx tools/verify-j-stage.ts",
+    "verify:j7": "tsx tools/verify-j7-regression.ts",
+    "verify:k": "tsx tools/verify-k-stage.ts",
     "start": "electron .",
-    "desktop": "pnpm build && pnpm start"
+    "desktop": "pnpm build && pnpm start",
+    "dist": "pnpm build && electron-builder --mac --win",
+    "dist:mac": "pnpm build && electron-builder --mac",
+    "dist:win": "pnpm build && electron-builder --win"
   },
   "dependencies": {
+    "@ffmpeg-installer/darwin-x64": "^4.1.0",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffmpeg-installer/win32-x64": "^4.1.0",
     "@larksuiteoapi/node-sdk": "^1.70.0",
-    "@vitejs/plugin-react": "latest",
-    "concurrently": "latest",
-    "electron": "43.1.0",
+    "docx": "^9.7.1",
+    "electron-updater": "^6.7.3",
     "iconv-lite": "^0.7.3",
+    "mammoth": "^1.12.0",
+    "pdf-parse": "^1.1.1",
     "react": "latest",
     "react-dom": "latest",
-    "typescript": "latest",
-    "vite": "8.1.4",
-    "wait-on": "latest"
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@types/node": "latest",
     "@types/react": "latest",
-    "@types/react-dom": "latest"
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "concurrently": "latest",
+    "electron": "43.1.0",
+    "electron-builder": "^26.7.0",
+    "typescript": "~5.7.2",
+    "vite": "8.1.4",
+    "wait-on": "latest"
   }
 }

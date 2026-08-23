@@ -1,0 +1,26 @@
+const { _electron:electron }=require('/Users/zyc/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright')
+const path=require('node:path'),fs=require('node:fs'),os=require('node:os')
+const qa={id:'url-1688-qa',email:'qa@example.test',name:'1688网址验收',isOwner:true,status:'ACTIVE',mustChangePassword:false,lastLoginAt:null,org:{id:'url-1688-org',name:'1688网址验收组织'},roles:[],permissions:'ALL',stores:null}
+;(async()=>{
+  const executablePath=path.resolve(__dirname,'../node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'),userDataDir=fs.mkdtempSync(path.join(os.tmpdir(),'url-1688-'))
+  const app=await electron.launch({executablePath,args:[`--user-data-dir=${userDataDir}`,`.`],cwd:path.resolve(__dirname,'..')})
+  try{
+    const page=await app.firstWindow()
+    await page.route('**/api/auth/me',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(qa)}))
+    await app.evaluate(({ipcMain},fixturePath)=>{const fs=process.getBuiltinModule('node:fs'),{createRequire}=process.getBuiltinModule('node:module'),localRequire=createRequire(`${process.cwd()}/package.json`),service=localRequire(`${process.cwd()}/dist/main/main/services/ImageSourceService.js`),html=fs.readFileSync(fixturePath,'utf8');ipcMain.removeHandler('image:source:read-url');ipcMain.handle('image:source:read-url',(_event,value)=>service.importProductUrl(value,'',html))},'/tmp/phase9-1688.html')
+    await page.evaluate(profile=>{localStorage.setItem('sourcing.auth.tokens:v1',JSON.stringify({accessToken:'qa',refreshToken:'qa',refreshTokenExpiresAt:'2099-01-01T00:00:00.000Z'}));localStorage.setItem('sourcing.auth.profile:v1',JSON.stringify(profile))},qa)
+    await page.reload();await page.waitForTimeout(800)
+    await page.getByRole('button',{name:'AI美工'}).first().click();await page.getByText('AI生图',{exact:true}).first().click()
+    await page.getByRole('button',{name:/添加商品/}).first().click();await page.locator('.image-source-options').getByRole('button',{name:/产品网址/}).click()
+    await page.getByLabel('产品网址').fill('https://detail.1688.com/offer/677442502491.html');await page.getByRole('button',{name:'读取商品'}).click()
+    await page.getByText(/宠物尿垫尿片狗狗尿垫/).first().waitFor({timeout:30000})
+    await page.getByRole('button',{name:/管理参考图 43张/}).click();await page.getByRole('heading',{name:'管理参考图'}).waitFor()
+    const total=await page.locator('.image-reference-list article').count(),gallery=await page.getByText(/商品图库-/).count(),sku=await page.getByText(/SKU规格-/).count(),details=await page.getByText(/详情页-/).count()
+    if(total!==43||gallery!==5||sku!==27||details!==11)throw new Error(`图片分类不正确：总${total} 主图${gallery} SKU${sku} 详情${details}`)
+    const brand=await page.getByLabel('事实-品牌').inputValue(),material=await page.getByLabel('事实-材质').inputValue(),specification=await page.getByLabel('事实-尺寸/数量/规格').inputValue()
+    if(brand!=='碧舒柔'||!material.includes('无纺布')||!specification.includes('S100/M50/L40/XL20'))throw new Error('网页结构化事实未进入商品事实卡')
+    const screenshot=path.resolve('output/playwright/1688-full-page-import.png');fs.mkdirSync(path.dirname(screenshot),{recursive:true});await page.screenshot({path:screenshot,fullPage:true})
+    const loadedAssets=await page.evaluate(()=>[...document.querySelectorAll('link[rel="stylesheet"],script[src]')].map(node=>node.getAttribute('href')||node.getAttribute('src')).filter(Boolean))
+    console.log(JSON.stringify({url:'https://detail.1688.com/offer/677442502491.html',total,gallery,sku,details,pageFacts:6,factsVisible:{brand,material,specification:specification.slice(0,80)},errorVisible:false,loadedAssets,screenshot},null,2))
+  }finally{await app.close()}
+})().catch(error=>{console.error(error);process.exit(1)})

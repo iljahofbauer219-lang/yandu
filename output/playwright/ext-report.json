@@ -1,0 +1,20 @@
+{
+  "extId": "eplkjhpainebggemdfpafjhnamoomjid",
+  "productUrl": "https://detail.1688.com/offer/677442502491.html",
+  "extract": {
+    "ok": true,
+    "info": {
+      "title": "验证码拦截",
+      "price": "",
+      "attributes": [],
+      "images": [
+        "https://img.alicdn.com/tfs/TB17G2dJGmWBuNjy1XaXXXCbXXa-241-41.png",
+        "https://img.alicdn.com/imgextra/i4/O1CN01qmaJz31q4weSk8nm6_!!6000000005443-2-tps-1280-720.png"
+      ],
+      "seller": ""
+    },
+    "prompt": "我在1688看到一款商品，商品信息如下：\n- 标题：验证码拦截\n- 图片：2 张\n请帮我分析这款产品在亚马逊是否有机会，按方法论文档输出完整评估报告。"
+  },
+  "analyzeLength": 1029,
+  "elapsedSec": "13.5"
+}

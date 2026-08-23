@@ -1,0 +1,36 @@
+const { _electron: electron }=require('/Users/zyc/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright')
+const path=require('node:path'),fs=require('node:fs'),os=require('node:os')
+const qa={id:'phase9-qa',email:'qa@example.test',name:'阶段9验收',isOwner:true,status:'ACTIVE',mustChangePassword:false,lastLoginAt:null,org:{id:'phase9-org',name:'阶段9验收组织'},roles:[],permissions:'ALL',stores:null}
+
+;(async()=>{
+  const executablePath=path.resolve(__dirname,'../node_modules/electron/dist/Electron.app/Contents/MacOS/Electron')
+  const userDataDir=fs.mkdtempSync(path.join(os.tmpdir(),'phase9-ocr-'))
+  const app=await electron.launch({executablePath,args:[`--user-data-dir=${userDataDir}`,`.`],cwd:path.resolve(__dirname,'..'),env:{...process.env,CODEX_UI_TEST:'1'}})
+  try{
+    const page=await app.firstWindow()
+    await page.route('**/api/auth/me',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(qa)}))
+    await app.evaluate(({app})=>{
+      const{DatabaseSync}=process.getBuiltinModule('node:sqlite'),db=new DatabaseSync(`${app.getPath('userData')}/sourcing-data.sqlite`),now=new Date().toISOString()
+      db.exec('PRAGMA foreign_keys = OFF')
+      db.prepare(`INSERT OR REPLACE INTO supply_warehouse_products (id,warehouse_code,selection_id,source_url,product_id,title,image_url,price_text,supplier_name,category,subcategory,tertiary_category,status,payload,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run('phase9-product','1688','phase9-selection','https://example.test/product','PHASE9-SKU','阶段9宠物训练垫','','¥99','测试供应商','宠物','清洁','尿垫','ACTIVE','{}',now,now)
+      db.close()
+    })
+    await page.evaluate(profile=>{localStorage.setItem('sourcing.auth.tokens:v1',JSON.stringify({accessToken:'qa',refreshToken:'qa',refreshTokenExpiresAt:'2099-01-01T00:00:00.000Z'}));localStorage.setItem('sourcing.auth.profile:v1',JSON.stringify(profile))},qa)
+    await page.reload();await page.waitForTimeout(800)
+    await page.getByRole('button',{name:'AI美工'}).first().click()
+    await page.getByText('AI生图',{exact:true}).first().click()
+    await page.getByRole('button',{name:/添加商品/}).first().click()
+    await page.locator('.image-source-options').getByRole('button',{name:/AI入库商品/}).click()
+    await page.getByRole('button',{name:'AI做图'}).first().click()
+    await page.getByRole('button',{name:'识别包装文字'}).click()
+    await page.getByText(/包装OCR：2张识别到文字/).waitFor()
+    await page.getByText(/存在冲突：specification、quantity/).waitFor()
+    const packageStatus=await page.getByLabel('包装原文状态').inputValue()
+    if(packageStatus!=='CONFLICT')throw new Error(`包装原文应为CONFLICT，实际${packageStatus}`)
+    await page.getByRole('button',{name:'确认并锁定商品事实'}).click()
+    await page.getByText(/包装原文存在冲突/).first().waitFor()
+    const screenshot=path.resolve('output/playwright/package-ocr-phase9.png');fs.mkdirSync(path.dirname(screenshot),{recursive:true});await page.screenshot({path:screenshot,fullPage:true})
+    const loadedAssets=await page.evaluate(()=>[...document.querySelectorAll('link[rel="stylesheet"],script[src]')].map(node=>node.getAttribute('href')||node.getAttribute('src')).filter(Boolean))
+    console.log(JSON.stringify({ocrVisible:true,observations:2,conflictVisible:true,conflictStatus:packageStatus,confirmationBlocked:true,loadedAssets,screenshot},null,2))
+  }finally{await app.close()}
+})().catch(error=>{console.error(error);process.exit(1)})

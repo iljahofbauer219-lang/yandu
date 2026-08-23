@@ -179,3 +179,31 @@
 .ebay-visual-curation button:hover{background:#d5f1ed;border-color:#7ecfc7}
 .ebay-visual-curation button.active{background:#0f9c8f;border-color:#0f9c8f;color:#fff}
 .ebay-visual-curation button:disabled{opacity:.5;cursor:not-allowed}
+.ebay-role-suggestion{color:#8a949a;font-size:10px;white-space:nowrap}
+.ebay-original-gallery-extra .ebay-role-suggestion{font-size:7px}
+/* 分类来源小标记：自动（灰）/手动（青） */
+.ebay-role-source{padding:1px 6px;border:1px solid #dbe3e2;border-radius:6px;background:#eef2f2;color:#8a949a;font-size:9px;font-style:normal;white-space:nowrap}
+.ebay-role-source.manual{border-color:#aee2de;background:#d5f1ed;color:#075955}
+/* 多选参考：计数胶囊、超限提示与选中卡片高亮 */
+.ebay-visual-reference-count{margin-left:8px;padding:2px 8px;border:1px solid #aee2de;border-radius:999px;background:#e8f8f6;color:#0f9c8f;font-size:11px;font-style:normal;font-weight:600;white-space:nowrap;vertical-align:middle}
+.ebay-visual-reference-warning{margin:0 18px 8px;padding:7px 10px;border:1px solid #ead5a4;border-radius:8px;background:#fff7e4;color:#94610c;font-size:11px}
+.ebay-visual-results article.reference-selected{border:1px solid #0f9c8f;box-shadow:0 0 0 2px rgba(15,156,143,.16)}
+
+/* 图片整改清单：单行摘要 + 展开态 */
+.ebay-issue-compact-list details.ebay-issue-compact { border:1px solid #e5e8e9; border-left:4px solid #98aaa8; border-radius:9px; background:#fff; }
+.ebay-issue-compact-list details.ebay-issue-compact:has(>summary em.p0) { border-left-color:#d64b42; }
+.ebay-issue-compact-list details.ebay-issue-compact:has(>summary em.p1) { border-left-color:#d99a26; }
+.ebay-issue-compact-list details.ebay-issue-compact:has(>summary em.p2) { border-left-color:#db8a22; }
+.ebay-issue-compact-list details.ebay-issue-compact:has(>summary em.p3) { border-left-color:#55aaa3; }
+.ebay-issue-compact>summary { display:flex; align-items:center; gap:9px; min-width:0; padding:8px 11px; list-style:none; cursor:pointer; }
+.ebay-issue-compact>summary::-webkit-details-marker { display:none; }
+.ebay-issue-compact>summary b { flex:none; max-width:40%; overflow:hidden; font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+.ebay-issue-compact>summary span { flex:1; min-width:0; overflow:hidden; color:#899094; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+.ebay-issue-compact>summary i { flex:none; color:#9aa2a4; font-size:10px; font-style:normal; transition:transform .15s ease; }
+.ebay-issue-compact[open]>summary i { transform:rotate(180deg); }
+.ebay-issue-compact[open]>summary span { display:none; }
+.ebay-issue-compact>div { min-width:0; padding:0 12px 10px 62px; }
+.ebay-issue-optional>summary { padding:8px 11px; border:1px dashed #cfd8d7; border-radius:9px; color:#5f7370; background:#f7fafa; font-size:11px; font-weight:650; list-style:none; cursor:pointer; }
+.ebay-issue-optional>summary::-webkit-details-marker { display:none; }
+.ebay-issue-optional[open]>summary { margin-bottom:6px; }
+.ebay-issue-optional>div { display:grid; gap:6px; }

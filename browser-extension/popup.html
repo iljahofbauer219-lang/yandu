@@ -1,2 +1,50 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>砚都跨境采集助手</title><link rel="stylesheet" href="popup.css"></head><body><main><header><span>砚</span><div><b>砚都跨境采集助手</b><small id="status">正在检测桌面端…</small></div></header><section id="pairing"><label>桌面端配对码<input id="code" inputmode="numeric" maxlength="6" placeholder="6 位数字"></label><button id="pair">连接桌面端</button></section><section id="ready" hidden><p>请先在平台页面完成筛选，再采集适合的商品。</p><button id="collect">采集当前商品</button></section><footer id="message"></footer></main><script src="popup.js"></script></body></html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>砚都跨境采集助手</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+<main>
+  <header>
+    <span>砚</span>
+    <div>
+      <b>砚都跨境采集助手</b>
+      <small id="status">正在检测桌面端…</small>
+    </div>
+  </header>
+
+  <section id="pairing">
+    <label>桌面端配对码<input id="code" inputmode="numeric" maxlength="6" placeholder="6 位数字"></label>
+    <button id="pair">连接桌面端</button>
+  </section>
+
+  <section id="ready" hidden>
+    <p>请先在平台页面完成筛选，再采集适合的商品。</p>
+    <button id="collect">采集当前商品</button>
+  </section>
+
+  <section id="ai1688">
+    <h2>AI 选品分析</h2>
+    <p id="pageHint" class="hint">请打开 1688 商品详情页后使用</p>
+    <div id="extractedPreview" class="preview" hidden></div>
+    <button id="analyze1688" hidden>提取并分析</button>
+    <div id="reportArea" class="report" hidden></div>
+  </section>
+
+  <section id="settings">
+    <details>
+      <summary>RAGFlow 设置</summary>
+      <label>服务地址<input id="ragflowUrl" placeholder="http://114.55.149.192:8090"></label>
+      <label>API Key<input id="ragflowKey" type="password" placeholder="ragflow-xxxx"></label>
+      <button id="saveRagflow">保存设置</button>
+    </details>
+  </section>
+
+  <footer id="message"></footer>
+</main>
+<script src="popup.js"></script>
+</body>
+</html>

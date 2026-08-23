@@ -1,0 +1,231 @@
+import { ComponentPropsWithoutRef, MouseEvent, useEffect, useMemo, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { stripAppendix } from '../shared/reportEnhance'
+import { reportPlatform } from '../shared/selectionExtract'
+import { enhanceReportDom } from './reportEnhanceDom'
+
+function tableRows(table: HTMLTableElement): string[][] {
+  return Array.from(table.rows).map(row =>
+    Array.from(row.cells).map(cell => (cell.textContent || '').trim())
+  )
+}
+
+function rowsAsTsv(rows: string[][]): string {
+  return rows.map(row => row.join('\t')).join('\n')
+}
+
+function rowsAsCsv(rows: string[][]): string {
+  return '\uFEFF' + rows.map(row => row.map(value => `"${value.replaceAll('"', '""')}"`).join(',')).join('\n')
+}
+
+function MarkdownTable(props: ComponentPropsWithoutRef<'table'>) {
+  const tableRef = useRef<HTMLTableElement>(null)
+  const [expanded, setExpanded] = useState(false)
+  const [notice, setNotice] = useState('')
+
+  const copyTable = async () => {
+    if (!tableRef.current) return
+    await navigator.clipboard.writeText(rowsAsTsv(tableRows(tableRef.current)))
+    setNotice('已复制')
+    window.setTimeout(() => setNotice(''), 1500)
+  }
+
+  const downloadCsv = () => {
+    if (!tableRef.current) return
+    const url = URL.createObjectURL(new Blob([rowsAsCsv(tableRows(tableRef.current))], { type: 'text/csv;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `AI表格-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+    setNotice('已下载')
+    window.setTimeout(() => setNotice(''), 1500)
+  }
+
+  return <section className={`ai-markdown-table-card${expanded ? ' expanded' : ''}`}>
+    <header>
+      <b>表格</b>
+      <span aria-live="polite">{notice}</span>
+      <button type="button" aria-label="复制表格" title="复制表格" onClick={() => void copyTable()}>复制</button>
+      <button type="button" aria-label="下载CSV" title="下载CSV" onClick={downloadCsv}>CSV</button>
+      <button type="button" aria-label={expanded ? '退出表格大图' : '展开表格'} title={expanded ? '退出大图' : '展开表格'} onClick={() => setExpanded(value => !value)}>{expanded ? '退出大图' : '展开'}</button>
+    </header>
+    <div className="ai-markdown-table-scroll" tabIndex={0} aria-label="可横向滚动的表格">
+      <table ref={tableRef} {...props} />
+    </div>
+  </section>
+}
+
+export default function AIMessageContent({ content, tone = 'answer', onPrompt }: { content: string; tone?: 'answer' | 'question'; onPrompt?: (prompt: string) => void }) {
+  const [copied, setCopied] = useState(false)
+  const [actionNotice, setActionNotice] = useState('')
+  const [documentReady, setDocumentReady] = useState(false)
+  const [documentBusy, setDocumentBusy] = useState<'word' | 'markdown' | ''>('')
+  const [documentEditing, setDocumentEditing] = useState(false)
+  const [editedContent, setEditedContent] = useState('')
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [favorited, setFavorited] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const moreMenuRef = useRef<HTMLDivElement>(null)
+  // v1.4：旧报告自带的附录不再展示（省版面），渲染前剩除
+  const rendered = useMemo(() => stripAppendix(content), [content])
+  const documentStorageKey = `yd.aiEmployee.document:${encodeURIComponent(rendered.slice(0, 120))}`
+  const favoriteStorageKey = `yd.aiEmployee.favorite:${encodeURIComponent(rendered.slice(0, 120))}`
+
+  // 报告增强：旧报告追溯补链 + 证据等级标签 + 术语悬停注解（rendered 变化后重跑）
+  useEffect(() => {
+    enhanceReportDom(rootRef.current)
+  }, [rendered])
+  useEffect(() => {
+    try { setEditedContent(localStorage.getItem(documentStorageKey) || rendered) } catch { setEditedContent(rendered) }
+  }, [documentStorageKey, rendered])
+  useEffect(() => {
+    try { setFavorited(localStorage.getItem(favoriteStorageKey) === '1') } catch { setFavorited(false) }
+  }, [favoriteStorageKey])
+  useEffect(() => {
+    if (!moreOpen) return
+    const closeOutside = (event: PointerEvent) => {
+      if (!moreMenuRef.current?.contains(event.target as Node)) setMoreOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMoreOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [moreOpen])
+
+  const copyAnswer = async () => {
+    await navigator.clipboard.writeText(rendered)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1500)
+  }
+
+  const documentTitle = rendered.match(/^#\s+(.+)$/m)?.[1]?.trim() || 'Amazon选品分析报告'
+  const documentPlatform = reportPlatform(editedContent || rendered)
+  const documentPrompts = useMemo(() => {
+    const prompts: string[] = []
+    if (/待验证|未知|数据不足/.test(editedContent || rendered)) prompts.push('请优先核验这份报告中的待验证数据，并按重要性排序。')
+    if (/竞品|ASIN|商品\/品牌链接/.test(editedContent || rendered)) prompts.push('请根据报告中的竞品表，筛选出最值得重点研究的 5 个 Amazon 竞品。')
+    if (/利润|成本|FBA|毛利|盈亏/.test(editedContent || rendered)) prompts.push('请补充采购成本、物流、FBA费用、广告费和退货率，计算 Amazon 美国站利润。')
+    if (/合规|FDA|EPA|知识产权|专利/.test(editedContent || rendered)) prompts.push('请检查报告中的合规与知识产权风险，并列出需要人工确认的事项。')
+    prompts.push('请根据这份 Amazon 选品报告制定 30 天验证计划和止损条件。')
+    return [...new Set(prompts)].slice(0, 4)
+  }, [editedContent, rendered])
+  const createDocument = () => {
+    setDocumentReady(true)
+    setDocumentEditing(true)
+    setActionNotice('文档已生成，可直接编辑。')
+  }
+  const downloadDocument = async (format: 'word' | 'markdown') => {
+    setDocumentBusy(format)
+    setActionNotice('')
+    try {
+      const result = await window.desktop.aiEmployee.exportListing({
+        title: documentTitle,
+        format,
+        material: '',
+        packages: [{ siteLabel: `${documentPlatform}选品分析报告`, languageCode: 'zh-CN', conclusion: '', content: editedContent || rendered }]
+      })
+      if (!result.canceled) setActionNotice(`已下载：${result.filePath || documentTitle}`)
+    } catch (error) {
+      setActionNotice(`文档下载失败：${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setDocumentBusy('')
+    }
+  }
+
+  const updateDocument = (value: string) => {
+    setEditedContent(value)
+    try { localStorage.setItem(documentStorageKey, value) } catch { /* ignore quota errors */ }
+    setActionNotice('已自动保存')
+  }
+
+  const toggleFavorite = () => {
+    const next = !favorited
+    setFavorited(next)
+    setMoreOpen(false)
+    try {
+      if (next) localStorage.setItem(favoriteStorageKey, '1')
+      else localStorage.removeItem(favoriteStorageKey)
+    } catch { /* ignore quota errors */ }
+    setActionNotice(next ? '已收藏这条回复。' : '已取消收藏。')
+  }
+
+  const downloadFromMore = (format: 'word' | 'markdown') => {
+    setMoreOpen(false)
+    void downloadDocument(format)
+  }
+
+  // 链接点击：优先内置浏览器 web 标签（报告旁直接核验竞店），失败降级系统浏览器
+  const smartOpen = (href: string, label: string) => {
+    void (async () => {
+      try {
+        await window.desktop.browser.openTab('web', href, label)
+      } catch {
+        await window.desktop.system.openExternal(href).catch(() => undefined)
+      }
+    })()
+  }
+
+  const onLinkClick = (event: MouseEvent<HTMLDivElement>) => {
+    const anchor = (event.target as HTMLElement).closest('a[href]')
+    const href = anchor?.getAttribute('href') || ''
+    if (!anchor || !/^https?:\/\//.test(href)) return
+    event.preventDefault()
+    smartOpen(href, (anchor.textContent || href).slice(0, 24))
+  }
+
+  return <div ref={rootRef} onClick={onLinkClick} className={`ai-markdown-content ai-markdown-${tone}`}>
+    <ReactMarkdown
+      key={rendered}
+      remarkPlugins={[remarkGfm]}
+      components={{
+        table: MarkdownTable,
+        a: ({ children, ...props }) => <a
+          {...props}
+          target="_blank"
+          rel="noreferrer"
+          onClick={event => {
+            const href = props.href || ''
+            if (!/^https?:\/\//.test(href)) return
+            event.preventDefault()
+            event.stopPropagation()
+            smartOpen(href, (event.currentTarget.textContent || href).slice(0, 24))
+          }}
+        >{children}</a>
+      }
+    }>{rendered}</ReactMarkdown>
+    {tone === 'answer' && <footer className="ai-markdown-answer-actions" aria-label="回复操作">
+      <button type="button" onClick={() => void copyAnswer()}>{copied ? '已复制' : '复制回答'}</button>
+      <button type="button" className="primary" onClick={createDocument}>✎ 转为文档编辑</button>
+      <div className="ai-markdown-answer-more" ref={moreMenuRef}>
+        <button type="button" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen(value => !value)}>••• 更多</button>
+        {moreOpen && <div className="ai-markdown-answer-more-menu" role="menu" aria-label="更多回复操作">
+          <button type="button" role="menuitem" disabled={!!documentBusy} onClick={() => downloadFromMore('word')}>下载 Word</button>
+          <button type="button" role="menuitem" disabled={!!documentBusy} onClick={() => downloadFromMore('markdown')}>下载 Markdown</button>
+          <button type="button" role="menuitem" onClick={toggleFavorite}>{favorited ? '取消收藏' : '收藏回复'}</button>
+        </div>}
+      </div>
+      {actionNotice && <small role="status">{actionNotice}</small>}
+    </footer>}
+    {tone === 'answer' && documentReady && <section className="ai-markdown-document-card" aria-label="已生成的报告文档">
+      <header><b>文档已准备</b><span>{documentEditing ? '编辑中 · 自动保存' : '可下载编辑版文件'}</span></header>
+      <p title={documentTitle}>{documentTitle}</p>
+      {documentEditing && <textarea aria-label="报告文档编辑区" value={editedContent} onChange={event => updateDocument(event.target.value)} />}
+      <div>
+        <button type="button" onClick={() => setDocumentEditing(value => !value)}>{documentEditing ? '完成编辑' : '编辑文档'}</button>
+        <button type="button" disabled={!!documentBusy} onClick={() => void downloadDocument('word')}>{documentBusy === 'word' ? '生成中…' : '下载 Word'}</button>
+        <button type="button" disabled={!!documentBusy} onClick={() => void downloadDocument('markdown')}>{documentBusy === 'markdown' ? '生成中…' : '下载 Markdown'}</button>
+      </div>
+      {onPrompt && <div className="ai-markdown-document-prompts" aria-label="基于文档的提问建议">
+        <b>基于文档继续提问</b>
+        {documentPrompts.map(prompt => <button key={prompt} type="button" onClick={() => onPrompt(prompt)}>{prompt} <span>→</span></button>)}
+      </div>}
+    </section>}
+  </div>
+}

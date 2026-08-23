@@ -1,0 +1,75 @@
+# electron-builder 打包配置（S3 安装包与自动更新）
+appId: com.yandu.crossborder.desktop
+productName: 砚都跨境
+copyright: Copyright © 2026 砚都跨境
+
+directories:
+  output: release
+  buildResources: build
+
+# 使用项目已安装的 Electron，避免打包时重复从 GitHub 下载而超时
+electronDist: node_modules/electron/dist
+disableDefaultIgnoredFiles: true
+
+# 只打包构建产物与运行时依赖；server/ 由中央服务器承载，不进安装包
+files:
+  - dist/**/*
+  - package.json
+  - "!**/*.map"
+  - "!node_modules/.bin"
+
+# Harness 在主进程中以 Electron 的 Node 模式运行，不能放入 asar；保留官方
+# 源码、锁定依赖与 Web 构建结果，以支持已安装桌面应用的离线本机启动。
+extraResources:
+  - from: vendor/deepseek-harness
+    to: deepseek-harness
+    filter:
+      - "**/*"
+      - "!**/.git/**"
+
+afterPack: tools/fix-packaged-python-links.cjs
+
+# 本机 dev/构建产物目录不需要进包
+asar: true
+compression: normal
+
+# 阿里云 OSS 公共读 Bucket 作为通用更新源（方案 A：安装包迁移 OSS）
+publish:
+  provider: generic
+  url: https://yandu-download.oss-cn-hangzhou.aliyuncs.com/
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64]
+  icon: build/icon.icns
+  category: public.app-category.business
+  # 未购买苹果开发者证书，先不签名（首次打开需右键→打开）
+  identity: null
+
+dmg:
+  # 文件名用 ASCII，避免中文文件名在 HTTP 分发/自动更新时的编码问题
+  artifactName: YanduCrossBorder-${version}-${arch}.${ext}
+  title: ${productName} ${version}
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+  artifactName: YanduCrossBorder-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: 砚都跨境
+  artifactName: YanduCrossBorder-Setup-${version}.${ext}

@@ -1,0 +1,117 @@
+{
+  "checkedAt": "2026-08-09T15:40:19.913Z",
+  "runtime": {
+    "appPath": "/Users/zyc/Desktop/砚都跨境",
+    "appVersion": "1.0.11",
+    "isPackaged": false,
+    "userData": "/private/var/folders/7t/jxwtgcv909qb_w6knyd9f31m0000gp/T/yandu-stage0-KwLhdn",
+    "windows": [
+      {
+        "bounds": {
+          "x": 48,
+          "y": 25,
+          "width": 1440,
+          "height": 867
+        },
+        "contentSize": [
+          1440,
+          867
+        ]
+      }
+    ],
+    "webContents": [
+      {
+        "id": 1,
+        "type": "window",
+        "url": "file:///Users/zyc/Desktop/%E7%A0%9A%E9%83%BD%E8%B7%A8%E5%A2%83/dist/renderer/index.html",
+        "title": "砚都跨境"
+      }
+    ]
+  },
+  "loadedAssets": [
+    "./assets/index-DlGs-VIC.js",
+    "./assets/index-BSIxlY2p.css"
+  ],
+  "launchedViewport": {
+    "innerWidth": 1440,
+    "innerHeight": 867,
+    "clientWidth": 1440,
+    "clientHeight": 867,
+    "scrollWidth": 1440,
+    "scrollHeight": 867
+  },
+  "minViewport": {
+    "innerWidth": 1100,
+    "innerHeight": 720,
+    "clientWidth": 1100,
+    "clientHeight": 720,
+    "scrollWidth": 1100,
+    "scrollHeight": 733,
+    "card": {
+      "top": 476.4765625,
+      "left": 504,
+      "right": 664,
+      "bottom": 651.015625
+    },
+    "heading": {
+      "top": 29.3671875,
+      "left": 530,
+      "right": 638,
+      "bottom": 90.0546875
+    }
+  },
+  "checks": [
+    {
+      "id": "runtime-path",
+      "passed": true,
+      "detail": "appPath=/Users/zyc/Desktop/砚都跨境; packaged=false"
+    },
+    {
+      "id": "loaded-assets",
+      "passed": true,
+      "detail": "./assets/index-DlGs-VIC.js, ./assets/index-BSIxlY2p.css"
+    },
+    {
+      "id": "launched-window",
+      "passed": true,
+      "detail": "{\"innerWidth\":1440,\"innerHeight\":867,\"clientWidth\":1440,\"clientHeight\":867,\"scrollWidth\":1440,\"scrollHeight\":867}"
+    },
+    {
+      "id": "analyst-workspace",
+      "passed": true,
+      "detail": "工作台与四个入口按钮可见"
+    },
+    {
+      "id": "report-product-title",
+      "passed": false,
+      "detail": "产品名被改写：待命名产品 · Amazon美国站选品分析报告"
+    },
+    {
+      "id": "reply-actions-visible",
+      "passed": true,
+      "detail": "报告标题=待命名产品 · Amazon美国站选品分析报告；复制回答、转为文档编辑、更多均可见"
+    },
+    {
+      "id": "more-current-state",
+      "passed": false,
+      "detail": "按钮可点击，但当前仅显示占位提示，未形成真实菜单"
+    },
+    {
+      "id": "document-interaction",
+      "passed": true,
+      "detail": "生成、编辑、自动保存、编辑状态切换、4条提问建议及回填均通过"
+    },
+    {
+      "id": "amazon-data-source-flow",
+      "passed": true,
+      "detail": "卡片进入、参数输入、返回 AI总部通过"
+    },
+    {
+      "id": "minimum-window-fit",
+      "passed": false,
+      "detail": "最小窗口标题或关键卡片被顶栏遮挡/裁切：{\"innerWidth\":1100,\"innerHeight\":720,\"clientWidth\":1100,\"clientHeight\":720,\"scrollWidth\":1100,\"scrollHeight\":733,\"card\":{\"top\":476.4765625,\"left\":504,\"right\":664,\"bottom\":651.015625},\"heading\":{\"top\":29.3671875,\"left\":530,\"right\":638,\"bottom\":90.0546875}}"
+    }
+  ],
+  "passed": 7,
+  "total": 10
+}

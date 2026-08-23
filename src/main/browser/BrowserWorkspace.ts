@@ -1,4 +1,5 @@
-import { BaseWindow, WebContents, WebContentsView } from 'electron'
+import { BaseWindow, BrowserWindow, WebContents, WebContentsView } from 'electron'
+import { AMAZON_LISTING_EVIDENCE_SCRIPT, AMAZON_REVIEW_EVIDENCE_SCRIPT, AMAZON_SAMPLES_SCRIPT, type AmazonListingEvidence, type AmazonMarketSample, type AmazonReviewEvidence } from '../../shared/amazonScraper'
 import type { BrowserBounds, BrowserState, BrowserTab, BuiltInCollectorState, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, EbayBrowserPluginState, EbayCategorySpecificRequirement, EbayCollectedProduct, EbayDeliveryLocationResult, EbayDirectoryProductScanCategory, EbayLoginResult, EbayMarketResearchFilter, EbayMarketResearchMetric, EbayMarketResearchSample, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayProductDetails, EbaySellerHubAcceptanceSnapshot, EbayStoreCategory, MarketplacePlatformCode, NetworkStrategy, Platform, SelectionTask, SupplyActivationResult } from '../../shared/contracts'
 import gigaCatalog from '../../renderer/gigaCatalog.json'
 import type { EbayLocalListingRequirements, EbayLocalProduct, EbayLocalRevisionPreparationResult } from '../../shared/contracts'
@@ -57,6 +58,7 @@ export class BrowserWorkspace {
   private readonly ebayPluginProducts = new Map<string,EbayCollectedProduct>()
   private gigaAutoLoginAttemptedAt = 0
   private readonly ebayAutoLoginAttemptedAt = new Map<string,number>()
+  private productLoginWindow: BrowserWindow | null = null
 
   constructor(private readonly window: BaseWindow, private readonly shellContents: WebContents) {}
 
@@ -163,6 +165,65 @@ export class BrowserWorkspace {
     if (platform === '1688') this.supplyViews.set(this.supplyPlatformCode, view)
     if (initialLoad) void this.configureNetworkAndLoad(platform, view)
     return view
+  }
+
+  /**
+   * 使用内置 1688 浏览器的持久会话读取商品页。
+   * 1688 会拦截云服务器和无会话 HTTP 请求，因此商品整页采集必须复用用户在客户端完成的登录/验证状态。
+   */
+  async read1688ProductPage(url: string): Promise<string> {
+    const parsed = new URL(url)
+    if (!(parsed.hostname === '1688.com' || parsed.hostname.endsWith('.1688.com')) || !/\/offer\/\d+\.html/i.test(parsed.pathname)) {
+      throw new Error('请输入有效的1688商品详情页网址')
+    }
+    const view = this.get('1688')
+    await view.webContents.loadURL(parsed.toString())
+    await this.sleep(1_200)
+    const issue = await view.webContents.executeJavaScript(String.raw`(() => {
+      const text=(document.body?.innerText||'').slice(0,12000), url=location.href;
+      if (/punish|captcha|verify|安全验证|滑块|验证码|访问频繁|操作异常|请求过于频繁|cloud_ip_bl/i.test(text+' '+url)) return 'VERIFY';
+      if (/login\.1688\.com|请登录|重新登录|登录已失效/i.test(text+' '+url)) return 'LOGIN';
+      return '';
+    })()` ) as string
+    if (issue) {
+      await this.open1688ProductLoginWindow(view.webContents.getURL() || parsed.toString())
+      throw new Error(issue === 'LOGIN'
+        ? '1688登录状态已失效，已打开独立登录窗口；请完成登录并关闭窗口后重新读取'
+        : '1688要求安全验证，已打开独立验证窗口；请人工完成验证并关闭窗口后重新读取')
+    }
+    for (let index = 0; index < 4; index += 1) {
+      await view.webContents.executeJavaScript('window.scrollBy(0, Math.max(900, window.innerHeight * 1.2))')
+      await this.sleep(350)
+    }
+    await view.webContents.executeJavaScript('window.scrollTo(0, 0)')
+    return view.webContents.executeJavaScript('document.documentElement.outerHTML') as Promise<string>
+  }
+
+  private async open1688ProductLoginWindow(url: string): Promise<void> {
+    if (this.productLoginWindow && !this.productLoginWindow.isDestroyed()) {
+      this.productLoginWindow.show()
+      this.productLoginWindow.focus()
+      if (this.productLoginWindow.webContents.getURL() !== url) await this.productLoginWindow.loadURL(url)
+      return
+    }
+    const allowedDomains=['1688.com','alibaba.com','taobao.com','alipay.com']
+    const allowed=(rawUrl:string)=>{try{const target=new URL(rawUrl);return target.protocol==='https:'&&allowedDomains.some(domain=>target.hostname===domain||target.hostname.endsWith(`.${domain}`))}catch{return false}}
+    if(!allowed(url))url='https://login.1688.com/'
+    const loginWindow=new BrowserWindow({
+      width:1080,
+      height:780,
+      minWidth:760,
+      minHeight:560,
+      title:'1688 登录 / 安全验证（完成后关闭此窗口）',
+      autoHideMenuBar:true,
+      webPreferences:{partition:'persist:supply:1688:default',nodeIntegration:false,contextIsolation:true,sandbox:true}
+    })
+    this.productLoginWindow=loginWindow
+    loginWindow.webContents.setUserAgent(loginWindow.webContents.getUserAgent().replace(/\sElectron\/[^\s]+/g,'').replace(/\scross-border-sourcing-desktop\/[^\s]+/g,''))
+    loginWindow.webContents.setWindowOpenHandler(({url:nextUrl})=>{if(allowed(nextUrl))void loginWindow.loadURL(nextUrl);return{action:'deny'}})
+    loginWindow.webContents.on('will-navigate',(event,nextUrl)=>{if(!allowed(nextUrl))event.preventDefault()})
+    loginWindow.on('closed',()=>{if(this.productLoginWindow===loginWindow)this.productLoginWindow=null})
+    await loginWindow.loadURL(url)
   }
 
   async activateMarketplace(platformCode: MarketplacePlatformCode, accountId: string, strategy: NetworkStrategy) {
@@ -2181,5 +2242,463 @@ export class BrowserWorkspace {
   private showVisibleHome() {
     if (this.marketplaceTabVisible) this.show('ozon')
     else this.show('1688')
+  }
+
+  // ---------- AI员工工作台内嵌浏览器（1688 商品页浏览 + 一键提取分析） ----------
+  // 与 1688 采购浏览器共享持久分区，复用登录/验证状态；页面在本机加载，绕开数据中心 IP 风控
+  private aiEmployeeView: WebContentsView | null = null
+  private aiEmployeeAttached = false
+
+  private ensureAiEmployeeView() {
+    if (this.aiEmployeeView && !this.aiEmployeeView.webContents.isDestroyed()) return this.aiEmployeeView
+    const view = new WebContentsView({
+      webPreferences: {
+        partition: 'persist:supply:1688:default',
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true
+      }
+    })
+    view.setBackgroundColor('#ffffff')
+    const browserUserAgent = view.webContents
+      .getUserAgent()
+      .replace(/\sElectron\/[^\s]+/g, '')
+      .replace(/\scross-border-sourcing-desktop\/[^\s]+/g, '')
+    view.webContents.setUserAgent(browserUserAgent)
+    view.webContents.setWindowOpenHandler(({ url }) => {
+      if (/^https?:\/\//i.test(url)) void view.webContents.loadURL(url)
+      return { action: 'deny' }
+    })
+    const emitUrl = () => this.shellContents.send('ai-employee:browser:url', view.webContents.getURL())
+    view.webContents.on('did-navigate', emitUrl)
+    view.webContents.on('did-navigate-in-page', emitUrl)
+    view.webContents.on('did-start-loading', () => this.shellContents.send('ai-employee:browser:loading', true))
+    view.webContents.on('did-stop-loading', () => {
+      this.shellContents.send('ai-employee:browser:loading', false)
+      emitUrl()
+    })
+    this.aiEmployeeView = view
+    return view
+  }
+
+  showAiEmployeeBrowser(bounds: BrowserBounds) {
+    const view = this.ensureAiEmployeeView()
+    if (this.attached && this.attached !== view) {
+      this.window.contentView.removeChildView(this.attached)
+      this.attached = null
+    }
+    if (this.attached !== view) {
+      this.window.contentView.addChildView(view)
+      this.attached = view
+    }
+    this.aiEmployeeAttached = true
+    view.setBounds({
+      x: Math.max(0, Math.round(bounds.x)),
+      y: Math.max(0, Math.round(bounds.y)),
+      width: Math.max(320, Math.round(bounds.width)),
+      height: Math.max(240, Math.round(bounds.height))
+    })
+    if (!view.webContents.getURL()) void view.webContents.loadURL('https://www.1688.com/')
+  }
+
+  hideAiEmployeeBrowser() {
+    if (!this.aiEmployeeAttached) return
+    if (this.attached === this.aiEmployeeView) {
+      this.window.contentView.removeChildView(this.aiEmployeeView!)
+      this.attached = null
+    }
+    this.aiEmployeeAttached = false
+  }
+
+  aiEmployeeNavigate(rawUrl: string) {
+    const url = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`
+    void this.ensureAiEmployeeView().webContents.loadURL(url)
+  }
+
+  aiEmployeeBack() {
+    const contents = this.ensureAiEmployeeView().webContents
+    if (contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack()
+  }
+
+  aiEmployeeForward() {
+    const contents = this.ensureAiEmployeeView().webContents
+    if (contents.navigationHistory.canGoForward()) contents.navigationHistory.goForward()
+  }
+
+  aiEmployeeReload() {
+    this.ensureAiEmployeeView().webContents.reload()
+  }
+
+  aiEmployeeGetUrl() {
+    return this.ensureAiEmployeeView().webContents.getURL()
+  }
+
+  // 提取当前 1688 商品页信息（复用 Chrome 扩展 content-script-1688 的提取逻辑）
+  async aiEmployeeExtractInfo(): Promise<{ ok: boolean; info?: Record<string, unknown>; prompt?: string; message?: string }> {
+    const view = this.ensureAiEmployeeView()
+    const url = view.webContents.getURL()
+    if (!/1688\.com\/offer\//.test(url) && !/detail\.1688\.com/.test(url)) {
+      return { ok: false, message: '请先在右侧浏览器打开 1688 商品详情页' }
+    }
+    const result = await view.webContents
+      .executeJavaScript(String.raw`(() => {
+        const clean = (text) => (text || '').replace(/\s+/g, ' ').trim()
+        const firstText = (els) => {
+          for (const el of els) {
+            const t = clean(el?.textContent)
+            if (t) return t
+          }
+          return ''
+        }
+        function extractInfo() {
+          const info = {}
+          const $ = (sel) => document.querySelector(sel)
+          const $$ = (sel) => Array.from(document.querySelectorAll(sel))
+          info.title = firstText([
+            $('.title-content'), $('.d-title'), $('.title-text'),
+          ]) || (() => {
+            const h1s = $$('h1').map(h => clean(h.textContent)).filter(Boolean)
+            return h1s.length ? h1s[h1s.length - 1] : ''
+          })() || document.title.replace(/\s*[-_|].*$/, '').trim()
+          info.url = location.href
+          info.analysisDate = new Date().toLocaleDateString('en-CA')
+          info.price = firstText([
+            $('.price-info'), $('.price-comp'), $('.price-text'), $('.price'),
+          ]) || (document.querySelector('meta[property="og:price:amount"]')?.content || '')
+          const attrs = []
+          const seen = new Set()
+          const seenKeys = new Set()
+          const push = (k, v) => {
+            k = clean(k); v = clean(v)
+            if (k && v && !seen.has(k + v) && !seenKeys.has(k) && attrs.length < 40) {
+              seen.add(k + v); seenKeys.add(k); attrs.push(k + '：' + v)
+            }
+          }
+          const bodyText = document.body.innerText || ''
+          const bodyLines = bodyText.split(/\n+/).map(clean).filter(Boolean)
+          const detailCandidates = [
+            '#detail', '#detail-desc', '#mod-detail-description', '.detail-desc', '.desc-content', '.offer-detail',
+            '[data-module*="detail"]', '[class*="detail-desc"]', '[class*="detail-content"]', '[class*="description"]'
+          ]
+          const detailNodes = detailCandidates.flatMap(sel => $$(sel)).filter(node => clean(node.innerText).length >= 40)
+          const detailParts = []
+          const detailSources = []
+          const addDetail = (source, value) => {
+            const text = clean(value)
+            if (!text || text.length < 20 || detailParts.some(part => part.includes(text) || text.includes(part))) return
+            detailParts.push(text)
+            detailSources.push(source)
+          }
+          detailNodes.forEach(node => addDetail('详情模块DOM', node.innerText))
+          addDetail('页面描述Meta', $('meta[name="description"]')?.content || $('meta[property="og:description"]')?.content)
+          for (const script of $$('script[type="application/ld+json"]')) {
+            try {
+              const parsed = JSON.parse(script.textContent || '{}')
+              const rows = Array.isArray(parsed) ? parsed : [parsed]
+              rows.forEach(row => addDetail('结构化商品描述', row?.description))
+            } catch { /* 页面结构化数据不是有效JSON时跳过 */ }
+          }
+          if (!detailParts.length) {
+            const marker = bodyLines.findIndex(line => /^(?:产品详情|商品详情|产品描述|商品描述|详细信息|产品参数)$/.test(line))
+            if (marker >= 0) addDetail('详情区正文', bodyLines.slice(marker + 1, marker + 81).join(' '))
+          }
+          if (detailParts.length) {
+            info.detailText = detailParts.join('\n').slice(0, 8000)
+            info.detailSource = [...new Set(detailSources)].join(' + ')
+          }
+          const knownLabels = ['材质', '品牌', '包装数量(片)', '货号', '是否进口', '是否专利货源', '规格', '是否跨境出口专供货源', '主要销售地区', '主要下游平台', '有可授权的自有品牌', '适用对象']
+          for (const label of knownLabels) {
+            const index = bodyLines.indexOf(label)
+            if (index >= 0 && bodyLines[index + 1]) push(label, bodyLines[index + 1])
+          }
+          // 只在同一属性项内配对标签和值。页面中还存在导航、店铺等多个
+          // 无关 dl，按全页面 dt/dd 序号配对会把品牌、材质、货号串位。
+          $$('dt').forEach(dt => {
+            const sibling = dt.nextElementSibling
+            if (sibling?.tagName === 'DD') push(dt.textContent, sibling.textContent)
+          })
+          const trEls = $$('tr')
+          trEls.forEach(tr => {
+            const cells = tr.querySelectorAll('th, td')
+            if (cells.length >= 2) push(cells[0].textContent, cells[cells.length - 1].textContent)
+          })
+          info.attributes = attrs
+          // 图片按商品主图/详情图优先级筛选，排除Logo、头像、图标和广告，避免全页前10张造成产品失真。
+          const imageCandidates = []
+          const seenImageKeys = new Set()
+          const addImage = (raw, node, role, source, baseScore) => {
+            let src = clean(raw)
+            if (!src || src.startsWith('data:image/svg') || src.startsWith('blob:')) return
+            if (src.startsWith('//')) src = 'https:' + src
+            try { src = new URL(src, location.href).toString() } catch { return }
+            if (!/^https?:/i.test(src) || !/\.(?:jpe?g|png|webp)(?:\?|$)/i.test(src)) return
+            const alt = clean(node?.getAttribute?.('alt') || node?.getAttribute?.('title'))
+            const context = clean(src + ' ' + alt + ' ' + (node?.className || '') + ' ' + (node?.parentElement?.className || ''))
+            if (/logo|avatar|icon|sprite|qrcode|qr-code|banner|advert|loading|placeholder/i.test(context)) return
+            const key = src.replace(/^http:/i, 'https:').replace(/\?.*$/, '')
+            if (seenImageKeys.has(key)) return
+            const width = Number(node?.naturalWidth || node?.width || 0)
+            const height = Number(node?.naturalHeight || node?.height || 0)
+            if (width && height && (width < 100 || height < 100)) return
+            let score = baseScore
+            if (width >= 500 || height >= 500) score += 35
+            else if (width >= 240 || height >= 240) score += 18
+            if (info.title && alt && info.title.split(/\s+/).some(word => word.length >= 2 && alt.includes(word))) score += 20
+            seenImageKeys.add(key)
+            imageCandidates.push({ url: src, role, source, alt, score })
+          }
+          const ogImage = $('meta[property="og:image"]')?.content
+          if (ogImage) addImage(ogImage, null, '主图', '页面主图Meta', 220)
+          const gallerySelectors = ['[class*="gallery"]', '[class*="image-list"]', '[class*="img-list"]', '[class*="preview"]', '[class*="main-image"]']
+          gallerySelectors.forEach(sel => $$(sel + ' img').forEach(img => addImage(img.currentSrc || img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-lazyload'), img, '主图', '商品主图区域', 160)))
+          detailNodes.forEach(node => Array.from(node.querySelectorAll('img')).forEach(img => addImage(img.currentSrc || img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-lazyload'), img, '详情图', '商品详情区域', 130)))
+          $$('img[src], img[data-src], img[data-lazyload]').forEach(img => addImage(img.currentSrc || img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-lazyload'), img, '详情图', '页面候选图片', 20))
+          const selectedImages = imageCandidates.sort((a, b) => b.score - a.score).filter(item => item.score >= 50).slice(0, 10)
+          info.images = selectedImages.map(item => item.url)
+          info.imageEvidence = selectedImages.map(({ url, role, source, alt }) => ({ url, role, source, alt }))
+          info.seller = firstText([
+            $('.seller-name'), $('.company-name'), $('[class*="seller-name"]'),
+            $('[class*="company"]'), $('[class*="shop-name"]'), $('[class*="ShopName"]'),
+          ])
+          const moqMatch = bodyText.match(/起订量[：:\s]*(\d+\s*[件个套箱]?)/)
+          const shipMatch = bodyText.match(/(?:发货地|所在地|发货城市)[：:\s]*([^\n，。;；]{2,20})/)
+          const dealMatch = bodyText.match(/(\d[\d,]*)\s*(?:件)?成交/) || bodyText.match(/成交[：:\s]*(\d[\d,]*)/)
+          if (moqMatch) info.moq = clean(moqMatch[1])
+          if (shipMatch) info.shipFrom = clean(shipMatch[1])
+          if (dealMatch) info.deals = clean(dealMatch[1])
+          return info
+        }
+        function toPromptText(info) {
+          const lines = ['我在1688看到一款商品，商品信息如下：']
+          if (info.url) lines.push('- 1688商品URL：' + info.url)
+          if (info.analysisDate) lines.push('- 分析日期：' + info.analysisDate)
+          if (info.title) lines.push('- 标题：' + info.title)
+          if (info.price) lines.push('- 价格：' + info.price)
+          if (info.seller) lines.push('- 供应商/店铺：' + info.seller)
+          if (info.moq) lines.push('- 起订量：' + info.moq)
+          if (info.shipFrom) lines.push('- 发货地：' + info.shipFrom)
+          if (info.deals) lines.push('- 成交：' + info.deals + ' 件')
+          if (info.attributes.length) lines.push('- 规格属性：\n' + info.attributes.map(a => '  * ' + a).join('\n'))
+          if (info.images.length) lines.push('- 图片：' + info.images.length + ' 张')
+          if (info.detailText) lines.push('- 详情页文字（页面DOM）：\n' + info.detailText)
+          lines.push('请帮我分析这款产品在亚马逊是否有机会，按方法论文档输出完整评估报告。')
+          return lines.join('\n')
+        }
+        try {
+          const info = extractInfo()
+          return { ok: true, info, prompt: toPromptText(info) }
+        } catch (error) {
+          return { ok: false, message: '提取失败：' + ((error && error.message) || '未知错误') }
+        }
+      })()`)
+      .catch(() => ({ ok: false, message: '提取失败，请确认页面已完整加载' }))
+    if (!result || !result.ok) return result || { ok: false, message: '提取失败，请确认页面已完整加载' }
+    return result
+  }
+
+  // ---------- Amazon 竞品链接真实结果解析（隐藏视图后台解析搜索首结果，为报告竞品链接提供 dp 升级） ----------
+  private amazonResolverView: WebContentsView | null = null
+  private amazonResolveQueue: Promise<unknown> = Promise.resolve()
+
+  /** 串行解析品牌 Amazon 搜索首结果（并发会触发风控）；失败返回 null，渲染进程兑底搜索链接 */
+  resolveAmazonTopResult(keyword: string): Promise<{ asin: string; title: string } | null> {
+    const task = (): Promise<{ asin: string; title: string } | null> => this.doResolveAmazonTopResult(keyword)
+    const run = this.amazonResolveQueue.then(task, task)
+    this.amazonResolveQueue = run.catch(() => undefined)
+    return run
+  }
+
+  private ensureAmazonResolverView(): WebContentsView {
+    if (this.amazonResolverView && !this.amazonResolverView.webContents.isDestroyed()) return this.amazonResolverView
+    const view = new WebContentsView({
+      webPreferences: {
+        partition: 'persist:market:AMAZON:default',
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true
+      }
+    })
+    // 干净 UA：与其余内置浏览器一致，避免 Electron 标识被机器人检测拦截
+    const browserUserAgent = view.webContents
+      .getUserAgent()
+      .replace(/\sElectron\/[^\s]+/g, '')
+      .replace(/\scross-border-sourcing-desktop\/[^\s]+/g, '')
+    view.webContents.setUserAgent(browserUserAgent)
+    view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    this.amazonResolverView = view
+    return view
+  }
+
+  private async doResolveAmazonTopResult(keyword: string): Promise<{ asin: string; title: string } | null> {
+    const brand = (keyword || '').trim()
+    if (!brand) return null
+    const contents = this.ensureAmazonResolverView().webContents
+    const url = `https://www.amazon.com/s?k=${encodeURIComponent(brand)}`
+    await Promise.race([
+      new Promise<void>(resolve => {
+        contents.once('did-stop-loading', () => resolve())
+        void contents.loadURL(url).catch(() => resolve())
+      }),
+      new Promise<void>(resolve => setTimeout(resolve, 20000))
+    ])
+    try {
+      const result = (await contents.executeJavaScript(String.raw`(() => {
+        if (/captcha|robot check/i.test(document.title) || document.querySelector('form[action*="validateCaptcha"]')) return null;
+        const card = Array.from(document.querySelectorAll('div[data-component-type="s-search-result"]')).find(el => (el.getAttribute('data-asin') || '').trim());
+        if (!card) return null;
+        const asin = (card.getAttribute('data-asin') || '').trim();
+        const h2 = card.querySelector('h2');
+        const title = (h2 ? h2.textContent : '').replace(/\s+/g, ' ').trim();
+        return { asin: asin, title: title };
+      })()`) as { asin: string; title: string } | null) ?? null
+      return result && result.asin ? result : null
+    } catch {
+      return null
+    }
+  }
+
+  // ---------- Amazon 市场样本抓取（隐藏视图加载搜索页 1–2 页，为报告大盘表提供真实数据） ----------
+  private amazonStatsCache = new Map<string, { at: number; samples: AmazonMarketSample[] }>()
+  private amazonListingEvidenceCache = new Map<string, { at: number; evidence: AmazonListingEvidence }>()
+  private amazonReviewEvidenceCache = new Map<string, { at: number; evidence: AmazonReviewEvidence }>()
+
+  /** 串行抓取 Amazon 搜索样本（与品牌解析共用防风控队列）；24h 缓存；失败返回 null，调用方静默降级 */
+  collectAmazonMarketSamples(keyword: string, options: { pages?: number; maxSamples?: number; cacheHours?: number } = {}): Promise<AmazonMarketSample[] | null> {
+    const pages = Math.min(2, Math.max(1, Math.floor(Number(options.pages) || 2)))
+    const maxSamples = Math.min(48, Math.max(1, Math.floor(Number(options.maxSamples) || 48)))
+    const cacheHours = Math.min(168, Math.max(1, Math.floor(Number(options.cacheHours) || 24)))
+    const term = (keyword || '').trim()
+    if (!term) return Promise.resolve(null)
+    const key = `${term.toLowerCase()}|${pages}|${maxSamples}`
+    const cached = this.amazonStatsCache.get(key)
+    if (cached && cached.samples.length && Date.now() - cached.at < cacheHours * 3600 * 1000) return Promise.resolve(cached.samples)
+    const task = (): Promise<AmazonMarketSample[] | null> => this.doCollectAmazonMarketSamples(keyword, pages, maxSamples)
+    const run = this.amazonResolveQueue.then(task, task)
+    this.amazonResolveQueue = run.catch(() => undefined)
+    return run.then(samples => {
+      if (samples && samples.length) this.amazonStatsCache.set(key, { at: Date.now(), samples })
+      return samples
+    })
+  }
+
+  private async doCollectAmazonMarketSamples(keyword: string, pages: number, maxSamples: number): Promise<AmazonMarketSample[] | null> {
+    const term = (keyword || '').trim()
+    if (!term) return null
+    const contents = this.ensureAmazonResolverView().webContents
+    const all: AmazonMarketSample[] = []
+    for (let page = 1; page <= pages && all.length < maxSamples; page++) {
+      const url = `https://www.amazon.com/s?k=${encodeURIComponent(term)}&page=${page}`
+      await Promise.race([
+        new Promise<void>(resolve => {
+          contents.once('did-stop-loading', () => resolve())
+          void contents.loadURL(url).catch(() => resolve())
+        }),
+        new Promise<void>(resolve => setTimeout(resolve, 20000))
+      ])
+      let pageSamples: AmazonMarketSample[] | null = null
+      try {
+        pageSamples = (await contents.executeJavaScript(AMAZON_SAMPLES_SCRIPT) as AmazonMarketSample[] | null) ?? null
+      } catch {
+        pageSamples = null
+      }
+      // captcha/解析失败：已有首页样本则返回已有部分，否则视为失败
+      if (!pageSamples) return all.length ? all : null
+      const known = new Set(all.map(item => item.asin))
+      for (const sample of pageSamples) {
+        if (!known.has(sample.asin)) all.push({ ...sample, page, source: 'browser' })
+        if (all.length >= maxSamples) break
+      }
+      if (pageSamples.length < 5) break
+    }
+    return all.length ? all : null
+  }
+
+  /**
+   * 对已判定为 DIRECT 的样本逐个进入详情页取证。仅返回页面实际可见字段；
+   * 验证码、空页或解析失败的商品不伪造记录，交由后续报告明确为待验证。
+   */
+  collectAmazonListingEvidence(asins: string[], options: { maxListings?: number; cacheHours?: number } = {}): Promise<AmazonListingEvidence[]> {
+    const maxListings = Math.min(8, Math.max(1, Math.floor(Number(options.maxListings) || 8)))
+    const cacheHours = Math.min(168, Math.max(1, Math.floor(Number(options.cacheHours) || 24)))
+    const uniqueAsins = Array.from(new Set(asins.map(asin => String(asin || '').trim().toUpperCase()).filter(asin => /^[A-Z0-9]{10}$/.test(asin)))).slice(0, maxListings)
+    if (!uniqueAsins.length) return Promise.resolve([])
+    const task = (): Promise<AmazonListingEvidence[]> => this.doCollectAmazonListingEvidence(uniqueAsins, cacheHours)
+    const run = this.amazonResolveQueue.then(task, task)
+    this.amazonResolveQueue = run.catch(() => undefined)
+    return run
+  }
+
+  private async doCollectAmazonListingEvidence(asins: string[], cacheHours: number): Promise<AmazonListingEvidence[]> {
+    const contents = this.ensureAmazonResolverView().webContents
+    const evidence: AmazonListingEvidence[] = []
+    for (const asin of asins) {
+      const cached = this.amazonListingEvidenceCache.get(asin)
+      if (cached && Date.now() - cached.at < cacheHours * 3600 * 1000) {
+        evidence.push(cached.evidence)
+        continue
+      }
+      const url = `https://www.amazon.com/dp/${encodeURIComponent(asin)}`
+      await Promise.race([
+        new Promise<void>(resolve => {
+          contents.once('did-stop-loading', () => resolve())
+          void contents.loadURL(url).catch(() => resolve())
+        }),
+        new Promise<void>(resolve => setTimeout(resolve, 20_000))
+      ])
+      try {
+        const item = (await contents.executeJavaScript(AMAZON_LISTING_EVIDENCE_SCRIPT) as AmazonListingEvidence | null) ?? null
+        if (item?.asin) {
+          const normalized = { ...item, asin: item.asin.toUpperCase(), url: item.url || url }
+          evidence.push(normalized)
+          this.amazonListingEvidenceCache.set(normalized.asin, { at: Date.now(), evidence: normalized })
+        }
+      } catch {
+        // 单一详情页失败不阻断其余 DIRECT 取证。
+      }
+    }
+    return evidence
+  }
+
+  /** 读取 DIRECT 商品评论页的少量可见原文，供报告展示样本，不做评论量或情绪比例外推。 */
+  collectAmazonReviewEvidence(asins: string[], options: { maxListings?: number; cacheHours?: number } = {}): Promise<AmazonReviewEvidence[]> {
+    const maxListings = Math.min(5, Math.max(1, Math.floor(Number(options.maxListings) || 5)))
+    const cacheHours = Math.min(168, Math.max(1, Math.floor(Number(options.cacheHours) || 24)))
+    const uniqueAsins = Array.from(new Set(asins.map(asin => String(asin || '').trim().toUpperCase()).filter(asin => /^[A-Z0-9]{10}$/.test(asin)))).slice(0, maxListings)
+    if (!uniqueAsins.length) return Promise.resolve([])
+    const task = (): Promise<AmazonReviewEvidence[]> => this.doCollectAmazonReviewEvidence(uniqueAsins, cacheHours)
+    const run = this.amazonResolveQueue.then(task, task)
+    this.amazonResolveQueue = run.catch(() => undefined)
+    return run
+  }
+
+  private async doCollectAmazonReviewEvidence(asins: string[], cacheHours: number): Promise<AmazonReviewEvidence[]> {
+    const contents = this.ensureAmazonResolverView().webContents
+    const evidence: AmazonReviewEvidence[] = []
+    for (const asin of asins) {
+      const cached = this.amazonReviewEvidenceCache.get(asin)
+      if (cached && Date.now() - cached.at < cacheHours * 3600 * 1000) {
+        evidence.push(cached.evidence)
+        continue
+      }
+      const url = `https://www.amazon.com/product-reviews/${encodeURIComponent(asin)}?reviewerType=all_reviews&pageNumber=1`
+      await Promise.race([
+        new Promise<void>(resolve => {
+          contents.once('did-stop-loading', () => resolve())
+          void contents.loadURL(url).catch(() => resolve())
+        }),
+        new Promise<void>(resolve => setTimeout(resolve, 20_000))
+      ])
+      try {
+        const item = (await contents.executeJavaScript(AMAZON_REVIEW_EVIDENCE_SCRIPT) as AmazonReviewEvidence | null) ?? null
+        if (item?.asin && item.snippets.length) {
+          const normalized = { ...item, asin: item.asin.toUpperCase(), url: item.url || url }
+          evidence.push(normalized)
+          this.amazonReviewEvidenceCache.set(normalized.asin, { at: Date.now(), evidence: normalized })
+        }
+      } catch {
+        // 单一评论页不可用时继续下一条，不把未抓取的评论内容写入报告。
+      }
+    }
+    return evidence
   }
 }

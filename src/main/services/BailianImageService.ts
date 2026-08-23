@@ -1,16 +1,16 @@
 import type { ImageGenerationRequest, ImageGenerationResult, ImageModelConnection, ImageModelProfile } from '../../shared/contracts'
 
 const supportedModels: Record<string, Omit<ImageModelProfile, 'id'>> = {
-  'wan2.7-image-pro': { name: '万相 2.7 Pro', description: '高质量商品图、文字与品牌色控制，参照图上限8张' },
-  'wan2.7-image': { name: '万相 2.7', description: '质量与生成速度平衡，参照图上限8张' },
-  'qwen-image-2.0-pro': { name: '千问 Image 2.0 Pro', description: '文字渲染与复杂指令表现更强，参照图上限3张' },
-  'qwen-image-2.0': { name: '千问 Image 2.0', description: '快速生成与图片编辑' },
-  'qwen-image-edit-plus': { name: '千问 Image Edit Plus', description: '多图参照编辑，适合保持商品结构与材质' },
-  'qwen-image-edit-max': { name: '千问 Image Edit Max', description: '高保真多图编辑，适合复杂商品细节' },
-  'z-image-turbo': { name: 'Z-Image Turbo', description: '快速低成本，适合写实商品图' }
+  'wan2.7-image-pro': { name: '万相 2.7 Pro', description: '高质量商品图、文字与品牌色控制，参照图上限8张', maxReferenceImages: 8, strengths: '商品主图·细节还原·品牌色控制', costLabel: '¥0.16/张' },
+  'wan2.7-image': { name: '万相 2.7', description: '质量与生成速度平衡，参照图上限8张', maxReferenceImages: 8, strengths: '商品主图·质量速度均衡', costLabel: '¥0.08/张' },
+  'qwen-image-2.0-pro': { name: '千问 Image 2.0 Pro', description: '纯文生图，文字渲染与复杂指令表现更强；不支持参照商品原图', maxReferenceImages: 0, strengths: '文字渲染·复杂指令·纯文生图', costLabel: '¥0.20/张' },
+  'qwen-image-2.0': { name: '千问 Image 2.0', description: '纯文生图，生成速度快；不支持参照商品原图', maxReferenceImages: 0, strengths: '快速生成·纯文生图', costLabel: '¥0.10/张' },
+  'qwen-image-edit-plus': { name: '千问 Image Edit Plus', description: '多图参照编辑，适合保持商品结构与材质', maxReferenceImages: 3, strengths: '多图参照·材质结构保持', costLabel: '¥0.12/张' },
+  'qwen-image-edit-max': { name: '千问 Image Edit Max', description: '高保真多图编辑，适合复杂商品细节', maxReferenceImages: 3, strengths: '高保真编辑·细节还原', costLabel: '¥0.20/张' },
+  'z-image-turbo': { name: 'Z-Image Turbo', description: '快速低成本，适合写实商品图', maxReferenceImages: 1, strengths: '极速低成本·写实商品主图', costLabel: '¥0.04/张' }
 }
 
-const NEGATIVE_PROMPT = 'Do not change the referenced product identity, structure, proportions, color, material, included accessories, packaging, logo, text, measurement labels, or verified facts. No watermark, promotional badge, border, invented parts, invented claims, distorted geometry, or AI artifacts.'
+const NEGATIVE_PROMPT = 'Do not change the referenced PRODUCT identity, structure, proportions, color, material, included accessories, packaging, logo, text, measurement labels, or verified facts. Props, background and non-product elements MAY differ when the prompt requests it. No watermark, promotional badge, border, invented parts, invented claims, distorted geometry, or AI artifacts.'
 
 /** 通用的内容提取工具：从 choices 中提取 image URL */
 function extractImageUrls(choices: unknown): string[] {
@@ -89,7 +89,7 @@ export class BailianImageService {
 
   private dedupReferences(request: ImageGenerationRequest, limit: number): string[] {
     const all = [...(request.referenceImageUrls || []), request.referenceImageUrl || '']
-      .filter(url => Boolean(url) && /^https?:\/\//i.test(url))
+      .filter(url => Boolean(url) && /^(https?:\/\/|data:image\/(?:jpeg|png|webp);base64,)/i.test(url))
     return [...new Set(all)].slice(0, limit)
   }
 
@@ -112,13 +112,14 @@ export class BailianImageService {
 
     const resolvedSize = this.resolveSize(request.size)
     const count = Math.max(1, Math.min(isQwenImage ? 6 : 4, request.count))
-    const referenceLimit = isWan ? 8 : (isQwenImage ? 3 : 1)
-    const references = this.dedupReferences(request, referenceLimit)
+    // maxReferenceImages 为 0 表示纯文生图模型（qwen-image-2.0 / qwen-image-2.0-pro），不支持参照图输入
+    const referenceLimit = supportedModels[request.model].maxReferenceImages ?? (isWan ? 8 : (isQwenImage ? 3 : 1))
+    const references = referenceLimit > 0 ? this.dedupReferences(request, referenceLimit) : []
 
     // 构建 content 数组
     const content: Array<Record<string, unknown>> = []
-    // 参考图仅支持 qwen-image 和 wan
-    if ((isQwenImage || isWan) && references.length > 0) {
+    // 参考图仅支持 qwen-image 编辑系列和 wan；纯文生图模型（上限 0）不传任何参照图字段，只发文字 prompt
+    if (referenceLimit > 0 && (isQwenImage || isWan) && references.length > 0) {
       for (const url of references) content.push({ image: url })
     }
     content.push({ text: request.prompt })

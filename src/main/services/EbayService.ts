@@ -46,7 +46,7 @@ export class EbayService {
   constructor(private readonly clientId:string,private readonly clientSecret:string,private readonly ruName:string) {}
 
   configuration() {
-    return { environment:'PRODUCTION' as const,configured:Boolean(this.clientId&&this.clientSecret&&this.ruName),clientIdConfigured:Boolean(this.clientId),clientSecretConfigured:Boolean(this.clientSecret),ruNameConfigured:Boolean(this.ruName),readOnly:true }
+    return { environment:'PRODUCTION' as const,configured:Boolean(this.clientId&&this.clientSecret&&this.ruName),marketDataConfigured:false,clientIdConfigured:Boolean(this.clientId),clientSecretConfigured:Boolean(this.clientSecret),ruNameConfigured:Boolean(this.ruName),readOnly:true }
   }
 
   authorizationUrl(state:string) {

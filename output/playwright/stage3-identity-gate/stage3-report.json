@@ -1,0 +1,68 @@
+{
+  "generatedAt": "2026-08-10T01:32:35.985Z",
+  "expectedAssets": [
+    "./assets/index-Cgh42I-5.js",
+    "./assets/index-DWzst0Al.css"
+  ],
+  "loadedAssets": [
+    "./assets/index-Cgh42I-5.js",
+    "./assets/index-DWzst0Al.css"
+  ],
+  "checks": [
+    {
+      "id": "latest-assets",
+      "passed": true,
+      "detail": "实际加载 ./assets/index-Cgh42I-5.js, ./assets/index-DWzst0Al.css"
+    },
+    {
+      "id": "preflight-blocks-unconfirmed",
+      "passed": true,
+      "detail": "未确认商品在 Amazon 检索与模型调用之前被拦截，调用计数均为0"
+    },
+    {
+      "id": "complete-confirm-send",
+      "passed": true,
+      "detail": "证据完整商品确认后只调用一次检索派生与一次模型请求，报告身份正确"
+    },
+    {
+      "id": "conflict-blocked",
+      "passed": true,
+      "detail": "图文冲突商品未确认时同样被前置拦截"
+    },
+    {
+      "id": "manual-editor-validation",
+      "passed": true,
+      "detail": "冲突商品打开人工裁决表单；必填形态为空时不能锁定；1100×720无横向溢出"
+    },
+    {
+      "id": "manual-resolution-preserves-evidence",
+      "passed": true,
+      "detail": "人工裁决锁定液体精华，同时原始湿巾OCR、视觉结果和冲突提示仍完整保留"
+    },
+    {
+      "id": "resolved-query-traceable",
+      "passed": true,
+      "detail": "发送请求以人工裁决为最高身份，同时携带原始湿巾视觉和冲突证据供追溯"
+    },
+    {
+      "id": "postflight-rejects-wrong-report",
+      "passed": true,
+      "detail": "模型仍输出湿巾时，人工锁定形态触发后置校验并拒绝保存为正式报告"
+    },
+    {
+      "id": "resolution-persisted",
+      "passed": true,
+      "detail": "会话存储同时保留人工液体裁决和原始湿巾视觉证据"
+    }
+  ],
+  "counters": {
+    "ask": 3,
+    "derive": 3
+  },
+  "editorLayout": {
+    "width": 938,
+    "scrollWidth": 938,
+    "right": 1053,
+    "viewport": 1100
+  }
+}

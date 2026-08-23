@@ -1,0 +1,687 @@
+{
+  "schemaVersion": 2,
+  "summary": {
+    "evidenceMode": "session-rich",
+    "evidenceBoundary": {
+      "manifest": {
+        "schemaVersion": 2,
+        "sourceFingerprint": "6cd36b07b6ba7397",
+        "adapterVersion": "qoder-task-loop-source-v2",
+        "platform": "qoder",
+        "selection": {
+          "strategy": "stratified",
+          "eligibleCount": 187,
+          "analyzedCount": 40,
+          "confidence": "Medium"
+        }
+      },
+      "episodeCoverage": {
+        "episodeCount": 287,
+        "editedEpisodeCount": 287,
+        "closedEpisodeCount": 0,
+        "recoveredEpisodeCount": 0
+      },
+      "deliveryEvidenceLevels": [],
+      "sourceGaps": []
+    },
+    "semanticFacets": {
+      "schemaVersion": 1,
+      "status": "supplementary",
+      "entries": [
+        {
+          "id": "session-insight:source-coverage",
+          "kind": "redacted-summary",
+          "episodeRef": null,
+          "status": "candidate",
+          "labels": [
+            "source-coverage",
+            "Medium"
+          ],
+          "summary": "Analyzed 40 of 187 sessions; 3/6 enabled source roots exist. Treat conclusions as sampled and increase the limit or time scope before making broad claims.",
+          "evidenceRefs": [],
+          "modelVersion": "session-insights-v1"
+        },
+        {
+          "id": "session-insight:validation-behavior",
+          "kind": "redacted-summary",
+          "episodeRef": null,
+          "status": "candidate",
+          "labels": [
+            "validation-behavior",
+            "Low"
+          ],
+          "summary": "No validation command category was observed in the analyzed session sample. Inspect more sessions or add explicit validation guidance before claiming validation-after-edit behavior.",
+          "evidenceRefs": [],
+          "modelVersion": "session-insights-v1"
+        },
+        {
+          "id": "session-insight:post-edit-validation",
+          "kind": "rework-correction",
+          "episodeRef": null,
+          "status": "candidate",
+          "labels": [
+            "post-edit-validation",
+            "Medium"
+          ],
+          "summary": "Observed 330 edit event(s), but no later validation command in the analyzed sample. Route this lead to Harness session-evidence review to inspect the affected Task Episodes and later relevant validation before any finding.",
+          "evidenceRefs": [
+            {
+              "kind": "execution-transcript",
+              "id": "session-insight-3-1",
+              "type": "assistant",
+              "line": 70
+            }
+          ],
+          "modelVersion": "session-insights-v1"
+        },
+        {
+          "id": "session-insight:execution-friction",
+          "kind": "friction-taxonomy",
+          "episodeRef": null,
+          "status": "candidate",
+          "labels": [
+            "execution-friction",
+            "Low"
+          ],
+          "summary": "No strong execution friction signal in the analyzed sample. Keep friction claims narrow unless additional failed commands, rejected actions, or warnings are inspected.",
+          "evidenceRefs": [],
+          "modelVersion": "session-insights-v1"
+        },
+        {
+          "id": "session-insight:tool-mix",
+          "kind": "redacted-summary",
+          "episodeRef": null,
+          "status": "candidate",
+          "labels": [
+            "tool-mix",
+            "Medium"
+          ],
+          "summary": "Most observed tool: Bash (783). Use this as workflow evidence, then inspect bounded sessions before claiming user intent.",
+          "evidenceRefs": [
+            {
+              "kind": "execution-transcript",
+              "id": "session-insight-5-1",
+              "type": "assistant",
+              "line": 11
+            }
+          ],
+          "modelVersion": "session-insights-v1"
+        },
+        {
+          "id": "session-insight:session-complexity",
+          "kind": "redacted-summary",
+          "episodeRef": null,
+          "status": "candidate",
+          "labels": [
+            "session-complexity",
+            "Medium"
+          ],
+          "summary": "Observed 4 active long session(s); longest active estimate: 8h 33m. Review task family, outcome, and friction before deciding whether this duration reflects a problem or any decomposition, tool, delegation, or model change is needed.",
+          "evidenceRefs": [
+            {
+              "kind": "execution-transcript",
+              "id": "session-insight-6-1",
+              "type": "progress",
+              "line": 1
+            }
+          ],
+          "modelVersion": "session-insights-v1"
+        },
+        {
+          "id": "session-insight:session-usage-efficiency",
+          "kind": "redacted-summary",
+          "episodeRef": null,
+          "status": "candidate",
+          "labels": [
+            "session-usage-efficiency",
+            "Medium"
+          ],
+          "summary": "本次分析覆盖 187 个会话，其中 20 个达到活跃长会话阈值，最长约 706 分钟；另有 2 个长跨度主要来自暂停或恢复。 这些活动证据只描述投入；当前 token 或 credit 证据不足，不能据此推断模型偏好、质量或节省。",
+          "evidenceRefs": [
+            {
+              "kind": "execution-transcript",
+              "id": "session-insight-7-1",
+              "type": "progress",
+              "line": 1
+            }
+          ],
+          "modelVersion": "session-insights-v1"
+        }
+      ]
+    },
+    "learningCapture": {
+      "schemaVersion": 1,
+      "state": "N/A",
+      "summary": "暂不适用——需要两个可比的观察窗口和一次改进对比。",
+      "interventions": []
+    },
+    "aiAgentPractice": {
+      "inspectedSurfaces": [],
+      "coverageRows": [
+        {
+          "surface": "Rules",
+          "scopes": [
+            "Global",
+            "Plugin"
+          ],
+          "count": 3,
+          "paths": [
+            "~/.qoder/rules/yandu.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/rules/postman-best-practices.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/cloudflare/1.0.0/rules/workers.md"
+          ]
+        },
+        {
+          "surface": "Skills",
+          "scopes": [
+            "Global",
+            "Plugin"
+          ],
+          "count": 217,
+          "paths": [
+            "~/.agents/skills/embedded-captions/SKILL.md",
+            "~/.agents/skills/faceless-explainer/SKILL.md",
+            "~/.agents/skills/figma/SKILL.md",
+            "~/.agents/skills/figma-generate-design/SKILL.md",
+            "~/.agents/skills/figma-implement-design/SKILL.md",
+            "~/.agents/skills/general-video/SKILL.md",
+            "~/.agents/skills/gh-address-comments/SKILL.md",
+            "~/.agents/skills/gh-fix-ci/SKILL.md",
+            "~/.agents/skills/hyperframes/SKILL.md",
+            "~/.agents/skills/hyperframes-animation/SKILL.md",
+            "~/.agents/skills/hyperframes-cli/SKILL.md",
+            "~/.agents/skills/hyperframes-core/SKILL.md"
+          ]
+        },
+        {
+          "surface": "Hooks",
+          "scopes": [
+            "Plugin"
+          ],
+          "count": 11,
+          "paths": [
+            "~/.qoder/plugins/cache/qoder-marketplace/alibabacloud-spec-ops/0.1.4/hooks/qoderwork-hooks.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/alibabacloud-core/1.0.20/hooks/qoderwork-hooks.json",
+            "~/.qoder/plugins/cache/qoder-bundler/security-scan/.qoder-plugin/qoder-hooks.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/superpowers/5.1.0/hooks/hooks.json"
+          ]
+        },
+        {
+          "surface": "Commands",
+          "scopes": [
+            "Plugin"
+          ],
+          "count": 25,
+          "paths": [
+            "~/.qoder/plugins/cache/qoder-marketplace/cloudflare/1.0.0/commands/build-agent.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/cloudflare/1.0.0/commands/build-mcp.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/commands/codegen.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/context7/1.0.0/commands/docs.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/commands/docs.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/commands/mock.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/commands/search.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/commands/security.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/commands/setup.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/slack/1.0.0/commands/channel-digest.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/slack/1.0.0/commands/draft-announcement.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/slack/1.0.0/commands/find-discussions.md"
+          ]
+        },
+        {
+          "surface": "Custom Agents",
+          "scopes": [
+            "Plugin"
+          ],
+          "count": 7,
+          "paths": [
+            "~/.qoder/plugins/cache/qoder-marketplace/vercel/0.44.0/agents/ai-architect.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/agents/readiness-analyzer.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/alibabacloud-spec-ops/0.1.4/agents/code-quality-reviewer.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/vercel/0.44.0/agents/deployment-expert.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/context7/1.0.0/agents/docs-researcher.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/vercel/0.44.0/agents/performance-optimizer.md",
+            "~/.qoder/plugins/cache/qoder-marketplace/alibabacloud-spec-ops/0.1.4/agents/spec-reviewer.md"
+          ]
+        },
+        {
+          "surface": "MCP",
+          "scopes": [
+            "Plugin"
+          ],
+          "count": 18,
+          "paths": [
+            "~/.qoder/plugins/cache/qoder-marketplace/alibabacloud-core/1.0.20/.mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/alibabacloud-spec-ops/0.1.4/.mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/atlassian-mcp-server/1.0.0/.mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/chrome-devtools-mcp/1.2.0/.mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/cloudflare/1.0.0/mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/context7/1.0.0/.mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/datadog/0.7.13/mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/apollographql-skills/1.2.2/.mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/mongodb-agent-skills/1.1.0/mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/postman/1.0.1/mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/slack/1.0.0/.mcp.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/sourcegraph/0.1.0/mcp.json"
+          ]
+        },
+        {
+          "surface": "Plugins",
+          "scopes": [
+            "Plugin"
+          ],
+          "count": 29,
+          "paths": [
+            "~/.qoder/plugins/cache/qoder-marketplace/alibabacloud-spec-ops/0.1.4/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/alibabacloud-core/1.0.20/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/apollographql-skills/1.2.2/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/architecture-visualization/0.1.0/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/atlassian-mcp-server/1.0.0/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-bundler/better-harness/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/cangjie-skills/1.0.0/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/chrome-devtools-mcp/1.2.0/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/cloudflare/1.0.0/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/context7/1.0.0/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/datadog/0.7.13/.qoder-plugin/plugin.json",
+            "~/.qoder/plugins/cache/qoder-marketplace/design-review/0.1.0/.qoder-plugin/plugin.json"
+          ]
+        },
+        {
+          "surface": "Memories",
+          "scopes": [
+            "Project",
+            "Global"
+          ],
+          "count": 112
+        },
+        {
+          "surface": "Workflows",
+          "scopes": [
+            "Project"
+          ],
+          "count": 0
+        }
+      ],
+      "repositorySourceRows": [],
+      "memoryDetails": {
+        "contentPolicy": "metadata-only",
+        "scanState": "scanned-present",
+        "scopeCounts": [
+          {
+            "scope": "Project",
+            "count": 111
+          },
+          {
+            "scope": "Global",
+            "count": 1
+          }
+        ],
+        "integrity": {
+          "status": "reviewed",
+          "titleCount": 112,
+          "reviewedTitleCount": 112,
+          "truncated": false,
+          "exactCollisionGroups": 1,
+          "similarityCandidates": 1
+        }
+      }
+    },
+    "usageActivity": {
+      "schemaVersion": 2,
+      "dateBasis": "UTC",
+      "measurementBasis": "session-starts-active-estimate-model-active-session-days-skill-invocations-and-loads",
+      "truncated": false,
+      "dates": [
+        "2026-07-29",
+        "2026-07-30",
+        "2026-07-31",
+        "2026-08-01",
+        "2026-08-02",
+        "2026-08-03",
+        "2026-08-04",
+        "2026-08-05",
+        "2026-08-06",
+        "2026-08-07",
+        "2026-08-08",
+        "2026-08-09",
+        "2026-08-10",
+        "2026-08-11",
+        "2026-08-12",
+        "2026-08-13",
+        "2026-08-14"
+      ],
+      "sessions": {
+        "total": 187,
+        "starts": [
+          33,
+          36,
+          14,
+          13,
+          0,
+          0,
+          1,
+          3,
+          3,
+          0,
+          46,
+          5,
+          0,
+          0,
+          0,
+          0,
+          33
+        ],
+        "activeMinutes": [
+          1382.7,
+          747.6,
+          79.8,
+          731.6,
+          0,
+          0,
+          706.1,
+          313.8,
+          6.5,
+          0,
+          1099.5,
+          196,
+          0,
+          0,
+          0,
+          0,
+          449.9
+        ]
+      },
+      "models": [],
+      "skills": [
+        {
+          "name": "canvas",
+          "total": 3,
+          "daily": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "create-skill",
+          "total": 1,
+          "daily": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "qmind-knowledge",
+          "total": 1,
+          "daily": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "usageEfficiency": {
+      "schemaVersion": 2,
+      "selection": {
+        "strategy": "all-eligible",
+        "eligibleSessionCount": 187,
+        "analyzedSessionCount": 187,
+        "complete": true
+      },
+      "roles": {
+        "userThreadCandidateCount": 170,
+        "childAgentCandidateCount": 17
+      },
+      "longSessions": {
+        "activeCount": 20,
+        "wallOnlyCount": 2,
+        "longestActiveMinutes": 706.1,
+        "activeRatio": 0.107,
+        "estimate": {
+          "method": "capped-event-gap",
+          "activeThresholdMinutes": 45,
+          "gapCapMinutes": 5,
+          "idleGapMinutes": 30
+        },
+        "samples": [
+          {
+            "alias": "S1",
+            "role": "child-agent-candidate",
+            "activeMinutes": 706.1,
+            "failureCount": 0
+          },
+          {
+            "alias": "S2",
+            "role": "child-agent-candidate",
+            "activeMinutes": 512.7,
+            "failureCount": 0
+          },
+          {
+            "alias": "S3",
+            "role": "user-thread-candidate",
+            "activeMinutes": 451.4,
+            "failureCount": 0
+          },
+          {
+            "alias": "S4",
+            "role": "child-agent-candidate",
+            "activeMinutes": 389.7,
+            "failureCount": 0
+          }
+        ]
+      },
+      "accounting": {
+        "mode": "effort-proxy",
+        "responseCount": 0,
+        "modelAttributedResponseCount": 0,
+        "unattributedResponseCount": 0,
+        "usageFieldObservedCount": 0,
+        "nonZeroUsageCount": 0,
+        "exactCreditsAvailable": false,
+        "pricingVersion": null
+      },
+      "modelUsage": [],
+      "outcomeReview": {
+        "status": "required",
+        "reviewedCandidateCount": 0,
+        "reviewedActiveLongCount": 0,
+        "comparableModelOutcomeEvidence": false,
+        "recommendation": "controlled-a-b-required"
+      },
+      "reviewLead": {
+        "id": "session-usage-outcome-review-gap",
+        "title": "20 个长会话候选仍待结果复核",
+        "reason": "187 个已分析会话中有 20 个（10.7%）超过估算活跃时长阈值，最长估算为 706.1 分钟，其中 0 个已有结果复核；另有 2 个长跨度可能来自空闲或恢复。这只是调查线索，尚未确认存在效率、任务拆分、工具链或模型问题。",
+        "expectedOutcome": "每个展示候选都完成任务族、结果和摩擦分类，让报告能够判断是否真的需要改进。",
+        "aiFixPrompt": "/better-harness 复核这些会话\n\n20 个长会话候选仍待结果复核\n\n## 先核对的会话\n\n- S1：子 Agent 候选，估算活跃约 706.1 分钟，失败事件 0 次\n- S2：子 Agent 候选，估算活跃约 512.7 分钟，失败事件 0 次\n- S3：用户会话候选，估算活跃约 451.4 分钟，失败事件 0 次\n- S4：子 Agent 候选，估算活跃约 389.7 分钟，失败事件 0 次\n- 当前展示 20 个未复核活跃长会话中的 4 个；其余 16 个继续通过同一个有界 review packet 复核。\n\n## 先做什么\n\n在操作系统临时目录创建 <run>，从项目根运行：\n\n```bash\nnode scripts/session-analysis.mjs insights --platform qoder --workspace . --selection all-eligible --limit 1000 --format json --output <run>/insights.json\nnode scripts/session-analysis/usage-review-packet.mjs --source <run>/insights.json --workspace . --limit 8 --output <run>/.review-packet.json\n```\n\n私有 review packet 会在本地解析候选；只为 S1, S2, S3, S4 写入 taskFamily、outcome、friction、confidence 和 evidenceReason。先完成复核，不改业务代码，也不创建 Memory、Skill 或 Hook。\n\n## 我们看到了什么\n\n187 个已分析会话中有 20 个（10.7%）超过估算活跃时长阈值，最长估算为 706.1 分钟，其中 0 个已有结果复核；另有 2 个长跨度可能来自空闲或恢复。这只是调查线索，尚未确认存在效率、任务拆分、工具链或模型问题。\n\n## 为什么值得复核\n\n未复核前无法区分复杂任务、工具链摩擦、暂停恢复噪音或正常的长任务。\n\n## 预期结果\n\n每个展示候选都完成任务族、结果和摩擦分类，让报告能够判断是否真的需要改进。\n\n## 范围\n\n只生成隐私安全的会话效率复核和 reader report，不改业务代码，不把墙钟跨度当作活跃成本。持久报告只保留匿名别名；私有 review packet 不得复制进报告。这是 4/20 的有界视图（4/N）；只对展示样本下结论，其余候选保持未复核。\n\n## 怎样算完成\n\n<run>/.review.json 对 S1, S2, S3, S4 各有一条有效复核；语义复核生成 <run>/insights.reviewed.json；<run>/report.md 以 reviewed source 校验通过。复核未确认问题时，不创建优化项。\n\n## 验证\n\n- 运行 `node scripts/session-analysis/usage-semantic-review.mjs --source <run>/insights.json --packet <run>/.review-packet.json --review <run>/.review.json --output <run>/insights.reviewed.json`\n- 运行 `node scripts/session-analysis/validate-usage-report.mjs --source <run>/insights.reviewed.json --report <run>/report.md`，必须返回 `ok: true`\n- 确认 reviewed source 的 `outcomeReview.reviewedActiveLongCount` 等于已复核的展示别名数；通过后删除两个私有临时 review 文件",
+        "sampleCoverage": {
+          "shown": 4,
+          "total": 20,
+          "complete": false
+        }
+      }
+    },
+    "projectName": "砚都跨境",
+    "locale": "zh-CN",
+    "modelId": "agent-work-loop-v4",
+    "reportContractVersion": 26,
+    "overview": "项目有可用的启动和构建路由，但在编辑后验证、项目级指导、交付验收和回滚恢复方面存在基础性缺口。330 次编辑后零验证命令、零测试文件、无 AGENTS.md，使得变更正确性完全依赖用户手动检查。",
+    "dimensions": [
+      {
+        "id": "task-understanding",
+        "label": "任务理解",
+        "score": 42,
+        "summary": "42 个源文件的项目缺少 AGENTS.md 和项目级 Rule，Agent 无法获取项目特定的上下文和约束。",
+        "findingRefs": [
+          "missing-agents-md"
+        ]
+      },
+      {
+        "id": "controlled-execution",
+        "label": "可控执行",
+        "score": 56,
+        "summary": "启动和构建脚本可用（pnpm dev/build/typecheck），但无项目级 Hook 或权限边界约束。",
+        "findingRefs": []
+      },
+      {
+        "id": "change-validation",
+        "label": "改动验证",
+        "score": 32,
+        "summary": "330 次编辑后零验证命令，42 个源文件零测试文件，变更验证完全缺失。",
+        "findingRefs": [
+          "post-edit-validation-gap",
+          "zero-test-files"
+        ]
+      },
+      {
+        "id": "reliable-delivery",
+        "label": "可靠交付",
+        "score": 38,
+        "summary": "186 个会话中零结构化完成信号，单次提交历史无文档化回滚程序，交付可靠性不可评估。",
+        "findingRefs": [
+          "no-acceptance-signals",
+          "no-rollback-procedure"
+        ]
+      },
+      {
+        "id": "learning-capture",
+        "label": "经验沉淀",
+        "score": 35,
+        "summary": "有界审查无法达到 clean no-candidate 或 supported-match 结论；112 条 Memory 存在标题碰撞。",
+        "findingRefs": [
+          "memory-title-collision"
+        ]
+      }
+    ],
+    "assignmentSummaries": []
+  },
+  "findings": [
+    {
+      "id": "post-edit-validation-gap",
+      "title": "Edits go unverified because no validation command runs after changes",
+      "severity": "Medium",
+      "reason": "In 40 analyzed sessions, 330 edit events were observed with zero subsequent validation commands. Population coverage shows 0 of 186 sessions contained any check. The diagnostic flag 'no-reviewed-relevant-check-evidence' is present. The project has available validation commands (pnpm typecheck, pnpm build) but they are never invoked after edits. The sole candidate with actual code changes (1 edit, 1 file) closed as 'changed-without-check'. Zero project-level Hooks exist to trigger validation automatically. This means changes may introduce undetected regressions and the user is the sole validation mechanism.",
+      "dimensionRefs": [
+        "change-validation"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nAdd the smallest owned validation route for post-edit verification.\n\n## What to do\n\nCreate a project-level Rule or AGENTS.md instruction that requires running `pnpm typecheck` after any source file edit. The project already has this command in package.json.\n\n## Validation\n\n- After making edits, run `pnpm typecheck` and confirm it exits 0\n- If typecheck fails, fix the error before handing off to the user",
+      "expectedArtifact": "Rule",
+      "expectedOutput": [
+        "Update the existing Rule owner identified by the reviewed evidence and retain a focused validation result."
+      ]
+    },
+    {
+      "id": "zero-test-files",
+      "title": "No test files exist to verify source behavior",
+      "severity": "Low",
+      "reason": "The project has 42 source files across TypeScript, JavaScript, Python, and TSX, but zero test files. No 'test' script exists in package.json. Even if validation commands were run after edits, there are no behavioral tests to catch logic regressions. The available validation is limited to type checking (pnpm typecheck) and build verification (pnpm build), which cannot detect behavioral defects.",
+      "dimensionRefs": [
+        "change-validation"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nEstablish baseline test infrastructure for the project.\n\n## What to do\n\nAdd a test runner and at least one test file for a core module (e.g., src/shared/contracts.ts or src/main/services/EbayService.ts). Add a 'test' script to package.json.\n\n## Validation\n\n- Run the new test script and confirm it passes\n- Run pnpm typecheck to confirm no type errors were introduced",
+      "expectedArtifact": "Test",
+      "expectedOutput": [
+        "Update the existing Test owner identified by the reviewed evidence and retain a focused validation result."
+      ]
+    },
+    {
+      "id": "missing-agents-md",
+      "title": "Agent lacks scoped project instructions for a 42-source-file codebase",
+      "severity": "Medium",
+      "reason": "The project profile shows agentInstructions.status='missing' with zero AGENTS.md files for a repository with 42 source files. The suggested minimum is 1. The project has complex business logic spanning eBay, Amazon, and Shopee integrations, Electron desktop framework, and Prisma backend, but no scoped instructions guide the agent on project structure, validation commands, safety boundaries, or coding conventions. Zero project-level Rules exist (all 3 Rules are global or plugin scope). The project has accumulated 111 project-level Memory entries including 12 common pitfalls and 12 code specifications, but these are not formalized as deterministic project-level instructions.",
+      "dimensionRefs": [
+        "task-understanding"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nCreate the smallest useful AGENTS.md for this project.\n\n## What to do\n\nCreate a root AGENTS.md that covers: project structure (src/main, src/renderer, src/shared, server), available commands (pnpm install, pnpm dev, pnpm typecheck, pnpm build), safety boundaries (do not modify .env files, do not push without typecheck), and key conventions from existing Memory entries.\n\n## Validation\n\n- Confirm AGENTS.md exists at the project root\n- Run pnpm typecheck to confirm no issues\n- Verify the file references only commands that exist in package.json",
+      "expectedArtifact": "Document",
+      "expectedOutput": [
+        "Update the existing Document owner identified by the reviewed evidence and retain a focused validation result."
+      ]
+    },
+    {
+      "id": "no-acceptance-signals",
+      "title": "Task completion cannot be confirmed at any acceptance boundary",
+      "severity": "Low",
+      "reason": "Population coverage shows 0 of 186 sessions with structured completion signals and 0 with user correction signals. The only acceptance signal observed is 'assistant-handoff' in 16 of 186 sessions (8.6%). All 5 emitted candidates have acceptanceEvidenceCeiling='lead', meaning acceptance is inferred from agent behavior, not confirmed by user decision. In 287 task episodes, 0 were closed and 0 were recovered. This means the agent never formally confirms task completion and the user never provides correction signals, making delivery reliability unobservable.",
+      "dimensionRefs": [
+        "reliable-delivery"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nAdd an explicit completion confirmation step to the agent workflow.\n\n## What to do\n\nAdd a project-level Rule that requires the agent to explicitly ask the user to confirm task completion before handing off, and to request correction if the result does not meet expectations.\n\n## Validation\n\n- In the next task episode, confirm the agent asks for completion confirmation before handoff",
+      "expectedArtifact": "Rule",
+      "expectedOutput": [
+        "Update the existing Rule owner identified by the reviewed evidence and retain a focused validation result."
+      ]
+    },
+    {
+      "id": "no-rollback-procedure",
+      "title": "No documented rollback procedure exists for recovering from a bad change",
+      "severity": "Low",
+      "reason": "The repository has a single-commit history ('Initial commit'), low history confidence, and no documented rollback or recovery procedure. While git itself provides reset and revert commands, the project has no runbook, script, or instruction that names the recovery owner, entrypoint, or postcondition. The project profile shows no recovery evidence, and 0 of 287 task episodes were recovered. In case of a bad change, the operator has no documented path to restore service.",
+      "dimensionRefs": [
+        "reliable-delivery"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nDocument the smallest owned recovery route for failed changes.\n\n## What to do\n\nAdd a recovery section to AGENTS.md or a RUNBOOK.md that names: the recovery owner, the rollback command (git revert or git reset), the validation step after rollback (pnpm typecheck && pnpm build), and the postcondition (service restored to last known good state).\n\n## Validation\n\n- Confirm the recovery procedure is documented\n- Verify the rollback command works by running git log --oneline -1",
+      "expectedArtifact": "Runbook",
+      "expectedOutput": [
+        "Update the existing Runbook owner identified by the reviewed evidence and retain a focused validation result."
+      ]
+    },
+    {
+      "id": "memory-title-collision",
+      "title": "Duplicate Memory title creates retrieval ambiguity",
+      "severity": "Low",
+      "reason": "Asset integrity review found 1 exact title collision: two project-scope Memory entries share the same normalized title. The review covered all 112 Memory titles without truncation. The integrity finding is advisory and explicitly states the collision proves only title metadata naming collision, not body duplication or current impact. However, exact same-scope title collisions can cause retrieval to return conflicting entries, and the quality gates require an ordinary Low governance finding for exact collisions. A separate similarity candidate (80% title match) was found but remains deferred per quality gate policy on near matches.",
+      "dimensionRefs": [
+        "learning-capture"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nResolve the exact Memory title collision.\n\n## What to do\n\nUse SearchMemory to locate the two entries with the same normalized title. Review their content to determine if they are duplicates or distinct entries with a naming conflict. If duplicates, update one to merge content and delete the other. If distinct, rename one to be unique.\n\n## Validation\n\n- Re-run the asset integrity review and confirm 0 exact collision groups",
+      "expectedArtifact": "Memory",
+      "expectedOutput": [
+        "Update the existing Memory owner identified by the reviewed evidence and retain a focused validation result."
+      ]
+    }
+  ]
+}

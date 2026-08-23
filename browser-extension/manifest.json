@@ -1,12 +1,16 @@
 {
   "manifest_version": 3,
   "name": "砚都跨境采集助手",
-  "version": "0.1.0",
-  "description": "在大健云仓筛选商品后，手动标记并采集到砚都跨境。",
+  "version": "0.2.0",
+  "description": "大健云仓商品采集 + 1688 商品一键 AI 选品分析（RAGFlow 选品分析师）。",
   "permissions": ["storage", "activeTab", "tabs"],
   "host_permissions": [
     "https://gigab2b.com/*",
     "https://*.gigab2b.com/*",
+    "https://detail.1688.com/*",
+    "https://m.1688.com/*",
+    "https://*.1688.com/*",
+    "http://114.55.149.192:8090/*",
     "http://127.0.0.1:17321/*"
   ],
   "background": { "service_worker": "service-worker.js" },
@@ -15,6 +19,10 @@
     "matches": ["https://gigab2b.com/*", "https://*.gigab2b.com/*"],
     "js": ["content-script.js"],
     "css": ["content-script.css"],
+    "run_at": "document_idle"
+  }, {
+    "matches": ["https://detail.1688.com/*", "https://m.1688.com/*"],
+    "js": ["content-script-1688.js"],
     "run_at": "document_idle"
   }]
 }

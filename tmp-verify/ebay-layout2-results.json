@@ -1,0 +1,63 @@
+[
+  {
+    "key": "CHECK1_WAREHOUSE_CARD",
+    "theme": null,
+    "headerDisplay": "flex",
+    "headerAlignItems": "center",
+    "headerJustify": "space-between",
+    "left": {
+      "x": 33,
+      "yCenter": 63
+    },
+    "badge": {
+      "x": 319,
+      "yCenter": 63
+    },
+    "sameLine": true,
+    "badgeRightOfDiv": true,
+    "cardWidth": 344
+  },
+  {
+    "key": "CHECK2_PUBLISHING_DARK",
+    "theme": "dark",
+    "workspaceBg": "rgba(255, 255, 255, 0.06)",
+    "workspaceBorder": "rgba(255, 255, 255, 0.1)",
+    "controlBg": "rgba(255, 255, 255, 0.06)",
+    "checklistBg": "rgba(255, 255, 255, 0.06)"
+  },
+  {
+    "key": "CHECK3_COMPARISON_DARK",
+    "theme": "dark",
+    "mainBg": "rgba(255, 255, 255, 0.06)",
+    "mainBorder": "rgba(255, 255, 255, 0.1)",
+    "asideBg": "rgba(255, 255, 255, 0.06)",
+    "asideBorder": "rgba(255, 255, 255, 0.1)"
+  },
+  {
+    "key": "CHECK4_EBAY_COLLECTION",
+    "theme": null,
+    "workbench": {
+      "x": 82,
+      "y": 360,
+      "width": 330,
+      "height": 510,
+      "right": 412,
+      "bottom": 870
+    },
+    "panel": {
+      "x": 422,
+      "y": 360,
+      "width": 1004,
+      "height": 510,
+      "right": 1426,
+      "bottom": 870
+    },
+    "sameTop": true,
+    "panelGap": 10,
+    "panelBottomInViewport": true,
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    }
+  }
+]

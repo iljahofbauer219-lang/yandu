@@ -1,0 +1,395 @@
+/* K 阶段新增：团队工作台首页样式 */
+
+.dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px;
+  min-height: 100%;
+}
+
+.dashboard-loading,
+.dashboard-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  gap: 12px;
+  color: #475569;
+  font-size: 14px;
+}
+
+.dashboard-error {
+  color: #b91c1c;
+}
+
+.dashboard-error button {
+  padding: 6px 16px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0 12px 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.dashboard-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 4px 0;
+  color: #0f172a;
+}
+
+.dashboard-header p {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+}
+
+.dashboard-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dashboard-updated-at {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.dashboard-refresh-btn {
+  padding: 6px 14px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dashboard-refresh-btn:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.dashboard-refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ─── KPI 卡片网格 ─── */
+
+.dashboard-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.dashboard-kpi {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.dashboard-kpi:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.kpi-icon {
+  font-size: 28px;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.kpi-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.kpi-label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.kpi-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1;
+}
+
+.kpi-suffix {
+  font-size: 13px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.kpi-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  width: fit-content;
+}
+
+.kpi-trend.up {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.kpi-trend.down {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.kpi-trend.flat {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* KPI 主题色 */
+
+.kpi-todayProducts .kpi-icon { background: #eff6ff; }
+.kpi-pendingReports .kpi-icon { background: #fef9c3; }
+.kpi-failedTasks .kpi-icon { background: #fee2e2; }
+.kpi-aiQuotaUsed .kpi-icon { background: #f3e8ff; }
+.kpi-activeMembers .kpi-icon { background: #dcfce7; }
+.kpi-runningSkills .kpi-icon { background: #cffafe; }
+
+/* ─── 双栏面板（待办 + 动态） ─── */
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 16px;
+}
+
+@media (max-width: 1100px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dashboard-panel {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px 18px;
+  min-height: 320px;
+}
+
+.dashboard-panel h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.dashboard-panel h2 small {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+.dashboard-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+/* ─── 我的待办列表 ─── */
+
+.dashboard-todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dashboard-todo-item {
+  display: grid;
+  grid-template-columns: 70px 50px 1fr 80px 80px;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.todo-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-align: center;
+  width: fit-content;
+}
+
+.todo-status.pending {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.todo-status.running {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.todo-status.failed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.todo-type {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.todo-title {
+  font-weight: 500;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.todo-owner {
+  font-size: 12px;
+  color: #64748b;
+  text-align: right;
+}
+
+.todo-time {
+  font-size: 11px;
+  color: #94a3b8;
+  text-align: right;
+}
+
+/* ─── 团队动态时间线 ─── */
+
+.dashboard-activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.dashboard-activity-item {
+  display: grid;
+  grid-template-columns: 50px 80px 70px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-left: 2px solid #e2e8f0;
+  font-size: 13px;
+  color: #475569;
+}
+
+.dashboard-activity-item:hover {
+  background: #f8fafc;
+  border-left-color: #2563eb;
+}
+
+.activity-time {
+  font-size: 11px;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-member {
+  font-weight: 600;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-action {
+  font-size: 12px;
+  color: #2563eb;
+  font-weight: 500;
+}
+
+.activity-target {
+  font-size: 12px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-target b {
+  color: #334155;
+  font-weight: 500;
+}
+
+/* 暗色主题适配 */
+@media (prefers-color-scheme: dark) {
+  .dashboard-header { border-bottom-color: #1e293b; }
+  .dashboard-header h1 { color: #f1f5f9; }
+  .dashboard-header p { color: #94a3b8; }
+  .dashboard-refresh-btn { background: #1e293b; border-color: #334155; color: #cbd5e1; }
+  .dashboard-refresh-btn:hover:not(:disabled) { background: #334155; }
+  .dashboard-kpi { background: #0f172a; border-color: #1e293b; }
+  .kpi-icon { background: #1e293b; }
+  .kpi-label { color: #94a3b8; }
+  .kpi-value { color: #f1f5f9; }
+  .kpi-suffix { color: #64748b; }
+  .dashboard-panel { background: #0f172a; border-color: #1e293b; }
+  .dashboard-panel h2 { color: #f1f5f9; border-bottom-color: #1e293b; }
+  .dashboard-todo-item { background: #1e293b; color: #cbd5e1; }
+  .todo-title { color: #f1f5f9; }
+  .dashboard-activity-item { border-left-color: #1e293b; }
+  .dashboard-activity-item:hover { background: #1e293b; }
+  .activity-member { color: #f1f5f9; }
+}

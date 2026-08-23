@@ -1,40 +1,62 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import type { BrowserState, BrowserTab, BrowserTranslationMode, CandidateCollectionRecord, CandidateCollectionRun, CandidateArea, CollectionMethod, CollectionProtectionMode, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, ComparisonCostSettings, ComparisonDecision, ComparisonRecordView, ComplianceAlertStatus, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementStatus, ComplianceKnowledgeWorkspace, ComplianceProductProfileDraft, ComplianceReviewStatus, ComplianceRiskLevel, ComplianceRule, ComplianceRuleDraft, ComplianceTaskStatus, EbayAcceptanceBatch, EbayCategoryWorkspace, EbayCollectedProduct, EbayConfigurationStatus, EbayContentOptimizationResult, EbayContentTranslationResult, EbayDirectoryProductSyncCheckpoint, EbayDirectoryProductSyncProgress, EbayDirectoryProductSyncResult, EbayImageCandidateReview, EbayImageGenerationPurpose, EbayImageGroundingPlan, EbayImageInspectionReport, EbayImageVisualInspectionReport, EbayImageVisualRuleCode, EbayListing, EbayLocalProduct, EbayLocalProductUpdateInput, EbayLoginResult, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayProductSyncRun, EbayPublishTask, EbayStore, EbayTitleOptimizationResult, GigaReturnRateFilter, GigaSellerIndexFilter, ImageGenerationResult, ImageModelProfile, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishStatus, MarketplaceSelectionProduct, NetworkStrategy, Platform, RealShiftProfile, RealShiftResult, SelectionCatalogItem, SelectionDecision, SelectionTask, SelectionTaskDraft, SupplyActivationResult, SupplyPlatformCode, SupplyWarehouseProduct, TaskProgress, WorkflowCounts } from '../shared/contracts'
+import { useSession } from './SessionGate'
+import { hasPermission, getServerBaseUrl } from './serverApi'
+import { MENU_PERMISSION_TREE, hasMenuAccess } from '../shared/menuPermissionTree'
+import type { BrowserState, BrowserTab, BrowserTranslationMode, CandidateCollectionRecord, CandidateCollectionRun, CandidateArea, CollectionMethod, CollectionProtectionMode, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, ComparisonCostSettings, ComparisonDecision, ComparisonRecordView, ComplianceAlertStatus, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementStatus, ComplianceKnowledgeWorkspace, ComplianceProductProfileDraft, ComplianceReviewStatus, ComplianceRiskLevel, ComplianceRule, ComplianceRuleDraft, ComplianceTaskStatus, EbayAcceptanceBatch, EbayCategoryWorkspace, EbayCollectedProduct, EbayConfigurationStatus, EbayContentOptimizationResult, EbayContentTranslationResult, EbayDirectoryProductSyncCheckpoint, EbayDirectoryProductSyncProgress, EbayDirectoryProductSyncResult, EbayImageCandidateReview, EbayImageGenerationPurpose, EbayImageInspectionReport, EbayImageVisualInspectionReport, EbayListing, EbayLocalProduct, EbayLocalProductUpdateInput, EbayLoginResult, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayProductSyncRun, EbayPublishTask, EbayStore, EbayTitleOptimizationResult, GigaReturnRateFilter, GigaSellerIndexFilter, ImageModelProfile, ImageReferenceRole, ImportedProductImage, ImportedProductSource, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishStatus, MarketplaceSelectionProduct, NetworkStrategy, Platform, RealShiftProfile, RealShiftResult, SelectionCatalogItem, SelectionDecision, SelectionTask, SelectionTaskDraft, SupplyActivationResult, SupplyPlatformCode, SupplyWarehouseProduct, TaskProgress, WorkflowCounts } from '../shared/contracts'
 import { evaluateEbayCompliance } from '../shared/ebayComplianceKnowledge'
 import { complianceCheckFingerprint } from '../shared/complianceFingerprint'
 import { buildEbayMarketDecisionReport } from '../shared/ebayMarketDecision'
 import { auditEbayTitle } from '../shared/ebayTitleAudit'
 import type { EbayTitleDecision } from '../shared/contracts'
+import { applyPackageTextExtraction, buildImageOperationsSummary, buildImageProductionTasks, buildImageTaskQualityLayers, calculateContainPlacement, cloneImageStylePreset, confirmedImageFactContext, createDefaultImageLayout, deriveImageProjectStatus, getPlatformImageRule, imageStyleTaskPrompt, imageTaskAllowsTypography, IMAGE_STYLE_CONTRACTS, IMAGE_STYLE_PRESETS, isImageTaskExportReady, normalizeImageProductFacts, overallImageTaskQuality, platformImagePlanningWarnings, protectedCommerceTokens, selectTaskReferenceImages, summarizeImageTaskQuality, taskReviewPurpose, validateImageLayoutDraft, validateImageProductFacts, validateImageProductionProject, validateImageSizeOutput } from '../shared/imageProduction'
+import type { ImageFactSource, ImageFactStatus, ImageLayoutDraft, ImageLocalEditOperation, ImageLocalEditRecord, ImageProductFacts, ImageProductionProject, ImageProductionTask, ImageSizeVariant, ImageStyleLock, ImageStylePresetId } from '../shared/imageProduction'
 import gigaCatalog from './gigaCatalog.json'
 import EbayLocalListingEditor from './EbayLocalListingEditor'
-import { EbayVisualCompliancePanel } from './EbayVisualCompliancePanel'
 import EbayVideoStudio from './EbayVideoStudio'
+import EbayImageStagePanel from './EbayImageStagePanel'
+import SystemAdmin from './SystemAdmin'
+import Dashboard from './Dashboard'
+import { LlmApiKeysPage } from './LlmApiKeysPage'
+import OnlineAdvisor from './OnlineAdvisor'
+import AIEmployee from './AIEmployee'
+import KnowledgeHub from './KnowledgeHub'
+import SampleLibrary from './SampleLibrary'
+import WindowTitleControls from './WindowTitleControls'
 import './ebay-collection.css'
+import './ebay-image-stage-panel.css'
 
-type AppPage = 'ebay' | 'compliance-knowledge' | 'warehouse-dashboard' | 'tasks' | 'ozon' | 'sourcing' | 'comparison' | 'review' | 'catalog' | 'image-studio' | 'realshift' | 'publishing' | 'procurement' | 'finance' | 'ai-support' | 'feishu'
+type AppPage = 'dashboard' | 'ebay' | 'ebay-hub' | 'ebay-title' | 'ai-crossborder' | 'compliance-knowledge' | 'ops-knowledge' | 'system-admin' | 'warehouse-dashboard' | 'tasks' | 'ozon' | 'sourcing' | 'comparison' | 'review' | 'catalog' | 'image-studio' | 'realshift' | 'publishing' | 'procurement' | 'finance' | 'ai-support' | 'feishu' | 'ai-advisor' | 'online-advisor' | 'ai-collect' | 'ai-art' | 'ai-video' | 'ai-video-watch' | 'ai-video-resource' | 'ai-tasks' | 'ai-employee' | 'ai-employee-workspace' | 'ai-employee-listing' | 'ai-employee-guardian' | 'ai-planet' | 'ai-hq' | 'amazon-data-source' | 'llm-keys' | 'ai-sample-library'
 type EbayWorkspaceTab = 'browser' | 'library' | 'local' | 'optimize' | 'premium' | 'publish'
-type ImageSourceProduct = CollectedOzonProduct | CollectedSupplyProduct | SupplyWarehouseProduct
+
+// AI跨境之下的七个 AI 模块一级菜单（当前均为“功能建设中”占位页）
+const aiModuleNav: { page: AppPage; label: string; icon: string; perm: string }[] = [
+  // K 阶段新增：团队工作台首页（KPI + 我的待办 + 团队动态）
+  { page: 'dashboard', label: '团队工作台', icon: 'dashboard', perm: 'dashboard.view' },
+  { page: 'ai-advisor', label: 'AI参谋', icon: 'ai-advisor', perm: 'menu.advisor' },
+  { page: 'ai-collect', label: 'AI采集', icon: 'ai-collect', perm: 'menu.collect' },
+  { page: 'ai-art', label: 'AI美工', icon: 'ai-art', perm: 'menu.art' },
+  { page: 'ai-video', label: 'AI视频', icon: 'ai-video', perm: 'menu.video' },
+  { page: 'ai-tasks', label: 'AI任务', icon: 'ai-tasks', perm: 'menu.tasks' },
+  { page: 'ai-employee', label: 'AI员工', icon: 'ai-employee', perm: 'menu.employee' },
+  { page: 'ai-planet', label: 'AI星球', icon: 'ai-planet', perm: 'menu.planet' },
+  { page: 'ai-hq', label: 'AI总部', icon: 'ai-hq', perm: 'menu.hq' }
+]
+type ImageSourceProduct = CollectedOzonProduct | CollectedSupplyProduct | SupplyWarehouseProduct | ImportedProductSource
 type ProductWarehouseCode = 'GIGACLOUD' | 'ALIEXPRESS' | '1688' | 'OZON'
 type EbayImagePurpose = EbayImageGenerationPurpose
-type EbayImageShot = { purpose:EbayImagePurpose; index:number; total:number; code:string; title:string; instruction:string; evidence:string; acceptance:string; prohibited:string }
 type EbayImageSourceRole = 'HERO'|'FRONT'|'SIDE'|'BACK'|'DETAIL'|'INSTALLATION'|'SIZE'|'PAIN_POINT'|'SCENE'|'UNUSED'
 type EbayImageSourceCurationEntry = { enabled:boolean; role:EbayImageSourceRole }
 type EbayImageSourceCuration = Record<string,EbayImageSourceCurationEntry>
 
-const ebayImagePurposes:EbayImagePurpose[]=['HERO','DETAIL','PAIN_POINT','SCENE']
-const ebayImagePurposeLabels:Record<EbayImagePurpose,string>={HERO:'产品主图',DETAIL:'产品详情图',PAIN_POINT:'解决痛点图',SCENE:'应用场景图'}
+const ebayImagePurposes:EbayImagePurpose[]=['HERO','PRODUCT','PAIN_POINT','SCENE']
+const ebayImagePurposeLabels:Record<EbayImagePurpose,string>={HERO:'产品主图',PRODUCT:'产品图',PAIN_POINT:'解决痛点图',SCENE:'应用场景图'}
 const ebayImageSourceRoles:EbayImageSourceRole[]=['HERO','FRONT','SIDE','BACK','DETAIL','INSTALLATION','SIZE','PAIN_POINT','SCENE','UNUSED']
 const ebayImageSourceRoleLabels:Record<EbayImageSourceRole,string>={HERO:'主图',FRONT:'正面',SIDE:'侧面',BACK:'背面',DETAIL:'细节',INSTALLATION:'安装/结构',SIZE:'尺寸参照',PAIN_POINT:'痛点依据',SCENE:'应用场景',UNUSED:'不使用'}
-const ebayImageSourceMaxReferences=8
-const ebayFixedImageModelId='wan2.7-image-pro'
-const ebayImageReferenceRolePreferences:Record<EbayImagePurpose,EbayImageSourceRole[]>={
-  HERO:['HERO','FRONT','SIDE','DETAIL'],
-  DETAIL:['DETAIL','SIDE','BACK','INSTALLATION','SIZE','FRONT'],
-  PAIN_POINT:['PAIN_POINT','DETAIL','INSTALLATION','SIZE','HERO','FRONT'],
-  SCENE:['SCENE','HERO','FRONT','SIDE','DETAIL']
-}
+const ebayDefaultImageModelId='wan2.7-image-pro'
+// 参照图上限优先读 BailianImageService 随 connection() 返回的 maxReferenceImages 元数据（显式判断 number 以保留 0：0 表示纯文生图模型不支持参照图，不能回退成默认值）；缺失时按 id 回退（wan2.7 系列 8 张、Z-Image 1 张），未知模型默认 3 张，与服务端裁剪规则保持一致
+const ebayImageModelReferenceLimit=(model?:ImageModelProfile)=>typeof model?.maxReferenceImages==='number'?model.maxReferenceImages:(model?.id.startsWith('wan2.7')?8:model?.id==='z-image-turbo'?1:3)
 const ebayImageSourceCurationKey=(listingId:string)=>`ebay-image-source-curation:v1:${listingId}`
 
 function readEbayImageSourceCuration(listingId:string):EbayImageSourceCuration {
@@ -49,112 +71,64 @@ function saveEbayImageSourceCuration(listingId:string,curation:EbayImageSourceCu
   if(listingId)localStorage.setItem(ebayImageSourceCurationKey(listingId),JSON.stringify(curation))
 }
 
+// 手动改过角色的原图 URL 集合，单独存 key，不侵入 ebay-image-source-curation:v1 的条目结构；AI 建议永不覆盖这些条目。
+const ebayImageSourceTouchedKey=(listingId:string)=>`ebay-image-source-curation-touched:v1:${listingId}`
+
+function readEbayImageSourceTouched(listingId:string):Set<string> {
+  if(!listingId)return new Set()
+  try {
+    const value=JSON.parse(localStorage.getItem(ebayImageSourceTouchedKey(listingId))||'[]')
+    return new Set(Array.isArray(value)?value.map(String):[])
+  } catch { return new Set() }
+}
+
+// 用户手动勾选的参考图 URL 列表，按商品持久化；生成分镜时优先使用这些参照
+const ebayImageReferenceSelectionKey=(listingId:string)=>`ebay-image-reference-selection:v1:${listingId}`
+
+function readEbayImageReferenceSelection(listingId:string):string[] {
+  if(!listingId)return []
+  try {
+    const value=JSON.parse(localStorage.getItem(ebayImageReferenceSelectionKey(listingId))||'[]')
+    return Array.isArray(value)?value.map(String):[]
+  } catch { return [] }
+}
+
+function saveEbayImageReferenceSelection(listingId:string,urls:string[]) {
+  if(listingId)localStorage.setItem(ebayImageReferenceSelectionKey(listingId),JSON.stringify(urls))
+}
+
+// 用户在「02 选择原图」点击“确定”后提交的原图 URL 列表，按商品持久化；返回 null 表示从未确定过（用于严格闸门：未确定前不进入生成选择区）
+const ebaySourceSelectionKey=(listingId:string)=>`ebay-source-selection:v1:${listingId}`
+
+function readEbaySourceSelection(listingId:string):string[]|null {
+  if(!listingId)return null
+  try {
+    const raw=localStorage.getItem(ebaySourceSelectionKey(listingId))
+    if(raw===null)return null
+    const value=JSON.parse(raw)
+    return Array.isArray(value)?value.map(String):[]
+  } catch { return null }
+}
+
+function saveEbaySourceSelection(listingId:string,urls:string[]) {
+  if(listingId)localStorage.setItem(ebaySourceSelectionKey(listingId),JSON.stringify(urls))
+}
+
 function normalizeEbayImageSourceCuration(images:string[],saved:EbayImageSourceCuration):EbayImageSourceCuration {
   return Object.fromEntries(images.map((url,index)=>{
     const existing=saved[url]
-    const defaultEnabled=index<ebayImageSourceMaxReferences
+    const defaultEnabled=true
     const role=existing&&ebayImageSourceRoles.includes(existing.role)?existing.role:(index===0?'HERO':defaultEnabled?'DETAIL':'UNUSED')
     return [url,{enabled:role==='UNUSED'?false:(existing?.enabled??defaultEnabled),role}]
   })) as EbayImageSourceCuration
 }
 
-function ebayImageGenerationPlan(total:number):Record<EbayImagePurpose,number> {
-  const count=Math.min(20,Math.max(4,Math.round(total)||8))
-  const plan:Record<EbayImagePurpose,number>={HERO:1,DETAIL:1,PAIN_POINT:1,SCENE:1}
-  const cycle:EbayImagePurpose[]=['DETAIL','PAIN_POINT','SCENE','DETAIL','HERO','DETAIL','PAIN_POINT','SCENE']
-  for(let index=0;index<count-4;index+=1)plan[cycle[index%cycle.length]]+=1
-  return plan
+const ebayImageDefaultModelKey='ebay-image-default-model:v1'
+
+function readEbayImageDefaultModel() {
+  return localStorage.getItem(ebayImageDefaultModelKey)||''
 }
 
-function ebayImageShotPlan(total:number,content?:EbayContentOptimizationResult|null):EbayImageShot[] {
-  const counts=ebayImageGenerationPlan(total)
-  const templates:Record<EbayImagePurpose,string[]>={
-    HERO:[
-      'Show the complete sellable product in a straight-on, centered studio view on a pure white background. This is the primary listing image, so no props, text, packaging claims, measurements or decorative setting.',
-      'Show the complete sellable product from a clearly different three-quarter studio angle on a pure white background. Keep every visible product fact identical to the references.'
-    ],
-    DETAIL:[
-      'Create a close product-detail shot focused on one verified material, finish, construction joint, closure or included component. The exact visible detail must be supported by the reference images.',
-      'Create a different close product-detail shot focused on a second verified structure, side, back, installation point or functional feature. Do not reuse the previous detail angle or crop.',
-      'Create a product-detail shot that explains verified scale, assembly or included parts visually without any words, labels, measurement marks or invented accessories.'
-    ],
-    PAIN_POINT:[
-      'Create a product-led solution shot for one verified customer pain point. Make the relevant verified feature visually obvious through real use or construction, without before-and-after framing, claims or added text.',
-      'Create a distinctly different product-led solution shot for another verified customer pain point or buying reason. Change the camera task and the demonstrated feature, not just the background.'
-    ],
-    SCENE:[
-      'Place the exact verified product in one plausible, evidence-supported use scenario. Use a wide environmental composition while keeping the sellable product clearly dominant and recognizable.',
-      'Place the exact verified product in a second plausible, evidence-supported use scenario with a different viewpoint, distance and real activity. Do not repeat the previous scene composition.'
-    ]
-  }
-  const labels:Record<EbayImagePurpose,string[]>={
-    HERO:['白底正面主图','白底三分之四主图'],
-    DETAIL:['材质或工艺细节','结构或功能细节','安装与配件细节'],
-    PAIN_POINT:['痛点解决展示','购买理由展示'],
-    SCENE:['核心应用场景','第二应用场景']
-  }
-  const acceptance:Record<EbayImagePurpose,string>={
-    HERO:'完整商品主体、白底、无文字、无道具',
-    DETAIL:'展示指定已核实细节，且与其他细节图角度不同',
-    PAIN_POINT:'可见地对应已核实痛点或购买理由，不使用夸张文案',
-    SCENE:'真实可行的使用环境，商品主体清晰且占画面重点'
-  }
-  const prohibited:Record<EbayImagePurpose,string>={
-    HERO:'禁止场景、包装、促销元素、裁切主体',
-    DETAIL:'禁止仅换背景、重复裁切、凭空增加部件',
-    PAIN_POINT:'禁止前后对比、功效承诺、文字标签',
-    SCENE:'禁止改变产品事实、模糊商品主体、重复同一场景'
-  }
-  return ebayImagePurposes.flatMap(purpose=>Array.from({length:counts[purpose]},(_,index)=>{
-    const benefit=content?.benefits?.length?content.benefits[index%content.benefits.length]:undefined
-    const scenario=content?.scenarios?.length?content.scenarios[index%content.scenarios.length]:undefined
-    const baseInstruction=templates[purpose][index%templates[purpose].length]
-    const instruction=purpose==='PAIN_POINT'&&benefit
-      ? `${baseInstruction} The only customer problem to demonstrate is: ${benefit.painPoint}. Show this verified solution: ${benefit.solution}. Make this verified buyer benefit visible without text: ${benefit.customerBenefit}.`
-      :purpose==='SCENE'&&scenario
-        ? `${baseInstruction} The required use scenario is: ${scenario.title}. ${scenario.description}.`
-        :baseInstruction
-    const evidence=purpose==='PAIN_POINT'
-      ? benefit?`已核实痛点：${benefit.painPoint}；对应方案：${benefit.solution}；购买利益：${benefit.customerBenefit}。`:'未生成已核实痛点资料；仅可展示原图可直接证明的结构或功能，不得虚构痛点。'
-      :purpose==='SCENE'
-        ? scenario?`已核实应用场景：${scenario.title}；${scenario.description}。`:'未生成已核实应用场景；只能使用原图可直接证明的使用环境，不得虚构。'
-        :purpose==='DETAIL'
-          ? '仅展示原图中可见、已核实的结构、材质、尺寸或安装事实；镜头必须区别于其他详情图。'
-          : '完整展示原图可验证的商品主体和事实，不得加入任何未核实信息。'
-    return {purpose,index,total:counts[purpose],code:`${purpose}-${String(index+1).padStart(2,'0')}`,title:labels[purpose][index%labels[purpose].length],instruction,evidence,acceptance:acceptance[purpose],prohibited:prohibited[purpose]}
-  }))
-}
-
-const ebayImageUsageKey=()=>`ebay-image-model-usage:${new Date().toISOString().slice(0,7)}`
-
-function readEbayImageUsage():Record<string,number> {
-  try { return JSON.parse(localStorage.getItem(ebayImageUsageKey())||'{}') as Record<string,number> }
-  catch { return {} }
-}
-
-function saveEbayImageUsage(usage:Record<string,number>) {
-  localStorage.setItem(ebayImageUsageKey(),JSON.stringify(usage))
-}
-
-function ebayImageModelQualityScore(review:EbayImageCandidateReview){
-  return review.identityScore*.35+review.structuralScore*.25+review.factScore*.2+review.purposeScore*.2
-}
-
-function ebayImageCandidateStatus(review?:EbayImageCandidateReview){
-  if(!review)return '等待自动审核'
-  if(review.status==='PASSED')return `已通过 · 商品 ${review.identityScore} · 镜头 ${review.purposeScore} · 差异 ${review.diversityScore}`
-  return review.status==='REVIEW'?'自动审核未完成，暂不可采用':'未通过质量门槛，需重新生成'
-}
-
-function ImageNaturalizePanel({purposes,purpose,onPurpose,profile,onProfile,results,choices,busy,onRun,onConfirm}:{purposes:EbayImagePurpose[];purpose:EbayImagePurpose;onPurpose:(purpose:EbayImagePurpose)=>void;profile:RealShiftProfile;onProfile:(profile:RealShiftProfile)=>void;results:Partial<Record<EbayImagePurpose,RealShiftResult>>;choices:Partial<Record<EbayImagePurpose,'original'|'processed'>>;busy:string;onRun:()=>void;onConfirm:(choice:'original'|'processed')=>void}) {
-  const result=results[purpose]
-  return <>
-    <div className="ebay-naturalize-purpose">{purposes.map(value=><button type="button" className={purpose===value?'active':''} key={value} onClick={()=>onPurpose(value)}><b>{ebayImagePurposeLabels[value]}</b><small>{choices[value]?'✓ 最终版已确认':results[value]?'待对比确认':'待处理'}</small></button>)}</div>
-    <div className="ebay-naturalize-controls"><div><b>处理强度</b><button type="button" className={profile==='light'?'active':''} onClick={()=>onProfile('light')}><strong>轻度（推荐）</strong><small>轻微纹理与色彩微调，更适合商品图</small></button><button type="button" className={profile==='balanced'?'active':''} onClick={()=>onProfile('balanced')}><strong>均衡</strong><small>调整更明显，必须仔细人工核对细节</small></button></div><aside><b>处理边界</b><span>✓ 本地处理、保留尺寸与原图</span><span>✓ 输出前后对比与处理报告</span><span>✕ 不删除第三方水印</span><span>✕ 不承诺规避平台检测</span></aside></div>
-    <button className="primary ebay-naturalize-run" disabled={busy===`naturalize-image:${purpose}`} onClick={onRun}>{busy===`naturalize-image:${purpose}`?'本地处理中…':result?'按当前强度重新处理':'开始本地自然化处理'}</button>
-    {result&&<div className="ebay-naturalize-result"><div className="ebay-naturalize-compare"><figure><img src={result.originalDataUrl} alt="第二阶段确认稿"/><figcaption>第二阶段确认稿</figcaption></figure><figure><img src={result.processedDataUrl} alt="自然化处理图"/><figcaption>自然化处理图</figcaption></figure></div><div className="ebay-naturalize-report"><header><b>本地处理报告</b><small>参考值仅用于前后对比，不是 eBay 官方判定。</small></header><div><span><b>{Math.round((1-result.processedScore.risk)*100)}</b><small>自然度参考</small></span><span><b>{result.processedScore.entropy.toFixed(2)}</b><small>细节熵</small></span><span><b>{result.processedScore.high_frequency.toFixed(2)}</b><small>高频细节</small></span><span><b>{result.chosenIteration}</b><small>选中迭代</small></span></div><p>请确认商品形状、结构、颜色、材质、配件和文字均未发生错误。确认后才会成为最终本地优化图。</p><footer><button disabled={busy===`naturalize-confirm:${purpose}`} onClick={()=>onConfirm('original')}>{choices[purpose]==='original'?'✓ 已保留原稿':'保留第二阶段原稿'}</button><button className="primary" disabled={busy===`naturalize-confirm:${purpose}`} onClick={()=>onConfirm('processed')}>{choices[purpose]==='processed'?'✓ 已采用自然化图':'确认采用自然化图'}</button></footer></div></div>}
-  </>
-}
 
 function ebayContentTranslationSource(englishDescription:string) {
   return englishDescription.split(/\r?\n/).map(line=>line.trim()).filter(Boolean).map((english,index)=>({id:`P${String(index+1).padStart(3,'0')}`,english}))
@@ -316,18 +290,63 @@ function saveEbayResearchQueryPreference(storeId:string,listingId:string,prefere
   localStorage.setItem(ebayResearchQueryPreferenceKey(storeId,listingId),JSON.stringify(preference))
 }
 
+const ebayResearchQueryDropWords=new Set(['with','for','and','the','a','an','of','to','in','on','by','at','pcs','pc','pack','set','sets','lot','lots','free','shipping','new','hot','sale','best','selling','premium','professional','high','quality','durable','heavy','duty','convenient','wholesale','fashion','multi','functional'])
+const ebayResearchQueryInvalidSpecificValue=/^(?:does not apply|not applicable|n\/a|unbranded|unknown|other|none|no|-)$/i
+
+// 商品词单复数归一，仅用于核心名词锚定匹配，不影响输出大小写
+function ebayResearchQuerySingular(word:string):string {
+  if(word.length<=4)return word
+  if(/ves$/.test(word))return `${word.slice(0,-3)}fe`
+  if(/sses$/.test(word))return word.slice(0,-2)
+  if(/(?:ch|sh|x)es$/.test(word))return word.slice(0,-2)
+  if(/ies$/.test(word))return `${word.slice(0,-3)}y`
+  if(/s$/.test(word)&&!/us$|is$/.test(word))return word.slice(0,-1)
+  return word
+}
+
 function ebayResearchQuerySuggestion(listing:EbayListing):{query:string;source:Exclude<EbayResearchQuerySource,'MANUAL'>} {
+  const specifics=listing.itemSpecifics||[]
+  const specificValue=(pattern:RegExp)=>{const value=specifics.find(item=>pattern.test(item.name.trim()))?.value.replace(/\s+/g,' ').trim()||'';return ebayResearchQueryInvalidSpecificValue.test(value)?'':value}
+  const categoryAnchor=(listing.categoryName.split(/\s*>+\s*/).pop()||listing.categoryName).trim()
+  const fallback:{query:string;source:'CATEGORY'}={query:categoryAnchor.slice(0,120),source:'CATEGORY'}
   const original=(listing.originalTitle||listing.title).replace(/\([^)]*\)/g,' ').replace(/\s+/g,' ').trim()
-  const productType=(listing.itemSpecifics||[]).find(item=>/^(?:product\s*)?type$|^item\s*type$/i.test(item.name.trim()))?.value.replace(/\s+/g,' ').trim()||''
-  if(productType&&!/^(?:does not apply|not applicable|n\/a|unbranded|unknown|other)$/i.test(productType)&&original.toLowerCase().includes(productType.toLowerCase()))return {query:productType.slice(0,120),source:'PRODUCT_TYPE'}
-  const firstPhrase=(original.split(/\s*(?:,|;|\||\/|\s+-\s+)\s*/)[0]||original)
-    .replace(/^(?:(?:brand\s+new|new|convenient|premium|professional|high\s+quality|hot\s+sale|best\s+selling|durable|heavy\s+duty)\s+)+/i,'')
-    .replace(/^\d+(?:\.\d+)?\s*(?:inch(?:es)?|in\.?|cm|mm|ft|feet|foot|["”'])\s+/i,'')
-    .replace(/\b(?:item\s+code|sku)\s*[:#].*$/i,'')
-    .replace(/\s+/g,' ').trim()
-  const titleQuery=firstPhrase.split(' ').filter(Boolean).slice(0,6).join(' ')
-  if(titleQuery)return {query:titleQuery.slice(0,120),source:'TITLE'}
-  return {query:listing.categoryName.trim().slice(0,120),source:'CATEGORY'}
+  if(!original)return fallback
+  const brandTokens=new Set((specificValue(/^brand$/i).toLowerCase().match(/[a-z0-9]+/g)||[]))
+  const isDimensionToken=(token:string)=>/\d/.test(token)&&(/^\d+(?:\.\d+)?x\d/i.test(token)||/^[a-z]?\d+(?:\.\d+)?(?:["”']|in(?:ch(?:es)?)?\.?|cm|mm|ft|feet|foot|pcs?|packs?|ml|cl|l|oz|lb|kg|g|mah)?$/i.test(token))
+  const tokens=original.split(' ').map(raw=>raw.replace(/^[\s"'“”‘’()[\]{}.,;:!?|/\\&-]+|[\s"'“”‘’()[\]{}.,;:!?|/\\&-]+$/g,'')).filter(raw=>{
+    const lower=raw.toLowerCase()
+    if(!/[a-z0-9]/i.test(raw))return false
+    if(ebayResearchQueryDropWords.has(lower)||brandTokens.has(lower)||isDimensionToken(raw))return false
+    if(raw.includes('-')&&raw.split('-').every(part=>!part||ebayResearchQueryDropWords.has(part.toLowerCase())))return false
+    return true
+  })
+  if(tokens.length<2)return fallback
+  const type=specificValue(/^(?:product\s*)?type$|^item\s*type$/i)
+  const anchorText=type||categoryAnchor
+  const anchorTokens=(anchorText.toLowerCase().match(/[a-z0-9]+/g)||[]).map(ebayResearchQuerySingular).filter(token=>!ebayResearchQueryDropWords.has(token))
+  const lowered=tokens.map(token=>ebayResearchQuerySingular(token.toLowerCase()))
+  let anchorStart=-1
+  if(anchorTokens.length){
+    searchAnchor:for(let start=0;start+anchorTokens.length<=lowered.length;start+=1){
+      for(let offset=0;offset<anchorTokens.length;offset+=1)if(lowered[start+offset]!==anchorTokens[offset])continue searchAnchor
+      anchorStart=start;break
+    }
+  }
+  let queryTokens:string[]
+  let source:'PRODUCT_TYPE'|'TITLE'|'CATEGORY'
+  if(anchorStart>=0){
+    queryTokens=[...tokens.slice(Math.max(0,anchorStart-2),anchorStart),...tokens.slice(anchorStart,anchorStart+anchorTokens.length)]
+    source=type?'PRODUCT_TYPE':'TITLE'
+  }else if(type){
+    queryTokens=[...tokens.slice(0,2),...type.split(' ').filter(Boolean)]
+    source='PRODUCT_TYPE'
+  }else{
+    queryTokens=tokens.slice(0,3)
+    source='TITLE'
+  }
+  if(queryTokens.length<2){const extra=tokens.find(token=>!queryTokens.includes(token));if(extra)queryTokens=[...queryTokens,extra]}
+  const query=queryTokens.slice(0,5).join(' ').slice(0,120)
+  return query?{query,source}:fallback
 }
 
 
@@ -352,6 +371,14 @@ const productWarehouses: Array<{code:ProductWarehouseCode;name:string;kind:'SUPP
   {code:'1688',name:'1688',kind:'SUPPLY',description:'国内工厂、批发与阶梯价货源'},
   {code:'OZON',name:'Ozon',kind:'MARKET',description:'Ozon市场商品、成本与利润机会'}
 ]
+
+// AI采集模块四个货源平台的图标与主题色
+const aiCollectPlatformThemes: Record<ProductWarehouseCode,{color:string;icon:ReactNode}> = {
+  GIGACLOUD:{color:'#0891b2',icon:<><path d="M3 21V9l9-6 9 6v12"/><path d="M3 21h18"/><path d="M7 21v-8h10v8"/></>},
+  '1688':{color:'#f97316',icon:<><path d="M2 21h20"/><path d="M4 21V11l5 3v-3l5 3v-3l6 3v7"/></>},
+  ALIEXPRESS:{color:'#e11d48',icon:<><path d="M6 7h12l1.2 13H4.8L6 7z"/><path d="M9 7a3 3 0 016 0"/></>},
+  OZON:{color:'#2563eb',icon:<><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></>}
+}
 
 const warehouseRuleProfiles:Record<ProductWarehouseCode,string[]>={
   GIGACLOUD:['海外仓可售库存','仓库位置与配送区域','尾程费用与履约时效','重量体积与破损风险'],
@@ -511,8 +538,118 @@ function SupplyCandidateCard({ product, candidateKey, sourceCount, sourceText, c
   </article>
 }
 
+// 自动更新状态悬浮提示（右下角）：下载中显示百分比，失败显示原因，下载完成可一键重启安装；
+// 状态由主进程 app:update-status 推送（见 main.ts initAutoUpdate）
+function UpdateStatusPill() {
+  const [status, setStatus] = useState<{ phase: 'downloading' | 'downloaded' | 'error'; version: string; percent?: number; message?: string } | null>(null)
+  const [dismissed, setDismissed] = useState(false)
+  useEffect(() => {
+    return window.desktop.appInfo.onUpdateStatus(next => {
+      setDismissed(false)
+      setStatus(next)
+    })
+  }, [])
+  if (!status || dismissed) return null
+  return <div className={`update-pill update-pill--${status.phase}`} role="status" aria-live="polite">
+    {status.phase === 'downloading' && <span>正在下载新版本 v{status.version} · {status.percent ?? 0}%</span>}
+    {status.phase === 'downloaded' && <>
+      <span>新版本 v{status.version} 已下载完成</span>
+      <button type="button" className="update-pill-action" onClick={() => void window.desktop.appInfo.installUpdate()}>重启安装</button>
+    </>}
+    {status.phase === 'error' && <span title={status.message}>自动更新失败：{status.message || '未知错误'}</span>}
+    <button type="button" className="update-pill-close" aria-label="关闭提示" onClick={() => setDismissed(true)}>×</button>
+  </div>
+}
+
+function WatchSkillPage({ onBack }: { onBack: () => void }) {
+  type Task={id:string;videoPath:string;createdAt:string;status:'COMPLETED'|'FAILED';report:string;framePaths:string[];error?:string}
+  const [checks,setChecks]=useState<Record<string,boolean>>({})
+  const [busy,setBusy]=useState(false)
+  const [videoPath,setVideoPath]=useState('')
+  const [youtubeUrl,setYoutubeUrl]=useState('')
+  const [message,setMessage]=useState('正在读取真实安装状态…')
+  const [tasks,setTasks]=useState<Task[]>([])
+  const [activeTask,setActiveTask]=useState<Task|null>(null)
+  const refresh=async()=>{setBusy(true);try{const [result,history]=await Promise.all([window.desktop.system.watchSkillStatus(),window.desktop.system.watchSkillTasks()]);setChecks(result.checks);setTasks(history);setActiveTask(current=>current||history[0]||null);setMessage(result.checks.engine?`Watch Skill ${result.version} 已安装`:'Watch Skill 引擎未安装')}catch(reason){setMessage(reason instanceof Error?reason.message:String(reason))}finally{setBusy(false)}}
+  useEffect(()=>{void refresh()},[])
+  const pick=async()=>{const selected=await window.desktop.system.watchSkillPickVideo();if(selected)setVideoPath(selected)}
+  const analyze=async()=>{if(!videoPath)return;setBusy(true);setMessage('正在提取语音、媒体信息和关键帧…');try{const result=await window.desktop.system.watchSkillAnalyze(videoPath);setTasks(current=>[result,...current.filter(item=>item.id!==result.id)]);setActiveTask(result);setMessage('解析完成，报告和关键帧已保存')}catch(reason){setMessage(reason instanceof Error?reason.message:String(reason))}finally{setBusy(false)}}
+  const downloadAndAnalyze=async()=>{if(!youtubeUrl.trim())return;setBusy(true);setMessage('正在使用 Chrome Cookie 下载 YouTube 视频…');try{const downloaded=await window.desktop.system.watchSkillDownloadYoutube(youtubeUrl);setVideoPath(downloaded);setMessage('下载完成，正在解析语音和关键帧…');const result=await window.desktop.system.watchSkillAnalyze(downloaded);setTasks(current=>[result,...current.filter(item=>item.id!==result.id)]);setActiveTask(result);setMessage('YouTube 下载与 Watch 解析完成')}catch(reason){setMessage(reason instanceof Error?reason.message:String(reason))}finally{setBusy(false)}}
+  const installed=checks.engine&&checks.ffmpeg&&checks.whisper
+  const mark=(key:string,label:string)=>`${checks[key]?'✓':'×'} ${label}`
+  const fileName=(value:string)=>value.split(/[\\/]/).pop()||value
+  return <section className="ai-crossborder-page watch-skill-page"><div className="ai-crossborder-header"><h2>Watch Skill｜视频解析</h2><p>第一阶段：独立解析视频，提取语音、画面和时间戳</p></div><div className="watch-skill-workspace"><div className="watch-skill-panel"><div className="watch-skill-title"><b>Watch Skill</b><em className={installed?'ready':''}>{installed?'可用':'环境异常'}</em></div><p className="watch-skill-message">{message}</p><div className="watch-skill-checks"><span>{mark('engine','解析引擎')}</span><span>{mark('ffmpeg','FFmpeg')}</span><span>{mark('whisper','Whisper')}</span><span>{mark('ocr','OCR')}</span></div><div className="watch-skill-file"><input aria-label="YouTube 链接" value={youtubeUrl} onChange={event=>setYoutubeUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=..."/><button className="primary" onClick={()=>void downloadAndAnalyze()} disabled={busy||!installed||!youtubeUrl.trim()}>下载并解析</button></div><div className="watch-skill-file"><button onClick={()=>void pick()} disabled={busy}>选择本地视频</button><span>{videoPath||'支持 MP4、MOV、MKV、WebM'}</span></div><div className="watch-skill-actions"><button onClick={onBack}>返回 AI视频</button><button onClick={()=>void refresh()} disabled={busy}>{busy?'处理中…':'重新检查'}</button><button className="primary" onClick={()=>void analyze()} disabled={busy||!videoPath||!installed}>解析本地视频</button></div><small>YouTube 下载使用已授权的 Chrome Cookie；语音转录、关键帧和时间戳结果会持久保存。</small></div><aside className="watch-skill-history"><b>解析记录</b>{tasks.length?tasks.map(task=><button key={task.id} className={activeTask?.id===task.id?'active':''} onClick={()=>setActiveTask(task)}><span>{fileName(task.videoPath)}</span><small>{new Date(task.createdAt).toLocaleString('zh-CN')} · {task.status==='COMPLETED'?'完成':'失败'}</small></button>):<p>暂无解析记录</p>}</aside>{activeTask&&<section className="watch-skill-result"><header><b>{fileName(activeTask.videoPath)}</b><em>{activeTask.framePaths.length} 张关键帧</em></header><div className="watch-skill-frames">{activeTask.framePaths.map(frame=><img key={frame} src={`cross-media://watch/${encodeURIComponent(frame)}`} alt="视频关键帧" />)}</div><pre>{activeTask.error||activeTask.report}</pre></section>}</div></section>
+}
+
+function Resource2SkillModelPanel({busy,configured,apiKey,baseUrl,url,onApiKey,onUrl,onSave,onClear,onAnalyze}:{busy:boolean;configured:boolean;apiKey:string;baseUrl:string;url:string;onApiKey:(value:string)=>void;onUrl:(value:string)=>void;onSave:()=>void;onClear:()=>void;onAnalyze:()=>void}){
+  return <section className="resource2skill-model"><b>02 官方模型蒸馏</b><label>Gemini API Key<input aria-label="Gemini API Key" type="password" value={apiKey} onChange={event=>onApiKey(event.target.value)} placeholder={configured?'已配置，留空不修改':'输入 API Key'} autoComplete="new-password"/></label><div><button disabled={busy||!apiKey.trim()} onClick={onSave}>保存 Key</button><button disabled={busy||!configured} onClick={onClear}>清除 Key</button></div><label>API Base URL<input aria-label="API Base URL" value={baseUrl} readOnly/></label><label>YouTube URL<input aria-label="YouTube URL" value={url} onChange={event=>onUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=..."/></label><button className="primary" disabled={busy||!configured||!url.trim()} onClick={onAnalyze}>开始官方模型蒸馏</button><small>Key 使用系统安全存储；当前通过 api000.com 的 Gemini 兼容接口调用，可能产生费用。</small></section>
+}
+
+function Resource2SkillPage({onBack}:{onBack:()=>void}){
+  type Task={id:string;videoPath:string;createdAt:string;status:'COMPLETED'|'FAILED';report:string;framePaths:string[]}
+  type Draft={id:string;sourceTaskId:string;name:string;content:string;createdAt:string;updatedAt:string}
+  const [tasks,setTasks]=useState<Task[]>([]),[drafts,setDrafts]=useState<Draft[]>([]),[taskId,setTaskId]=useState(''),[active,setActive]=useState<Draft|null>(null)
+  const [domains,setDomains]=useState<string[]>([]),[domain,setDomain]=useState('general')
+  const [geminiKey,setGeminiKey]=useState(''),[modelConfigured,setModelConfigured]=useState(false),[baseUrl,setBaseUrl]=useState('https://api000.com'),[youtubeUrl,setYoutubeUrl]=useState('')
+  const [name,setName]=useState(''),[content,setContent]=useState(''),[message,setMessage]=useState('正在检查 Resource2Skill…'),[busy,setBusy]=useState(false)
+  useEffect(()=>{void(async()=>{try{const [status,history,items,model]=await Promise.all([window.desktop.system.resource2SkillStatus(),window.desktop.system.watchSkillTasks(),window.desktop.system.resource2SkillDrafts(),window.desktop.system.resource2SkillModelSettings()]);setTasks(history.filter(item=>item.status==='COMPLETED'));setTaskId(history.find(item=>item.status==='COMPLETED')?.id||'');setDomains(status.domains);setDomain(status.domains.includes('general')?'general':status.domains[0]||'');setModelConfigured(model.configured);setBaseUrl(model.baseUrl);setDrafts(items);if(items[0]){setActive(items[0]);setName(items[0].name);setContent(items[0].content)}setMessage(status.note)}catch(reason){setMessage(reason instanceof Error?reason.message:String(reason))}})()},[])
+  const selectDraft=(item:Draft)=>{setActive(item);setName(item.name);setContent(item.content);setMessage('已载入 Skill 草稿')}
+  const generate=async()=>{if(!taskId||!domain)return;setBusy(true);try{const item=await window.desktop.system.resource2SkillGenerate(taskId,domain);setDrafts(current=>[item,...current]);selectDraft(item);setMessage(`已按 ${domain} 官方领域约束生成适配草稿`)}catch(reason){setMessage(reason instanceof Error?reason.message:String(reason))}finally{setBusy(false)}}
+  const distillWatch=async()=>{if(!taskId||!domain)return;setBusy(true);setMessage('正在通过 api000 蒸馏 Watch Skill 报告…');try{const item=await window.desktop.system.resource2SkillDistillWatch({taskId,domain});setDrafts(current=>[item,...current.filter(value=>value.id!==item.id)]);selectDraft(item);setMessage('Gemini 蒸馏完成，已加入内部 Skill 库')}catch(reason){setMessage(reason instanceof Error?reason.message:String(reason))}finally{setBusy(false)}}
+  const save=async()=>{if(!active)return;setBusy(true);try{const item=await window.desktop.system.resource2SkillSave({id:active.id,name,content});setActive(item);setDrafts(current=>[item,...current.filter(value=>value.id!==item.id)]);setMessage(`已保存：${item.filePath}`)}catch(reason){setMessage(reason instanceof Error?reason.message:String(reason))}finally{setBusy(false)}}
+  const saveGeminiKey=async()=>{setBusy(true);try{const result=await window.desktop.system.resource2SkillModelSettingsSave({apiKey:geminiKey,baseUrl});setModelConfigured(result.configured);setBaseUrl(result.baseUrl);setGeminiKey('');setMessage('Gemini API Key 已安全保存')}catch(reason){setMessage(reason instanceof Error?reason.message:String(reason))}finally{setBusy(false)}}
+  const clearGeminiKey=async()=>{setBusy(true);try{await window.desktop.system.resource2SkillModelSettingsClear();setModelConfigured(false);setMessage('Gemini API Key 已清除')}finally{setBusy(false)}}
+  const officialAnalyze=async()=>{setBusy(true);setMessage('正在调用 Resource2Skill 官方 Gemini 视频蒸馏…');try{const item=await window.desktop.system.resource2SkillOfficialAnalyze({url:youtubeUrl,domain});setDrafts(current=>[item,...current]);selectDraft(item);setMessage('官方模型蒸馏完成')}catch(reason){setMessage(reason instanceof Error?reason.message:String(reason))}finally{setBusy(false)}}
+  const modelPanel=<Resource2SkillModelPanel busy={busy} configured={modelConfigured} apiKey={geminiKey} baseUrl={baseUrl} url={youtubeUrl} onApiKey={setGeminiKey} onUrl={setYoutubeUrl} onSave={()=>void saveGeminiKey()} onClear={()=>void clearGeminiKey()} onAnalyze={()=>void officialAnalyze()}/>
+  const fileName=(value:string)=>value.split(/[\\/]/).pop()||value
+  if(!domains.length)return modelPanel
+  return <section className="ai-crossborder-page resource2skill-page"><div className="ai-crossborder-header"><h2>Resource2Skill｜Skill蒸馏</h2><p>将 Watch Skill 解析记录转换为可编辑、可发布的 SKILL.md</p></div><div className="resource2skill-workspace"><section className="resource2skill-source"><b>01 选择来源与官方领域</b><select aria-label="Watch Skill来源" value={taskId} onChange={event=>setTaskId(event.target.value)}><option value="">请选择 Watch Skill 解析记录</option>{tasks.map(task=><option key={task.id} value={task.id}>{fileName(task.videoPath)} · {new Date(task.createdAt).toLocaleString('zh-CN')}</option>)}</select><select aria-label="Resource2Skill领域" value={domain} onChange={event=>setDomain(event.target.value)}>{domains.map(item=><option key={item} value={item}>{item}</option>)}</select><button disabled={!taskId||!domain||busy} onClick={()=>void generate()}>{busy?'处理中…':'生成本地草稿'}</button><button className="primary" disabled={!taskId||!domain||!modelConfigured||busy} onClick={()=>void distillWatch()}>{busy?'蒸馏中…':'Gemini 蒸馏'}</button><p>{message}</p><small>Gemini 蒸馏使用 Watch Skill 时间轴报告和 api000 安全存储的 Key，不依赖 API 直接读取 YouTube。</small></section><aside className="resource2skill-list"><b>内部 Skill 库</b>{drafts.map(item=><button key={item.id} className={active?.id===item.id?'active':''} onClick={()=>selectDraft(item)}><span>{item.name}</span><small>{new Date(item.updatedAt).toLocaleString('zh-CN')}</small></button>)}</aside>{modelPanel}{active&&<section className="resource2skill-editor"><header><input aria-label="Skill名称" value={name} onChange={event=>setName(event.target.value)}/><div><button onClick={onBack}>返回 AI视频</button><button className="primary" disabled={busy} onClick={()=>void save()}>保存 SKILL.md</button></div></header><textarea aria-label="SKILL.md内容" value={content} onChange={event=>setContent(event.target.value)}/></section>}</div></section>
+}
+
 export function App() {
-  const [page, setPage] = useState<AppPage>('warehouse-dashboard')
+  const { signOut, profile } = useSession()
+  // 两级使用权限：一级菜单访问判断（主帐号经 hasPermission 直通）
+  const canMenu = (code: string) => {
+    const node = MENU_PERMISSION_TREE.find(n => n.code === code)
+    return !!node && hasMenuAccess(c => hasPermission(profile, c), node)
+  }
+  const PAGE_PERM: Partial<Record<AppPage, string>> = {
+    ebay: 'menu.crossborder.login',
+    'ebay-title': 'menu.crossborder.title',
+    'online-advisor': 'menu.advisor.online',
+    'image-studio': 'menu.art.studio',
+    realshift: 'menu.art.realshift',
+    'ops-knowledge': 'menu.planet.ops',
+    'compliance-knowledge': 'menu.planet.compliance',
+    'system-admin': 'menu.hq.admin',
+    finance: 'menu.hq.finance',
+    'ai-support': 'menu.hq.support',
+    feishu: 'menu.hq.feishu',
+    'ai-employee-workspace': 'menu.employee',
+    'ai-employee-listing': 'menu.employee',
+    'ai-employee-guardian': 'menu.employee',
+    'ai-sample-library': 'menu.advisor'
+  }
+  const pageAllowed = (p: AppPage) => { const code = PAGE_PERM[p]; return !code || hasPermission(profile, code) }
+  const [page, setPage] = useState<AppPage>('dashboard')
+  // AI员工独立工作台：角色 chips 行跨工作台导航（占位员工在组件层灰态，不会触达）
+  const navigateEmployeePosition = (name: string) => {
+    if (name === '知识库守卫') setPage('ai-employee-guardian')
+    else if (name === 'Listing精造师') setPage('ai-employee-listing')
+    else setPage('ai-employee-workspace')
+  }
+  // 主题模式：浅色/深色/跟随系统（system 实时监听 prefers-color-scheme），持久化 app-theme:v1
+  const [appTheme,setAppTheme]=useState<'light'|'dark'|'system'>(()=>{try{const saved=localStorage.getItem('app-theme:v1');return saved==='dark'||saved==='system'?saved:'light'}catch{return 'light'}})
+  const [systemDark,setSystemDark]=useState(()=>window.matchMedia('(prefers-color-scheme: dark)').matches)
+  useEffect(()=>{const query=window.matchMedia('(prefers-color-scheme: dark)');const onChange=(event:MediaQueryListEvent)=>setSystemDark(event.matches);query.addEventListener('change',onChange);return()=>query.removeEventListener('change',onChange)},[])
+  const [themeMenuOpen,setThemeMenuOpen]=useState(false)
+  const effectiveDark=appTheme==='dark'||(appTheme==='system'&&systemDark)
+  useEffect(()=>{if(effectiveDark){document.documentElement.dataset.theme='dark'}else{delete document.documentElement.dataset.theme};try{localStorage.setItem('app-theme:v1',appTheme)}catch{}},[effectiveDark,appTheme])
+  const themeMenuOptions=[
+    {id:'system' as const,label:'跟随系统',icon:<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>},
+    {id:'light' as const,label:'浅色',icon:<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>},
+    {id:'dark' as const,label:'深色',icon:<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79Z"/></svg>}
+  ]
   const [platform, setPlatform] = useState<Platform>('1688')
   const [state, setState] = useState<BrowserState | null>(null)
   const [browserTabs, setBrowserTabs] = useState<BrowserTab[]>([
@@ -1150,7 +1287,7 @@ export function App() {
   const selectionModulePages: AppPage[] = ['warehouse-dashboard','tasks','ozon','sourcing','comparison','review','catalog']
   const inSelectionModule = selectionModulePages.includes(page)
   const artModulePages: AppPage[] = ['image-studio','realshift']
-  const inArtModule = artModulePages.includes(page)
+  const aiHqChildPages: AppPage[] = ['system-admin','finance','ai-support','feishu','amazon-data-source','llm-keys']
   const activeWarehouseProfile=productWarehouses.find(item=>item.code===activeWarehouse)!
   const warehouseSelectionItems=selectionItems.filter(item=>item.platformCode===activeWarehouse)
   const warehouseComparisons=activeWarehouse==='OZON'?comparisons:[]
@@ -1171,31 +1308,82 @@ export function App() {
   const mergeWarehouseSelections=(next:SelectionCatalogItem[])=>setSelectionItems(current=>[...current.filter(item=>item.platformCode!==activeWarehouse),...next])
 
   return <div className="app-shell">
+    <UpdateStatusPill />
+    <div className="app-titlebar">
+      <strong className="app-titlebar-title">砚都跨境</strong>
+      <div className="app-titlebar-actions">
+        <button type="button" title="刷新页面" onClick={() => window.location.reload()}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>刷新
+        </button>
+        <div className="titlebar-theme-wrap">
+          <button type="button" title="主题" aria-haspopup="menu" aria-expanded={themeMenuOpen} onClick={()=>setThemeMenuOpen(value=>!value)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor" stroke="none"/></svg>主题
+          </button>
+          {themeMenuOpen&&<>
+            <div className="titlebar-menu-backdrop" onClick={()=>setThemeMenuOpen(false)}/>
+            <div className="titlebar-theme-menu" role="menu" aria-label="主题">
+              {themeMenuOptions.map(item=><button key={item.id} type="button" role="menuitemradio" aria-checked={appTheme===item.id} className={appTheme===item.id?'active':''} onClick={()=>{setAppTheme(item.id);setThemeMenuOpen(false)}}>{item.icon}{item.label}{appTheme===item.id&&<span className="check">✓</span>}</button>)}
+            </div>
+          </>}
+        </div>
+        <button type="button" title="设置" onClick={()=>setPage('system-admin')}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>设置
+        </button>
+        <button type="button" title="退出登录" onClick={()=>void signOut()}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>退出
+        </button>
+        <WindowTitleControls />
+      </div>
+    </div>
     <aside className="sidebar">
-      <div className="brand"><span className="brand-mark">砚</span><div><strong>砚都跨境</strong><small>Sourcing Desk</small></div></div>
+      <div className="brand"><span className="brand-mark">砚</span><div><strong>砚都跨境</strong><small>跨境电商选品与素材工作台</small></div></div>
       <nav>
-        <NavButton label="eBay平台" icon="ebay" active={page==='ebay'} onClick={()=>setPage('ebay')} />
-        <NavButton label="合规知识库" icon="compliance" active={page==='compliance-knowledge'} onClick={()=>setPage('compliance-knowledge')} />
-        <NavButton label="旧版内容" icon="archive" active={page!=='ebay'&&page!=='compliance-knowledge'} onClick={()=>setPage('warehouse-dashboard')} />
+        {canMenu('menu.crossborder') && <NavButton label="AI跨境" icon="ai-crossborder" active={page==='ai-crossborder'||page==='ebay-hub'||page==='ebay'||page==='ebay-title'} onClick={()=>setPage('ai-crossborder')} />}
+        {aiModuleNav.filter(item=>canMenu(item.perm)).map(item=><NavButton key={item.page} label={item.label} icon={item.icon} active={page===item.page||(item.page==='ai-advisor'&&page==='online-advisor')||(item.page==='ai-planet'&&(page==='compliance-knowledge'||page==='ops-knowledge'))||(item.page==='ai-hq'&&aiHqChildPages.includes(page))||(item.page==='ai-art'&&artModulePages.includes(page))||(item.page==='ai-employee'&&(page==='ai-employee-workspace'||page==='ai-employee-listing'||page==='ai-employee-guardian'))} onClick={()=>setPage(item.page)} />)}
       </nav>
     </aside>
 
     <main>
       {/* 导航功能统一直接渲染工作区，不使用占用顶部空间的全局页面头部。 */}
-      {page!=='ebay'&&page!=='compliance-knowledge'&&<div className="legacy-module-nav">
-        <span className="legacy-module-title"><b>旧版内容</b><small>原功能归档</small></span>
-        <button className={inSelectionModule?'active':''} onClick={()=>setPage('warehouse-dashboard')}>供应仓库</button>
-        <button className={inArtModule?'active':''} onClick={()=>setPage('image-studio')}>AI美工</button>
-        <button className={page==='publishing'?'active':''} onClick={()=>setPage('publishing')}>平台运营</button>
-        <button className={page==='procurement'?'active':''} onClick={()=>setPage('procurement')}>AI采购</button>
-        <button className={page==='finance'?'active':''} onClick={()=>setPage('finance')}>AI财务</button>
-        <button className={page==='ai-support'?'active':''} onClick={()=>setPage('ai-support')}>AI客服</button>
-        <button className={page==='feishu'?'active':''} onClick={()=>setPage('feishu')}>AI飞书</button>
-      </div>}
-      {page==='ebay'&&<EbayPlatformWorkspace/>}
-      {page==='compliance-knowledge'&&<ComplianceKnowledgePage/>}
-      {inSelectionModule && <><div className="warehouse-module-nav">{productWarehouses.map(item=><button key={item.code} className={page!=='warehouse-dashboard'&&activeWarehouse===item.code?'active':''} onClick={()=>void activateProductWarehouse(item.code,'tasks')}><span><b>{item.name}</b><small>{item.description}</small></span><em>{warehouseCount(item.code)}</em></button>)}</div>{page!=='warehouse-dashboard'&&<div className="selection-module-nav warehouse-flow-nav"><button className={page==='tasks'?'active':''} onClick={()=>setPage('tasks')}><span>AI采集</span></button><button className={page==='ozon'?'active':''} onClick={()=>setPage('ozon')}><span>采集侯选</span></button><button className={page==='comparison'?'active':''} onClick={()=>setPage('comparison')}><span>优选产品</span>{warehouseSelectionItems.length>0&&<em>{warehouseSelectionItems.length}</em>}</button>{activeWarehouse!=='GIGACLOUD'&&<button className={page==='sourcing'?'active':''} onClick={()=>setPage('sourcing')}><span>AI比价</span>{warehouseComparisons.length>0&&<em>{warehouseComparisons.length}</em>}</button>}<button className={page==='review'?'active':''} onClick={()=>setPage('review')}><span>正式入库</span>{warehouseCount(activeWarehouse)>0&&<em>{warehouseCount(activeWarehouse)}</em>}</button></div>}</>}
-      {inArtModule && <div className="selection-module-nav art-module-nav"><button className={page==='image-studio'?'active':''} onClick={()=>setPage('image-studio')}><span>AI做图</span></button><button className={page==='realshift'?'active':''} onClick={()=>setPage('realshift')}><span>AI洗图</span></button></div>}
+      {page==='ebay'&&pageAllowed('ebay')&&<EbayPlatformWorkspace/>}
+      {page==='ebay-title'&&pageAllowed('ebay-title')&&<EbayPlatformWorkspace initialTab="optimize" lockTitleMode/>}
+      {page==='ai-crossborder'&&canMenu('menu.crossborder')&&<section className="ai-crossborder-page">
+        <div className="ai-crossborder-header"><h2>AI跨境</h2><p>7大跨境电商平台智能运营中心</p></div>
+        <div className="ai-crossborder-grid">
+          {[
+            {name:'Amazon',sub:'',color:'#FF9900',icon:<svg viewBox="0 0 64 30" fill="none"><text x="32" y="15" textAnchor="middle" fontFamily="Arial,Helvetica,sans-serif" fontWeight="700" fontSize="14" fill="#232F3E">amazon</text><path d="M15 21c8 5 26 5 34 0" stroke="#FF9900" strokeWidth="2.4" strokeLinecap="round"/><path d="M46 19.5c2.2 1.3 3 2.6 2.4 4" stroke="#FF9900" strokeWidth="2" strokeLinecap="round"/></svg>},
+            {name:'eBay',sub:'',color:'#E53238',icon:<svg viewBox="0 0 52 24" fill="none"><text x="26" y="17" textAnchor="middle" fontFamily="Arial,Helvetica,sans-serif" fontWeight="700" fontSize="16"><tspan fill="#E53238">e</tspan><tspan fill="#0064D2">b</tspan><tspan fill="#F5AF02">a</tspan><tspan fill="#86B817">y</tspan></text></svg>},
+            {name:'Ozon',sub:'',color:'#005BFF',icon:<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9.5" fill="#005BFF"/><path d="M7.5 9.5a5.5 5.5 0 015-3" stroke="#8FBBFF" strokeWidth="2" strokeLinecap="round"/></svg>},
+            {name:'Temu',sub:'',color:'#FB7701',icon:<svg viewBox="0 0 24 24" fill="none"><path d="M5.5 8.5h13L17 20H7L5.5 8.5z" fill="#FB7701"/><path d="M9 8.5V7a3 3 0 016 0v1.5" stroke="#FB7701" strokeWidth="2" strokeLinecap="round"/><path d="M9.5 13h5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round"/></svg>},
+            {name:'TikTok',sub:'',color:'#010101',icon:<svg viewBox="0 0 24 24" fill="none"><path d="M14 4v10.5a3.5 3.5 0 11-3-3.46" stroke="#25F4EE" strokeWidth="2.2" strokeLinecap="round" transform="translate(-0.9,0.9)"/><path d="M14 4v10.5a3.5 3.5 0 11-3-3.46" stroke="#FE2C55" strokeWidth="2.2" strokeLinecap="round" transform="translate(0.9,-0.9)"/><path d="M14 4v10.5a3.5 3.5 0 11-3-3.46" stroke="#010101" strokeWidth="2.2" strokeLinecap="round"/><path d="M14 4c.5 2.4 2.4 4 4.8 4.2" stroke="#010101" strokeWidth="2.2" strokeLinecap="round"/></svg>},
+            {name:'eMAG',sub:'',color:'#D91E2E',icon:<svg viewBox="0 0 56 24" fill="none"><text x="28" y="17" textAnchor="middle" fontFamily="Arial,Helvetica,sans-serif" fontWeight="700" fontSize="15" fill="#D91E2E">eMAG</text></svg>},
+            {name:'Lazada',sub:'',color:'#0F146D',icon:<svg viewBox="0 0 60 24" fill="none"><text x="30" y="17" textAnchor="middle" fontFamily="Arial,Helvetica,sans-serif" fontWeight="700" fontSize="14" fill="#0F146D">Lazada</text></svg>}
+          ].map(platform=>{
+            if(platform.name==='eBay'&&!canMenu('menu.crossborder'))return null
+            const target=platform.name==='eBay'?('ebay-hub' as AppPage):undefined
+            return <div className={`ai-crossborder-card${target?' clickable':''}`} key={platform.name} onClick={target?()=>setPage(target):undefined}>
+              <span className="ai-crossborder-logo" style={{color:platform.color,background:`${platform.color}14`,borderColor:`${platform.color}30`}}>{platform.icon}</span>
+              <b>{platform.name}</b>
+              {platform.sub&&<small>{platform.sub}</small>}
+              <em className={target?'ready':''}>{target?'进入平台':'即将上线'}</em>
+            </div>
+          })}
+        </div>
+      </section>}
+      {page==='ebay-hub'&&<section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>eBay</h2><p>eBay平台智能运营中心</p></div><div className="ai-crossborder-entries">{hasPermission(profile,'menu.crossborder.login')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('ebay')}><span className="ai-crossborder-logo" style={{color:'#E53238',background:'#E5323814',borderColor:'#E5323830'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.85 12.15L19 4"/><path d="M18 5l2 2"/><path d="M15 8l2 2"/></svg></span><b>平台登录</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.crossborder.title')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('ebay-title')}><span className="ai-crossborder-logo" style={{color:'#0064D2',background:'#0064D214',borderColor:'#0064D230'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg></span><b>标题优化</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.crossborder.desc')&&<div className="ai-crossborder-card"><span className="ai-crossborder-logo" style={{color:'#f59e0b',background:'#f59e0b14',borderColor:'#f59e0b30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h8"/></svg></span><b>描述优化</b><em>即将上线</em></div>}{hasPermission(profile,'menu.crossborder.image')&&<div className="ai-crossborder-card"><span className="ai-crossborder-logo" style={{color:'#86B817',background:'#86B81714',borderColor:'#86B81730'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M4 17l5-5 4 4 2-2 5 4"/></svg></span><b>图片优化</b><em>即将上线</em></div>}</div></section>}
+      {(()=>{const current=aiModuleNav.find(item=>item.page===page);if(!current)return null;if(!canMenu(current.perm))return null;if(page==='dashboard')return <Dashboard/>;if(page==='ai-advisor')return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>AI参谋</h2><p>选品与运营决策支持入口</p></div><div className="ai-crossborder-entries">{[{label:'报告样例库',target:'ai-sample-library' as AppPage,color:'#0ea5e9',icon:<><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><path d="M9 7h7M9 11h5"/></>},{label:'在线参谋',target:'online-advisor' as AppPage,color:'#ef4444',icon:<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>},{label:'竞品分析',color:'#f59e0b',icon:<><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></>},{label:'产品定价',color:'#10b981',icon:<><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.83z"/><path d="M7 7h.01"/></>},{label:'类目优选',color:'#06b6d4',icon:<><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></>},{label:'数据复盘',color:'#3b82f6',icon:<><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></>},{label:'产品仓库',color:'#8b5cf6',icon:<><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></>},{label:'物流成本',color:'#ec4899',icon:<><rect x="1" y="3" width="15" height="13"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></>}].map(card=>{if(card.label==='在线参谋'&&!hasPermission(profile,'menu.advisor.online'))return null;const target='target' in card?card.target:undefined;return <div className={`ai-crossborder-card${target?' clickable':''}`} key={card.label} onClick={target?()=>setPage(target):undefined}><span className="ai-crossborder-logo" style={{color:card.color,background:`${card.color}14`,borderColor:`${card.color}30`}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{card.icon}</svg></span><b>{card.label}</b><em className={target?'ready':undefined}>{target?'进入':'即将上线'}</em></div>})}</div></section>;if(page==='ai-employee')return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>AI员工</h2><p>跨境电商全角色AI员工入口</p></div><div className="ai-crossborder-entries">{[{label:'在线参谋长',color:'#ef4444',icon:<><path d="M12 2l2.4 4.8 5.6.6-4.2 3.7 1.2 5.4-5-2.9-5 2.9 1.2-5.4L4 7.4l5.6-.6z"/><path d="M5 21h14"/></>},{label:'产品分析师',target:'ai-employee-workspace' as AppPage,color:'#0ea5e9',icon:<><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><path d="M7.5 13.5l2.5-3 2 2 2.5-4"/></>},{label:'Listing精造师',target:'ai-employee-listing' as AppPage,color:'#10b981',icon:<><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8"/></>},{label:'图片设计师',color:'#8b5cf6',icon:<><circle cx="12" cy="12" r="10"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16" cy="10" r="1"/><path d="M12 22a2.5 2.5 0 002.2-3.7c-.6-1.1.2-2.3 1.4-2.3H17a5 5 0 005-5"/></>},{label:'视频创作师',color:'#f97316',icon:<><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></>},{label:'物流精算师',color:'#06b6d4',icon:<><rect x="1" y="3" width="15" height="13"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></>},{label:'跨境会计师',color:'#3b82f6',icon:<><circle cx="12" cy="12" r="10"/><path d="M12 6v12"/><path d="M16 8.5c-.8-1-2.3-1.5-4-1.5-2.2 0-4 1.1-4 2.5s1.8 2 4 2.5c2.2.5 4 1.1 4 2.5s-1.8 2.5-4 2.5c-1.7 0-3.2-.5-4-1.5"/></>},{label:'金牌客服官',color:'#ec4899',icon:<><path d="M3 18v-6a9 9 0 0118 0v6"/><path d="M21 19a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3v5zM3 19a2 2 0 002 2h1a2 2 0 002-2v-3a2 2 0 00-2-2H3v5z"/></>},{label:'知识库守卫',target:'ai-employee-guardian' as AppPage,color:'#14b8a6',icon:<><path d="M12 2l8 3v6c0 5-3.4 8.6-8 11-4.6-2.4-8-6-8-11V5z"/><path d="M12 8.5c-1-.8-2.3-1-3.5-.8v6c1.2-.2 2.5 0 3.5.8 1-.8 2.3-1 3.5-.8v-6c-1.2-.2-2.5 0-3.5.8z"/><path d="M12 8.5v6"/></>}].map(card=>{const target='target' in card?card.target:undefined;return <div className={`ai-crossborder-card${target?' clickable':''}`} key={card.label} onClick={target?()=>setPage(target):undefined}><span className="ai-crossborder-logo" style={{color:card.color,background:`${card.color}14`,borderColor:`${card.color}30`}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{card.icon}</svg></span><b>{card.label}</b><em className={target?'ready':undefined}>{target?'进入':'即将上线'}</em></div>})}</div></section>;if(page==='ai-art')return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>AI美工</h2><p>商品视觉生成与图片优化入口</p></div><div className="ai-crossborder-entries">{hasPermission(profile,'menu.art.studio')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('image-studio')}><span className="ai-crossborder-logo" style={{color:'#e11d48',background:'#e11d4814',borderColor:'#e11d4830'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M4 17l5-5 4 4 2-2 5 4"/></svg></span><b>AI生图</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.art.realshift')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('realshift')}><span className="ai-crossborder-logo" style={{color:'#9333ea',background:'#9333ea14',borderColor:'#9333ea30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 18l7-7M9 5l1 2 2 1-2 1-1 2-1-2-2-1 2-1zM17 12l1.2 2.8L21 16l-2.8 1.2L17 20l-1.2-2.8L13 16l2.8-1.2z"/><path d="M5 21l-2-2 9-9 2 2z"/></svg></span><b>AI洗图</b><em className="ready">进入</em></div>}</div></section>;if(page==='ai-hq')return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>AI总部</h2><p>管理与服务功能入口</p></div><div className="ai-crossborder-entries">{hasPermission(profile,'menu.hq.finance')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('finance')}><span className="ai-crossborder-logo" style={{color:'#2563eb',background:'#2563eb14',borderColor:'#2563eb30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h16M6 17V9M10 17V5M14 17v-4M18 17V7"/></svg></span><b>AI财务</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.hq.support')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('ai-support')}><span className="ai-crossborder-logo" style={{color:'#0891b2',background:'#0891b214',borderColor:'#0891b230'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 13v-2a8 8 0 0116 0v2M4 13h3v6H5a2 2 0 01-2-2v-2a2 2 0 011-2zM20 13h-3v6h2a2 2 0 002-2v-2a2 2 0 00-1-2zM17 19c0 2-2 2-5 2"/></svg></span><b>AI客服</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.hq.feishu')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('feishu')}><span className="ai-crossborder-logo" style={{color:'#7c3aed',background:'#7c3aed14',borderColor:'#7c3aed30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 12h8M12 8v8"/></svg></span><b>AI飞书</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.hq.vpn')&&<div className="ai-crossborder-card clickable" onClick={()=>void window.desktop.system.openVpnPanel()}><span className="ai-crossborder-logo" style={{color:'#0f766e',background:'#0f766e14',borderColor:'#0f766e30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a9 9 0 109 9"/><path d="M12 3a9 9 0 019 9M3 12h18M12 3c2.2 2.5 3.3 5.5 3.3 9S14.2 18.5 12 21M12 3C9.8 5.5 8.7 8.5 8.7 12S9.8 18.5 12 21"/></svg></span><b>翻墙管理</b><em className="ready">进入</em></div>}<div className="ai-crossborder-card clickable" onClick={()=>setPage('llm-keys')}><span className="ai-crossborder-logo" style={{color:'#d97706',background:'#d9770614',borderColor:'#d9770630'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg></span><b>大模型API Key</b><em className="ready">进入</em></div>{hasPermission(profile,'menu.hq.admin')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('system-admin')}><span className="ai-crossborder-logo" style={{color:'#64748b',background:'#64748b14',borderColor:'#64748b30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span><b>系统管理</b><em className="ready">进入</em></div>}</div></section>;if(page==='ai-planet')return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>AI星球</h2><p>聚合AI能力入口</p></div><div className="ai-crossborder-entries"><div className="ai-crossborder-card"><span className="ai-crossborder-logo" style={{color:'#7c3aed',background:'#7c3aed14',borderColor:'#7c3aed30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 4.5A3.5 3.5 0 006 8v1a3 3 0 00-2 2.83V13a3 3 0 002 2.83V17a3 3 0 003 3h1V4.5z"/><path d="M14.5 4.5A3.5 3.5 0 0118 8v1a3 3 0 012 2.83V13a3 3 0 01-2 2.83V17a3 3 0 01-3 3h-1V4.5z"/><path d="M10 8H8.5A2.5 2.5 0 006 10.5M14 8h1.5a2.5 2.5 0 012.5 2.5M10 15H8.5A2.5 2.5 0 016 12.5M14 15h1.5a2.5 2.5 0 002.5-2.5"/></svg></span><b>MaxKB智体</b></div>{hasPermission(profile,'menu.planet.ops')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('ops-knowledge')}><span className="ai-crossborder-logo" style={{color:'#2563eb',background:'#2563eb14',borderColor:'#2563eb30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><path d="M9 7h7M9 11h5"/></svg></span><b>知识库</b><small>智能体知识库 · 自定义知识库</small><em className="ready">进入</em></div>}{hasPermission(profile,'menu.planet.compliance')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('compliance-knowledge')}><span className="ai-crossborder-logo" style={{color:'#0d9488',background:'#0d948814',borderColor:'#0d948830'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l7 3v5c0 4.8-2.8 8.2-7 10-4.2-1.8-7-5.2-7-10V6z"/><path d="M9 12l2 2 4-5"/></svg></span><b>合规知识库</b><em className="ready">进入</em></div>}</div></section>;if(page==='ai-collect')return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>AI采集</h2><p>选择货源平台，开始智能采集</p></div><div className="ai-crossborder-entries">{productWarehouses.map(item=>{const collectPerm:Record<string,string>={GIGACLOUD:'menu.collect.gigacloud','1688':'menu.collect.1688',ALIEXPRESS:'menu.collect.aliexpress',OZON:'menu.collect.ozon'};if(!hasPermission(profile,collectPerm[item.code]))return null;const theme=aiCollectPlatformThemes[item.code];return <div className="ai-crossborder-card clickable" key={item.code} onClick={()=>void activateProductWarehouse(item.code,'tasks')}><span className="ai-crossborder-logo" style={{color:theme.color,background:`${theme.color}14`,borderColor:`${theme.color}30`}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{theme.icon}</svg></span><b>{item.name}</b><small>{item.description}</small><em className="ready">进入</em></div>})}</div></section>;return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>{current.label}</h2><p>功能建设中…</p></div></section>})()}
+      {page==='ai-video'&&canMenu('menu.video')&&<section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>AI视频</h2><p>视频理解与智能创作能力</p></div><div className="ai-crossborder-entries"><div className="ai-crossborder-card clickable" onClick={()=>setPage('ai-video-watch')}><b>Watch Skill</b><small>独立解析视频</small><em className="ready">进入</em></div><div className="ai-crossborder-card clickable" onClick={()=>setPage('ai-video-resource')}><b>Resource2Skill</b><small>生成 SKILL.md</small><em className="ready">进入</em></div></div></section>}
+      {page==='ai-video-watch'&&pageAllowed('ai-video-watch')&&<WatchSkillPage onBack={()=>setPage('ai-video')} />}
+      {page==='ai-video-resource'&&canMenu('menu.video')&&<Resource2SkillPage onBack={()=>setPage('ai-video')} />}
+      {page==='online-advisor'&&pageAllowed('online-advisor')&&<OnlineAdvisor/>}
+      {page==='ai-employee-workspace'&&pageAllowed('ai-employee-workspace')&&<AIEmployee position="选品调研员" onBackToHub={()=>setPage('ai-employee')} onSelfLink={()=>setPage('ai-employee-workspace')} onNavigatePosition={navigateEmployeePosition}/>}
+      {page==='ai-employee-listing'&&pageAllowed('ai-employee-listing')&&<AIEmployee position="Listing精造师" initialTab="workbench" onBackToHub={()=>setPage('ai-employee')} onSelfLink={()=>setPage('ai-employee-listing')} onNavigatePosition={navigateEmployeePosition}/>}
+      {page==='ai-employee-guardian'&&pageAllowed('ai-employee-guardian')&&<AIEmployee position="知识库守卫" onBackToHub={()=>setPage('ai-employee')} onNavigatePosition={navigateEmployeePosition}/>}
+      {page==='ai-sample-library'&&pageAllowed('ai-sample-library')&&<SampleLibrary onBackToHub={()=>setPage('ai-advisor')}/>}
+      {page==='compliance-knowledge'&&pageAllowed('compliance-knowledge')&&<ComplianceKnowledgePage/>}
+      {page==='ops-knowledge'&&pageAllowed('ops-knowledge')&&<KnowledgeHub onOpenEmployee={()=>setPage('ai-employee')}/>}
+      {page==='system-admin'&&pageAllowed('system-admin')&&<SystemAdmin/>}
+      {inSelectionModule && <>{page!=='warehouse-dashboard'&&<div className="selection-module-nav warehouse-flow-nav"><button className={page==='tasks'?'active':''} onClick={()=>setPage('tasks')}><span>AI采集</span></button><button className={page==='ozon'?'active':''} onClick={()=>setPage('ozon')}><span>采集侯选</span></button><button className={page==='comparison'?'active':''} onClick={()=>setPage('comparison')}><span>优选产品</span>{warehouseSelectionItems.length>0&&<em>{warehouseSelectionItems.length}</em>}</button>{activeWarehouse!=='GIGACLOUD'&&<button className={page==='sourcing'?'active':''} onClick={()=>setPage('sourcing')}><span>AI比价</span>{warehouseComparisons.length>0&&<em>{warehouseComparisons.length}</em>}</button>}<button className={page==='review'?'active':''} onClick={()=>setPage('review')}><span>正式入库</span>{warehouseCount(activeWarehouse)>0&&<em>{warehouseCount(activeWarehouse)}</em>}</button></div>}</>}
       {page==='warehouse-dashboard'&&<section className="warehouse-dashboard">
         <div className="warehouse-dashboard-heading"><div><small>WAREHOUSE OVERVIEW</small><h2>供应仓库总览</h2><p>本页只读取本地业务数据，不连接或登录任何供应平台。</p></div><span>本地数据</span></div>
         <div className="warehouse-dashboard-metrics">
@@ -1310,13 +1498,15 @@ export function App() {
       {page === 'comparison' && <SelectionWorkspace warehouseName={activeWarehouseProfile.name} items={warehouseSelectionItems} onItemsChange={mergeWarehouseSelections} onDecision={()=>{void window.desktop.workflow.counts().then(setWorkflowCounts);void window.desktop.warehouses.list().then(setWarehouseProducts)}} onCandidates={()=>setPage('ozon')} onReturnCandidate={returnSelectionToCandidates} onOpen={item=>{const browserPlatform:Platform=item.platformCode==='1688'?'1688':item.platformCode==='OZON'?'ozon':'web';setPage('tasks');setPlatform(browserPlatform);void window.desktop.browser.openTab(browserPlatform,item.sourceUrl,item.title)}} onNext={activeWarehouse==='GIGACLOUD'?()=>setPage('review'):undefined} nextLabel={activeWarehouse==='GIGACLOUD'?'进入正式入库':undefined} />}
       {page === 'review' && <CatalogWorkspace paths={activeWarehouseProfile.kind==='SUPPLY'?warehouseProducts.filter(item=>item.warehouseCode===activeWarehouse).map(item=>({id:item.id,category:item.category,subcategory:item.subcategory,tertiaryCategory:item.tertiaryCategory})):warehouseSelectionItems.filter(item=>item.decision==='APPROVED').map(item=>({id:item.id,category:item.category,subcategory:item.subcategory,tertiaryCategory:item.tertiaryCategory||'待细分'}))}>{category=>activeWarehouseProfile.kind==='SUPPLY'?<SupplyWarehouseWorkspace products={warehouseProducts.filter(item=>item.warehouseCode===activeWarehouse&&catalogSelectionMatches(item,category))} warehouse={activeWarehouse as '1688'|'GIGACLOUD'} onOpenSelection={()=>setPage('comparison')} onOpenCatalog={()=>setPage('catalog')} onCreateImage={item=>{setImageMarketplaceSelection(null);setImageProduct(item);setPage('image-studio')}} />:<MarketOpportunityWarehouse warehouse={activeWarehouse as 'ALIEXPRESS'|'OZON'} items={warehouseSelectionItems.filter(item=>item.decision==='APPROVED'&&catalogSelectionMatches(item,category))} onOpenSelection={()=>setPage('comparison')} onOpen={item=>{setPage('tasks');setPlatform(item.platformCode==='OZON'?'ozon':'web');void window.desktop.browser.openTab(item.platformCode==='OZON'?'ozon':'web',item.sourceUrl,item.title)}} />}</CatalogWorkspace>}
       {page === 'catalog' && <CatalogManager usagePaths={[...selectionItems.map(item=>({id:item.id,category:item.category,subcategory:item.subcategory,tertiaryCategory:item.tertiaryCategory||'待细分'})),...supplyProducts.filter(item=>item.selected).map(stockCatalogPath)]} onChanged={()=>setCatalogRevision(value=>value+1)} />}
-      {page === 'image-studio' && <ImageStudio product={imageProduct} marketplaceSelection={imageMarketplaceSelection} onOpenInventory={()=>setPage(imageMarketplaceSelection?'publishing':'review')} />}
-      {page === 'realshift' && <RealShiftWorkbench />}
+      {page === 'image-studio' && pageAllowed('image-studio') && <ImageStudio product={imageProduct} marketplaceSelection={imageMarketplaceSelection} onOpenInventory={()=>setPage(imageMarketplaceSelection?'publishing':'review')} />}
+      {page === 'realshift' && pageAllowed('realshift') && <RealShiftWorkbench />}
       {page === 'publishing' && <PublishingWorkspace products={warehouseProducts} onInventory={()=>setPage('review')} onCreateImage={(item,selection)=>{setImageMarketplaceSelection(selection);setImageProduct(item);setPage('image-studio')}} />}
       {page === 'procurement' && <section className="content-page"><div className="page-toolbar"><div><b>采购与履约数据库</b><small>销售订单、供应商采购单、采购明细、物流单号和履约状态</small></div></div><EmptyState title="暂无采购发货任务" description="跨境订单进入后，按 SKU 和供应商自动生成采购及发货履约记录。" action="查看AI发布" onAction={()=>setPage('publishing')} /></section>}
-      {page === 'finance' && <section className="content-page"><div className="page-toolbar"><div><b>财务成本利润台账</b><small>销售、采购、运费、平台费、退款、汇率和利润对账</small></div></div><EmptyState title="暂无待核算账期" description="订单、采购和物流产生的费用会自动进入财务流水并按账期对账。" action="查看采购发货" onAction={()=>setPage('procurement')} /></section>}
-      {page === 'ai-support' && <AiSupportFramework />}
-      {page === 'feishu' && <FeishuBotPage activeTask={activeTask} />}
+      {page === 'finance' && pageAllowed('finance') && <section className="content-page"><div className="page-toolbar"><div><b>财务成本利润台账</b><small>销售、采购、运费、平台费、退款、汇率和利润对账</small></div></div><EmptyState title="暂无待核算账期" description="订单、采购和物流产生的费用会自动进入财务流水并按账期对账。" action="查看采购发货" onAction={()=>setPage('procurement')} /></section>}
+      {page === 'ai-support' && pageAllowed('ai-support') && <AiSupportFramework />}
+      {page === 'feishu' && pageAllowed('feishu') && <FeishuBotPage activeTask={activeTask} />}
+      {page === 'amazon-data-source' && <AmazonDataSourcePage onBack={()=>setPage('llm-keys')} />}
+      {page==='llm-keys'&&<LlmApiKeysPage onBack={()=>setPage('ai-hq')} onOpenAmazonDataSource={()=>setPage('amazon-data-source')}/>}
     </main>
   </div>
 }
@@ -1365,8 +1555,8 @@ function PublishingWorkspace({ products, onInventory, onCreateImage }: { product
   const visible=platformItems.filter(item=>(status==='ALL'||item.status===status)&&(!query.trim()||`${item.title} ${item.platformSku}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())))
   const current=visible[0]
   const statusLabel:Record<MarketplacePublishStatus,string>={DRAFT:'发布草稿',VALIDATED:'待上传草稿',SELLER_DRAFT:'Ozon草稿',REVIEW:'审核中',PUBLISHED:'已发布',FAILED:'失败'}
-  const platformTabs=<div className="publishing-platform-tabs">{platformProfiles.map(item=><button key={item.code} className={platform===item.code?'active':''} onClick={()=>{setPlatform(item.code);setSection('SELECTION')}}><b>{item.name}</b><small>{item.market}</small><em>{item.ready?(item.code==='OZON'&&stores.length?`${stores.length}店铺`:'已开通'):'待接入'}</em></button>)}</div>
-  const operationNav=<div className="ozon-publish-subnav">{([['SELECTION','平台选品库'],['IMAGES','AI做图'],['WASH','AI洗图'],['CENTER','发布中心'],['PRODUCTS','在线商品'],['STORES','店铺管理'],['ISSUES','审核与异常'],['AUDIT','发布记录']] as const).map(([value,label])=><button key={value} className={section===value?'active':''} onClick={()=>setSection(value)}>{label}</button>)}</div>
+  const platformTabs=<div className="publishing-platform-tabs" role="tablist" aria-label="发布平台">{platformProfiles.map(item=><button key={item.code} role="tab" aria-selected={platform===item.code} className={platform===item.code?'active':''} onClick={()=>{setPlatform(item.code);setSection('SELECTION')}}><b>{item.name}</b><small>{item.market}</small><em>{item.ready?(item.code==='OZON'&&stores.length?`${stores.length}店铺`:'已开通'):'待接入'}</em></button>)}</div>
+  const operationNav=<div className="ozon-publish-subnav" role="tablist" aria-label="发布工作区">{([['SELECTION','平台选品库'],['IMAGES','AI做图'],['WASH','AI洗图'],['CENTER','发布中心'],['PRODUCTS','在线商品'],['STORES','店铺管理'],['ISSUES','审核与异常'],['AUDIT','发布记录']] as const).map(([value,label])=><button key={value} role="tab" aria-selected={section===value} className={section===value?'active':''} onClick={()=>setSection(value)}>{label}</button>)}</div>
   const openStudio=(selection:MarketplaceSelectionProduct)=>{const source=products.find(product=>product.id===selection.supplyProductId);if(source)onCreateImage(source,selection)}
   const selectionContent=<PlatformSelectionLibrary platform={activePlatform.name} warehouseProducts={products} selections={platformSelections} onAdd={product=>void addPlatformSelection(product)} onCreateImage={openStudio}/>
   if(platform!=='OZON')return <section className="publishing-page"><div className="publishing-top"><div><small>MARKETPLACE OPERATIONS</small><h2>{activePlatform.name}运营工作台</h2><p>选品、素材和发布资料按平台独立保存</p></div><span><i/>{activePlatform.ready?'已开通':'发布器待接入'}</span></div>{platformTabs}{operationNav}{section==='SELECTION'?selectionContent:section==='IMAGES'?<PlatformMediaQueue title={`${activePlatform.name} AI做图`} items={platformSelections} action="进入AI做图" onAction={openStudio}/>:section==='WASH'?<PlatformMediaQueue title={`${activePlatform.name} AI洗图`} items={platformSelections} action="进入AI洗图" onAction={openStudio}/>:<EmptyState title={`${activePlatform.name}${section==='CENTER'?'发布器':'运营功能'}待接入`} description="当前已建立独立选品库和素材入口，正式发布需接入该平台官方API。" action="查看平台选品库" onAction={()=>setSection('SELECTION')}/>}</section>
@@ -1438,7 +1628,7 @@ function CatalogManager({usagePaths,onChanged}:{usagePaths:CatalogPath[];onChang
 }
 
 function CatalogManageColumn({title,onAdd,wide,children}:{title:string;onAdd:()=>void;wide?:boolean;children:ReactNode}) { return <section className={wide?'catalog-manage-column wide':'catalog-manage-column'}><header><b>{title}</b><button onClick={onAdd}>＋ 新增</button></header><div>{children}</div></section> }
-function CatalogManageRow({name,count,active,onSelect,onRename,onMove,onUp,onDown,onDelete}:{name:string;count:number;active:boolean;onSelect:()=>void;onRename:()=>void;onMove?:()=>void;onUp:()=>void;onDown:()=>void;onDelete:()=>void}) { return <article className={active?'active':''}><button className="catalog-row-main" onClick={onSelect}><b>{name}</b><em>{count}</em></button><div><button onClick={onRename}>改名</button>{onMove&&<button onClick={onMove}>移动</button>}<button onClick={onUp}>↑</button><button onClick={onDown}>↓</button><button className="danger" onClick={onDelete}>删</button></div></article> }
+function CatalogManageRow({name,count,active,onSelect,onRename,onMove,onUp,onDown,onDelete}:{name:string;count:number;active:boolean;onSelect:()=>void;onRename:()=>void;onMove?:()=>void;onUp:()=>void;onDown:()=>void;onDelete:()=>void}) { return <article className={active?'active':''}><button className="catalog-row-main" aria-pressed={active} onClick={onSelect}><b>{name}</b><em>{count}</em></button><div><button onClick={onRename}>改名</button>{onMove&&<button onClick={onMove}>移动</button>}<button onClick={onUp}>↑</button><button onClick={onDown}>↓</button><button className="danger" onClick={onDelete}>删</button></div></article> }
 
 function ThreeLevelCatalog({ paths, selected, onSelect }: { paths:CatalogPath[]; selected:string; onSelect:(value:string)=>void }) {
   const [expanded,setExpanded] = useState('')
@@ -1539,12 +1729,85 @@ function SupplyWarehouseWorkspace({ products, warehouse, onOpenSelection, onOpen
   return <section className="supply-warehouse-page"><div className="warehouse-heading"><div><small>SUPPLY PRODUCT WAREHOUSE</small><h2>{names[warehouse]}产品库</h2><p>{note}；商品入库不代表已实际采购。</p></div><div className="warehouse-heading-actions"><button onClick={onOpenCatalog}>管理产品目录</button><button className="primary" onClick={onOpenSelection}>进入AI选品</button></div></div><div className="warehouse-toolbar"><input value={query} onChange={event=>setQuery(event.target.value)} placeholder={`搜索${names[warehouse]}商品、SKU或供应商`}/><span>当前显示 <b>{visible.length}</b> 个商品</span></div>{visible.length?<div className="warehouse-product-grid">{visible.map(item=><article key={item.id}><button className="warehouse-product-image" onClick={()=>onCreateImage(item)}>{item.imageUrl?<img src={item.imageUrl} alt={item.title}/>:<span>无图片</span>}<em>{names[item.warehouseCode]}</em></button><div><small>SKU {item.productId||'待生成'} · {item.category}</small><b>{item.title}</b><strong>{item.priceText||'价格待核验'}</strong><p>{item.supplierName||'供应商待补采'}</p><span>{item.category} / {item.subcategory} / {item.tertiaryCategory}</span><div><button onClick={()=>onCreateImage(item)}>AI做图</button><button className="primary" onClick={()=>onCreateImage(item)}>进入平台素材</button></div></div></article>)}</div>:<EmptyState title={`${names[warehouse]}暂无入库商品`} description="请在当前仓库的AI选品中审核商品，系统会自动归入本仓库。" action="进入AI选品" onAction={onOpenSelection}/>}</section>
 }
 
-function ImageStudio({ product, marketplaceSelection, onOpenInventory }: { product: ImageSourceProduct | null; marketplaceSelection:MarketplaceSelectionProduct|null; onOpenInventory: () => void }) {
+const imageProductionStorageKey='image-production-projects:v1'
+
+const layoutFonts:Record<ImageLayoutDraft['fontFamily'],string>={SYSTEM_SANS:'Arial, "PingFang SC", sans-serif',SERIF:'Georgia, "Songti SC", serif',ROUNDED:'"Arial Rounded MT Bold", "PingFang SC", sans-serif'}
+
+function loadLayoutImage(url:string):Promise<HTMLImageElement> {
+  return new Promise((resolve,reject)=>{const image=new Image();image.crossOrigin='anonymous';image.onload=()=>resolve(image);image.onerror=()=>reject(new Error('底图加载失败，无法进行正式排版'));image.src=url})
+}
+
+function drawLayoutLines(context:CanvasRenderingContext2D,text:string,x:number,y:number,maxWidth:number,lineHeight:number,maxLines:number):boolean {
+  const characters=Array.from(text.trim());const lines:string[]=[];let line=''
+  for(const character of characters){const candidate=line+character;if(context.measureText(candidate).width>maxWidth&&line){lines.push(line);line=character}else line=candidate}
+  if(line)lines.push(line)
+  if(lines.length>maxLines)return false
+  lines.forEach((value,index)=>context.fillText(value,x,y+index*lineHeight,maxWidth));return true
+}
+
+async function composeFormalLayout(baseUrl:string,draft:ImageLayoutDraft):Promise<string> {
+  const issues=validateImageLayoutDraft(draft);if(issues.length)throw new Error(issues.join('；'))
+  const image=await loadLayoutImage(baseUrl);const canvas=document.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=image.naturalHeight
+  const context=canvas.getContext('2d');if(!context)throw new Error('当前环境不支持图片排版')
+  context.drawImage(image,0,0,canvas.width,canvas.height)
+  const width=canvas.width,height=canvas.height,pad=Math.round(width*.055),font=layoutFonts[draft.fontFamily]
+  let x=pad,y=Math.round(height*.12),maxWidth=Math.round(width*.62),headlineSize=Math.max(28,Math.round(width*.052)),subSize=Math.max(18,Math.round(width*.025))
+  if(draft.template==='BOTTOM_BAND'){const bandHeight=Math.round(height*.31);context.fillStyle=`${draft.accentColor}E8`;context.fillRect(0,height-bandHeight,width,bandHeight);x=pad;y=height-bandHeight+Math.round(bandHeight*.28);maxWidth=width-pad*2}
+  if(draft.template==='TOP_LEFT'){const gradient=context.createLinearGradient(0,0,width*.72,0);gradient.addColorStop(0,`${draft.accentColor}EB`);gradient.addColorStop(1,`${draft.accentColor}00`);context.fillStyle=gradient;context.fillRect(0,0,width,Math.round(height*.42))}
+  if(draft.template==='SIDE_PANEL'){const panelWidth=Math.round(width*.39);context.fillStyle=`${draft.accentColor}EC`;context.fillRect(0,0,panelWidth,height);x=pad;y=Math.round(height*.2);maxWidth=panelWidth-pad*2;headlineSize=Math.max(25,Math.round(width*.043))}
+  context.textBaseline='top';context.fillStyle=draft.textColor;context.font=`700 ${headlineSize}px ${font}`
+  const headlineOk=drawLayoutLines(context,draft.headline,x,y,maxWidth,Math.round(headlineSize*1.18),2)
+  context.font=`400 ${subSize}px ${font}`;const subY=y+Math.round(headlineSize*2.55);const subOk=drawLayoutLines(context,draft.subheadline,x,subY,maxWidth,Math.round(subSize*1.42),3)
+  if(!headlineOk||!subOk)throw new Error('文案在当前模板中发生溢出，请缩短文字或更换模板')
+  return canvas.toDataURL('image/png')
+}
+
+const imageSizePresets=[{id:'SQUARE',label:'平台方图 1:1',width:1200,height:1200},{id:'PORTRAIT',label:'详情竖图 3:4',width:1200,height:1600},{id:'SOCIAL',label:'社媒竖图 4:5',width:1200,height:1500},{id:'WIDE',label:'横幅图 16:9',width:1600,height:900}] as const
+
+async function cropImageRegion(sourceUrl:string,region:ImageLocalEditRecord['region']):Promise<string> {
+  const image=await loadLayoutImage(sourceUrl),sx=Math.round(image.naturalWidth*region.x),sy=Math.round(image.naturalHeight*region.y),sw=Math.max(1,Math.round(image.naturalWidth*region.width)),sh=Math.max(1,Math.round(image.naturalHeight*region.height));const canvas=document.createElement('canvas');canvas.width=sw;canvas.height=sh;canvas.getContext('2d')?.drawImage(image,sx,sy,sw,sh,0,0,sw,sh);return canvas.toDataURL('image/png')
+}
+
+async function applyLocalImageEdit(sourceUrl:string,region:ImageLocalEditRecord['region'],operation:ImageLocalEditOperation,replacementUrl?:string):Promise<string> {
+  const image=await loadLayoutImage(sourceUrl),canvas=document.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;const context=canvas.getContext('2d');if(!context)throw new Error('当前环境不支持局部修改');context.drawImage(image,0,0)
+  const sx=Math.round(canvas.width*region.x),sy=Math.round(canvas.height*region.y),sw=Math.max(1,Math.round(canvas.width*region.width)),sh=Math.max(1,Math.round(canvas.height*region.height))
+  context.save();context.beginPath();context.rect(sx,sy,sw,sh);context.clip()
+  if(operation==='AI_REPAINT'){if(!replacementUrl)throw new Error('AI局部重绘没有返回图片');const replacement=await loadLayoutImage(replacementUrl);context.drawImage(replacement,sx,sy,sw,sh)}else{context.filter=operation==='BRIGHTEN'?'brightness(1.18)':operation==='DARKEN'?'brightness(.82)':'blur(8px)';context.drawImage(image,0,0)}
+  context.restore();return canvas.toDataURL('image/png')
+}
+
+async function createSizeVariant(sourceUrl:string,preset:typeof imageSizePresets[number],backgroundColor:string):Promise<ImageSizeVariant> {
+  const image=await loadLayoutImage(sourceUrl),canvas=document.createElement('canvas');canvas.width=preset.width;canvas.height=preset.height
+  const context=canvas.getContext('2d');if(!context)throw new Error('当前环境不支持多尺寸输出')
+  context.fillStyle=backgroundColor;context.fillRect(0,0,canvas.width,canvas.height)
+  const placement=calculateContainPlacement(image.naturalWidth,image.naturalHeight,canvas.width,canvas.height);context.drawImage(image,placement.x,placement.y,placement.width,placement.height)
+  const outputUrl=canvas.toDataURL('image/png'),byteSize=Math.floor((outputUrl.split(',')[1]?.length||0)*3/4),compliance=validateImageSizeOutput({width:canvas.width,height:canvas.height,expectedWidth:preset.width,expectedHeight:preset.height,format:'image/png',byteSize,placement})
+  return{id:preset.id,label:preset.label,width:preset.width,height:preset.height,fit:'CONTAIN',outputUrl,compliance,createdAt:new Date().toISOString()}
+}
+
+function withDefaultStyleLock(project:ImageProductionProject):ImageProductionProject {
+  const styleLock=project.styleLock||cloneImageStylePreset('CLEAN_COMMERCE')
+  return {...project,styleLock,facts:normalizeImageProductFacts(project.facts),tasks:project.tasks.map(task=>task.prompt.includes('STYLE CONTRACT')||task.prompt.includes('STYLE LOCK v')?task:{...task,prompt:`${imageStyleTaskPrompt(styleLock,task)}\n${task.prompt}`})}
+}
+
+function readImageProductionProjects():ImageProductionProject[] {
+  try { const value=JSON.parse(localStorage.getItem(imageProductionStorageKey)||'[]');return Array.isArray(value)?value.map(withDefaultStyleLock):[] }
+  catch { return [] }
+}
+
+function saveImageProductionProject(project:ImageProductionProject) {
+  const projects=readImageProductionProjects().filter(item=>item.id!==project.id)
+  localStorage.setItem(imageProductionStorageKey,JSON.stringify([project,...projects].slice(0,30)))
+}
+
+function ImageStudio({ product:inventoryProduct, marketplaceSelection, onOpenInventory }: { product: ImageSourceProduct | null; marketplaceSelection:MarketplaceSelectionProduct|null; onOpenInventory: () => void }) {
   const usageStorageKey = `image-model-usage-${new Date().toISOString().slice(0,7)}`
   const [plan, setPlan] = useState<GenerationPlan>('full')
   const [targetPlatform, setTargetPlatform] = useState('Ozon')
   const [language, setLanguage] = useState('俄语')
-  const [models, setModels] = useState<{ id: string; name: string; description: string }[]>([])
+  const [mainImageCount,setMainImageCount]=useState(()=>Math.max(1,Number(localStorage.getItem('image-count-Ozon-main')||getPlatformImageRule('Ozon').recommendedMainCount)))
+  const [detailImageCount,setDetailImageCount]=useState(()=>Math.max(1,Number(localStorage.getItem('image-count-Ozon-detail')||getPlatformImageRule('Ozon').recommendedDetailCount)))
+  const [models, setModels] = useState<ImageModelProfile[]>([])
   const [model, setModel] = useState('wan2.7-image-pro')
   const [modelStatus, setModelStatus] = useState('正在连接百炼…')
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
@@ -1564,14 +1827,73 @@ function ImageStudio({ product, marketplaceSelection, onOpenInventory }: { produ
   const [savedChoices, setSavedChoices] = useState<Record<number, 'original' | 'processed'>>({})
   const [marketplaceAssets,setMarketplaceAssets] = useState<MarketplaceMediaAsset[]>([])
   const [extraPrompt, setExtraPrompt] = useState('')
+  const [styleLock,setStyleLock]=useState<ImageStyleLock>(()=>cloneImageStylePreset('CLEAN_COMMERCE'))
+  const [facts,setFacts]=useState<ImageProductFacts|null>(null)
+  const [project,setProject]=useState<ImageProductionProject|null>(null)
+  const [confirmationOpen,setConfirmationOpen]=useState(false)
+  const [historyOpen,setHistoryOpen]=useState(false)
+  const [history,setHistory]=useState<ImageProductionProject[]>(()=>readImageProductionProjects())
+  const [manualProduct,setManualProduct]=useState<ImportedProductSource|null>(null)
+  const [sourceMenuOpen,setSourceMenuOpen]=useState(false)
+  const [urlDialogOpen,setUrlDialogOpen]=useState(false)
+  const [productUrl,setProductUrl]=useState('')
+  const [sourceLoading,setSourceLoading]=useState(false)
+  const [referenceManagerOpen,setReferenceManagerOpen]=useState(false)
+  const [referenceImages,setReferenceImages]=useState<ImportedProductImage[]>([])
+  const [referenceAdding,setReferenceAdding]=useState(false)
+  const [packageOcrBusy,setPackageOcrBusy]=useState(false)
+  const [taskGroupFilter,setTaskGroupFilter]=useState<'ALL'|'MAIN'|'DETAIL'>('ALL')
+  const [layoutTaskId,setLayoutTaskId]=useState<string|null>(null)
+  const [layoutDraft,setLayoutDraft]=useState<ImageLayoutDraft|null>(null)
+  const [layoutBusy,setLayoutBusy]=useState(false)
+  const [layoutError,setLayoutError]=useState('')
+  const [localEditTaskId,setLocalEditTaskId]=useState<string|null>(null)
+  const [localEditRegion,setLocalEditRegion]=useState({x:.2,y:.2,width:.35,height:.35})
+  const [localEditOperation,setLocalEditOperation]=useState<ImageLocalEditOperation>('BRIGHTEN')
+  const [localEditInstruction,setLocalEditInstruction]=useState('')
+  const [localEditBusy,setLocalEditBusy]=useState(false)
+  const [localEditError,setLocalEditError]=useState('')
+  const [localEditCandidate,setLocalEditCandidate]=useState<ImageLocalEditRecord|null>(null)
+  const localEditDrag=useRef<{x:number;y:number}|null>(null)
+  const [sizeTaskId,setSizeTaskId]=useState<string|null>(null)
+  const [selectedSizeIds,setSelectedSizeIds]=useState<string[]>(['SQUARE','PORTRAIT'])
+  const [sizeBackground,setSizeBackground]=useState('#FFFFFF')
+  const [sizeBusy,setSizeBusy]=useState(false)
+  const [sizeError,setSizeError]=useState('')
+  const [batchOpen,setBatchOpen]=useState(false)
+  const [batchSelectedIds,setBatchSelectedIds]=useState<string[]>([])
+  const [batchRunning,setBatchRunning]=useState(false)
+  const [batchProgress,setBatchProgress]=useState('')
+  const [batchExportNotice,setBatchExportNotice]=useState('')
+  const batchPauseRequested=useRef(false)
+  const product=manualProduct||inventoryProduct
+  const primaryReference=referenceImages.find(image=>image.role==='PRIMARY')||referenceImages[0]
+  const referenceImageUrl=primaryReference?.dataUrl||product?.imageUrl||''
+  const productSourceUrl=product&&'sourceKind' in product?product.sourceUrl:undefined
   const plans: { id: GenerationPlan; icon: string; name: string; note: string; count: number; recommended?: boolean }[] = [
-    { id:'full', icon:'▤', name:'全套生成', note:'主图 + 商品图库 + 详情页', count:16, recommended:true },
-    { id:'main', icon:'▦', name:'仅主图', note:'搜索列表与商品图库 5–8张', count:6 },
-    { id:'detail', icon:'▧', name:'仅详情页', note:'详情内容模块 8–18张', count:10 }
+    { id:'full', icon:'▤', name:'全套生成', note:`${mainImageCount}张主图 + ${detailImageCount}张详情页`, count:mainImageCount+detailImageCount, recommended:true },
+    { id:'main', icon:'▦', name:'仅主图', note:'平台首图与商品图库', count:mainImageCount },
+    { id:'detail', icon:'▧', name:'仅详情页', note:'详情内容模块', count:detailImageCount }
   ]
   const activePlan = plans.find(item=>item.id===plan)!
+  const platformRule=getPlatformImageRule(targetPlatform)
+  const platformWarnings=platformImagePlanningWarnings(targetPlatform,plan==='detail'?0:mainImageCount,plan==='main'?0:detailImageCount)
+  const styleContract=IMAGE_STYLE_CONTRACTS[styleLock.presetId]
   const selectedModel = models.find(item => item.id === model)
   const totalUsage = Object.values(modelUsage).reduce((sum, count) => sum + count, 0)
+  const mainTasks=project?.tasks.filter(task=>task.group==='MAIN')||[]
+  const detailTasks=project?.tasks.filter(task=>task.group==='DETAIL')||[]
+  const visibleTasks=project?.tasks.filter(task=>taskGroupFilter==='ALL'||task.group===taskGroupFilter)||[]
+  const taskPosition=(task:ImageProductionTask)=>{const groupTasks=task.group==='MAIN'?mainTasks:detailTasks;return{label:task.group==='MAIN'?'主图':'详情页',short:task.group==='MAIN'?'主':'详',index:groupTasks.findIndex(item=>item.id===task.id)+1,total:groupTasks.length}}
+
+  useEffect(() => {
+    const rule=getPlatformImageRule(targetPlatform)
+    setMainImageCount(Math.max(1,Number(localStorage.getItem(`image-count-${targetPlatform}-main`)||rule.recommendedMainCount)))
+    setDetailImageCount(Math.max(1,Number(localStorage.getItem(`image-count-${targetPlatform}-detail`)||rule.recommendedDetailCount)))
+  },[targetPlatform])
+
+  useEffect(()=>{localStorage.setItem(`image-count-${targetPlatform}-main`,String(mainImageCount))},[targetPlatform,mainImageCount])
+  useEffect(()=>{localStorage.setItem(`image-count-${targetPlatform}-detail`,String(detailImageCount))},[targetPlatform,detailImageCount])
 
   useEffect(() => {
     void window.desktop.image.models().then(connection => {
@@ -1582,6 +1904,90 @@ function ImageStudio({ product, marketplaceSelection, onOpenInventory }: { produ
   }, [])
 
   useEffect(()=>{if(!marketplaceSelection){setMarketplaceAssets([]);return}setTargetPlatform(marketplaceSelection.marketplaceCode==='OZON'?'Ozon':marketplaceSelection.marketplaceCode);void window.desktop.marketplaceMedia.list(marketplaceSelection.id).then(setMarketplaceAssets)},[marketplaceSelection?.id])
+
+  useEffect(()=>{if(inventoryProduct)setManualProduct(null)},[inventoryProduct?.productId])
+
+  useEffect(()=>{
+    if(!product){setFacts(null);setProject(null);setReferenceImages([]);return}
+    const nextReferences='sourceKind' in product?product.images.map((image,index)=>({...image,id:image.id||crypto.randomUUID(),role:image.role||(index===0?'PRIMARY':'DETAIL')})):[{id:crypto.randomUUID(),name:product.title,dataUrl:product.imageUrl,source:'AI入库',mimeType:'image/jpeg' as const,role:'PRIMARY' as const}]
+    setReferenceImages(nextReferences)
+    const source='sourceKind' in product?product.sourceLabel:'supplierName' in product?`${'platformCode' in product?product.platformCode:product.warehouseCode} · ${product.supplierName||'供应商待核验'}`:`Ozon · ${product.brand||'品牌待核验'}`
+    const factSource:'WEBPAGE'|'INVENTORY'|'IMAGE'='sourceKind' in product?(product.sourceKind==='URL'?'WEBPAGE':'IMAGE'):'INVENTORY'
+    const normalizedFacts=normalizeImageProductFacts({productName:product.title,sku:product.productId||'待补充',source,price:product.priceText||'价格待核验',referenceImageUrl:nextReferences[0]?.dataUrl||product.imageUrl,confirmed:false},factSource)
+    const pageFacts='sourceKind' in product?product.pageFacts||[]:[],pageValues=new Map<string,string[]>()
+    for(const item of pageFacts){const values=pageValues.get(item.key)||[];if(item.value&&!values.includes(item.value))values.push(item.value);pageValues.set(item.key,values)}
+    setFacts({...normalizedFacts,entries:(normalizedFacts.entries||[]).map(entry=>{const values=pageValues.get(entry.key);return values?.length?{...entry,value:values.join('；'),source:'WEBPAGE' as const,sourceLabel:'商品网页结构化内容',status:'PENDING' as const}:entry})})
+    const restored=readImageProductionProjects().find(item=>item.productKey===product.productId&&item.plan===plan&&item.platform===targetPlatform&&item.language===language)
+    setProject(restored||null)
+    if(restored){setFacts(restored.facts);setStyleLock(restored.styleLock||cloneImageStylePreset('CLEAN_COMMERCE'));setMainImageCount(restored.mainImageCount??(restored.tasks.filter(task=>task.group==='MAIN').length||5));setDetailImageCount(restored.detailImageCount??(restored.tasks.filter(task=>task.group==='DETAIL').length||7));if(restored.referenceImages?.length)setReferenceImages(restored.referenceImages);setGeneratedImages(restored.tasks.map(task=>task.outputUrl||'').filter(Boolean))}
+    else setGeneratedImages([])
+  },[product?.productId])
+
+  const applyReferenceImages=(next:ImportedProductImage[])=>{
+    if(!next.length)return
+    const hasPrimary=next.some(image=>image.role==='PRIMARY')
+    const normalized=next.map((image,index)=>({...image,role:hasPrimary?image.role:index===0?'PRIMARY':'DETAIL'}))
+    setReferenceImages(normalized)
+    const primary=normalized.find(image=>image.role==='PRIMARY')||normalized[0]
+    if(manualProduct)setManualProduct(current=>current?{...current,imageUrl:primary.dataUrl,images:normalized}:current)
+    setFacts(current=>current?{...current,referenceImageUrl:primary.dataUrl}:current)
+    if(project)updateProject(current=>({...current,productImageUrl:primary.dataUrl,referenceImages:normalized,updatedAt:new Date().toISOString()}))
+  }
+
+  const addReferenceImages=async()=>{if(referenceAdding)return;setReferenceAdding(true);setGenerationError('');try{const imported=await window.desktop.image.pickProductImages();if(!imported)return;const knownKeys=new Set(referenceImages.flatMap(image=>[image.source,image.dataUrl]));const additions=imported.images.filter(image=>{if(knownKeys.has(image.source)||knownKeys.has(image.dataUrl))return false;knownKeys.add(image.source);knownKeys.add(image.dataUrl);return true}).map(image=>({...image,id:image.id||crypto.randomUUID(),role:'DETAIL' as const}));if(!additions.length){setGenerationError('所选图片已在参考图列表中');return}applyReferenceImages([...referenceImages,...additions])}catch(reason){setGenerationError(reason instanceof Error?reason.message:'添加参考图失败')}finally{setReferenceAdding(false)}}
+
+  const setPrimaryReference=(id:string)=>applyReferenceImages(referenceImages.map(image=>({...image,role:image.id===id?'PRIMARY':image.role==='PRIMARY'?'DETAIL':image.role})))
+  const setReferenceRole=(id:string,role:ImageReferenceRole)=>role==='PRIMARY'?setPrimaryReference(id):applyReferenceImages(referenceImages.map(image=>image.id===id?{...image,role}:image))
+  const moveReference=(id:string,direction:-1|1)=>{const index=referenceImages.findIndex(image=>image.id===id);const target=index+direction;if(index<0||target<0||target>=referenceImages.length)return;const next=[...referenceImages];[next[index],next[target]]=[next[target],next[index]];applyReferenceImages(next)}
+  const removeReference=(id:string)=>{if(referenceImages.length<=1){setGenerationError('至少保留一张参考图');return}const removed=referenceImages.find(image=>image.id===id);const next=referenceImages.filter(image=>image.id!==id);if(removed?.role==='PRIMARY')next[0]={...next[0],role:'PRIMARY'};applyReferenceImages(next)}
+  const editFactEntry=(key:string,value:string,source:ImageFactSource='USER',status:ImageFactStatus='CONFIRMED')=>{setFacts(current=>{if(!current)return current;const entries=(current.entries||[]).map(entry=>entry.key===key?{...entry,value,source,sourceLabel:source==='USER'?'用户填写':entry.sourceLabel,status:value.trim()?status:'UNREADABLE' as const}:entry);const legacy=key==='productName'?{productName:value}:key==='sku'?{sku:value}:key==='price'?{price:value}:{};return{...current,...legacy,entries,confirmed:false,confirmedAt:undefined}});setProject(null);setGeneratedImages([])}
+  const setFactStatus=(key:string,status:ImageFactStatus)=>setFacts(current=>current?{...current,entries:(current.entries||[]).map(entry=>entry.key===key?{...entry,status}:entry),confirmed:false,confirmedAt:undefined}:current)
+  const extractPackageText=async()=>{if(!facts||packageOcrBusy)return;setPackageOcrBusy(true);setGenerationError('');try{const result=await window.desktop.image.extractPackageText({sourceImages:referenceImages.map(image=>image.dataUrl),sourceLabels:referenceImages.map(image=>image.role||'DETAIL')});setFacts(current=>current?applyPackageTextExtraction(current,result):current);setProject(null);setGeneratedImages([]);if(result.warnings.length)setGenerationError(result.warnings.join('；'))}catch(reason){setGenerationError(reason instanceof Error?reason.message:'包装OCR失败')}finally{setPackageOcrBusy(false)}}
+
+  const chooseLocalProduct=async()=>{
+    setSourceLoading(true);setGenerationError('')
+    try{const imported=await window.desktop.image.pickProductImages();if(imported){setManualProduct(imported);setSourceMenuOpen(false)}}
+    catch(reason){setGenerationError(reason instanceof Error?reason.message:'本地图片读取失败')}
+    finally{setSourceLoading(false)}
+  }
+
+  const readUrlProduct=async()=>{
+    if(!productUrl.trim())return
+    setSourceLoading(true);setGenerationError('')
+    try{const imported=await window.desktop.image.readProductUrl(productUrl.trim());setManualProduct(imported);setUrlDialogOpen(false);setSourceMenuOpen(false);setProductUrl('')}
+    catch(reason){const message=reason instanceof Error?reason.message:'产品网址读取失败';setGenerationError(message.replace(/^Error invoking remote method '[^']+': Error:\s*/,'').replace(/^Error:\s*/,''))}
+    finally{setSourceLoading(false)}
+  }
+
+  useEffect(()=>{
+    if(!project||project.plan===plan&&project.platform===targetPlatform&&project.language===language)return
+    setProject(null);setGeneratedImages([]);setFacts(current=>current?{...current,confirmed:false,confirmedAt:undefined}:current)
+  },[plan,targetPlatform,language,mainImageCount,detailImageCount])
+
+  const updateProject=(producer:(current:ImageProductionProject)=>ImageProductionProject)=>{
+    setProject(current=>{
+      if(!current)return current
+      const next=producer(current)
+      saveImageProductionProject(next)
+      setHistory(readImageProductionProjects())
+      setGeneratedImages(next.tasks.map(task=>task.outputUrl||'').filter(Boolean))
+      return next
+    })
+  }
+
+  const confirmFacts=()=>{
+    if(!facts||!product)return
+    const promoted={...facts,entries:(facts.entries||[]).map(entry=>entry.value.trim()&&entry.status==='PENDING'?{...entry,status:'CONFIRMED' as const}:entry)}
+    const factIssues=validateImageProductFacts(promoted)
+    if(factIssues.length){setGenerationError(factIssues.join('；'));return}
+    const confirmedFacts={...promoted,confirmed:true,confirmedAt:new Date().toISOString()}
+    setFacts(confirmedFacts)
+    const now=new Date().toISOString()
+    const productContext=confirmedImageFactContext(confirmedFacts)
+    const tasks=buildImageProductionTasks({plan,productName:confirmedFacts.productName,sku:confirmedFacts.sku,platform:targetPlatform,language,sourceContext:productContext,extraPrompt,styleLock,mainCount:mainImageCount,detailCount:detailImageCount})
+    const next:ImageProductionProject={id:crypto.randomUUID(),productKey:product.productId,productTitle:confirmedFacts.productName,productImageUrl:referenceImageUrl,referenceImages,mainImageCount,detailImageCount,plan,platform:targetPlatform,platformRuleVersion:platformRule.version,language,model,styleLock,facts:confirmedFacts,approved:false,status:'DRAFT',tasks,createdAt:now,updatedAt:now}
+    setProject(next);saveImageProductionProject(next);setHistory(readImageProductionProjects());setGeneratedImages([])
+  }
 
   const saveMarketplaceAsset = async(assetType:'ORIGINAL'|'AI_GENERATED'|'REALSHIFT',imageUrl:string,localPath='',selected=false)=>{
     if(!marketplaceSelection)return
@@ -1605,59 +2011,146 @@ function ImageStudio({ product, marketplaceSelection, onOpenInventory }: { produ
     const result = realShiftResults[index]
     if (!result) return
     await window.desktop.image.selectRealshift(result.reportPath, choice)
-    if(marketplaceSelection) await saveMarketplaceAsset(choice==='processed'?'REALSHIFT':'AI_GENERATED',choice==='processed'?result.processedDataUrl:generatedImages[index],choice==='processed'?result.processedPath:'',true)
+    const originalUrl=project?.tasks[index]?.outputUrl||generatedImages[index]
+    if(marketplaceSelection&&originalUrl) await saveMarketplaceAsset(choice==='processed'?'REALSHIFT':'AI_GENERATED',choice==='processed'?result.processedDataUrl:originalUrl,choice==='processed'?result.processedPath:'',true)
     setSavedChoices(current=>({...current,[index]:choice}))
   }
 
   const selectGeneratedAsset = async(index:number)=>{
     if(!marketplaceSelection)return
-    await saveMarketplaceAsset('AI_GENERATED',generatedImages[index],'',true)
+    const task=project?.tasks[index]
+    const imageUrl=task?(task.localEdits?.at(-1)?.outputUrl||task.finalOutputUrl||task.outputUrl):generatedImages[index]
+    if(!imageUrl)return
+    await saveMarketplaceAsset('AI_GENERATED',imageUrl,'',true)
     setSavedChoices(current=>({...current,[index]:'original'}))
   }
 
-  const generateImage = async () => {
-    if (!product || !model || generating) return
-    if (!window.confirm(`将为“${product.title}”生成${activePlan.count}张图片，百炼会按实际成功图片计费。确认开始？`)) return
+  const runTasks = async (taskIds?:string[],projectOverride?:ImageProductionProject) => {
+    const activeProject=projectOverride||project
+    if (!product || !model || generating || !activeProject?.approved) return
+    const selected=activeProject.tasks.filter(task=>(!taskIds||taskIds.includes(task.id))&&task.status!=='SUCCESS')
+    if(!selected.length)return
     setGenerating(true)
     setGenerationError('')
-    setGeneratedImages([])
-    setRealShiftResults({})
-    setSavedChoices({})
-    setCompareIndex(null)
-    const productContext = 'supplierName' in product ? `供应商：${product.supplierName}；价格：${product.priceText}；平台：${'platformCode' in product?product.platformCode:product.warehouseCode}` : `品牌：${product.brand}；价格：${product.priceText}`
-    const mainPrompt = `为${targetPlatform}生成${language}站点商品图库。严格保留参考图商品的结构、颜色、材质和配件数量。包含纯净封面主图、多角度、局部细节、核心卖点与真实使用场景；禁止虚构参数、认证和功效，无水印。`
-    const detailPrompt = `为${targetPlatform}生成${language}商品详情页模块图片。严格基于参考图和已知商品资料，包含商品首屏、核心卖点、材质细节、使用场景、使用步骤、尺寸参数占位、包装清单与注意事项；未知参数不得编造，保持整套商品外观一致。`
-    const stages = plan === 'full' ? [{name:'主图与图库',count:6,prompt:mainPrompt},{name:'详情页',count:10,prompt:detailPrompt}] : plan === 'main' ? [{name:'主图与图库',count:6,prompt:mainPrompt}] : [{name:'详情页',count:10,prompt:detailPrompt}]
-    const maxPerTask = model === 'z-image-turbo' ? 1 : model.startsWith('qwen-image') ? 6 : 4
-    const completed: string[] = []
-    try {
-      let taskNumber = 0
-      const totalTasks = stages.reduce((sum,stage)=>sum+Math.ceil(stage.count/maxPerTask),0)
-      for (const stage of stages) {
-        let remaining = stage.count
-        while (remaining > 0) {
-          taskNumber += 1
-          const count = Math.min(maxPerTask,remaining)
-          setGenerationProgress(`${stage.name} · 任务 ${taskNumber}/${totalTasks}`)
-          const result = await window.desktop.image.generate({ model, prompt:`商品：${product.title}。${productContext}。${stage.prompt}${extraPrompt ? ` 补充要求：${extraPrompt}` : ''}`, referenceImageUrl:product.imageUrl, size:'1K', count })
-          completed.push(...result.imageUrls)
-          setGeneratedImages([...completed])
-          remaining -= count
-        }
+    let successCount=0
+    for(let index=0;index<selected.length;index+=1){
+      const task=selected[index]
+      const taskStartedAt=new Date().toISOString(),taskStartedMs=Date.now()
+      setGenerationProgress(`${task.code} ${task.title} · ${index+1}/${selected.length}`)
+      updateProject(current=>({...current,status:'RUNNING',updatedAt:taskStartedAt,tasks:current.tasks.map(item=>item.id===task.id?{...item,status:'RUNNING',error:undefined,startedAt:taskStartedAt,attempts:item.attempts+1,updatedAt:taskStartedAt}:item)}))
+      try{
+        const referenceLimit=selectedModel?.maxReferenceImages??1
+        const taskReferences=selectTaskReferenceImages(task,referenceImages,referenceLimit)
+        const referenceUrls=taskReferences.map(image=>image.dataUrl)
+        const result=await window.desktop.image.generate({model,prompt:task.prompt,referenceImageUrl:referenceUrls[0],referenceImageUrls:referenceUrls,size:'1K',count:1})
+        const outputUrl=result.imageUrls[0]
+        if(!outputUrl)throw new Error('模型没有返回图片')
+        const review=await window.desktop.image.reviewCandidate({title:facts?.productName||product.title,description:task.objective,itemSpecifics:[{name:'SKU',value:facts?.sku||product.productId}],purpose:taskReviewPurpose(task),candidateUrl:outputUrl,sourceImages:referenceUrls,sourceLabels:taskReferences.map(image=>image.role||'DETAIL'),referenceIndices:taskReferences.map((_,index)=>index),protectedAttributes:['商品结构','主颜色','配件数量'],verifiedFacts:[facts?.productName||product.title,facts?.sku||product.productId],shotInstruction:`${task.code} ${task.title}：${task.objective}`,styleInstruction:imageStyleTaskPrompt(activeProject.styleLock||styleLock,task),targetLanguage:activeProject.language,baseImageNoMarketingText:true,verifiedPackageTexts:(activeProject.facts.entries||[]).filter(entry=>entry.key==='packageText'&&entry.status==='CONFIRMED').map(entry=>entry.value).filter(Boolean),comparisonCandidateUrls:activeProject.tasks.map(item=>item.outputUrl||'').filter(Boolean)})
+        const qualityLayers=buildImageTaskQualityLayers(review),overallQuality=overallImageTaskQuality(qualityLayers),nextStatus:ImageProductionTask['status']=overallQuality==='PASSED'?'SUCCESS':overallQuality==='REJECTED'?'FAILED':'REVIEW'
+        if(nextStatus==='SUCCESS')successCount+=1
+        updateProject(current=>{const tasks=current.tasks.map(item=>item.id===task.id?{...item,status:nextStatus,outputUrl,providerTaskId:result.taskId,error:nextStatus==='FAILED'?summarizeImageTaskQuality(qualityLayers):undefined,referenceImageIds:taskReferences.map(image=>image.id||image.source),qualityStatus:overallQuality,qualityReason:summarizeImageTaskQuality(qualityLayers),qualityLayers,qualityScores:{identity:review.identityScore,structure:review.structuralScore,facts:review.factScore,purpose:review.purposeScore,style:review.styleScore,language:qualityLayers.language.score},durationMs:Date.now()-taskStartedMs,costLabel:selectedModel?.costLabel,updatedAt:new Date().toISOString()}:item);return {...current,model,status:deriveImageProjectStatus(tasks),tasks,updatedAt:new Date().toISOString()}})
+        if(marketplaceSelection)await saveMarketplaceAsset('AI_GENERATED',outputUrl)
+      }catch(reason){
+        const error=reason instanceof Error?reason.message:'图片生成失败'
+        updateProject(current=>{const tasks=current.tasks.map(item=>item.id===task.id?{...item,status:'FAILED' as const,error,durationMs:Date.now()-taskStartedMs,updatedAt:new Date().toISOString()}:item);return {...current,status:deriveImageProjectStatus(tasks),tasks,updatedAt:new Date().toISOString()}})
       }
-      setModelUsage(current => {
-        const next = { ...current, [model]:(current[model] || 0) + completed.length }
-        localStorage.setItem(usageStorageKey, JSON.stringify(next))
-        return next
-      })
-      if(marketplaceSelection) for(const imageUrl of completed) await saveMarketplaceAsset('AI_GENERATED',imageUrl)
-      if (realShiftEnabled && plan !== 'detail') {
-        for (const index of [4,5]) if (completed[index]) await runRealShift(completed[index], index)
-      }
-    } catch (reason) {
-      setGenerationError(reason instanceof Error ? reason.message : '图片生成失败')
-    } finally { setGenerating(false); setGenerationProgress('') }
+    }
+    setModelUsage(current=>{const next={...current,[model]:(current[model]||0)+successCount};localStorage.setItem(usageStorageKey,JSON.stringify(next));return next})
+    setGenerating(false);setGenerationProgress('')
   }
+
+  const generateImage=()=>{
+    if(!facts?.confirmed){setGenerationError('请先确认商品事实');return}
+    if(!project){setGenerationError('请先生成图片清单');return}
+    setConfirmationOpen(true)
+  }
+
+  const approveAndGenerate=()=>{
+    if(!project)return
+    const now=new Date().toISOString()
+    const approved={...project,approved:true,approvedAt:now,status:'APPROVED' as const,model,updatedAt:now}
+    const issues=validateImageProductionProject(approved)
+    if(issues.length){setGenerationError(issues.join('；'));return}
+    setProject(approved);saveImageProductionProject(approved);setHistory(readImageProductionProjects());setConfirmationOpen(false)
+    setTimeout(()=>void runTasks(undefined,approved),0)
+  }
+
+  const retryFailed=()=>{
+    if(!project)return
+    void runTasks(project.tasks.filter(task=>task.status==='FAILED'||task.status==='REVIEW').map(task=>task.id))
+  }
+
+  const acceptReviewTask=(taskId:string)=>updateProject(current=>{const tasks=current.tasks.map(task=>task.id===taskId?{...task,status:'SUCCESS' as const,qualityStatus:'PASSED' as const,qualityReason:`人工复核通过：${task.qualityReason||'视觉一致性已确认'}`,error:undefined,updatedAt:new Date().toISOString()}:task);return{...current,status:deriveImageProjectStatus(tasks),tasks,updatedAt:new Date().toISOString()}})
+
+  const restoreProject=(saved:ImageProductionProject)=>{
+    setPlan(saved.plan);setTargetPlatform(saved.platform);setLanguage(saved.language);setMainImageCount(saved.mainImageCount??(saved.tasks.filter(task=>task.group==='MAIN').length||5));setDetailImageCount(saved.detailImageCount??(saved.tasks.filter(task=>task.group==='DETAIL').length||7));setModel(saved.model);setStyleLock(saved.styleLock||cloneImageStylePreset('CLEAN_COMMERCE'));setFacts(saved.facts);if(saved.referenceImages?.length)setReferenceImages(saved.referenceImages);setProject(saved);setGeneratedImages(saved.tasks.map(task=>task.outputUrl||'').filter(Boolean));setHistoryOpen(false)
+  }
+
+  const invalidateProjectForStyleChange=()=>{
+    if(!project)return
+    setProject(null);setGeneratedImages([])
+    setFacts(current=>current?{...current,confirmed:false,confirmedAt:undefined}:current)
+    setGenerationError('Style Lock 已更新，请重新确认商品事实生成清单')
+  }
+
+  const changeStylePreset=(presetId:ImageStylePresetId)=>{setStyleLock(cloneImageStylePreset(presetId));invalidateProjectForStyleChange()}
+  const editStyleLock=(field:keyof Pick<ImageStyleLock,'primaryColor'|'backgroundColor'|'lighting'|'composition'|'mood'|'typography'>,value:string)=>{setStyleLock(current=>({...current,[field]:value}));invalidateProjectForStyleChange()}
+
+  const openFormalLayout=async(task:ImageProductionTask)=>{
+    if(!facts||!task.outputUrl||!imageTaskAllowsTypography(task))return
+    const existing=task.layoutDraft,draft=existing||createDefaultImageLayout(task,facts,project?.styleLock||styleLock,language)
+    setLayoutTaskId(task.id);setLayoutDraft(draft);setLayoutError('')
+    if(existing||language==='中文')return
+    setLayoutBusy(true)
+    try{const protectedTerms=(facts.entries||[]).filter(entry=>['brand','sku','specification'].includes(entry.key)&&entry.status==='CONFIRMED').map(entry=>entry.value).filter(Boolean),result=await window.desktop.image.translateMarketing({texts:[draft.sourceHeadline||draft.headline,draft.sourceSubheadline||draft.subheadline],targetLanguage:language,protectedTerms:[...protectedTerms,...protectedCommerceTokens([draft.headline,draft.subheadline])]});setLayoutDraft(current=>current?{...current,headline:result.translations[0]||current.headline,subheadline:result.translations[1]||current.subheadline,translationStatus:result.status,translationIssues:result.issues}:current);if(result.issues.length)setLayoutError(result.issues.join('；'))}
+    catch(reason){const message=reason instanceof Error?reason.message:'营销文案翻译失败';setLayoutDraft(current=>current?{...current,translationStatus:'FAILED',translationIssues:[message]}:current);setLayoutError(`${message}；可以人工填写目标语言后标记复核。`)}
+    finally{setLayoutBusy(false)}
+  }
+
+  const markLayoutTranslationReviewed=()=>{if(!layoutDraft)return;const languageIssue=layoutDraft.language==='俄语'&&/[\u4e00-\u9fff]/.test(`${layoutDraft.headline}${layoutDraft.subheadline}`)?'俄语排版中仍包含中文营销文案':'';if(languageIssue){setLayoutError(languageIssue);return}setLayoutDraft({...layoutDraft,translationStatus:'TRANSLATED',translationIssues:[]});setLayoutError('')}
+
+  const applyFormalLayout=async()=>{
+    const task=project?.tasks.find(item=>item.id===layoutTaskId);if(!task?.outputUrl||!layoutDraft||layoutBusy)return
+    setLayoutBusy(true);setLayoutError('')
+    try{const finalOutputUrl=await composeFormalLayout(task.outputUrl,layoutDraft);updateProject(current=>({...current,updatedAt:new Date().toISOString(),tasks:current.tasks.map(item=>{if(item.id!==task.id)return item;const qualityLayers=item.qualityLayers?{...item.qualityLayers,language:{status:'PASSED' as const,score:100,reason:`${layoutDraft.language}营销文案与排版检查通过`}}:undefined;return{...item,layoutDraft,finalOutputUrl,localEdits:[],sizeVariants:[],qualityLayers,qualityReason:qualityLayers?summarizeImageTaskQuality(qualityLayers):item.qualityReason,updatedAt:new Date().toISOString()}})}));setLayoutTaskId(null);setLayoutDraft(null)}
+    catch(reason){setLayoutError(reason instanceof Error?reason.message:'正式排版失败')}
+    finally{setLayoutBusy(false)}
+  }
+
+  const restoreBaseImage=(taskId:string)=>updateProject(current=>({...current,updatedAt:new Date().toISOString(),tasks:current.tasks.map(item=>item.id===taskId?{...item,finalOutputUrl:undefined,localEdits:[],sizeVariants:[],updatedAt:new Date().toISOString()}:item)}))
+
+  const activeTaskImage=(task:ImageProductionTask)=>task.localEdits?.at(-1)?.outputUrl||task.finalOutputUrl||task.outputUrl||''
+  const openLocalEdit=(task:ImageProductionTask)=>{if(!activeTaskImage(task))return;setLocalEditTaskId(task.id);setLocalEditRegion({x:.2,y:.2,width:.35,height:.35});setLocalEditOperation('BRIGHTEN');setLocalEditInstruction('');setLocalEditCandidate(null);setLocalEditError('')}
+  const startLocalSelection=(event:ReactPointerEvent<HTMLDivElement>)=>{const rect=event.currentTarget.getBoundingClientRect(),x=Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width)),y=Math.max(0,Math.min(1,(event.clientY-rect.top)/rect.height));localEditDrag.current={x,y};setLocalEditRegion({x,y,width:.01,height:.01});event.currentTarget.setPointerCapture(event.pointerId)}
+  const moveLocalSelection=(event:ReactPointerEvent<HTMLDivElement>)=>{if(!localEditDrag.current)return;const rect=event.currentTarget.getBoundingClientRect(),x=Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width)),y=Math.max(0,Math.min(1,(event.clientY-rect.top)/rect.height)),start=localEditDrag.current;setLocalEditRegion({x:Math.min(start.x,x),y:Math.min(start.y,y),width:Math.max(.01,Math.abs(x-start.x)),height:Math.max(.01,Math.abs(y-start.y))})}
+  const finishLocalSelection=()=>{localEditDrag.current=null}
+  const applyLocalEdit=async()=>{const activeProject=project,task=activeProject?.tasks.find(item=>item.id===localEditTaskId);if(!activeProject||!task||localEditBusy)return;const sourceUrl=activeTaskImage(task);if(!sourceUrl)return;if(localEditRegion.width<.03||localEditRegion.height<.03){setLocalEditError('框选区域过小，请重新框选');return}if(localEditOperation==='AI_REPAINT'&&!localEditInstruction.trim()){setLocalEditError('请输入局部重绘要求');return}setLocalEditBusy(true);setLocalEditCandidate(null);setLocalEditError('');try{let replacementUrl:string|undefined;if(localEditOperation==='AI_REPAINT'){const cropUrl=await cropImageRegion(sourceUrl,localEditRegion);const result=await window.desktop.image.generate({model,prompt:`Edit only the referenced crop according to this instruction: ${localEditInstruction.trim()}. Preserve the original product identity, structure, material, color and surrounding visual style. Return a seamless replacement crop without text or border.`,referenceImageUrl:cropUrl,referenceImageUrls:[cropUrl],size:'1K',count:1});replacementUrl=result.imageUrls[0];if(!replacementUrl)throw new Error('模型没有返回局部重绘图片');setModelUsage(current=>{const next={...current,[model]:(current[model]||0)+1};localStorage.setItem(usageStorageKey,JSON.stringify(next));return next})}const outputUrl=await applyLocalImageEdit(sourceUrl,localEditRegion,localEditOperation,replacementUrl),taskReferences=selectTaskReferenceImages(task,referenceImages,selectedModel?.maxReferenceImages??1),referenceUrls=(taskReferences.length?taskReferences.map(image=>image.dataUrl):[activeProject.productImageUrl]).filter(Boolean),review=await window.desktop.image.reviewCandidate({title:activeProject.facts.productName,description:task.objective,itemSpecifics:[{name:'SKU',value:activeProject.facts.sku}],purpose:taskReviewPurpose(task),candidateUrl:outputUrl,sourceImages:referenceUrls,sourceLabels:taskReferences.length?taskReferences.map(image=>image.role||'DETAIL'):['PRIMARY'],referenceIndices:referenceUrls.map((_,index)=>index),protectedAttributes:['商品结构','主颜色','配件数量'],verifiedFacts:[activeProject.facts.productName,activeProject.facts.sku],shotInstruction:`${task.code} 局部修改后复检：${task.objective}`,styleInstruction:imageStyleTaskPrompt(activeProject.styleLock||styleLock,task),targetLanguage:activeProject.language,baseImageNoMarketingText:!task.finalOutputUrl,verifiedPackageTexts:(activeProject.facts.entries||[]).filter(entry=>entry.key==='packageText'&&entry.status==='CONFIRMED').map(entry=>entry.value).filter(Boolean),comparisonCandidateUrls:activeProject.tasks.filter(item=>item.id!==task.id).map(item=>activeTaskImage(item)).filter(Boolean)}),qualityLayers=buildImageTaskQualityLayers(review),qualityStatus=overallImageTaskQuality(qualityLayers),record:ImageLocalEditRecord={id:crypto.randomUUID(),operation:localEditOperation,instruction:localEditInstruction.trim()||undefined,region:localEditRegion,beforeUrl:sourceUrl,outputUrl,qualityStatus,qualityReason:summarizeImageTaskQuality(qualityLayers),qualityLayers,createdAt:new Date().toISOString()};setLocalEditCandidate(record);if(qualityStatus==='REJECTED')setLocalEditError('修改后四层质检未通过，原图保持不变。可调整区域或要求后重试。')}catch(reason){setLocalEditError(reason instanceof Error?reason.message:'局部修改失败')}finally{setLocalEditBusy(false)}}
+  const confirmLocalEdit=()=>{if(!localEditCandidate||localEditCandidate.qualityStatus==='REJECTED')return;const record=localEditCandidate;updateProject(current=>{const tasks=current.tasks.map(item=>item.id===localEditTaskId?{...item,status:record.qualityStatus==='PASSED'?'SUCCESS' as const:'REVIEW' as const,qualityStatus:record.qualityStatus,qualityReason:`局部修改复检：${record.qualityReason}`,qualityLayers:record.qualityLayers,localEdits:[...(item.localEdits||[]),record],sizeVariants:[],updatedAt:record.createdAt}:item);return{...current,status:deriveImageProjectStatus(tasks),updatedAt:record.createdAt,tasks}});setLocalEditCandidate(null);setLocalEditTaskId(null)}
+  const undoLocalEdit=(taskId:string)=>updateProject(current=>({...current,updatedAt:new Date().toISOString(),tasks:current.tasks.map(item=>item.id===taskId?{...item,localEdits:item.localEdits?.slice(0,-1),sizeVariants:[],updatedAt:new Date().toISOString()}:item)}))
+  const openMultiSize=(task:ImageProductionTask)=>{if(!activeTaskImage(task))return;setSizeTaskId(task.id);setSelectedSizeIds(['SQUARE','PORTRAIT']);setSizeBackground(project?.styleLock?.backgroundColor||'#FFFFFF');setSizeError('')}
+  const generateSizeVariants=async()=>{const task=project?.tasks.find(item=>item.id===sizeTaskId);if(!task||sizeBusy)return;if(!selectedSizeIds.length){setSizeError('请至少选择一个输出尺寸');return}setSizeBusy(true);setSizeError('');try{const sourceUrl=activeTaskImage(task),presets=imageSizePresets.filter(item=>selectedSizeIds.includes(item.id)),variants=await Promise.all(presets.map(item=>createSizeVariant(sourceUrl,item,sizeBackground))),rejected=variants.filter(item=>item.compliance?.status==='REJECTED');if(rejected.length){setSizeError(rejected.map(item=>`${item.label}：${item.compliance?.issues.join('、')}`).join('；'));return}updateProject(current=>({...current,updatedAt:new Date().toISOString(),tasks:current.tasks.map(item=>item.id===task.id?{...item,sizeVariants:variants,updatedAt:new Date().toISOString()}:item)}));setSizeTaskId(null)}catch(reason){setSizeError(reason instanceof Error?reason.message:'多尺寸生成失败')}finally{setSizeBusy(false)}}
+
+  const openBatchWorkspace=()=>{const projects=readImageProductionProjects();setHistory(projects);setBatchSelectedIds(projects.filter(item=>item.approved&&item.tasks.some(task=>task.status!=='SUCCESS')).map(item=>item.id));setBatchExportNotice('');setBatchOpen(true)}
+  const saveBatchProject=(next:ImageProductionProject)=>{saveImageProductionProject(next);setHistory(readImageProductionProjects());if(project?.id===next.id){setProject(next);setGeneratedImages(next.tasks.map(task=>task.outputUrl||'').filter(Boolean))}}
+  const completeBatchFormalLayout=async(active:ImageProductionProject,task:ImageProductionTask,outputUrl:string,qualityLayers:NonNullable<ImageProductionTask['qualityLayers']>)=>{
+    if(overallImageTaskQuality(qualityLayers)!=='PASSED'||!imageTaskAllowsTypography(task))return{qualityLayers,finalOutputUrl:undefined,layoutDraft:undefined}
+    let layoutDraft=createDefaultImageLayout(task,active.facts,active.styleLock||cloneImageStylePreset('CLEAN_COMMERCE'),active.language)
+    if(active.language!=='中文'){
+      const protectedTerms=(active.facts.entries||[]).filter(entry=>['brand','sku','specification'].includes(entry.key)&&entry.status==='CONFIRMED').map(entry=>entry.value).filter(Boolean)
+      try{const translated=await window.desktop.image.translateMarketing({texts:[layoutDraft.sourceHeadline||layoutDraft.headline,layoutDraft.sourceSubheadline||layoutDraft.subheadline],targetLanguage:active.language,protectedTerms:[...protectedTerms,...protectedCommerceTokens([layoutDraft.headline,layoutDraft.subheadline])]});layoutDraft={...layoutDraft,headline:translated.translations[0]||layoutDraft.headline,subheadline:translated.translations[1]||layoutDraft.subheadline,translationStatus:translated.status,translationIssues:translated.issues}}
+      catch(reason){const message=reason instanceof Error?reason.message:'营销文案翻译失败';return{qualityLayers:{...qualityLayers,language:{status:'REVIEW' as const,score:60,reason:message}},finalOutputUrl:undefined,layoutDraft:{...layoutDraft,translationStatus:'FAILED' as const,translationIssues:[message]}}}
+    }
+    const issues=validateImageLayoutDraft(layoutDraft)
+    if(issues.length)return{qualityLayers:{...qualityLayers,language:{status:'REVIEW' as const,score:60,reason:issues.join('；')}},finalOutputUrl:undefined,layoutDraft}
+    try{const finalOutputUrl=await composeFormalLayout(outputUrl,layoutDraft);return{qualityLayers:{...qualityLayers,language:{status:'PASSED' as const,score:100,reason:`${active.language}营销文案与排版检查通过`}},finalOutputUrl,layoutDraft}}
+    catch(reason){const message=reason instanceof Error?reason.message:'正式排版失败';return{qualityLayers:{...qualityLayers,language:{status:'REVIEW' as const,score:60,reason:message}},finalOutputUrl:undefined,layoutDraft}}
+  }
+  const runBatchQueue=async()=>{if(batchRunning||!batchSelectedIds.length)return;batchPauseRequested.current=false;setBatchRunning(true);setGenerationError('');const successfulByModel:Record<string,number>={}
+    try{for(const projectId of batchSelectedIds){if(batchPauseRequested.current)break;let active=readImageProductionProjects().find(item=>item.id===projectId);if(!active?.approved)continue;const pending=active.tasks.filter(task=>task.status!=='SUCCESS');for(let index=0;index<pending.length;index+=1){if(batchPauseRequested.current)break;const task=pending[index],taskStartedAt=new Date().toISOString(),taskStartedMs=Date.now();const batchModel:string=models.some(item=>item.id===active!.model)?active.model:model,profile=models.find(item=>item.id===batchModel);setBatchProgress(`${active.facts.sku} · ${task.code} · ${index+1}/${pending.length}`);active={...active,status:'RUNNING',updatedAt:taskStartedAt,tasks:active.tasks.map(item=>item.id===task.id?{...item,status:'RUNNING',error:undefined,startedAt:taskStartedAt,attempts:item.attempts+1,updatedAt:taskStartedAt}:item)};saveBatchProject(active)
+        try{const batchReferences=selectTaskReferenceImages(task,active.referenceImages||[],profile?.maxReferenceImages??1),references=(batchReferences.length?batchReferences.map(image=>image.dataUrl):[active.productImageUrl]).filter(Boolean),result=await window.desktop.image.generate({model:batchModel,prompt:task.prompt,referenceImageUrl:references[0],referenceImageUrls:references,size:'1K',count:1}),outputUrl=result.imageUrls[0];if(!outputUrl)throw new Error('模型没有返回图片');const review=await window.desktop.image.reviewCandidate({title:active.facts.productName,description:task.objective,itemSpecifics:[{name:'SKU',value:active.facts.sku}],purpose:taskReviewPurpose(task),candidateUrl:outputUrl,sourceImages:references,sourceLabels:batchReferences.length?batchReferences.map(image=>image.role||'DETAIL'):['PRIMARY'],referenceIndices:references.map((_,index)=>index),protectedAttributes:['商品结构','主颜色','配件数量'],verifiedFacts:[active.facts.productName,active.facts.sku],shotInstruction:`${task.code} ${task.title}：${task.objective}`,styleInstruction:imageStyleTaskPrompt(active.styleLock||cloneImageStylePreset('CLEAN_COMMERCE'),task),targetLanguage:active.language,baseImageNoMarketingText:true,verifiedPackageTexts:(active.facts.entries||[]).filter(entry=>entry.key==='packageText'&&entry.status==='CONFIRMED').map(entry=>entry.value).filter(Boolean),comparisonCandidateUrls:active.tasks.map(item=>item.outputUrl||'').filter(Boolean)}),baseQualityLayers=buildImageTaskQualityLayers(review),batchLayout=await completeBatchFormalLayout(active,task,outputUrl,baseQualityLayers),qualityLayers=batchLayout.qualityLayers,overallQuality=overallImageTaskQuality(qualityLayers),status:ImageProductionTask['status']=overallQuality==='PASSED'?'SUCCESS':overallQuality==='REJECTED'?'FAILED':'REVIEW';if(status==='SUCCESS'){successfulByModel[batchModel]=(successfulByModel[batchModel]||0)+1}const tasks:ImageProductionTask[]=active.tasks.map(item=>item.id===task.id?{...item,status,outputUrl,finalOutputUrl:batchLayout.finalOutputUrl,layoutDraft:batchLayout.layoutDraft,providerTaskId:result.taskId,error:status==='FAILED'?summarizeImageTaskQuality(qualityLayers):undefined,referenceImageIds:batchReferences.length?batchReferences.map(image=>image.id||image.source):['BATCH_PRIMARY'],qualityStatus:overallQuality,qualityReason:summarizeImageTaskQuality(qualityLayers),qualityLayers,qualityScores:{identity:review.identityScore,structure:review.structuralScore,facts:review.factScore,purpose:review.purposeScore,style:review.styleScore,language:qualityLayers.language.score},durationMs:Date.now()-taskStartedMs,costLabel:profile?.costLabel,updatedAt:new Date().toISOString()}:item);active={...active,model:batchModel,status:deriveImageProjectStatus(tasks),tasks,updatedAt:new Date().toISOString()};saveBatchProject(active)}catch(reason){const tasks:ImageProductionTask[]=active.tasks.map(item=>item.id===task.id?{...item,status:'FAILED' as const,error:reason instanceof Error?reason.message:'批量生成失败',durationMs:Date.now()-taskStartedMs,updatedAt:new Date().toISOString()}:item);active={...active,status:deriveImageProjectStatus(tasks),tasks,updatedAt:new Date().toISOString()};saveBatchProject(active)}}}
+    }finally{if(Object.keys(successfulByModel).length)setModelUsage(current=>{const next={...current};for(const [modelId,count] of Object.entries(successfulByModel))next[modelId]=(next[modelId]||0)+count;localStorage.setItem(usageStorageKey,JSON.stringify(next));return next});setBatchRunning(false);setBatchProgress(batchPauseRequested.current?'已暂停':'批量任务完成')}}
+  const exportOperationsCsv=()=>{const projects=readImageProductionProjects(),rows=[['SKU','商品','平台','方案','项目状态','任务','成功','待复核','失败','人工复核率','拒绝率','可安全导出','正式排版','重试','平均耗时ms','预估成本CNY','局部修改','尺寸产出']];for(const item of projects){const summary=buildImageOperationsSummary([item]);rows.push([item.facts.sku,item.productTitle,item.platform,item.plan,item.status,String(summary.taskCount),String(summary.successCount),String(summary.reviewCount),String(summary.failedCount),`${summary.manualReviewRate}%`,`${summary.rejectionRate}%`,String(summary.exportReadyCount),String(summary.formalLayoutCount),String(summary.retryCount),String(summary.averageDurationMs),String(summary.estimatedCostCny),String(summary.localEditCount),String(summary.sizeVariantCount)])}const csv='\uFEFF'+rows.map(row=>row.map(value=>`"${String(value).replaceAll('"','""')}"`).join(',')).join('\n'),url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download=`image-operations-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(url);setBatchExportNotice(`运营CSV已导出，共${projects.length}个SKU项目`)}
+  const exportBatchImages=()=>{const selected=new Set(batchSelectedIds);let exported=0,blocked=0;readImageProductionProjects().filter(item=>selected.has(item.id)).forEach(item=>item.tasks.forEach(task=>{if(!isImageTaskExportReady(task)){blocked+=1;return}const url=task.localEdits?.at(-1)?.outputUrl||task.finalOutputUrl||task.outputUrl;if(!url){blocked+=1;return}const link=document.createElement('a');link.href=url;link.download=`${item.facts.sku}-${task.code}.png`;link.click();exported+=1;task.sizeVariants?.filter(variant=>variant.compliance?.status==='PASSED').forEach(variant=>{const child=document.createElement('a');child.href=variant.outputUrl;child.download=`${item.facts.sku}-${task.code}-${variant.id}.png`;child.click()})}));setBatchExportNotice(`已安全导出${exported}张，拦截${blocked}张未通过质检或未完成正式排版的图片`)}
 
   const configureMonthlyLimit = () => {
     const value = window.prompt('请输入本项目每月图片额度（张）', monthlyLimit ? String(monthlyLimit) : '100')
@@ -1672,23 +2165,38 @@ function ImageStudio({ product, marketplaceSelection, onOpenInventory }: { produ
     <aside className="image-tool-panel">
       <div className="image-panel-heading"><small>IMAGE WORKBENCH</small><h2>{marketplaceSelection?'Ozon平台素材':'商品视觉生成'}</h2><p>{marketplaceSelection?`平台SKU链路 · ${marketplaceSelection.productId||marketplaceSelection.id.slice(0,8)}`:'基于入库商品和目标平台要求生成'}</p></div>
       <div className="image-source-card">
-        <div><b>AI入库商品</b><span>{product?'已选择':'未选择'}</span></div>
-        {product ? <button className="selected-product" onClick={onOpenInventory}><img src={product.imageUrl} alt=""/><span><b>{product.title}</b><small>点击返回AI入库更换商品</small></span></button> : <button className="empty-product" onClick={onOpenInventory}>＋ 从AI入库选择商品</button>}
+        <div><b>商品来源</b><span>{product?('sourceKind' in product?product.sourceLabel:'AI入库'):'未选择'}</span></div>
+        {product ? <><button className="selected-product" onClick={()=>setSourceMenuOpen(true)}><img src={referenceImageUrl} alt=""/><span><b>{facts?.productName||product.title}</b><small>{'sourceKind' in product?`${product.sourceLabel} · 点击更换来源`:'AI入库 · 点击更换来源'}</small></span></button><button className="reference-manager-trigger" onClick={()=>setReferenceManagerOpen(true)}>管理参考图 <span>{referenceImages.length}张</span></button></> : <button className="empty-product" onClick={()=>setSourceMenuOpen(true)}>＋ 添加商品<small>本地图片 · 产品网址 · AI入库</small></button>}
       </div>
+      {facts&&<div className={`image-fact-card ${facts.confirmed?'confirmed':''}`}>
+        <div><b>商品事实确认</b><span>{facts.confirmed?'✓ 已锁定':'生成前必需'}</span></div>
+        <p className="fact-source-summary" title={productSourceUrl||facts.source}>来源：{facts.source} · 每项事实均保留来源与确认状态</p>
+        <details className="fact-ledger" open={!facts.confirmed}>
+          <summary>商品事实卡 <em>{(facts.entries||[]).filter(entry=>entry.status==='CONFIRMED').length}/{facts.entries?.length||0}项已确认</em></summary>
+          {!facts.confirmed&&<div className="package-ocr-toolbar"><button disabled={packageOcrBusy||!referenceImages.length} onClick={()=>void extractPackageText()}>{packageOcrBusy?'正在识别包装…':'识别包装文字'}</button><span>逐图提取品牌、型号、规格、数量和条码；结果必须人工确认</span></div>}
+          {facts.packageTextExtraction&&<div className={`package-ocr-result ${facts.packageTextExtraction.conflicts.length?'conflict':''}`}><b>包装OCR：{facts.packageTextExtraction.observations.length}张识别到文字</b>{facts.packageTextExtraction.conflicts.length?<em>存在冲突：{facts.packageTextExtraction.conflicts.join('、')}</em>:<em>未发现跨图字段冲突</em>}{facts.packageTextExtraction.observations.map(item=><small key={item.sourceIndex}>图{item.sourceIndex+1} · 置信度{item.confidence}%：{item.rawText||Object.values(item.fields).join('；')}</small>)}</div>}
+          <div className="fact-ledger-grid">{(facts.entries||[]).map(entry=><label key={entry.key} className={entry.status.toLocaleLowerCase()}><span><b>{entry.label}{entry.highRisk&&<i>高风险</i>}</b><small>{entry.sourceLabel}</small></span><input aria-label={`事实-${entry.label}`} disabled={facts.confirmed} value={entry.value} placeholder="未知则留空" onChange={event=>editFactEntry(entry.key,event.target.value)}/><select aria-label={`${entry.label}状态`} disabled={facts.confirmed} value={entry.status} onChange={event=>setFactStatus(entry.key,event.target.value as ImageFactStatus)}><option value="CONFIRMED">已确认</option><option value="PENDING">待确认</option><option value="CONFLICT">冲突</option><option value="UNREADABLE">不可识别</option></select></label>)}</div>
+        </details>
+        {product&&'sourceKind' in product&&product.evidence?.length?<details className="source-evidence"><summary>查看来源证据 · {product.images.length}张图片 / {product.pageFacts?.length||0}项网页事实</summary>{product.evidence.slice(0,20).map((item,index)=><span key={`${item.field}-${index}`}><b>{item.field==='title'?'标题':item.field==='productId'?'商品ID':item.field==='priceText'?'价格':item.field==='attribute'?'属性':item.field==='sku'?'SKU图':item.field==='description'?'详情图':'主图'}</b><em title={item.source}>{item.value}</em></span>)}</details>:null}
+        <p>空白或不可识别字段不会进入生成；尺寸、数量、材质、结构、配件、功能和包装文字必须确认后才能使用。</p>
+        {generationError&&validateImageProductFacts(facts).length>0&&<div className="fact-validation-error">{validateImageProductFacts(facts).join('；')}</div>}
+        {facts.confirmed?<button onClick={()=>{setFacts(current=>current?{...current,confirmed:false,confirmedAt:undefined}:current);setProject(null);setGeneratedImages([])}}>重新编辑事实</button>:<button className="primary" disabled={!facts.productName.trim()||!facts.sku.trim()} onClick={confirmFacts}>确认并锁定商品事实</button>}
+      </div>}
       <div className="generation-flow-fields"><label>目标跨境平台<select value={targetPlatform} onChange={event=>setTargetPlatform(event.target.value)}><option>Ozon</option><option disabled>Amazon（即将支持）</option><option disabled>Wildberries（即将支持）</option></select></label><label>目标语言<select value={language} onChange={event=>setLanguage(event.target.value)}><option>俄语</option><option>英语</option><option>西班牙语</option></select></label></div>
       <div className="generation-plan-list"><small>选择生成方案</small>{plans.map(item=><button key={item.id} className={plan===item.id?'active':''} onClick={()=>setPlan(item.id)}><i>{item.icon}</i><span><b>{item.name}{item.recommended&&<em>推荐</em>}</b><small>{item.note}</small></span><strong>{item.count}张</strong></button>)}
       </div>
-      <div className="plan-summary"><b>本次生成清单</b>{(plan==='full'||plan==='main')&&<span>主图与商品图库 <strong>6张</strong></span>}{(plan==='full'||plan==='detail')&&<span>详情页模块 <strong>10张</strong></span>}<span className="plan-total">合计 <strong>{activePlan.count}张</strong></span></div>
+      <div className="plan-count-settings"><b>自定义生成数量</b><div>{(plan==='full'||plan==='main')&&<label>主图<input aria-label="主图生成数量" type="number" min="1" max="99" value={mainImageCount} onChange={event=>setMainImageCount(Math.min(99,Math.max(1,Math.floor(Number(event.target.value)||1))))}/><span>张</span></label>}{(plan==='full'||plan==='detail')&&<label>详情页<input aria-label="详情页生成数量" type="number" min="1" max="99" value={detailImageCount} onChange={event=>setDetailImageCount(Math.min(99,Math.max(1,Math.floor(Number(event.target.value)||1))))}/><span>张</span></label>}</div><small>数量按平台分别保存，生成前可随时调整。</small></div>
     </aside>
 
     <div className="image-workspace">
-      <div className="image-workspace-toolbar"><div><small>当前方案</small><b>{activePlan.name} · {targetPlatform}</b></div><div className="image-toolbar-actions"><button>生成历史</button><button className="primary" disabled={!product || generating || !models.length} onClick={generateImage}>{generating?generationProgress:'确认并开始生成'}</button></div></div>
+      <div className="image-workspace-toolbar"><div><small>当前方案</small><b>{activePlan.name} · {targetPlatform}</b></div><div className="image-toolbar-actions"><button onClick={openBatchWorkspace}>批量SKU与运营</button><button onClick={()=>{setHistory(readImageProductionProjects());setHistoryOpen(true)}}>生成历史</button>{project?.tasks.some(task=>task.status==='FAILED'||task.status==='REVIEW')&&<button onClick={retryFailed} disabled={generating}>重做待复核/失败项</button>}<button className="primary" disabled={!product || !facts?.confirmed || generating || !models.length} onClick={generateImage}>{generating?generationProgress:project?.approved&&project.tasks.some(task=>task.status==='FAILED'||task.status==='REVIEW')?'继生成待处理项':'确认并开始生成'}</button></div></div>
+      {batchOpen&&<div className="image-production-backdrop"><div className="image-batch-dialog"><header><div><small>BATCH SKU & OPERATIONS</small><h3>批量SKU与运营数据</h3><p>串行执行已批准项目，按SKU保存进度；暂停不会中断当前正在生成的单张图片。</p></div><button disabled={batchRunning} onClick={()=>setBatchOpen(false)}>×</button></header><div className="image-operations-metrics">{(()=>{const summary=buildImageOperationsSummary(history);return <><span><b>{summary.skuCount}</b><small>SKU项目</small></span><span><b>{summary.completedSkuCount}</b><small>已完成SKU</small></span><span><b>{summary.qualityPassRate}%</b><small>图片通过率</small></span><span><b>{summary.retryCount}</b><small>重试次数</small></span><span><b>{summary.manualReviewRate}%</b><small>人工复核率</small></span><span><b>{summary.averageDurationMs?`${(summary.averageDurationMs/1000).toFixed(1)}s`:'--'}</b><small>平均耗时</small></span><span><b>{summary.sizeVariantCount}</b><small>尺寸产出</small></span><span><b>{summary.exportReadyCount}</b><small>可安全导出</small></span></>})()}</div><div className="image-batch-toolbar"><label><input type="checkbox" checked={history.length>0&&batchSelectedIds.length===history.length} onChange={event=>setBatchSelectedIds(event.target.checked?history.map(item=>item.id):[])}/> 全选项目</label><span>已选 {batchSelectedIds.length} 个 · 安全串行并发 1</span><div><button onClick={exportOperationsCsv}>导出运营CSV</button><button disabled={!batchSelectedIds.length} onClick={exportBatchImages}>导出所选图片</button></div></div>{batchExportNotice&&<div className="image-batch-progress">{batchExportNotice}</div>}<div className="image-batch-list">{history.length?history.map(item=>{const summary=buildImageOperationsSummary([item]);return <label key={item.id}><input type="checkbox" disabled={batchRunning} checked={batchSelectedIds.includes(item.id)} onChange={event=>setBatchSelectedIds(current=>event.target.checked?[...current,item.id]:current.filter(id=>id!==item.id))}/><img src={item.productImageUrl} alt=""/><span><b>{item.facts.sku} · {item.productTitle}</b><small>{item.platform} · {item.styleLock?.presetName||'默认风格'} · {summary.successCount}/{summary.taskCount} 已通过</small><small>待复核 {summary.reviewCount} · 失败 {summary.failedCount} · 重试 {summary.retryCount}</small></span><em className={item.status.toLocaleLowerCase()}>{item.status==='COMPLETED'?'已完成':item.status==='RUNNING'?'生成中':item.status==='PARTIAL'?'部分完成':item.status==='FAILED'?'失败':'待执行'}</em></label>}):<div className="image-history-empty">暂无SKU项目，请先完成商品事实确认并生成清单。</div>}</div>{batchProgress&&<div className="image-batch-progress">{batchProgress}</div>}<footer><button disabled={batchRunning} onClick={()=>setBatchOpen(false)}>关闭</button>{batchRunning?<button className="danger" onClick={()=>{batchPauseRequested.current=true;setBatchProgress('正在完成当前单图，随后暂停…')}}>暂停队列</button>:<button className="primary" disabled={!batchSelectedIds.length||!models.length} onClick={()=>void runBatchQueue()}>开始/继续批量生成</button>}</footer></div></div>}
       <div className="image-product-strip">
-        <span>生成进度</span>{generatedImages.length ? generatedImages.map((url,index)=><button key={url} className={index===0?'active':''}><img src={url} alt="生成结果"/><i>{index+1}</i></button>) : <span className="generation-waiting">确认清单后开始分批生成</span>}
+        <span>生成进度</span>{project?.tasks.length ? project.tasks.map(task=>{const position=taskPosition(task);return <button key={task.id} className={task.status.toLocaleLowerCase()} title={`${position.label} ${position.index}/${position.total} · ${task.title} · ${task.code}`}><i>{position.short}{position.index}</i></button>}) : <span className="generation-waiting">确认商品事实后生成逐图清单</span>}
       </div>
       <div className="image-editor">
         <div className="image-canvas">
-          {generatedImages.length ? <div className="generation-results"><div className="generated-gallery">{generatedImages.map((url,index)=><figure key={url}><div><img src={realShiftResults[index]?.processedDataUrl || url} alt={`生成结果${index+1}`}/>{realShiftResults[index]&&<span className="realshift-badge">已优化</span>}</div><figcaption><span>{index < 6 && plan!=='detail'?'商品图库':'详情页模块'} {index+1}</span><div>{marketplaceSelection&&<button className={savedChoices[index]==='original'?'selected':''} onClick={()=>void selectGeneratedAsset(index)}>设为平台图</button>}{realShiftResults[index]&&<button onClick={()=>setCompareIndex(index)}>原图对比</button>}<button disabled={realShiftProcessing===index} onClick={()=>runRealShift(url,index)}>{realShiftProcessing===index?'处理中':'真实感优化'}</button></div></figcaption></figure>)}</div>{compareIndex!==null&&realShiftResults[compareIndex]&&<div className="realshift-compare"><div className="compare-heading"><span><b>原图与真实感优化对比</b><small>{realShiftResults[compareIndex].profile==='light'?'轻度':'均衡'} · 第 {compareIndex+1} 张</small></span><button onClick={()=>setCompareIndex(null)}>关闭</button></div><div className="compare-images"><figure><img src={realShiftResults[compareIndex].originalDataUrl}/><figcaption>百炼原始图</figcaption></figure><figure><img src={realShiftResults[compareIndex].processedDataUrl}/><figcaption>RealShift优化图</figcaption></figure></div><div className="compare-report"><span>原始自然度参考 <b>{Math.round((1-realShiftResults[compareIndex].originalScore.risk)*100)}</b></span><span>优化后自然度参考 <b>{Math.round((1-realShiftResults[compareIndex].processedScore.risk)*100)}</b></span><span>选择迭代 <b>{realShiftResults[compareIndex].chosenIteration+1}</b></span><span>平台素材 <b>{marketplaceAssets.filter(asset=>asset.selected).length?'已选定':'待选定'}</b></span></div><div className="compare-actions"><button onClick={()=>runRealShift(generatedImages[compareIndex],compareIndex)}>重新处理</button><button className={savedChoices[compareIndex]==='original'?'selected':''} onClick={()=>void saveRealShiftChoice(compareIndex,'original')}>使用原图</button><button className={savedChoices[compareIndex]==='processed'?'primary selected':'primary'} onClick={()=>void saveRealShiftChoice(compareIndex,'processed')}>使用优化图</button></div></div>}</div> : product?.imageUrl ? <div className="image-preview"><span>入库商品原图</span><img src={product.imageUrl} alt={product.title}/></div> : <div className="image-canvas-empty"><i>▧</i><h3>请先从AI入库选择商品</h3><p>系统将读取商品资料并按目标平台规则生成</p><button className="primary" onClick={onOpenInventory}>前往AI入库</button></div>}
+          {project?.tasks.length ? <div className="generation-results"><div className="task-group-filters"><button className={taskGroupFilter==='ALL'?'active':''} onClick={()=>setTaskGroupFilter('ALL')}>全部 <span>{project.tasks.length}</span></button><button className={taskGroupFilter==='MAIN'?'active main':''} onClick={()=>setTaskGroupFilter('MAIN')}>主图 <span>{mainTasks.length}</span></button><button className={taskGroupFilter==='DETAIL'?'active detail':''} onClick={()=>setTaskGroupFilter('DETAIL')}>详情页 <span>{detailTasks.length}</span></button></div><div className="generated-gallery production-task-gallery">{visibleTasks.map(task=>{const index=project.tasks.findIndex(item=>item.id===task.id),position=taskPosition(task);return <figure key={task.id} className={`production-task ${task.status.toLocaleLowerCase()} ${task.group.toLocaleLowerCase()}`}><div>{task.outputUrl?<img src={activeTaskImage(task)} alt={`${position.label} ${position.index}/${position.total} ${task.title}`}/>:<div className="production-task-placeholder"><b>{position.short}{position.index}</b><span>{task.status==='RUNNING'?'生成中':task.status==='FAILED'?'生成失败':'等待生成'}</span></div>}<span className={`production-status ${task.status.toLocaleLowerCase()}`}>{task.localEdits?.length?`局部修改 ${task.localEdits.length}版`:task.finalOutputUrl?'正式排版':task.status==='SUCCESS'?'已通过':task.status==='REVIEW'?'待人工复核':task.status==='FAILED'?'质检未通过':task.status==='RUNNING'?'生成/质检中':'等待中'}</span></div><figcaption><span><div className="task-readable-heading"><em className={task.group.toLocaleLowerCase()}>{position.label} {position.index}/{position.total}</em><b>{task.title}</b><small>{task.code}</small></div><small>{task.objective}</small>{task.finalOutputUrl&&<small>底图已保留 · {task.layoutDraft?.language}</small>}{task.sizeVariants?.length?<small>多尺寸 {task.sizeVariants.length}个 · 完整主体留白适配</small>:null}{task.referenceImageIds?.length?<small>参考图 {task.referenceImageIds.length}张 · {task.referenceRoles?.join('/')}</small>:null}{task.qualityReason&&<em className={`quality-${task.qualityStatus?.toLocaleLowerCase()}`}>{task.qualityReason}</em>}{task.error&&!task.qualityReason&&<em>{task.error}</em>}</span><div>{(task.status==='FAILED'||task.status==='REVIEW')&&<button disabled={generating} onClick={()=>void runTasks([task.id])}>单张重做</button>}{task.status==='REVIEW'&&<button onClick={()=>acceptReviewTask(task.id)}>人工通过</button>}{task.outputUrl&&imageTaskAllowsTypography(task)&&<button onClick={()=>openFormalLayout(task)}>{task.finalOutputUrl?'编辑排版':'正式排版'}</button>}{task.finalOutputUrl&&<button onClick={()=>restoreBaseImage(task.id)}>恢复底图</button>}{task.outputUrl&&<button onClick={()=>openLocalEdit(task)}>局部修改</button>}{task.localEdits?.length?<button onClick={()=>undoLocalEdit(task.id)}>撤销局改</button>:null}{task.outputUrl&&<button onClick={()=>openMultiSize(task)}>多尺寸</button>}{task.outputUrl&&marketplaceSelection&&<button className={savedChoices[index]==='original'?'selected':''} onClick={()=>void selectGeneratedAsset(index)}>设为平台图</button>}{task.outputUrl&&<button disabled={realShiftProcessing===index} onClick={()=>runRealShift(task.outputUrl!,index)}>{realShiftProcessing===index?'处理中':'真实感优化'}</button>}</div></figcaption></figure>})}</div></div> : referenceImageUrl ? <div className="image-preview"><span>{facts?.confirmed?'商品事实已确认，图片清单待生成':'商品参考原图'}</span><img src={referenceImageUrl} alt={product?.title||''}/></div> : <div className="image-canvas-empty"><i>▧</i><h3>请先添加商品</h3><p>支持本地图片、产品网址和AI入库商品</p><button className="primary" onClick={()=>setSourceMenuOpen(true)}>添加商品</button></div>}
         </div>
         <aside className="image-settings">
           <div className="settings-title"><b>{activePlan.name}</b><small>{activePlan.note}</small></div>
@@ -1698,16 +2206,29 @@ function ImageStudio({ product, marketplaceSelection, onOpenInventory }: { produ
             <span className={`model-connection ${models.length?'connected':''}`}>{models.length?'●':'○'} {modelStatus}</span>
           </label>
           <div className="image-quota-card"><div className="quota-heading"><span><b>图片使用额度</b><small>本地项目统计</small></span><button type="button" onClick={configureMonthlyLimit}>{monthlyLimit?'调整':'设置额度'}</button></div><div className="quota-metrics"><span><b>{totalUsage}</b><small>本月已用</small></span><span><b>{monthlyLimit ? Math.max(0,monthlyLimit-totalUsage) : '--'}</b><small>项目剩余</small></span><span><b>{monthlyLimit || '--'}</b><small>月额度</small></span></div>{monthlyLimit>0 && <div className="quota-progress"><i style={{width:`${Math.min(100,totalUsage/monthlyLimit*100)}%`}}/></div>}<p>百炼云端剩余额度暂不支持通过推理API读取，请以百炼控制台为准。</p></div>
-          <label>平台图片规范<select><option>{targetPlatform} · 自动匹配主图与详情页</option></select></label>
-          <label>画面风格<select><option>简洁跨境电商</option><option>轻场景</option><option>品牌质感</option><option>生活方式</option></select></label>
+          <div className="platform-rule-card"><div><span><b>{platformRule.platformName}图片规则</b><small>规则版本 {platformRule.version}</small></span><em>已应用</em></div><dl><div><dt>首图</dt><dd>{platformRule.heroRules[0]}</dd></div><div><dt>图库上限</dt><dd>最多{platformRule.maxGalleryImages}张</dd></div><div><dt>生产建议</dt><dd>{platformRule.recommendedMainCount}张主图 + {platformRule.recommendedDetailCount}张详情页</dd></div></dl><p>官方规则参与任务Prompt；生产数量仍可自定义。</p>{platformWarnings.map(warning=><div className="platform-rule-warning" key={warning}>{warning}</div>)}<a href={platformRule.sourceUrl} target="_blank" rel="noreferrer">查看官方依据 ↗</a></div>
+          <div className="style-lock-card"><div className="style-lock-heading"><span><b>Style Lock</b><small>生成与质检使用同一视觉合同</small></span><em>LOCKED</em></div><label>视觉模板<select aria-label="Style Lock视觉模板" value={styleLock.presetId} onChange={event=>changeStylePreset(event.target.value as ImageStylePresetId)}>{Object.values(IMAGE_STYLE_PRESETS).map(item=><option key={item.presetId} value={item.presetId}>{item.presetName}</option>)}</select></label><div className="style-lock-colors"><label>强调色<input aria-label="Style Lock强调色" type="color" value={styleLock.primaryColor} onChange={event=>editStyleLock('primaryColor',event.target.value)}/><span>{styleLock.primaryColor}</span></label><label>背景色<input aria-label="Style Lock背景色" type="color" value={styleLock.backgroundColor} onChange={event=>editStyleLock('backgroundColor',event.target.value)}/><span>{styleLock.backgroundColor}</span></label></div><div className={`style-contract-requirements ${styleLock.presetId.toLocaleLowerCase()}`}><b>{styleLock.presetName}硬性标准</b><p>{styleContract.shortDescription}</p><span><strong>必须出现</strong>{styleContract.requiredCues.join(' · ')}</span><span><strong>禁止出现</strong>{styleContract.forbiddenCues.join(' · ')}</span><small>适用：{styleContract.bestFor.join('、')}。平台首图会自动使用合规收敛版。</small></div><details><summary>编辑视觉规则</summary><label>灯光<input aria-label="Style Lock灯光" value={styleLock.lighting} onChange={event=>editStyleLock('lighting',event.target.value)}/></label><label>构图<input aria-label="Style Lock构图" value={styleLock.composition} onChange={event=>editStyleLock('composition',event.target.value)}/></label><label>氛围<input aria-label="Style Lock氛围" value={styleLock.mood} onChange={event=>editStyleLock('mood',event.target.value)}/></label><label>排版倾向<input aria-label="Style Lock排版倾向" value={styleLock.typography} onChange={event=>editStyleLock('typography',event.target.value)}/></label></details><p>只影响环境、道具、背景、灯光与构图，不改变商品真实颜色和结构。</p></div>
           <div className="realshift-settings"><label className="realshift-toggle"><input type="checkbox" checked={realShiftEnabled} onChange={event=>setRealShiftEnabled(event.target.checked)}/><span><b>真实感优化</b><small>默认只自动处理场景图，原图永久保留</small></span></label>{realShiftEnabled&&<div className="realshift-profiles"><button className={realShiftProfile==='light'?'active':''} onClick={()=>setRealShiftProfile('light')}>轻度<small>推荐</small></button><button className={realShiftProfile==='balanced'?'active':''} onClick={()=>setRealShiftProfile('balanced')}>均衡<small>更明显</small></button></div>}</div>
           <label>补充要求<textarea value={extraPrompt} onChange={event=>setExtraPrompt(event.target.value)} placeholder="例如：保持商品颜色和结构，不改变配件数量…" /></label>
           {generationError && <div className="generation-error">{generationError}</div>}
           <div className="safety-note"><b>商品一致性保护</b><span>默认检查商品结构、颜色、配件数量和文字合规。</span></div>
-          <button className="primary image-generate" disabled={!product || generating || !models.length} onClick={generateImage}>{generating?generationProgress:`生成${activePlan.name} · ${activePlan.count}张`}</button>
+          <button className="primary image-generate" disabled={!product || !facts?.confirmed || generating || !models.length} onClick={generateImage}>{generating?generationProgress:`确认${activePlan.name} · ${activePlan.count}张`}</button>
         </aside>
       </div>
     </div>
+    {localEditTaskId&&project&&<div className="image-production-backdrop"><div className="image-local-edit-dialog"><header><div><small>LOCAL EDIT</small><h3>局部修改 · {project.tasks.find(item=>item.id===localEditTaskId)?.code}</h3><p>先生成候选并执行四层复检，确认采用前原图不会被替换。</p></div><button onClick={()=>{setLocalEditCandidate(null);setLocalEditTaskId(null)}}>×</button></header><div className="image-local-edit-body"><div className={localEditCandidate?'local-edit-comparison':''}><div><b>修改前</b><div className="local-selection-canvas" onPointerDown={localEditCandidate?undefined:startLocalSelection} onPointerMove={localEditCandidate?undefined:moveLocalSelection} onPointerUp={localEditCandidate?undefined:finishLocalSelection} onPointerCancel={localEditCandidate?undefined:finishLocalSelection}>{project.tasks.find(item=>item.id===localEditTaskId)&&<img draggable={false} src={localEditCandidate?.beforeUrl||activeTaskImage(project.tasks.find(item=>item.id===localEditTaskId)!)} alt="修改前"/>}{!localEditCandidate&&<i style={{left:`${localEditRegion.x*100}%`,top:`${localEditRegion.y*100}%`,width:`${localEditRegion.width*100}%`,height:`${localEditRegion.height*100}%`}}/>}</div></div>{localEditCandidate&&<div><b>修改后候选</b><div className="local-selection-canvas"><img draggable={false} src={localEditCandidate.outputUrl} alt="修改后候选"/></div></div>}</div><div className="local-edit-controls"><b>修改方式</b><div>{([['BRIGHTEN','提亮'],['DARKEN','压暗'],['BLUR','模糊'],['AI_REPAINT','AI局部重绘']] as const).map(([value,label])=><button key={value} className={localEditOperation===value?'active':''} disabled={Boolean(localEditCandidate)||(value==='AI_REPAINT'&&(selectedModel?.maxReferenceImages??0)<1)} onClick={()=>setLocalEditOperation(value)}>{label}</button>)}</div>{localEditOperation==='AI_REPAINT'&&<label>重绘要求<textarea aria-label="局部重绘要求" disabled={Boolean(localEditCandidate)} value={localEditInstruction} onChange={event=>setLocalEditInstruction(event.target.value)} placeholder="例如：修复表面划痕，保持原有材质和颜色"/></label>}<dl><div><dt>X / Y</dt><dd>{Math.round(localEditRegion.x*100)}% / {Math.round(localEditRegion.y*100)}%</dd></div><div><dt>宽 / 高</dt><dd>{Math.round(localEditRegion.width*100)}% / {Math.round(localEditRegion.height*100)}%</dd></div></dl>{localEditCandidate&&<div className={`local-edit-review ${localEditCandidate.qualityStatus?.toLocaleLowerCase()}`}><b>{localEditCandidate.qualityStatus==='PASSED'?'四层复检通过':localEditCandidate.qualityStatus==='REVIEW'?'需要人工确认':'四层复检未通过'}</b><p>{localEditCandidate.qualityReason}</p></div>}{localEditOperation==='AI_REPAINT'&&!localEditCandidate&&<p>AI局部重绘会调用当前支持参考图的模型并产生1次模型用量；其他修正均在本地完成。</p>}{localEditError&&<div className="generation-error">{localEditError}</div>}</div></div><footer><button onClick={()=>{setLocalEditCandidate(null);setLocalEditTaskId(null)}}>取消并保留原图</button>{localEditCandidate?<><button onClick={()=>{setLocalEditCandidate(null);setLocalEditError('')}}>重新修改</button><button className="primary" disabled={localEditCandidate.qualityStatus==='REJECTED'} onClick={confirmLocalEdit}>{localEditCandidate.qualityStatus==='REVIEW'?'人工确认采用':'确认采用'}</button></>:<button className="primary" disabled={localEditBusy} onClick={()=>void applyLocalEdit()}>{localEditBusy?'生成并复检中…':'生成候选并复检'}</button>}</footer></div></div>}
+    {sizeTaskId&&project&&<div className="image-production-backdrop"><div className="image-size-dialog"><header><div><small>MULTI SIZE</small><h3>多尺寸输出 · {project.tasks.find(item=>item.id===sizeTaskId)?.code}</h3><p>按完整主体留白适配，并检查尺寸、格式、文件大小和裁切风险。</p></div><button onClick={()=>setSizeTaskId(null)}>×</button></header><div className="image-size-body"><div className="size-source-preview">{project.tasks.find(item=>item.id===sizeTaskId)&&<img src={activeTaskImage(project.tasks.find(item=>item.id===sizeTaskId)!)} alt="多尺寸源图"/>}</div><div className="size-preset-list">{imageSizePresets.map(item=><label key={item.id}><input type="checkbox" checked={selectedSizeIds.includes(item.id)} onChange={event=>setSelectedSizeIds(current=>event.target.checked?[...current,item.id]:current.filter(id=>id!==item.id))}/><span><b>{item.label}</b><small>{item.width} × {item.height}px · PNG · ≤10MB · 完整主体</small></span></label>)}<label className="size-background">留白背景色<input aria-label="尺寸留白背景色" type="color" value={sizeBackground} onChange={event=>setSizeBackground(event.target.value)}/><em>{sizeBackground}</em></label>{sizeError&&<div className="generation-error">{sizeError}</div>}</div></div><footer><button onClick={()=>setSizeTaskId(null)}>取消</button><button className="primary" disabled={sizeBusy||!selectedSizeIds.length} onClick={()=>void generateSizeVariants()}>{sizeBusy?'生成并检查中…':`生成并检查 ${selectedSizeIds.length} 个尺寸`}</button></footer></div></div>}
+    {layoutTaskId&&layoutDraft&&project&&<div className="image-production-backdrop"><div className="image-layout-dialog"><header><div><small>FORMAL TYPOGRAPHY</small><h3>正式排版 · {project.tasks.find(item=>item.id===layoutTaskId)?.code}</h3><p>底图与排版分层保存；请确认文案与目标语言后生成成品。</p></div><button onClick={()=>{setLayoutTaskId(null);setLayoutDraft(null)}}>×</button></header><div className="image-layout-body"><div className={`image-layout-preview ${layoutDraft.template.toLocaleLowerCase()}`}>{project.tasks.find(item=>item.id===layoutTaskId)?.outputUrl&&<img src={project.tasks.find(item=>item.id===layoutTaskId)?.outputUrl} alt="无字底图"/>}<div style={{backgroundColor:`${layoutDraft.accentColor}e8`,color:layoutDraft.textColor,fontFamily:layoutFonts[layoutDraft.fontFamily]}}><b>{layoutDraft.headline||'主标题预览'}</b><span>{layoutDraft.subheadline||'副标题预览'}</span></div></div><div className="image-layout-fields"><label>排版模板<select aria-label="排版模板" value={layoutDraft.template} onChange={event=>setLayoutDraft(current=>current?{...current,template:event.target.value as ImageLayoutDraft['template']}:current)}><option value="BOTTOM_BAND">底部信息带</option><option value="TOP_LEFT">左上渐变标题</option><option value="SIDE_PANEL">左侧信息栏</option></select></label><label>目标语言<input value={layoutDraft.language} readOnly/></label><label>主标题 <em>{layoutDraft.headline.length}/42</em><input aria-label="排版主标题" value={layoutDraft.headline} onChange={event=>setLayoutDraft(current=>current?{...current,headline:event.target.value}:current)}/></label><label>副标题 <em>{layoutDraft.subheadline.length}/96</em><textarea aria-label="排版副标题" value={layoutDraft.subheadline} onChange={event=>setLayoutDraft(current=>current?{...current,subheadline:event.target.value}:current)}/></label><div><label>强调色<input aria-label="排版强调色" type="color" value={layoutDraft.accentColor} onChange={event=>setLayoutDraft(current=>current?{...current,accentColor:event.target.value}:current)}/></label><label>文字色<input aria-label="排版文字色" type="color" value={layoutDraft.textColor} onChange={event=>setLayoutDraft(current=>current?{...current,textColor:event.target.value}:current)}/></label></div><label>字体<select aria-label="排版字体" value={layoutDraft.fontFamily} onChange={event=>setLayoutDraft(current=>current?{...current,fontFamily:event.target.value as ImageLayoutDraft['fontFamily']}:current)}><option value="SYSTEM_SANS">现代无衬线</option><option value="SERIF">品牌衬线</option><option value="ROUNDED">亲和圆体</option></select></label>{layoutError&&<div className="generation-error">{layoutError}</div>}<p>系统检查文字长度和实际画布行数；溢出时不会生成成品。</p></div></div><footer><button onClick={()=>{setLayoutTaskId(null);setLayoutDraft(null)}}>取消</button><button className="primary" disabled={layoutBusy||validateImageLayoutDraft(layoutDraft).length>0} onClick={()=>void applyFormalLayout()}>{layoutBusy?'正在排版…':'生成正式排版'}</button></footer></div></div>}
+    {referenceManagerOpen&&<div className="image-production-backdrop"><div className="image-reference-dialog">
+      <header><div><small>REFERENCE IMAGES</small><h3>管理参考图</h3><p>设置主参考图、图片角色和生成时的优先顺序。</p></div><div className="image-reference-header-actions"><button className="add" disabled={referenceAdding} onClick={()=>void addReferenceImages()}>{referenceAdding?'正在添加…':'＋ 添加图片'}</button><button aria-label="关闭参考图管理" onClick={()=>setReferenceManagerOpen(false)}>×</button></div></header>
+      {generationError&&<div className="image-reference-error">{generationError}</div>}
+      <div className="image-reference-list">{referenceImages.map((image,index)=><article key={image.id} className={image.role==='PRIMARY'?'primary':''}><img src={image.dataUrl} alt={image.name}/><div><b>{image.name}</b><small title={image.source}>{image.source}</small><select aria-label={`${image.name}图片角色`} value={image.role||'DETAIL'} onChange={event=>setReferenceRole(image.id!,event.target.value as ImageReferenceRole)}><option value="PRIMARY">主参考图</option><option value="DETAIL">细节</option><option value="PACKAGING">包装</option><option value="ACCESSORY">配件</option></select></div><aside><button aria-label={`${image.name}上移`} disabled={index===0} onClick={()=>moveReference(image.id!,-1)}>↑</button><button aria-label={`${image.name}下移`} disabled={index===referenceImages.length-1} onClick={()=>moveReference(image.id!,1)}>↓</button><button aria-label={`${image.name}删除`} disabled={referenceImages.length===1} onClick={()=>removeReference(image.id!)}>删除</button></aside>{image.role==='PRIMARY'&&<em>主图</em>}</article>)}</div>
+      <footer><span>当前 {referenceImages.length} 张，上传数量不限；生成时按模型能力自动选择参考图。</span><button className="primary" onClick={()=>setReferenceManagerOpen(false)}>完成</button></footer>
+    </div></div>}
+    {sourceMenuOpen&&<div className="image-production-backdrop"><div className="image-source-dialog"><header><div><small>PRODUCT SOURCE</small><h3>选择商品来源</h3><p>三种方式都会进入同一商品事实确认流程。</p></div><button onClick={()=>setSourceMenuOpen(false)}>×</button></header><div className="image-source-options"><button disabled={sourceLoading} onClick={()=>void chooseLocalProduct()}><i>⇧</i><span><b>本地图片</b><small>JPG、PNG、WebP · 可多选，数量不限</small></span></button><button disabled={sourceLoading} onClick={()=>setUrlDialogOpen(true)}><i>⌘</i><span><b>产品网址</b><small>读取公开商品页或直接图片网址</small></span></button><button disabled={sourceLoading} onClick={()=>{setSourceMenuOpen(false);onOpenInventory()}}><i>▦</i><span><b>AI入库商品</b><small>从现有产品库选择</small></span></button></div>{generationError&&<div className="generation-error">{generationError}</div>}</div></div>}
+    {urlDialogOpen&&<div className="image-production-backdrop source-url-backdrop"><form className="image-source-dialog url" onSubmit={event=>{event.preventDefault();void readUrlProduct()}}><header><div><small>PRODUCT URL</small><h3>读取产品网址</h3><p>支持公开商品页和 JPG、PNG、WebP 直接网址。</p></div><button type="button" onClick={()=>setUrlDialogOpen(false)}>×</button></header><label>产品网址<input autoFocus type="url" required value={productUrl} onChange={event=>setProductUrl(event.target.value)} placeholder="https://example.com/product"/></label>{generationError&&<div className="generation-error">{generationError}</div>}<footer><button type="button" onClick={()=>setUrlDialogOpen(false)}>取消</button><button className="primary" type="submit" disabled={sourceLoading||!productUrl.trim()}>{sourceLoading?'正在读取…':'读取商品'}</button></footer></form></div>}
+    {confirmationOpen&&project&&<div className="image-production-backdrop"><div className="image-production-dialog"><header><div><small>GENERATION PLAN</small><h3>确认本次生成清单</h3><p>确认后才会按单张任务调用模型；失败项可以独立重做。</p></div><button onClick={()=>setConfirmationOpen(false)}>×</button></header><div className="image-production-summary"><span><b>{project.productTitle}</b><small>SKU {project.facts.sku}</small></span><span><b>{project.platform} · {project.language}</b><small>{activePlan.name}</small></span><span><b>{project.tasks.length} 张</b><small>按实际成功图片计费</small></span></div>{platformWarnings.map(warning=><div className="image-production-safety warning" key={warning}><b>平台数量提醒</b><span>{warning}</span></div>)}<div className="image-production-plan-list">{project.tasks.map(task=><article key={task.id}><b>{task.code}</b><span><strong>{task.group==='MAIN'?'主图':'详情页'} · {task.title}</strong><small>{task.objective}</small></span><em>{task.group==='MAIN'?'主图':'详情页'}</em></article>)}</div><div className="image-production-safety"><b>{platformRule.platformName}规则 · v{project.platformRuleVersion}</b><span>首图、支持图库与详情页任务已分别写入独立平台规则，分类不会根据生成内容事后猜测。</span></div><div className="image-production-safety"><b>Style Lock · {project.styleLock?.presetName||'平台标准商品图'}</b><span>必须项、禁止项和任务收敛规则已写入全部单图任务，并使用同一合同执行风格质检。</span></div><div className="image-production-safety"><b>真实性保护已启用</b><span>只使用已确认商品事实与参考图；禁止虚构参数、认证、功效、销量和评价。</span></div><footer><button onClick={()=>setConfirmationOpen(false)}>返回调整</button><button className="primary" onClick={approveAndGenerate}>确认并开始生成</button></footer></div></div>}
+    {historyOpen&&<div className="image-production-backdrop"><div className="image-production-dialog history"><header><div><small>GENERATION HISTORY</small><h3>生成历史</h3><p>恢复项目后可继续未完成或失败的单图任务。</p></div><button onClick={()=>setHistoryOpen(false)}>×</button></header><div className="image-production-history">{history.length?history.map(item=><button key={item.id} onClick={()=>restoreProject(item)}><img src={item.productImageUrl} alt=""/><span><b>{item.productTitle}</b><small>{item.platform} · {item.language} · {item.tasks.length}张</small><small>{new Date(item.updatedAt).toLocaleString()}</small></span><em className={item.status.toLocaleLowerCase()}>{item.status==='COMPLETED'?'已完成':item.status==='PARTIAL'?'部分完成':item.status==='FAILED'?'失败':item.status==='RUNNING'?'生成中':'待生成'}</em></button>):<div className="image-history-empty">暂无生成历史</div>}</div><footer><button onClick={()=>setHistoryOpen(false)}>关闭</button></footer></div></div>}
   </section>
 }
 
@@ -1765,9 +2286,14 @@ function hasCurrentEbayTitleVariants(variants:Array<{id:string}>|undefined) {
   return (variants?.length||0)>=currentEbayTitleStrategyIds.length&&currentEbayTitleStrategyIds.every(id=>ids.has(id))
 }
 
-function EbayPlatformWorkspace() {
-  const [activeTab,setActiveTab]=useState<EbayWorkspaceTab>('browser')
+function EbayPlatformWorkspace({initialTab,lockTitleMode}:{initialTab?:EbayWorkspaceTab;lockTitleMode?:boolean}={}) {
+  const [activeTab,setActiveTab]=useState<EbayWorkspaceTab>(initialTab||'browser')
   const [storeScope,setStoreScope]=useState('')
+  const [titleUrlInput,setTitleUrlInput]=useState('')
+  const [titleUrlError,setTitleUrlError]=useState('')
+  const [titleBrowserUrl,setTitleBrowserUrl]=useState('')
+  const [titleCustomUrl,setTitleCustomUrl]=useState('')
+  const [titleCustomUrlOpen,setTitleCustomUrlOpen]=useState(false)
   const [stores,setStores]=useState<EbayStore[]>([])
   const [listings,setListings]=useState<EbayListing[]>([])
   const [localProducts,setLocalProducts]=useState<EbayLocalProduct[]>([])
@@ -1788,6 +2314,13 @@ function EbayPlatformWorkspace() {
   const [busy,setBusy]=useState('')
   const [notice,setNotice]=useState('')
   const [ebayError,setEbayError]=useState('')
+  const ebayErrorRef=useRef<HTMLDivElement>(null)
+  useEffect(()=>{
+    const el=ebayErrorRef.current
+    if(!ebayError||!el)return
+    const r=el.getBoundingClientRect()
+    if(r.bottom<0||r.top>window.innerHeight)el.scrollIntoView({behavior:'smooth',block:'center'})
+  },[ebayError])
   const [downloadToast,setDownloadToast]=useState<{kind:'progress'|'success'|'warning'|'error';message:string}|null>(null)
   const [search,setSearch]=useState('')
   const [selectedCategoryId,setSelectedCategoryId]=useState('ALL')
@@ -1819,32 +2352,28 @@ function EbayPlatformWorkspace() {
   const [acceptanceBatches,setAcceptanceBatches]=useState<EbayAcceptanceBatch[]>([])
   const [imageModels,setImageModels]=useState<ImageModelProfile[]>([])
   const [imageModel,setImageModel]=useState('')
-  const [imageResults,setImageResults]=useState<Partial<Record<EbayImagePurpose,ImageGenerationResult>>>({})
-  const [imageGroundingPlan,setImageGroundingPlan]=useState<EbayImageGroundingPlan|null>(null)
   const [imageCandidateReviews,setImageCandidateReviews]=useState<Partial<Record<EbayImagePurpose,EbayImageCandidateReview[]>>>({})
   const [imageSourceCuration,setImageSourceCuration]=useState<EbayImageSourceCuration>({})
-  const [extraGalleryOpen,setExtraGalleryOpen]=useState(false)
-  const [imageGenerationRun,setImageGenerationRun]=useState<{phase:'IDLE'|'GROUNDING'|'GENERATING'|'REVIEWING'|'DONE'|'ERROR';message:string;completed:number;total:number}>({phase:'IDLE',message:'',completed:0,total:0})
-  const [imageTotalCount,setImageTotalCount]=useState(8)
-  const [imageExtraPrompt,setImageExtraPrompt]=useState('')
-  const [shotEdits,setShotEdits]=useState<Record<string,{painPoint?:string;solution?:string;customerBenefit?:string;title?:string;description?:string}>>({})
-  const [editingShot,setEditingShot]=useState<string|null>(null)
-  const [selectedGeneratedImages,setSelectedGeneratedImages]=useState<Partial<Record<EbayImagePurpose,string>>>({})
-  const [acceptedGeneratedImages,setAcceptedGeneratedImages]=useState<Partial<Record<EbayImagePurpose,string>>>({})
-  const [naturalizePurpose,setNaturalizePurpose]=useState<EbayImagePurpose>('HERO')
-  const [naturalizeProfile,setNaturalizeProfile]=useState<RealShiftProfile>('light')
-  const [naturalizeResults,setNaturalizeResults]=useState<Partial<Record<EbayImagePurpose,RealShiftResult>>>({})
-  const [naturalizeChoices,setNaturalizeChoices]=useState<Partial<Record<EbayImagePurpose,'original'|'processed'>>>({})
+  // 「02 选择原图」：sourceDraftSelection 为当前“选用”勾选（默认全选，未提交）；confirmedSourceSelection 为点击“确定”后提交的结果（null=从未确定，严格闸门）
+  const [sourceDraftSelection,setSourceDraftSelection]=useState<string[]>([])
+  const [confirmedSourceSelection,setConfirmedSourceSelection]=useState<string[]|null>(null)
+  // 「02 选择原图」网格折叠状态：点“确定”后自动折叠为摘要条；已确定过的商品默认折叠，未确定的默认展开
+  const [sourceGridExpanded,setSourceGridExpanded]=useState(true)
+  const [acceptedGeneratedImages,setAcceptedGeneratedImages]=useState<Partial<Record<EbayImagePurpose,string[]>>>({})
+  // 手动采纳：key 为分镜编号（如 DETAIL-02），value 为被采纳的草稿地址；这些分镜不再参与自动补位
+  const [manuallyAcceptedShots,setManuallyAcceptedShots]=useState<Record<string,string>>({})
+  const [naturalizeResults,setNaturalizeResults]=useState<Record<string,RealShiftResult>>({})
+  const [naturalizeChoices,setNaturalizeChoices]=useState<Record<string,'original'|'processed'>>({})
   const [finalImageInspection,setFinalImageInspection]=useState<EbayImageInspectionReport|null>(null)
   const [finalImageChecking,setFinalImageChecking]=useState(false)
-  const [imageModelUsage,setImageModelUsage]=useState<Record<string,number>>(()=>readEbayImageUsage())
+  const [imageDefaultModel,setImageDefaultModel]=useState(()=>readEbayImageDefaultModel())
   const [contentResult,setContentResult]=useState<EbayContentOptimizationResult|null>(null)
   const [contentResultTitle,setContentResultTitle]=useState('')
   const [contentTranslationView,setContentTranslationView]=useState<'BILINGUAL'|'ENGLISH'|'CHINESE'>('ENGLISH')
   const [literalTitleTranslation,setLiteralTitleTranslation]=useState('')
   const [titleVariantTranslations,setTitleVariantTranslations]=useState<Record<string,string>>({})
   const [titleVariantTranslationLoading,setTitleVariantTranslationLoading]=useState(false)
-  const [selectedSourceImageUrl,setSelectedSourceImageUrl]=useState('')
+  const [selectedReferenceUrls,setSelectedReferenceUrls]=useState<string[]>([])
   const [storeFormOpen,setStoreFormOpen]=useState(false)
   const [storeDraft,setStoreDraft]=useState({name:'',username:'',password:''})
   const [ebayBrowserState,setEbayBrowserState]=useState<BrowserState|null>(null)
@@ -1866,12 +2395,15 @@ function EbayPlatformWorkspace() {
   const [ebayDeliveryOpening,setEbayDeliveryOpening]=useState(false)
   const [ebayDeliveryLabel,setEbayDeliveryLabel]=useState('收货地')
   const ebayBrowserSlot=useRef<HTMLDivElement>(null)
+  const titleBrowserSlot=useRef<HTMLDivElement>(null)
   const ebayBrowserLaunchVersion=useRef(0)
   const pendingOriginalProduct=useRef<EbayListing|null>(null)
   const ebayTranslationRunning=useRef(false)
   const ebayCategoryAutoChecked=useRef(new Set<string>())
   const ebayImageSyncAttempted=useRef(new Set<string>())
   const ebayImageInspectionAttempted=useRef(new Set<string>())
+  // 已自动执行过原图分类预选的商品图集，避免同一图集重复调用 suggestRoles
+  const ebayImageAutoRoleAttempted=useRef(new Set<string>())
   const activeStore=stores.find(store=>store.id===storeScope)
   const scopeName=activeStore?.name||'尚未选择店铺'
   const ensureEbayLogin=async(store=activeStore,silent=false)=>{if(!store)return null;if(!silent)setEbayLogin({status:'AUTO_LOGIN_RUNNING',message:'正在检查会话并安全登录eBay…',url:ebayAddress,autoLoginAttempted:false});try{const result=await window.desktop.ebay.ensureLogin(store.id);setEbayLogin(result);return result}catch(reason){const result:EbayLoginResult={status:'ERROR',message:readableError(reason,'eBay自动登录失败'),url:ebayAddress,autoLoginAttempted:false};setEbayLogin(result);return result}}
@@ -1895,6 +2427,7 @@ function EbayPlatformWorkspace() {
   useEffect(()=>setEbayPlatformLogo(''),[activeStore?.id])
   useEffect(()=>{
     const launchVersion=++ebayBrowserLaunchVersion.current
+    if(lockTitleMode){if(!titleBrowserUrl){void window.desktop.browser.hide();return}return()=>void window.desktop.browser.hide()}
     if(activeTab!=='browser'||!activeStore||storeFormOpen){void window.desktop.browser.hide();return}
     let cancelled=false
     const isCurrent=()=>!cancelled&&ebayBrowserLaunchVersion.current===launchVersion
@@ -1953,7 +2486,7 @@ function EbayPlatformWorkspace() {
     }
     void launch()
     return()=>{cancelled=true;ebayBrowserLaunchVersion.current+=1;void window.desktop.browser.hide()}
-  },[activeStore?.id,activeTab,storeFormOpen])
+  },[activeStore?.id,activeTab,storeFormOpen,lockTitleMode,titleBrowserUrl])
   useEffect(()=>{if(activeTab!=='browser'||!activeStore||ebayLogin?.status!=='VERIFICATION_REQUIRED')return;const timer=window.setInterval(()=>void ensureEbayLogin(activeStore,true),2500);return()=>window.clearInterval(timer)},[activeStore?.id,activeTab,ebayLogin?.status])
   useEffect(()=>{
     if(activeTab!=='browser'||!activeStore||!ebayPluginActive)return
@@ -1972,6 +2505,12 @@ function EbayPlatformWorkspace() {
     update();const observer=new ResizeObserver(update);if(ebayBrowserSlot.current)observer.observe(ebayBrowserSlot.current);window.addEventListener('resize',update)
     return()=>{observer.disconnect();window.removeEventListener('resize',update)}
   },[activeStore?.id,activeTab])
+  useEffect(()=>{
+    if(!lockTitleMode||!titleBrowserUrl)return
+    const update=()=>{const rect=titleBrowserSlot.current?.getBoundingClientRect();if(rect)void window.desktop.browser.setBounds({x:rect.x,y:rect.y,width:rect.width,height:rect.height})}
+    update();const observer=new ResizeObserver(update);if(titleBrowserSlot.current)observer.observe(titleBrowserSlot.current);window.addEventListener('resize',update)
+    return()=>{observer.disconnect();window.removeEventListener('resize',update)}
+  },[lockTitleMode,titleBrowserUrl])
   const addStore=()=>{void window.desktop.browser.hide();setEbayError('');setStoreDraft({name:'',username:'',password:''});setStoreFormOpen(true)}
   const submitStore=async(event:FormEvent)=>{
     event.preventDefault()
@@ -2116,33 +2655,17 @@ function EbayPlatformWorkspace() {
   const selectedMinimumLongestEdge=selectedReadableMedia.length?Math.min(...selectedReadableMedia.map(media=>Math.max(media.width,media.height))):0
   const selectedSourceImages=selectedListing?[...(selectedListing.imageUrls||[]),selectedListing.imageUrl].filter((value,index,array)=>value&&array.indexOf(value)===index):[]
   const selectedSourceImagesKey=selectedSourceImages.join('|')
+  const ebayImageTouchedUrls=selectedListing?readEbayImageSourceTouched(selectedListing.listingId):new Set<string>()
   const curatedImageSourceEntries=selectedSourceImages.map((url,index)=>{
-    const defaultEnabled=index<ebayImageSourceMaxReferences
+    const defaultEnabled=true
     const entry=imageSourceCuration[url]
     const role=entry&&ebayImageSourceRoles.includes(entry.role)?entry.role:(index===0?'HERO':defaultEnabled?'DETAIL':'UNUSED')
-    return {url,originalIndex:index,enabled:role==='UNUSED'?false:(entry?.enabled??defaultEnabled),role}
+    return {url,originalIndex:index,enabled:role==='UNUSED'?false:(entry?.enabled??defaultEnabled),role,roleSource:(ebayImageTouchedUrls.has(url)?'manual':'auto') as 'manual'|'auto'}
   })
-  const activeImageSourceEntries=curatedImageSourceEntries.filter(entry=>entry.enabled&&entry.role!=='UNUSED').slice(0,ebayImageSourceMaxReferences)
+  // 严格闸门：只有点击“确定”提交过的原图才进入生成选择区（confirmedSourceSelection 为 null 表示从未确定，返回空）
+  const activeImageSourceEntries=curatedImageSourceEntries.filter(entry=>confirmedSourceSelection!==null&&confirmedSourceSelection.includes(entry.url))
   const activeImageSourceImages=activeImageSourceEntries.map(entry=>entry.url)
-  const complianceCoveredImageUrls=new Set((selectedLocalProduct?.snapshot.media||[]).map(media=>media.remoteUrl).filter(Boolean))
-  const extraImageSourceEntries=curatedImageSourceEntries.filter(entry=>!complianceCoveredImageUrls.has(entry.url))
-  const imageShotReferenceIndices=(shot:EbayImageShot,grounding=imageGroundingPlan)=>{
-    if(!grounding)return []
-    const isValid=(index:number)=>Number.isInteger(index)&&index>=0&&index<activeImageSourceImages.length
-    const matchedByPurpose=Array.from(new Set((grounding?.purposeReferences[shot.purpose]||[]).filter(isValid))).slice(0,3)
-    if(matchedByPurpose.length)return matchedByPurpose
-    const preferredRoles=ebayImageReferenceRolePreferences[shot.purpose]
-    const matchedByRole=activeImageSourceEntries
-      .map((entry,index)=>({entry,index}))
-      .filter(item=>preferredRoles.includes(item.entry.role))
-      .map(item=>item.index)
-    if(matchedByRole.length){
-      const start=shot.index%matchedByRole.length
-      return [...matchedByRole.slice(start),...matchedByRole.slice(0,start)].slice(0,Math.min(3,matchedByRole.length))
-    }
-    return activeImageSourceImages.length?[0]:[]
-  }
-  const selectedSourceImage=activeImageSourceImages.includes(selectedSourceImageUrl)?selectedSourceImageUrl:(activeImageSourceImages[0]||'')
+  const selectedSourceImage=selectedReferenceUrls.find(url=>activeImageSourceImages.includes(url))||activeImageSourceImages[0]||''
   const selectedLocalPreview=selectedLocalProduct?ebayLocalMediaUrl(selectedLocalProduct.snapshot.media.find(media=>media.downloadStatus==='DOWNLOADED')?.localPath||'',selectedSourceImages[0]||''):''
   const selectedOriginalTitleVerified=Boolean(selectedListing?.originalTitleVerified&&selectedListing.originalTitle?.trim())
   const selectedOriginalTitle=selectedOriginalTitleVerified?selectedListing?.originalTitle?.trim()||'':''
@@ -2150,8 +2673,10 @@ function EbayPlatformWorkspace() {
   const selectedTitleEnglish=selectedOriginalTitle||selectedListing?.title.trim()||''
   const selectedTitleChinese=selectedTranslatedTitle||literalTitleTranslation
   useEffect(()=>{
-    if(!selectedListing){setImageSourceCuration({});return}
+    if(!selectedListing){setImageSourceCuration({});setSelectedReferenceUrls([]);return}
     setImageSourceCuration(normalizeEbayImageSourceCuration(selectedSourceImages,readEbayImageSourceCuration(selectedListing.listingId)))
+    // 商品切换时恢复该商品已保存的参考图勾选，剔除已不在原图列表中的 URL
+    setSelectedReferenceUrls(readEbayImageReferenceSelection(selectedListing.listingId).filter(url=>selectedSourceImages.includes(url)))
   },[selectedListing?.listingId,selectedSourceImagesKey])
   useEffect(()=>{
     if(!selectedListing||!selectedTitleEnglish){setLiteralTitleTranslation('');return}
@@ -2284,8 +2809,33 @@ function EbayPlatformWorkspace() {
       setContentResultTitle('')
     }
   },[selectedTitle,contentResult,contentResultTitle])
-  useEffect(()=>{if(activeTab!=='optimize'||imageModels.length)return;void window.desktop.image.models().then(connection=>{const fixedModel=connection.models.find(model=>model.id===ebayFixedImageModelId);setImageModels(fixedModel?[fixedModel]:[]);setImageModel(fixedModel?.id||'');if(!fixedModel)setEbayError('当前百炼连接未提供万相 2.7 Pro（wan2.7-image-pro），无法生成 eBay 优化图。')}).catch(reason=>setEbayError(readableError(reason,'百炼生图模型读取失败')))},[activeTab,imageModels.length])
-  const selectForOptimization=async(product:EbayLocalProduct)=>{const item=product.snapshot.sourceListing;const suggestion=ebayResearchQuerySuggestion(item);const preference=activeStore?readEbayResearchQueryPreference(activeStore.id,item.listingId):undefined;setSelectedLocalProductId(product.id);setSelectedListingId(item.id);setTitleResult(null);setSelectedTitle('');setTitleDecision(null);setMarketResearch(null);setMarketResearchHistory([]);setResearchQuery(preference?.query||suggestion.query);setImageResults({});setImageGroundingPlan(null);setImageCandidateReviews({});setImageGenerationRun({phase:'IDLE',message:'',completed:0,total:0});setSelectedGeneratedImages({});setAcceptedGeneratedImages({});setNaturalizePurpose('HERO');setNaturalizeProfile('light');setNaturalizeResults({});setNaturalizeChoices({});setImageExtraPrompt('');setContentResult(null);setContentResultTitle('');const localMedia=product.snapshot.media.find(media=>media.downloadStatus==='DOWNLOADED');setSelectedSourceImageUrl(localMedia?await window.desktop.ebay.localProductMediaData(product.id,localMedia.id).catch(()=>localMedia.remoteUrl):item.imageUrls?.[0]||item.imageUrl||'');setComplianceReviewed(false);setOptimizeMode('title');setActiveTab('optimize')}
+  useEffect(()=>{if(activeTab!=='optimize'||imageModels.length)return;void window.desktop.image.models().then(connection=>{setImageModels(connection.models);const preferred=connection.models.find(model=>model.id===imageDefaultModel)||connection.models.find(model=>model.id===ebayDefaultImageModelId)||connection.models[0];setImageModel(preferred?.id||'');if(!connection.models.length)setEbayError('当前百炼连接未提供可用生图模型，无法生成 eBay 优化图。')}).catch(reason=>setEbayError(readableError(reason,'百炼生图模型读取失败')))},[activeTab,imageModels.length])
+  const readTitleProductByUrl=async()=>{
+    if(!activeStore)return
+    setBusy('read-title-url');setTitleUrlError('')
+    try{
+      const product=await window.desktop.ebay.readProductByUrl(activeStore.id,titleUrlInput.trim())
+      setTitleBrowserUrl('')
+      setLocalProducts(current=>[product,...current.filter(entry=>entry.id!==product.id)])
+      setTitleUrlInput('')
+      await selectForOptimization(product)
+    }catch(reason){setTitleUrlError(readableError(reason,'读取产品失败，请检查网址后重试'))}
+    finally{setBusy('')}
+  }
+  const openTitleBrowser=async(url:string)=>{
+    setTitleUrlError('');setTitleBrowserUrl(url)
+    try{
+      await window.desktop.browser.show('web')
+      await window.desktop.browser.navigate('web',url)
+    }catch(reason){setTitleBrowserUrl('');setTitleUrlError(readableError(reason,'内嵌浏览器打开失败'))}
+  }
+  const closeTitleBrowser=()=>{setTitleBrowserUrl('');void window.desktop.browser.hide()}
+  const openTitleCustomUrl=()=>{
+    const raw=titleCustomUrl.trim()
+    if(!raw)return
+    void openTitleBrowser(/^https?:\/\//i.test(raw)?raw:`https://${raw}`)
+  }
+  const selectForOptimization=async(product:EbayLocalProduct)=>{const item=product.snapshot.sourceListing;const suggestion=ebayResearchQuerySuggestion(item);const preference=activeStore?readEbayResearchQueryPreference(activeStore.id,item.listingId):undefined;setSelectedLocalProductId(product.id);setSelectedListingId(item.id);setTitleResult(null);setSelectedTitle('');setTitleDecision(null);setMarketResearch(null);setMarketResearchHistory([]);setResearchQuery(preference?.query||suggestion.query);setImageCandidateReviews({});setAcceptedGeneratedImages({});setManuallyAcceptedShots({});setNaturalizeResults({});setNaturalizeChoices({});setFinalImageInspection(null);setContentResult(null);setContentResultTitle('');setComplianceReviewed(false);setOptimizeMode('title');setActiveTab('optimize')}
   const openOriginalProduct=(item:EbayListing)=>{if(!activeStore||!item.viewUrl)return;pendingOriginalProduct.current=item;setBusy(`open:${item.id}`);setEbayError('');setActiveTab('browser')}
   const downloadLocalProduct=async(item:EbayListing)=>{
     if(!activeStore)return
@@ -2347,7 +2897,7 @@ function EbayPlatformWorkspace() {
   const uploadLocalEditorMedia=async(files:File[])=>{if(!localEditorProductId||!localEditorDraft||!files.length)return;const remaining=Math.max(0,24-localEditorDraft.media.length);const selected=files.slice(0,remaining);if(!selected.length){setEbayError('eBay 商品图片最多保留 24 张');return}setBusy(`local-media:${localEditorProductId}`);setEbayError('');try{const uploaded:EbayLocalProductUpdateInput['media']=[];for(const file of selected){const base64=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||'').split(',')[1]||'');reader.onerror=()=>reject(reader.error||new Error('读取图片失败'));reader.readAsDataURL(file)});uploaded.push(await window.desktop.ebay.addLocalProductMedia(localEditorProductId,{fileName:file.name,mimeType:file.type||'image/jpeg',base64}))}setLocalEditorDraft(current=>current?({...current,media:[...current.media,...uploaded].slice(0,24).map((media,sortOrder)=>({...media,sortOrder}))}):current);setNotice(`已添加 ${uploaded.length} 张图片，保存新版本后写入本地产品。`)}catch(reason){setEbayError(readableError(reason,'添加本地商品图片失败'))}finally{setBusy('')}}
   const removeLocalProduct=async(product:EbayLocalProduct)=>{const confirmed=window.confirm(`确定删除这个本地产品及全部历史快照和本地图片吗？\n\n${product.title}\n\n此操作不会修改 eBay 在线刊登。`);if(!confirmed)return;setBusy(`remove-local:${product.id}`);setEbayError('');try{await window.desktop.ebay.removeLocalProduct(product.id);setLocalProducts(current=>current.filter(item=>item.id!==product.id));if(selectedLocalProductId===product.id){setSelectedLocalProductId('');setSelectedListingId('')}setNotice('本地产品、历史快照和本地图片已删除；eBay 在线刊登未修改。')}catch(reason){setEbayError(readableError(reason,'删除本地产品失败'))}finally{setBusy('')}}
   const removeLocalListing=async(item:EbayListing)=>{if(!activeStore)return;const confirmed=window.confirm(`确定从本地“线上产品”库彻底删除这个商品吗？\n\n${item.title}\n\n数据库记录会被物理删除，但不会结束或删除 eBay 平台上的在线刊登。之后再次采集时会作为新商品收录。`);if(!confirmed)return;setBusy(`remove:${item.id}`);setEbayError('');try{await window.desktop.ebay.removeLocalListing(activeStore.id,item.listingId);setListings(current=>current.filter(entry=>entry.id!==item.id));if(selectedListingId===item.id)setSelectedListingId('');await refreshStores();setNotice('商品已从本地数据库物理删除；eBay 在线刊登未被修改，再次采集时可作为新商品收录。')}catch(reason){setEbayError(readableError(reason,'删除线上产品失败'))}finally{setBusy('')}}
-  const syncListingDetails=async(item=selectedListing)=>{if(!activeStore||!item)return null;setBusy(`details:${item.id}`);setEbayError('');try{const product=await window.desktop.ebay.downloadLocalProduct(activeStore.id,item.listingId);setLocalProducts(current=>[product,...current.filter(entry=>entry.id!==product.id)]);setSelectedLocalProductId(product.id);const updated=product.snapshot.sourceListing;setListings(current=>current.map(entry=>entry.id===updated.id?updated:entry));const synced=(updated.itemSpecifics||[]).map(specific=>({name:specific.name,value:specific.value,priority:'RECOMMENDED' as const,confidence:'HIGH' as const,needsConfirmation:false,source:'eBay 本地快照已保存'}));setTitleResult(current=>current?{...current,itemSpecifics:synced}:current);setSelectedSourceImageUrl(current=>(updated.imageUrls||[]).includes(current)?current:(updated.imageUrls?.[0]||updated.imageUrl||''));setImageGroundingPlan(null);setImageCandidateReviews({});setImageGenerationRun({phase:'IDLE',message:'',completed:0,total:0});setImageResults({});setSelectedGeneratedImages({});setAcceptedGeneratedImages({});setNaturalizeResults({});setNaturalizeChoices({});setFinalImageInspection(null);setNotice(`本地快照已更新至 V${product.versionCount}：${product.snapshot.media.filter(media=>media.downloadStatus==='DOWNLOADED').length} 张本地图片、${synced.length} 个 Item specifics，完整度 ${product.snapshot.completeness}%。`);return updated}catch(reason){setEbayError(readableError(reason,'更新本地产品快照失败'));return null}finally{if(activeTab!=='browser')void window.desktop.browser.hide();setBusy('')}}
+  const syncListingDetails=async(item=selectedListing)=>{if(!activeStore||!item)return null;setBusy(`details:${item.id}`);setEbayError('');try{const product=await window.desktop.ebay.downloadLocalProduct(activeStore.id,item.listingId);setLocalProducts(current=>[product,...current.filter(entry=>entry.id!==product.id)]);setSelectedLocalProductId(product.id);const updated=product.snapshot.sourceListing;setListings(current=>current.map(entry=>entry.id===updated.id?updated:entry));const synced=(updated.itemSpecifics||[]).map(specific=>({name:specific.name,value:specific.value,priority:'RECOMMENDED' as const,confidence:'HIGH' as const,needsConfirmation:false,source:'eBay 本地快照已保存'}));setTitleResult(current=>current?{...current,itemSpecifics:synced}:current);setSelectedReferenceUrls(current=>{const valid=new Set([...(updated.imageUrls||[]),updated.imageUrl].filter(Boolean));const next=current.filter(url=>valid.has(url));if(next.length!==current.length)saveEbayImageReferenceSelection(updated.listingId,next);return next});setImageCandidateReviews({});setAcceptedGeneratedImages({});setManuallyAcceptedShots({});setNaturalizeResults({});setNaturalizeChoices({});setFinalImageInspection(null);setNotice(`本地快照已更新至 V${product.versionCount}：${product.snapshot.media.filter(media=>media.downloadStatus==='DOWNLOADED').length} 张本地图片、${synced.length} 个 Item specifics，完整度 ${product.snapshot.completeness}%。`);return updated}catch(reason){setEbayError(readableError(reason,'更新本地产品快照失败'));return null}finally{if(activeTab!=='browser')void window.desktop.browser.hide();setBusy('')}}
   useEffect(()=>{
     if(activeTab!=='optimize'||optimizeMode!=='image'||!selectedListing||selectedSourceImages.length>1)return
     const key=`${selectedListing.id}:${selectedListing.updatedAt}`
@@ -2356,253 +2906,89 @@ function EbayPlatformWorkspace() {
     void syncListingDetails(selectedListing)
   },[activeTab,optimizeMode,selectedListing?.id,selectedListing?.updatedAt])
   const updateResearchQuery=(value:string)=>{if(!selectedListing||!activeStore)return;setResearchQuery(value);saveEbayResearchQueryPreference(activeStore.id,selectedListing.listingId,{query:value.replace(/\s+/g,' ').trim().slice(0,120),source:'MANUAL',locked:false})}
-  const runMarketResearch=async()=>{if(!selectedListing||!activeStore)return;if(!researchQuery.trim()){setEbayError('请输入能代表该商品的核心商品词');return}setBusy('market-research');setEbayError('');try{const snapshot=await window.desktop.ebay.runMarketResearch({storeId:activeStore.id,listingId:selectedListing.listingId,query:researchQuery.trim(),periodDays:researchPeriod});setMarketResearch(snapshot);setMarketResearchHistory(current=>[snapshot,...current.filter(item=>item.id!==snapshot.id)].slice(0,30));setResearchQuery(snapshot.query);setResearchPeriod(snapshot.periodDays===30||snapshot.periodDays===365?snapshot.periodDays:90);setTitleResult(null);setSelectedTitle('');setTitleDecision(null);const source=snapshot.source==='EBAY_PRODUCT_RESEARCH'?'eBay Product Research':'eBay Sold & Completed';setNotice(`已成交市场检索完成：通过 ${source} 读取 ${snapshot.sampleCount} 个真实结果。已保留最新结论与建议关键词，请核对后生成六套标题方案。`)}catch(reason){setEbayError(readableError(reason,'eBay 已成交市场检索失败'))}finally{setBusy('')}}
+  const runMarketResearch=async()=>{if(!selectedListing||!activeStore)return;if(!researchQuery.trim()){setEbayError('请输入能代表该商品的核心商品词');return}setBusy('market-research');setEbayError('');try{const snapshot=await window.desktop.ebay.runMarketResearch({storeId:activeStore.id,listingId:selectedListing.listingId,query:researchQuery.trim(),periodDays:researchPeriod});setMarketResearch(snapshot);setMarketResearchHistory(current=>[snapshot,...current.filter(item=>item.id!==snapshot.id)].slice(0,30));setResearchQuery(snapshot.query);setResearchPeriod(snapshot.periodDays===30||snapshot.periodDays===365?snapshot.periodDays:90);setTitleResult(null);setSelectedTitle('');setTitleDecision(null);const source=snapshot.source==='OMKAR_EBAY_SCRAPER'?'Omkar eBay Scraper':snapshot.source==='EBAY_PRODUCT_RESEARCH'?'eBay Product Research':'eBay Sold & Completed';setNotice(`市场检索完成：通过 ${source} 读取 ${snapshot.sampleCount} 个真实结果。已保留最新结论与建议关键词，请核对后生成六套标题方案。`)}catch(reason){setEbayError(readableError(reason,'eBay 市场检索失败'))}finally{setBusy('')}}
   const decideMarketTerm=async(kind:'KEYWORD'|'COMBINATION',term:string,status:'CONFIRMED'|'REVIEW'|'EXCLUDED')=>{if(!selectedListing||!activeStore)return;const key=`market-decision:${kind}:${term}`;setBusy(key);setEbayError('');try{const snapshot=await window.desktop.ebay.decideMarketResearch({storeId:activeStore.id,listingId:selectedListing.listingId,kind,term,status});setMarketResearch(snapshot);setTitleResult(null);setSelectedTitle('');setTitleDecision(null);setNotice(status==='CONFIRMED'?`已确认“${term}”与当前商品事实一致。`:status==='EXCLUDED'?`已排除“${term}”，生成标题时不会使用。`:`“${term}”已恢复为待核对。`)}catch(reason){setEbayError(readableError(reason,'市场词决策保存失败'))}finally{setBusy('')}}
   const optimizeTitle=async()=>{if(!selectedListing)return;if(!selectedOriginalTitleVerified){setEbayError('当前商品尚未取得 eBay 可验证原标题，请返回“店铺采集”，在店铺商品列表页重新采集。');return}if(!marketResearchCurrent||!marketResearch){setEbayError('市场调研条件已变化，请按当前关键词、时间、类目和 Condition 重新获取数据。');return}if(!confirmedMarketTerms){setEbayError('请至少确认一个与当前商品事实一致的市场词，再生成标题。');return}setBusy('optimize-title');setEbayError('');try{const result=await window.desktop.ebay.optimizeTitle({listingId:selectedListing.listingId,title:selectedOriginalTitle,categoryName:selectedListing.categoryName,marketplaceId:selectedListing.marketplaceId,sku:selectedListing.sku,itemSpecifics:selectedListing.itemSpecifics||[],condition:selectedListing.condition||'',verifiedDescription:selectedLocalProduct?.snapshot.details.descriptionText||'',marketResearch,marketResearchHistory});setTitleResult(result);setTitleDecision(null);setSelectedTitle(result.variants.find(item=>item.id==='BALANCED')?.title||result.optimizedTitle);setNotice('新版六套标题方案已生成，中文直译正在同步。')}catch(reason){const message=readableError(reason,'AI优化生成失败');setEbayError(/insufficient balance/i.test(message)?'AI服务余额不足，标题、属性和描述生成暂不可用；产品合规检查仍可正常使用。':message)}finally{setBusy('')}}
   const confirmTitleDecision=async()=>{if(!activeStore||!selectedListing||!marketResearch||!titleResult||!selectedTitle||!selectedTitleAudit)return;const variant=titleResult.variants.find(item=>item.title===selectedTitle);if(!variant){setEbayError('请选择本次生成的一个标题方案');return}if(!selectedTitleAudit.passed){setEbayError('当前标题未通过字符、重复词、商品事实或市场词检查，请改选其他方案。');return}setBusy('confirm-title');setEbayError('');try{const decision=await window.desktop.ebay.confirmTitleDecision({storeId:activeStore.id,listingId:selectedListing.listingId,researchSnapshotId:marketResearch.id,originalTitle:selectedOriginalTitle,selectedTitle,selectedVariantId:variant.id,variants:titleResult.variants,verifiedFacts:selectedTitleVerifiedFacts});setTitleDecision(decision);setNotice('标题审核结果和证据快照已保存；不会在当前环节打开或写入 eBay，将在最终发布确认时统一交付。')}catch(reason){setEbayError(readableError(reason,'标题审核保存失败'))}finally{setBusy('')}}
-  const buildImageGroundingRequest=()=>selectedListing?{
-    title:selectedTitle||selectedOriginalTitle||selectedListing.title,
-    description:titleResult?.description||contentResult?.englishDescription||selectedLocalProduct?.snapshot.details.descriptionText||selectedLocalProduct?.snapshot.details.descriptionHtml||'',
-    itemSpecifics:(titleResult?.itemSpecifics||selectedListing.itemSpecifics||[]).map(item=>({name:item.name,value:item.value})),
-    sourceImages:activeImageSourceImages,
-    sourceLabels:activeImageSourceEntries.map(entry=>ebayImageSourceRoleLabels[entry.role])
-  }:null
   const clearImageWorkflowForSourceChange=()=>{
-    setImageGroundingPlan(null)
     setImageCandidateReviews({})
-    setImageGenerationRun({phase:'IDLE',message:'',completed:0,total:0})
-    setImageResults({})
-    setSelectedGeneratedImages({})
     setAcceptedGeneratedImages({})
+    setManuallyAcceptedShots({})
     setNaturalizeResults({})
     setNaturalizeChoices({})
     setFinalImageInspection(null)
   }
-  const updateImageSourceCuration=(url:string,role:EbayImageSourceRole)=>{
+  // 「02 选择原图」：单张“选用”勾选切换（仅改草稿，点“确定”后才提交生效）
+  const toggleSourceDraftSelection=(url:string)=>{
+    setSourceDraftSelection(current=>current.includes(url)?current.filter(item=>item!==url):[...current,url])
+  }
+  // 「02 选择原图」：点击“确定”提交当前勾选，按商品持久化；原图集合变化后清空已生成的图片工作流
+  const confirmSourceSelection=()=>{
     if(!selectedListing)return
-    const normalized=normalizeEbayImageSourceCuration(selectedSourceImages,imageSourceCuration)
-    const nextEntry={...normalized[url],role,enabled:role!=='UNUSED'}
-    const retainedCount=Object.entries(normalized).filter(([entryUrl,entry])=>entryUrl!==url&&entry.enabled&&entry.role!=='UNUSED').length+(nextEntry.enabled?1:0)
-    if(retainedCount>ebayImageSourceMaxReferences){
-      setEbayError(`最多保留 ${ebayImageSourceMaxReferences} 张原图作为 AI 参照，请先将其他图片标记为“不使用”。`)
-      return
-    }
-    const next={...normalized,[url]:nextEntry}
+    setConfirmedSourceSelection(sourceDraftSelection)
+    saveEbaySourceSelection(selectedListing.listingId,sourceDraftSelection)
+    setSourceGridExpanded(false)
+    clearImageWorkflowForSourceChange()
+    setNotice(`已确定选用 ${sourceDraftSelection.length} 张原图，后续生成阶段仅使用这些图。`)
+  }
+  const applyImageRoleSuggestions=(suggestions:Record<string,EbayImageSourceRole>,mode:'AUTO'|'ALL')=>{
+    if(!selectedListing||!Object.keys(suggestions).length)return 0
+    const touched=readEbayImageSourceTouched(selectedListing.listingId)
+    const normalized=normalizeEbayImageSourceCuration(selectedSourceImages,readEbayImageSourceCuration(selectedListing.listingId))
+    const next={...normalized}
+    let applied=0
+    selectedSourceImages.forEach((url,index)=>{
+      const role=suggestions[url]
+      const current=next[url]
+      // 首图始终保持 HERO；手动标注过、已排除或建议不合法的条目不覆盖
+      if(!role||!current||index===0||touched.has(url)||!current.enabled||role==='UNUSED'||!ebayImageSourceRoles.includes(role))return
+      // AUTO 模式只覆盖仍为 normalize 默认值的条目；一键采纳覆盖所有未手动改过的条目
+      if(mode==='AUTO'&&current.role!=='DETAIL')return
+      if(current.role===role)return
+      next[url]={...current,role}
+      applied+=1
+    })
+    if(!applied)return 0
     setImageSourceCuration(next)
     saveEbayImageSourceCuration(selectedListing.listingId,next)
-    if(!nextEntry.enabled&&selectedSourceImageUrl===url)setSelectedSourceImageUrl('')
-    clearImageWorkflowForSourceChange()
-    setNotice(`原图治理已保存：${ebayImageSourceRoleLabels[role]}。后续事实分析与生成仅使用已保留的 ${retainedCount} 张原图。`)
+    return applied
   }
-  const analyzeImageSources=async()=>{
-    const request=buildImageGroundingRequest()
-    if(!request?.sourceImages.length){const message='请至少保留 1 张原商品图片作为 AI 参照';setEbayError(message);setImageGenerationRun({phase:'ERROR',message,completed:0,total:imageTotalCount});return null}
-    setImageGenerationRun({phase:'GROUNDING',message:`正在分析 ${request.sourceImages.length} 张 eBay 原图，建立商品事实卡…`,completed:0,total:imageTotalCount})
-    setBusy('image-grounding');setEbayError('')
-    try{
-      const plan=await window.desktop.image.ground(request)
-      setImageGroundingPlan(plan)
-      setImageGenerationRun({phase:'DONE',message:`已完成 ${request.sourceImages.length} 张原图分析，可开始按事实生成。`,completed:0,total:imageTotalCount})
-      setNotice(`已完成 ${request.sourceImages.length} 张原图的商品事实分析：${plan.productIdentity}。系统会按图片用途自动选取最相关的多张参照图，并为每张草稿建立独立镜头任务。`)
-      return plan
-    }catch(reason){const message=readableError(reason,'原图事实分析失败');setEbayError(message);setImageGenerationRun({phase:'ERROR',message:`原图事实分析失败：${message}`,completed:0,total:imageTotalCount});return null}finally{setBusy('')}
-  }
-  const optimizeImage=async()=>{
-    if(!selectedListing){const message='未选择线上产品，无法开始图片优化';setEbayError(message);setImageGenerationRun({phase:'ERROR',message,completed:0,total:imageTotalCount});return}
-    if(imageModel!==ebayFixedImageModelId){const message='万相 2.7 Pro 未就绪，请检查百炼生图模型配置后再生成。';setEbayError(message);setImageGenerationRun({phase:'ERROR',message,completed:0,total:imageTotalCount});return}
-    if(!activeImageSourceImages.length){const message='请至少保留 1 张原商品图片作为 AI 参照';setEbayError(message);setImageGenerationRun({phase:'ERROR',message,completed:0,total:imageTotalCount});return}
-    const instructions:Record<EbayImagePurpose,string>={
-      HERO:'Create a compliant eBay hero image on a pure white background. Center the complete product with realistic studio light and no decorative props.',
-      DETAIL:'Create a close-up eBay detail image that clearly shows only verified construction, material and craftsmanship. Use a clean neutral background.',
-      PAIN_POINT:'Create a product-led explanatory image that visibly addresses one verified customer pain point and its verified solution. Keep the product dominant, realistic and fully recognizable. Do not use comparison claims, before-and-after framing, labels or added text.',
-      SCENE:'Create a realistic eBay lifestyle image showing the verified product in a plausible use scenario. Keep the product dominant and fully recognizable.'
+  // 「02 选择原图」初始化：切换商品或原图列表变化时，恢复已持久化的“确定”选择；从未确定过则默认全选（待用户点“确定”提交）
+  useEffect(()=>{
+    if(!selectedListing){setConfirmedSourceSelection(null);setSourceDraftSelection([]);setSourceGridExpanded(true);return}
+    const saved=readEbaySourceSelection(selectedListing.listingId)
+    if(saved!==null){
+      const valid=saved.filter(url=>selectedSourceImages.includes(url))
+      setConfirmedSourceSelection(valid)
+      setSourceDraftSelection(valid)
+      setSourceGridExpanded(false)
+    } else {
+      setConfirmedSourceSelection(null)
+      setSourceDraftSelection(selectedSourceImages)
+      setSourceGridExpanded(true)
     }
-    const specifics=(titleResult?.itemSpecifics||selectedListing.itemSpecifics||[]).slice(0,12).map(item=>`${item.name}: ${item.value}`)
-    const facts=(contentResult?.sourceFacts||[]).slice(0,12).map(item=>item.text)
-    const scaleFacts=[...specifics,...facts].filter(item=>/\d\s*(?:in(?:ch(?:es)?)?|cm|mm|ft|feet)\b|\b\d+\s*[x×]\s*\d+/i.test(item)).slice(0,6)
-    const benefits=(contentResult?.benefits||[]).slice(0,4).map(item=>`${item.painPoint} -> ${item.solution} -> ${item.customerBenefit}`)
-    const scenarios=(contentResult?.scenarios||[]).slice(0,4).map(item=>`${item.title}: ${item.description}`)
-    const visualProblems=(imageVisualReport?.images||[]).flatMap(image=>image.rules.filter(rule=>rule.status!=='PASSED').map(rule=>`${rule.label}: ${rule.evidence}`)).slice(0,8)
-    const evidence=[
-      `Product title: ${selectedTitle||selectedOriginalTitle||selectedListing.title}`,
-      `Category: ${selectedListing.categoryName}`,
-      selectedListing.condition?`Condition: ${selectedListing.condition}`:'',
-      specifics.length?`Verified item specifics: ${specifics.join('; ')}`:'',
-      facts.length?`Verified source facts: ${facts.join('; ')}`:'',
-      scaleFacts.length?`Verified dimensions and scale: ${scaleFacts.join('; ')}`:'No verified dimensions available. Do not imply an exact size or scale.',
-      benefits.length?`Verified selling points: ${benefits.join('; ')}`:'',
-      scenarios.length?`Verified use scenarios: ${scenarios.join('; ')}`:'',
-      visualProblems.length?`Initial image-check issues to avoid: ${visualProblems.join('; ')}`:'',
-      imageExtraPrompt.trim()?`Seller supplement: ${imageExtraPrompt.trim()}`:''
-    ].filter(Boolean).join('\n')
-    const grounding=imageGroundingPlan
-    if(!grounding){
-      const message='请先建立全图事实卡，再开始按强制分镜生成。'
-      setEbayError(message)
-      setImageGenerationRun({phase:'ERROR',message,completed:0,total:imageTotalCount})
-      setNotice('请先建立全图事实卡。原图标签、保留状态或原图内容变更后，旧事实卡和图片草稿会自动失效。')
-      return
-    }
-    const shots=ebayImageShotPlan(imageTotalCount,contentResult)
-    const batch:Partial<Record<EbayImagePurpose,ImageGenerationResult>>={}
-    const reviewsByPurpose:Partial<Record<EbayImagePurpose,EbayImageCandidateReview[]>>={}
-    let generatedTotal=0
-    const failedShots:string[]=[]
-    setImageGenerationRun({phase:'GENERATING',message:`已建立商品事实卡，正在准备生成 ${imageTotalCount} 张图片…`,completed:0,total:imageTotalCount})
-    setBusy('optimize-image');setEbayError('');setImageResults({});setImageCandidateReviews({});setSelectedGeneratedImages({});setAcceptedGeneratedImages({});setNaturalizeResults({});setNaturalizeChoices({});setFinalImageInspection(null)
-    try{
-      for(const shot of shots){
-        try{
-        const purpose=shot.purpose
-        const referenceIndices=imageShotReferenceIndices(shot,grounding)
-        const referenceImageUrls=referenceIndices.map(index=>activeImageSourceImages[index]).filter(Boolean)
-        if(!referenceImageUrls.length)throw new Error(`${ebayImagePurposeLabels[purpose]}缺少可用原图参照`)
-        const referenceLabels=referenceIndices.map(index=>{const entry=activeImageSourceEntries[index];return `original image ${(entry?.originalIndex??index)+1} (${entry?ebayImageSourceRoleLabels[entry.role]:'未标注'})`}).join(', ')
-        const ev=shotEdits[shot.code]?shot.purpose==='PAIN_POINT'?'已核实痛点：'+(shotEdits[shot.code].painPoint??contentResult?.benefits?.[shot.index%contentResult.benefits.length]?.painPoint??'')+'；对应方案：'+(shotEdits[shot.code].solution??contentResult?.benefits?.[shot.index%contentResult.benefits.length]?.solution??'')+'；购买利益：'+(shotEdits[shot.code].customerBenefit??contentResult?.benefits?.[shot.index%contentResult.benefits.length]?.customerBenefit??'')+'。':shot.purpose==='SCENE'?'已核实应用场景：'+(shotEdits[shot.code].title??contentResult?.scenarios?.[shot.index%contentResult.scenarios.length]?.title??'')+'；'+(shotEdits[shot.code].description??contentResult?.scenarios?.[shot.index%contentResult.scenarios.length]?.description??'')+'。':shot.evidence:shot.evidence;const storyboardCard=`MANDATORY STORYBOARD CARD ${shot.code}\nRole: ${ebayImagePurposeLabels[purpose]} · ${shot.title}\nReference images: ${referenceLabels}\nContent evidence: ${ev}\nRequired shot: ${shot.instruction}\nAcceptance criteria: ${shot.acceptance}\nProhibited: ${shot.prohibited}\nReal-scale requirement: ${scaleFacts.length?`Use only these verified measurements or source proportions: ${scaleFacts.join('; ')}`:'No exact size is verified. Keep the product physically plausible against furniture, rooms and people; do not enlarge or shrink it for effect.'}\nThis card is mandatory. If any requirement conflicts with the references, preserve the reference facts and return no substitute product.`
-        setImageGenerationRun({phase:'GENERATING',message:`正在生成${ebayImagePurposeLabels[purpose]} ${shot.index+1}/${shot.total}：独立镜头与多图参照…`,completed:generatedTotal,total:imageTotalCount})
-        const result=await window.desktop.image.generate({model:imageModel,referenceImageUrls,promptExtend:false,size:purpose==='HERO'||purpose==='DETAIL'?'2K':'1K',count:1,prompt:`${instructions[purpose]}\n${storyboardCard}\nProduct identity confirmed from all original images: ${grounding.productIdentity}\nProtected attributes: ${grounding.protectedAttributes.join('; ')}\nVerified visual facts: ${grounding.verifiedFacts.join('; ')}\nPurpose-specific instruction: ${grounding.purposeInstructions[purpose]}\n${evidence}\nStrict truth constraints: the sellable product must remain the exact same product, not an item displayed in, worn by, stored in or used with it. Preserve exact product identity, structure, proportions, color, material, visible parts and included accessories from the reference images. Do not invent functions, parts, claims or packaging. No added text, measurement labels, logo, watermark, border or promotional badge. For pain-point and scene shots, demonstrate only the specific content evidence on this card. Keep the product at a physically plausible scale relative to its environment. This shot must be visually distinct from other ${ebayImagePurposeLabels[purpose]} shots by changing its camera task or verified feature, never merely the background.`})
-        const candidateUrl=result.imageUrls[0]
-        if(!candidateUrl)throw new Error(`${ebayImagePurposeLabels[purpose]}未返回可用图片`)
-        generatedTotal+=1
-        const previousCandidates=(batch[purpose]?.imageUrls||[])
-        batch[purpose]={taskId:[batch[purpose]?.taskId,result.taskId].filter(Boolean).join(','),imageUrls:[...previousCandidates,candidateUrl]}
-        setImageResults({...batch})
-        setImageGenerationRun({phase:'REVIEWING',message:`已生成 ${generatedTotal}/${imageTotalCount} 张，正在复核${ebayImagePurposeLabels[purpose]} ${shot.index+1}/${shot.total}的商品一致性与镜头差异…`,completed:generatedTotal,total:imageTotalCount})
-        let review:EbayImageCandidateReview
-        try{review=await window.desktop.image.reviewCandidate({title:selectedTitle||selectedOriginalTitle||selectedListing.title,description:titleResult?.description||contentResult?.englishDescription||selectedLocalProduct?.snapshot.details.descriptionText||'',itemSpecifics:(titleResult?.itemSpecifics||selectedListing.itemSpecifics||[]).map(item=>({name:item.name,value:item.value})),purpose,candidateUrl,sourceImages:activeImageSourceImages,referenceIndices,protectedAttributes:grounding.protectedAttributes,verifiedFacts:grounding.verifiedFacts,shotInstruction:storyboardCard,comparisonCandidateUrls:previousCandidates})}
-        catch{review={candidateUrl,purpose,status:'REVIEW',identityScore:0,structuralScore:0,factScore:0,purposeScore:0,diversityScore:0,reason:'一致性与镜头差异检查未完成，需人工确认。',referenceIndices}}
-        const reviews=[...(reviewsByPurpose[purpose]||[]),review]
-        reviewsByPurpose[purpose]=reviews
-        setImageCandidateReviews({...reviewsByPurpose})
-        }catch(reason){
-          const message=readableError(reason,`${shot.code} 生成失败`)
-          failedShots.push(`${shot.code}：${message}`)
-          setImageGenerationRun({phase:'GENERATING',message:`${shot.code} 生成失败，继续生成下一张…`,completed:generatedTotal,total:imageTotalCount})
-        }
-      }
-      for(const purpose of ebayImagePurposes){
-        const reviews=reviewsByPurpose[purpose]||[]
-        const selectable=reviews.find(review=>review.status==='PASSED')
-        setSelectedGeneratedImages(current=>({...current,[purpose]:selectable?.candidateUrl||''}))
-      }
-      setImageModelUsage(current=>{const next={...current,[imageModel]:(current[imageModel]||0)+generatedTotal};saveEbayImageUsage(next);return next})
-      const rejected=Object.values(reviewsByPurpose).flatMap(reviews=>reviews||[]).filter(review=>review.status!=='PASSED').length
-      const summary=`已生成 ${generatedTotal}/${shots.length} 张草稿，${failedShots.length?`${failedShots.length} 张生成失败；`:''}并完成已返回草稿的一致性复核。`
-      setImageGenerationRun({phase:failedShots.length?'ERROR':'DONE',message:failedShots.length?`${summary} ${failedShots.join('；')}`:summary,completed:generatedTotal,total:imageTotalCount})
-      if(failedShots.length)setEbayError(`部分图片未生成：${failedShots.join('；')}`)
-      setNotice(`已按全图事实卡生成 ${generatedTotal}/${shots.length} 张草稿；${rejected?`${rejected} 张未通过自动质量门槛，已拦截，`:'全部草稿均通过自动质量门槛，'}仅通过草稿可确认采用并进入自然化与最终复检。原商品图片未被覆盖。`)
-    }catch(reason){const message=readableError(reason,'AI图片优化失败');setEbayError(message);setImageGenerationRun({phase:'ERROR',message:`图片生成失败：${message}`,completed:generatedTotal,total:imageTotalCount})}finally{setBusy('')}
-  }
-  /* const runImageModelAbTest=async()=>{
-    if(!selectedListing){setEbayError('未选择线上产品，无法执行模型 A/B 测试');return}
-    if(!imageModel||!imageAbChallenger||imageModel===imageAbChallenger){setEbayError('请选择两个不同的可用生图模型');return}
-    if(!activeImageSourceImages.length){setEbayError('请至少保留 1 张原商品图片作为 AI 参照');return}
-    setBusy('image-model-ab');setEbayError('')
-    const grounding=imageGroundingPlan||await analyzeImageSources()
-    if(!grounding){setBusy('');return}
-    const shot=ebayImageShotPlan(4,contentResult).find(item=>item.purpose==='HERO')
-    if(!shot){setBusy('');setEbayError('无法建立主图 A/B 分镜');return}
-    const sourceReferenceIndex=(grounding.purposeReferences.HERO||[]).find(index=>Boolean(activeImageSourceImages[index]))??activeImageSourceImages.indexOf(selectedSourceImage)
-    const referenceIndex=sourceReferenceIndex>=0?sourceReferenceIndex:0
-    const referenceImageUrl=activeImageSourceImages[referenceIndex]
-    if(!referenceImageUrl){setBusy('');setEbayError('主图 A/B 测试缺少可用原图参照');return}
-    const specifics=(titleResult?.itemSpecifics||selectedListing.itemSpecifics||[]).slice(0,12).map(item=>`${item.name}: ${item.value}`)
-    const facts=(contentResult?.sourceFacts||[]).slice(0,12).map(item=>item.text)
-    const scaleFacts=[...specifics,...facts].filter(item=>/\d\s*(?:in(?:ch(?:es)?)?|cm|mm|ft|feet)\b|\b\d+\s*[x×]\s*\d+/i.test(item)).slice(0,6)
-    const benefits=(contentResult?.benefits||[]).slice(0,4).map(item=>`${item.painPoint} -> ${item.solution} -> ${item.customerBenefit}`)
-    const scenarios=(contentResult?.scenarios||[]).slice(0,4).map(item=>`${item.title}: ${item.description}`)
-    const evidence=[
-      `Product title: ${selectedTitle||selectedOriginalTitle||selectedListing.title}`,
-      `Category: ${selectedListing.categoryName}`,
-      selectedListing.condition?`Condition: ${selectedListing.condition}`:'',
-      specifics.length?`Verified item specifics: ${specifics.join('; ')}`:'',
-      facts.length?`Verified source facts: ${facts.join('; ')}`:'',
-      scaleFacts.length?`Verified dimensions and scale: ${scaleFacts.join('; ')}`:'No verified dimensions available. Do not imply an exact size or scale.',
-      benefits.length?`Verified selling points: ${benefits.join('; ')}`:'',
-      scenarios.length?`Verified use scenarios: ${scenarios.join('; ')}`:'',
-      imageExtraPrompt.trim()?`Seller supplement: ${imageExtraPrompt.trim()}`:''
-    ].filter(Boolean).join('\n')
-    const sourceEntry=activeImageSourceEntries[referenceIndex]
-    const storyboardCard=`MANDATORY STORYBOARD CARD ${shot.code}\nRole: ${ebayImagePurposeLabels.HERO} · ${shot.title}\nReference image: original image ${(sourceEntry?.originalIndex??referenceIndex)+1} (${sourceEntry?ebayImageSourceRoleLabels[sourceEntry.role]:'未标注'})\nContent evidence: ${shot.evidence}\nRequired shot: ${shot.instruction}\nAcceptance criteria: ${shot.acceptance}\nProhibited: ${shot.prohibited}\nReal-scale requirement: ${scaleFacts.length?`Use only these verified measurements or source proportions: ${scaleFacts.join('; ')}`:'No exact size is verified. Do not imply an exact size or scale.'}\nThis card is mandatory. Preserve the reference facts and return no substitute product.`
-    const prompt=`Create a compliant eBay hero image on a pure white background. Center the complete product with realistic studio light and no decorative props.\n${storyboardCard}\nProduct identity confirmed from all original images: ${grounding.productIdentity}\nProtected attributes: ${grounding.protectedAttributes.join('; ')}\nVerified visual facts: ${grounding.verifiedFacts.join('; ')}\nPurpose-specific instruction: ${grounding.purposeInstructions.HERO}\n${evidence}\nStrict truth constraints: the sellable product must remain the exact same product. Preserve exact product identity, structure, proportions, color, material, visible parts and included accessories from the reference image. Do not invent functions, parts, claims or packaging. No added text, measurement labels, logo, watermark, border or promotional badge.`
-    const startedAt=new Date().toISOString()
-    setImageAbRun({id:`image-ab-${Date.now()}`,productId:selectedListing.listingId,createdAt:startedAt,baselineModelId:imageModel,challengerModelId:imageAbChallenger,shot,candidates:[],reason:'正在用相同的事实卡、主图分镜和原图参照分别生成…'})
-    const candidates:EbayImageModelAbCandidate[]=[]
-    try{
-      for(const modelId of [imageModel,imageAbChallenger]){
-        const began=performance.now()
-        try{
-          const result=await window.desktop.image.generate({model:modelId,referenceImageUrls:[referenceImageUrl],size:'2K',count:1,prompt})
-          const imageUrl=result.imageUrls[0]
-          if(!imageUrl)throw new Error('模型未返回可用图片')
-          const review=await window.desktop.image.reviewCandidate({title:selectedTitle||selectedOriginalTitle||selectedListing.title,description:titleResult?.description||contentResult?.englishDescription||selectedLocalProduct?.snapshot.details.descriptionText||'',itemSpecifics:(titleResult?.itemSpecifics||selectedListing.itemSpecifics||[]).map(item=>({name:item.name,value:item.value})),purpose:'HERO',candidateUrl:imageUrl,sourceImages:activeImageSourceImages,referenceIndices:[referenceIndex],protectedAttributes:grounding.protectedAttributes,verifiedFacts:grounding.verifiedFacts,shotInstruction:storyboardCard,comparisonCandidateUrls:[]})
-          candidates.push({modelId,imageUrl,review,elapsedMs:Math.round(performance.now()-began)})
-        }catch(reason){candidates.push({modelId,elapsedMs:Math.round(performance.now()-began),error:readableError(reason,'生成或质量审核失败')})}
-        setImageAbRun(current=>current?{...current,candidates:[...candidates]}:current)
-      }
-      const passed=candidates.filter(candidate=>candidate.review?.status==='PASSED')
-      let winner:EbayImageModelAbCandidate|undefined
-      let reason='两个模型均未通过自动质量门槛，默认模型保持不变。'
-      if(passed.length===1){winner=passed[0];reason=`只有 ${imageModels.find(model=>model.id===winner!.modelId)?.name||winner.modelId} 通过商品一致性、结构、事实和分镜质量门槛。`}
-      if(passed.length>1){
-        const ranked=[...passed].sort((left,right)=>ebayImageModelQualityScore(right.review!)-ebayImageModelQualityScore(left.review!))
-        const [first,second]=ranked
-        const scoreGap=ebayImageModelQualityScore(first.review!)-ebayImageModelQualityScore(second.review!)
-        const chosen=scoreGap>.5?first:(first.elapsedMs<=second.elapsedMs?first:second)
-        winner=chosen
-        const winnerName=imageModels.find(model=>model.id===chosen.modelId)?.name||chosen.modelId
-        const runner=chosen===first?second:first
-        const runnerName=imageModels.find(model=>model.id===runner.modelId)?.name||runner.modelId
-        reason=scoreGap>.5?`${winnerName} 质量综合分 ${ebayImageModelQualityScore(chosen.review!).toFixed(1)}，高于 ${runnerName} 的 ${ebayImageModelQualityScore(runner.review!).toFixed(1)}。`:`两者质量分接近（差 ${scoreGap.toFixed(1)}），按较短生成耗时选择 ${winnerName}。`
-      }
-      const run:EbayImageModelAbRun={id:`image-ab-${Date.now()}`,productId:selectedListing.listingId,createdAt:startedAt,baselineModelId:imageModel,challengerModelId:imageAbChallenger,shot,candidates,winnerModelId:winner?.modelId,reason}
-      setImageAbRun(run)
-      setImageAbHistory(current=>{const next=[run,...current].slice(0,12);saveEbayImageModelAbHistory(next);return next})
-      const successful=candidates.filter(candidate=>Boolean(candidate.imageUrl))
-      if(successful.length)setImageModelUsage(current=>{const next={...current};for(const candidate of successful)next[candidate.modelId]=(next[candidate.modelId]||0)+1;saveEbayImageUsage(next);return next})
-      if(winner){saveEbayImageDefaultModel(winner.modelId);setImageDefaultModel(winner.modelId);setImageModel(winner.modelId);setNotice(`模型 A/B 测试完成：${imageModels.find(model=>model.id===winner!.modelId)?.name||winner.modelId} 已设为默认生图模型。${reason}`)}else setNotice(`模型 A/B 测试完成：${reason}`)
-    }catch(reason){
-      const message=readableError(reason,'模型 A/B 测试失败')
-      setEbayError(message)
-      setImageAbRun(current=>current?{...current,reason:`模型 A/B 测试失败：${message}`} : current)
-    }finally{setBusy('')}
-  } */
-  const acceptGeneratedImage=(purpose:EbayImagePurpose)=>{
-    const imageUrl=selectedGeneratedImages[purpose]
-    if(!imageUrl)return
-    const review=imageCandidateReviews[purpose]?.find(item=>item.candidateUrl===imageUrl)
-    if(review?.status!=='PASSED'){setEbayError('该草稿未通过自动质量门槛，或自动审核未完成，不能确认采用。请改选已通过草稿或重新生成。');return}
-    setAcceptedGeneratedImages(current=>({...current,[purpose]:imageUrl}))
-    setNaturalizeResults(current=>{const next={...current};delete next[purpose];return next})
-    setNaturalizeChoices(current=>{const next={...current};delete next[purpose];return next})
-    setNaturalizePurpose(purpose)
-    setNotice(`已确认${ebayImagePurposeLabels[purpose]}草稿。该图片只进入本地优化方案，尚未替换 eBay 线上图片。`)
-  }
-  const runImageNaturalization=async()=>{
-    if(!selectedListing)return
-    const imageUrl=acceptedGeneratedImages[naturalizePurpose]
-    const review=imageUrl?imageCandidateReviews[naturalizePurpose]?.find(item=>item.candidateUrl===imageUrl):undefined
-    if(!imageUrl||review?.status!=='PASSED'){setEbayError('请先确认一张已通过自动质量门槛的 AI 优化图，再进行自然化处理。');return}
-    const key=`naturalize-image:${naturalizePurpose}`
-    setBusy(key);setEbayError('')
-    try{
-      const result=await window.desktop.image.realshift({imageUrl,productId:`ebay-${selectedListing.listingId}-${naturalizePurpose.toLowerCase()}`,profile:naturalizeProfile})
-      setNaturalizeResults(current=>({...current,[naturalizePurpose]:result}))
-      setNaturalizeChoices(current=>{const next={...current};delete next[naturalizePurpose];return next})
-      setNotice('本地自然化处理已完成，请对照商品结构、颜色和细节后选择最终版本。')
-    }catch(reason){setEbayError(readableError(reason,'图片自然化处理失败'))}finally{setBusy('')}
-  }
-  const confirmNaturalizedImage=async(choice:'original'|'processed')=>{
-    const result=naturalizeResults[naturalizePurpose]
-    if(!result)return
-    const key=`naturalize-confirm:${naturalizePurpose}`
-    setBusy(key);setEbayError('')
-    try{
-      await window.desktop.image.selectRealshift(result.reportPath,choice)
-      setNaturalizeChoices(current=>({...current,[naturalizePurpose]:choice}))
-      setNotice(choice==='processed'?'已确认采用自然化版本；最终图将自动重新执行平台规则检查。':'已确认保留第二阶段原稿；选择原因已在本地报告中留痕。')
-    }catch(reason){setEbayError(readableError(reason,'保存最终图片选择失败'))}finally{setBusy('')}
-  }
+  },[selectedListing?.listingId,selectedSourceImagesKey])
+  // 原图列表载入后立即自动预选分类（不再等到分镜卡生成后）；仅在该商品还没有任何手动分类记录时触发，同一图集只执行一次
+  useEffect(()=>{
+    if(activeTab!=='optimize'||optimizeMode!=='image'||!selectedListing||!activeImageSourceImages.length)return
+    const key=`${selectedListing.listingId}:${selectedSourceImagesKey}`
+    if(ebayImageAutoRoleAttempted.current.has(key))return
+    if(readEbayImageSourceTouched(selectedListing.listingId).size)return
+    ebayImageAutoRoleAttempted.current.add(key)
+    let cancelled=false
+    setNotice(`正在自动识别 ${activeImageSourceImages.length} 张图片的分类…`)
+    void window.desktop.image.suggestRoles({sourceImages:activeImageSourceImages,title:selectedTitleEnglish||selectedListing.title}).then(result=>{
+      if(cancelled)return
+      const suggestions=Object.fromEntries(Object.entries(result.suggestions).filter(([,role])=>ebayImageSourceRoles.includes(role))) as Record<string,EbayImageSourceRole>
+      if(!Object.keys(suggestions).length)return
+      const applied=applyImageRoleSuggestions(suggestions,'AUTO')
+      if(applied)setNotice(`已自动分类 ${applied} 张原图，请在图片检查卡片中核对；手动改过分类的图片和首图不会被覆盖。`)
+    }).catch(()=>undefined)
+    return()=>{cancelled=true}
+  },[activeTab,optimizeMode,selectedListing?.listingId,selectedSourceImagesKey,activeImageSourceImages.length])
+  // 手动采纳的草稿地址；与自动通过的草稿一样可进入确认采用与自然化流程
+  const manuallyAcceptedImageUrls=new Set(Object.values(manuallyAcceptedShots))
+  const isGeneratedImageUsable=(purpose:EbayImagePurpose,imageUrl:string)=>imageCandidateReviews[purpose]?.find(item=>item.candidateUrl===imageUrl)?.status==='PASSED'||manuallyAcceptedImageUrls.has(imageUrl)
   const persistContentOptimization=async(result:EbayContentOptimizationResult)=>{
     if(!activeStore||!selectedListing||!selectedTitle)throw new Error('当前商品或标题尚未准备完成')
     const saved=await window.desktop.ebay.saveContentOptimization({storeId:activeStore.id,listingId:selectedListing.listingId,selectedTitle,result})
@@ -2626,40 +3012,29 @@ function EbayPlatformWorkspace() {
       setNotice('最终英文详情页修改已自动保存。')
     }catch(reason){setEbayError(readableError(reason,'最终英文详情保存失败'))}finally{setBusy('')}
   }
-  const plannedImageCounts=ebayImageGenerationPlan(imageTotalCount)
-  const plannedImageShots=ebayImageShotPlan(imageTotalCount,contentResult)
   const selectedImageModel=imageModels.find(model=>model.id===imageModel)
-  const generatedImageCount=Object.values(imageResults).reduce((total,result)=>total+(result?.imageUrls.length||0),0)
-  const confirmedGeneratedImages=ebayImagePurposes.reduce<Partial<Record<EbayImagePurpose,string>>>((current,purpose)=>{
-    const imageUrl=acceptedGeneratedImages[purpose]
-    const review=imageUrl?imageCandidateReviews[purpose]?.find(item=>item.candidateUrl===imageUrl):undefined
-    if(imageUrl&&review?.status==='PASSED')current[purpose]=imageUrl
+  const selectedImageModelReferenceLimit=ebayImageModelReferenceLimit(selectedImageModel)
+  const confirmedGeneratedImages=ebayImagePurposes.reduce<Partial<Record<EbayImagePurpose,string[]>>>((current,purpose)=>{
+    const imageUrls=(acceptedGeneratedImages[purpose]||[]).filter(imageUrl=>isGeneratedImageUsable(purpose,imageUrl))
+    if(imageUrls.length)current[purpose]=imageUrls
     return current
   },{})
-  const acceptedImagePurposes=ebayImagePurposes.filter(purpose=>confirmedGeneratedImages[purpose])
-  const acceptedImageTrace=ebayImagePurposes.map(purpose=>{
-    const imageUrl=confirmedGeneratedImages[purpose]
-    const result=imageResults[purpose]
-    const candidateIndex=imageUrl?(result?.imageUrls.indexOf(imageUrl)??-1):-1
-    const review=imageUrl?imageCandidateReviews[purpose]?.find(item=>item.candidateUrl===imageUrl):undefined
-    const shot=candidateIndex>=0?plannedImageShots.find(item=>item.purpose===purpose&&item.index===candidateIndex):undefined
-          const referenceIndices=review?.referenceIndices?.length
-            ?review.referenceIndices
-            :(shot?imageShotReferenceIndices(shot):imageGroundingPlan?.purposeReferences[purpose]||[])
-    return {purpose,imageUrl,review,shot,referenceIndices,choice:naturalizeChoices[purpose]}
-  })
+  const acceptedImagePurposes=ebayImagePurposes.filter(purpose=>confirmedGeneratedImages[purpose]?.length)
   const allImagePurposesAccepted=acceptedImagePurposes.length===ebayImagePurposes.length
-  const imageNaturalizationComplete=Boolean(allImagePurposesAccepted&&acceptedImagePurposes.every(purpose=>naturalizeChoices[purpose]))
-  const finalImageForPurpose=(purpose:EbayImagePurpose)=>naturalizeChoices[purpose]==='processed'?naturalizeResults[purpose]?.processedDataUrl:confirmedGeneratedImages[purpose]
+  // 所有确认图扁平化去重（自然化按 url 粒度逐张处理）
+  const confirmedGeneratedImageUrls=[...new Set(Object.values(confirmedGeneratedImages).flat())]
+  const imageNaturalizationComplete=Boolean(allImagePurposesAccepted&&confirmedGeneratedImageUrls.length&&confirmedGeneratedImageUrls.every(url=>naturalizeChoices[url]))
+  const finalImageForUrl=(url:string)=>naturalizeChoices[url]==='processed'?naturalizeResults[url]?.processedDataUrl||url:url
   const finalImageUrls=(()=>{
     const images=[...selectedSourceImages]
     if(!images.length&&selectedListing?.imageUrl)images.push(selectedListing.imageUrl)
-    const replacements:[EbayImagePurpose,number][]=[['HERO',0],['DETAIL',1],['PAIN_POINT',2],['SCENE',3]]
-    for(const [purpose,index] of replacements) {
-      const replacement=finalImageForPurpose(purpose)
-      if(!replacement)continue
-      if(index<images.length)images[index]=replacement
-      else images.push(replacement)
+    // 主图替换原图列表第 1 张
+    const heroUrl=(confirmedGeneratedImages.HERO||[]).map(finalImageForUrl)[0]
+    if(heroUrl){if(images.length)images[0]=heroUrl;else images.push(heroUrl)}
+    // 其余阶段（产品图/痛点图/场景图）的确认图全部追加到列表末尾
+    for(const purpose of ebayImagePurposes){
+      if(purpose==='HERO')continue
+      for(const url of (confirmedGeneratedImages[purpose]||[]).map(finalImageForUrl))images.push(url)
     }
     return [...new Set(images.filter(Boolean))]
   })()
@@ -2668,7 +3043,6 @@ function EbayPlatformWorkspace() {
   const complianceRequest:ComplianceCheckRequest|null=selectedListing?{productId:selectedListing.id,platform:'EBAY',marketplaceSite:selectedListing.marketplaceId||'EBAY_US',country:ebayCountryForMarketplace(selectedListing.marketplaceId||'EBAY_US'),categoryId:selectedListing.categoryId,categoryName:selectedListing.categoryName,title:selectedTitle||selectedOriginalTitle||selectedListing.title,description:titleResult?.description||selectedLocalProduct?.snapshot.details.descriptionText||selectedLocalProduct?.snapshot.details.descriptionHtml||'',imageUrl:optimizedImage,itemSpecifics:(titleResult?.itemSpecifics||selectedListing.itemSpecifics||[]).map(item=>({name:item.name,value:item.value}))}:null
   const complianceInputFingerprint=complianceRequest?complianceCheckFingerprint(complianceRequest):''
   const complianceIsCurrent=Boolean(complianceCheck&&complianceCheck.inputFingerprint===complianceInputFingerprint&&complianceCheck.gateStatus!=='RECHECK_REQUIRED')
-  const reviewImageVisualRule=async(mediaId:string,rule:EbayImageVisualRuleCode,decision:'PASSED'|'FAILED')=>{if(!selectedLocalProduct)return;const note=window.prompt(decision==='PASSED'?'请记录人工确认通过的依据：':'请记录人工确认不通过的问题：','已查看本地原图并核对商品画面');if(note===null)return;setBusy('visual-compliance-review');setEbayError('');try{const report=await window.desktop.ebay.reviewLocalProductImageRule({localProductId:selectedLocalProduct.id,mediaId,rule,decision,reviewedBy:'本机用户',note});setImageVisualReport(report);setNotice('人工复核结论已保存并记录时间、操作人和备注。')}catch(reason){setEbayError(readableError(reason,'保存人工复核结论失败'))}finally{setBusy('')}}
   useEffect(()=>{
     if(activeTab!=='optimize'||!selectedListing||!complianceRequest)return
     let cancelled=false
@@ -2733,7 +3107,6 @@ function EbayPlatformWorkspace() {
   const remediationIssues=diagnosisIssues.filter(item=>item.level==='P2')
   const advisoryIssues=diagnosisIssues.filter(item=>item.level==='P3')
   const visualPendingCount=complianceReport?.imageAssessment.visualPendingCount||0
-  const visualStatusMessage=!imageVisualReport?`图片数量、尺寸、格式和单文件大小已通过技术检查；${complianceReport?.imageAssessment.visualChecks.join('、')||'画面内容'}待视觉检查，不计入建议优化。`:imageVisualReport.status==='REVIEW'?`技术规则已检查；${imageVisualReport.review} 张图片需要人工复核，逐图证据见上方。`:'当前项目已通过本类 eBay 官方技术与视觉要求。'
   const combinedBlockingIssues=blockingIssues.length
   const combinedReviewIssues=reviewIssues.length
   const combinedRemediationIssues=remediationIssues.length
@@ -2805,7 +3178,7 @@ function EbayPlatformWorkspace() {
   const stageBadge={
     title:titleResult&&selectedTitle?'✓':'—',
     content:titleResult?.description.trim()?'✓':'—',
-    image:imageNaturalizationComplete?'✓':acceptedImagePurposes.length?'待自然化':Object.keys(imageResults).length?'待确认':complianceAutoRunning?'…':imageVisualReport?(imageVisualReport.failed+imageVisualReport.review||'待优化'):selectedSourceImages.length||'—',
+    image:imageNaturalizationComplete?'✓':acceptedImagePurposes.length===ebayImagePurposes.length?'待自然化':acceptedImagePurposes.length?`已确认${acceptedImagePurposes.length}/${ebayImagePurposes.length}`:complianceAutoRunning?'…':imageVisualReport?(imageVisualReport.failed+imageVisualReport.review||'待优化'):selectedSourceImages.length||'—',
     video:contentResult?.storyboard.length?'✓':'—'
   }
   const optimizeStageOrder=['title','content','image','video','pricing'] as const
@@ -2820,7 +3193,7 @@ function EbayPlatformWorkspace() {
         ?!contentResult?'请先生成并核对详情内容':staleContentTranslationCount?`还有 ${staleContentTranslationCount} 段中文翻译待同步`:'详情内容与中文翻译已同步'
         :optimizeMode==='image'
           ?!imageNaturalizationComplete
-            ?!acceptedImagePurposes.length?'请先一键生成整套图片并确认四类图片':!allImagePurposesAccepted?`请确认四类图片（已确认 ${acceptedImagePurposes.length}/4）`:`请完成 03 自然化处理并确认最终版本（${Object.keys(naturalizeChoices).length}/4）`
+            ?!acceptedImagePurposes.length?'请按阶段依次生成并确认四类图片':!allImagePurposesAccepted?`请确认四类图片（已确认 ${acceptedImagePurposes.length}/${ebayImagePurposes.length}）`:`请完成自然化处理（${Object.keys(naturalizeChoices).length}/${confirmedGeneratedImageUrls.length}）`
             :finalImageChecking||!finalImageInspection
               ?'正在自动检查最终图集'
               :finalImageInspection.blocked
@@ -2862,16 +3235,16 @@ function EbayPlatformWorkspace() {
         {stores.map(store=><button key={store.id} className={storeScope===store.id?'active':''} onClick={()=>selectStore(store)}><b>{store.name}</b><small>{store.passwordSaved?'凭据已保存':'待配置'} · {store.loginUsername||store.sellerId}</small></button>)}
       </div>
     </div>
-    <div className="ebay-business-nav">{tabs.map(tab=><button key={tab.id} className={activeTab===tab.id?'active':''} onClick={()=>setActiveTab(tab.id)}><b>{tab.name}</b><small>{tab.note}</small></button>)}</div>
+    {!lockTitleMode&&<div className="ebay-business-nav">{tabs.map(tab=><button key={tab.id} className={activeTab===tab.id?'active':''} onClick={()=>setActiveTab(tab.id)}><b>{tab.name}</b><small>{tab.note}</small></button>)}</div>}
     <div className={`ebay-workspace ${activeTab==='browser'?'ebay-browser-workspace':''}`}>
       {ebayCollectionPanel}
       {ebayDeliveryButton}
       {downloadToast&&<div className={`ebay-download-toast ${downloadToast.kind}`} role={downloadToast.kind==='error'?'alert':'status'} aria-live={downloadToast.kind==='error'?'assertive':'polite'}><span aria-hidden="true">{downloadToast.kind==='progress'?'↻':downloadToast.kind==='success'?'✓':downloadToast.kind==='warning'?'!':'×'}</span><div><b>{downloadToast.kind==='progress'?'正在下载':downloadToast.kind==='success'?'下载成功':downloadToast.kind==='warning'?'下载部分完成':'下载失败'}</b><p>{downloadToast.message}</p></div>{downloadToast.kind!=='progress'&&<button type="button" aria-label="关闭下载通知" onClick={()=>setDownloadToast(null)}>×</button>}</div>}
       {notice&&<div className="ebay-success-notice">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
-      {ebayError&&<div className="ebay-error-notice">{ebayError}<button onClick={()=>setEbayError('')}>×</button></div>}
+      {ebayError&&<div ref={ebayErrorRef} className="ebay-error-notice">{ebayError}<button onClick={()=>setEbayError('')}>×</button></div>}
       {activeTab==='browser'&&activeStore&&<div className={`ebay-auto-login-banner status-${(ebayLogin?.status||'CHECKING').toLowerCase()}`}><i/><div><b>{activeStore.name} · {ebayLoginLabel}</b><small>{ebayLogin?.message||'正在检查登录状态'}</small></div><button type="button" disabled={ebayLogin?.status==='AUTO_LOGIN_RUNNING'||ebayLogin?.status==='CHECKING'} onClick={()=>void ensureEbayLogin()}>一键登录</button></div>}
       {activeTab==='browser'&&(activeStore?<div className="ebay-browser-layout"><aside className="ebay-login-workbench"><div className="ebay-workbench-heading"><small>EBAY WORKBENCH</small><h2>eBay店铺工作台</h2><p>登录身份与浏览会话按店铺独立保存</p></div><section><header><span>01</span><div><b>平台与登录身份</b><small>查看登录状态和管理登录凭据</small></div></header><div className="ebay-login-status"><i/><div><b>{activeStore.name} · {activeStore.passwordSaved?'凭据已保存':'待配置'}</b><small>{activeStore.loginUsername||'尚未设置登录账号'}</small></div></div><CredentialPanel accountId={`ebay:${activeStore.id}`} platformCode="EBAY"/></section></aside><main className="ebay-browser-panel"><div className="ebay-browser-heading"><div><small>WORKSPACE BROWSER</small><b>eBay浏览器</b></div><div className="browser-heading-actions"><button title="eBay页面商品识别插件" className={`built-in-collector-trigger${ebayPluginActive?' active':''}`} onClick={()=>void startEbayPlugin()}>{ebayPluginActive?`🤖 采集插件 · 已开启 · 已选 ${ebayPluginSelected} / 当前页识别 ${ebayPluginRecognized}`:'🤖 启用采集插件'}</button><div className="browser-translation"><button className={`translation-trigger ${ebayTranslationActive?'active':''}`} disabled={ebayTranslating} onClick={()=>ebayTranslationActive?setEbayTranslationMenuOpen(open=>!open):void translateEbayPage('BILINGUAL')}><span>{ebayTranslating?'翻译中…':ebayTranslationActive?`中文 ✓${ebayTranslationCount?` · ${ebayTranslationCount}`:''}`:'译 · 中文'}</span><i>{ebayTranslationMenuOpen?'⌃':'⌄'}</i></button>{ebayTranslationMenuOpen&&<div className="translation-menu"><b>网页翻译</b><small>Qwen-MT Flash · 自动识别语种</small><button className={ebayTranslationMode==='BILINGUAL'?'active':''} onClick={()=>{setEbayTranslationMenuOpen(false);void translateEbayPage('BILINGUAL')}}><span>原文 + 中文</span><em>推荐</em></button><button className={ebayTranslationMode==='CHINESE'?'active':''} onClick={()=>{setEbayTranslationMenuOpen(false);void translateEbayPage('CHINESE')}}><span>仅显示中文</span></button><button onClick={()=>void translateEbayPage(ebayTranslationMode)}><span>翻译新增内容</span></button><button className="restore" onClick={()=>void restoreEbayTranslation()}><span>恢复原网页</span></button></div>}</div></div></div><div className="tabs ebay-browser-tabs"><div className="tab-scroll">{ebayBrowserTabs.map(tab=><button key={tab.id} className={tab.active?'active':''} onClick={()=>void activateEbayBrowserTab(tab)}><span className={`ebay-tab-icon${tab.faviconUrl?' has-site-logo':''}`}>{tab.faviconUrl?<img src={tab.faviconUrl} alt="" onError={event=>{event.currentTarget.hidden=true}}/>:'e'}</span><b>{tab.title}</b>{tab.closable&&<i onClick={event=>{event.stopPropagation();void closeEbayBrowserTab(tab.id)}}>×</i>}</button>)}</div><button className="new-browser-tab" title="新建eBay浏览页" aria-label="新建eBay浏览页" onClick={()=>void createEbayBrowserTab()}>＋</button>{ebayBrowserState?.loading&&<span className="run-state loading"><i/>页面加载中</span>}</div><form className="address-bar ebay-address-bar" onSubmit={navigateEbay}><button type="button" title="后退" disabled={!ebayBrowserState?.canGoBack} onClick={()=>void window.desktop.browser.back('web')}>←</button><button type="button" title="前进" disabled={!ebayBrowserState?.canGoForward} onClick={()=>void window.desktop.browser.forward('web')}>→</button><button type="button" title="刷新" onClick={()=>void window.desktop.browser.reload('web')}>↻</button><input aria-label="eBay网页地址" value={ebayAddress} onChange={event=>setEbayAddress(event.target.value)}/><button className="address-go" type="submit">打开 <span>↗</span></button></form><div ref={ebayBrowserSlot} className="browser-slot ebay-browser-slot"><div className="browser-placeholder">正在打开 {activeStore.name} 的 eBay 独立浏览会话…</div></div></main></div>:<EbayEmpty title="尚未添加 eBay 店铺" description="点击顶部“添加店铺”，保存店名、登录账号和密码后进入独立浏览会话。" action="添加第一个店铺" onAction={addStore}/>)}
-      {activeTab!=='browser'&&<><div className="ebay-page-heading"><div><small>EBAY {activeTab==='optimize'?'V2.0':'V1.0'} · PRODUCTION · READ ONLY</small><h2>{tabs.find(tab=>tab.id===activeTab)?.name}</h2><p>当前店铺：{scopeName} · 正式环境只读模式</p></div>{activeTab==='library'&&<div className="ebay-library-sync"><div className="ebay-library-sync-status"><b>{categoryWorkspace.categories.length} 个目录</b><small>上次同步：{categorySyncedAt}</small>{categoryImportantChanges>0&&<em>{categoryImportantChanges} 项变化</em>}</div><div className="ebay-library-sync-actions"><button type="button" title={ebayLogin?.status==='ONLINE'?'同步 eBay 店铺目录':'请先在店铺采集完成登录'} disabled={categorySyncing||ebayLogin?.status!=='ONLINE'} onClick={()=>void syncStoreCategories()}>{categorySyncing?'目录同步中…':'同步目录'}</button><button type="button" className="primary" title={ebayLogin?.status==='ONLINE'?'按店铺目录同步线上产品':'请先在店铺采集完成登录'} disabled={!directoryProductCategories.length||ebayLogin?.status!=='ONLINE'} onClick={()=>void openDirectoryProductSync()}>同步产品</button></div></div>}<span className={configuration?.configured?'ready':'pending'}><i/>{configuration?.configured?'正式环境配置完成':'等待 eBay 正式凭证'}</span></div>{!configuration?.configured&&<div className="ebay-config-notice"><b>正式环境尚未配置 Production Keys</b><span>当前可在内嵌 eBay 浏览器登录，并从 Seller Hub 下载 Listings CSV 后导入线上产品。</span></div>}</>}
+      {activeTab!=='browser'&&!lockTitleMode&&<><div className="ebay-page-heading"><div><small>EBAY {activeTab==='optimize'?'V2.0':'V1.0'} · PRODUCTION · READ ONLY</small><h2>{tabs.find(tab=>tab.id===activeTab)?.name}</h2><p>当前店铺：{scopeName} · 正式环境只读模式</p></div>{activeTab==='library'&&<div className="ebay-library-sync"><div className="ebay-library-sync-status"><b>{categoryWorkspace.categories.length} 个目录</b><small>上次同步：{categorySyncedAt}</small>{categoryImportantChanges>0&&<em>{categoryImportantChanges} 项变化</em>}</div><div className="ebay-library-sync-actions"><button type="button" title={ebayLogin?.status==='ONLINE'?'同步 eBay 店铺目录':'请先在店铺采集完成登录'} disabled={categorySyncing||ebayLogin?.status!=='ONLINE'} onClick={()=>void syncStoreCategories()}>{categorySyncing?'目录同步中…':'同步目录'}</button><button type="button" className="primary" title={ebayLogin?.status==='ONLINE'?'按店铺目录同步线上产品':'请先在店铺采集完成登录'} disabled={!directoryProductCategories.length||ebayLogin?.status!=='ONLINE'} onClick={()=>void openDirectoryProductSync()}>同步产品</button></div></div>}<span className={configuration?.marketDataConfigured?'ready':'pending'}><i/>{configuration?.marketDataConfigured?'Omkar 市场数据已配置':'等待 Omkar API Key'}</span></div>{!configuration?.marketDataConfigured&&<div className="ebay-config-notice"><b>eBay 市场数据尚未配置 Omkar API Key</b><span>请在 AI总部的“Amazon 数据源配置”中保存 Key；同一 Key 同时用于 Amazon 和 eBay Scraper。</span></div>}</>}
       {activeTab==='library'&&<div className="ebay-inline-check-summary"><div><b>{listings.length}</b><small>线上产品</small></div><div className={titleIssues?'warn':''}><b>{titleIssues}</b><small>标题待优化</small></div><div className={imageIssues?'warn':''}><b>{imageIssues}</b><small>主图待补充</small></div><div className={healthRows.filter(row=>row.issues.length).length?'warn':''}><b>{healthRows.filter(row=>row.issues.length).length}</b><small>存在待优化项</small></div></div>}
       {activeTab==='library'&&<div className="ebay-library-layout">
         <aside className="ebay-product-catalog">
@@ -2926,9 +3299,9 @@ function EbayPlatformWorkspace() {
           </article>})}</div>:<EbayEmpty title="本地产品库暂无商品" description="请在线上产品点击“下载到本地”，系统会保存商品详情、属性和全部可读取图片。" action="前往线上产品" onAction={()=>setActiveTab('library')}/>}
         </section>
       </div>}
-      {activeTab==='optimize'&&selectedListing&&complianceReport&&<div className={`ebay-compliance-strip ${combinedGateClass}`}><div><small>eBay详情页检查结果</small><b>{combinedGateLabel}</b></div><span>{complianceReport.marketplaceLabel} · 对照 eBay 官方图片与描述要求</span><span className="counts"><strong>{combinedBlockingIssues}</strong> 个必须修改 · <strong>{combinedReviewIssues}</strong> 个技术资料不完整 · {combinedAdvisoryIssues} 个建议优化 · {visualPendingCount} 张待视觉确认</span></div>}
-      {activeTab==='optimize'&&<div className="ebay-optimize-layout"><aside><b>优化任务 · V2</b><button className={optimizeMode==='title'?'active':''} onClick={()=>setOptimizeMode('title')}>标题优化 <em>{stageBadge.title}</em></button><button className={optimizeMode==='content'?'active':''} onClick={()=>setOptimizeMode('content')}>描述优化 <em>{stageBadge.content}</em></button><button className={optimizeMode==='image'?'active':''} onClick={()=>setOptimizeMode('image')}>图片优化 <em>{stageBadge.image}</em></button><button className={optimizeMode==='video'?'active':''} onClick={()=>setOptimizeMode('video')}>视频生成 <em>{stageBadge.video}</em></button><button className={optimizeMode==='pricing'?'active':''} onClick={()=>setOptimizeMode('pricing')}>售价设定 <em>{profitReady?`${estimatedProfitCny>=0?'+':''}${estimatedProfitCny.toFixed(0)}`:'待录入'}</em></button></aside><section>{selectedListing?<div className="ebay-optimization-workbench"><div className="ebay-selected-product">{selectedLocalPreview?<img src={selectedLocalPreview} alt={selectedTitleEnglish}/>:<span>无本地主图</span>}<div className="ebay-selected-title-pair"><small className="ebay-title-label">eBay 原文</small><b>{selectedTitleEnglish}</b><small className="ebay-title-label">中文直译</small><p className="ebay-title-translation">{selectedTitleChinese||'正在生成中文直译…'}</p>{optimizeMode==='title'&&selectedLocalProduct&&<small className="ebay-selected-source-meta">本地快照 V{selectedLocalProduct.versionCount} · 完整度 {selectedLocalProduct.snapshot.completeness}% · 本地图片 {selectedDownloadedMedia.length} 张 · 尺寸达标 {selectedCompliantMedia.length}/{selectedDownloadedMedia.length}{selectedMinimumLongestEdge?` · 最小最长边 ${selectedMinimumLongestEdge}px`:''}</small>}</div></div>
-        {optimizeMode==='image'&&complianceReport&&<div className="ebay-diagnosis-panel ebay-compliance-panel ebay-image-initial-check"><header><div><b>图片优化 · 01 初步检查</b><small>自动对照 eBay 官方图片政策与展示指南，不评价美观和转化率。</small></div><div className="ebay-compliance-actions"><span className={`ebay-auto-check-status ${complianceAutoRunning?'checking':complianceAutoError?'failed':complianceIsCurrent?'checked':'pending'}`}><b>{complianceAutoRunning?'正在自动检查官方规则…':complianceAutoError?'自动检查失败':complianceIsCurrent?'✓ 已自动检查官方规则':'等待自动检查'}</b><small>{complianceAutoRunning?'正在读取当前商品内容':complianceAutoError?complianceAutoError:complianceIsCurrent&&complianceCheck?new Date(complianceCheck.checkedAt).toLocaleString('zh-CN'):'商品内容变化后自动执行'}</small></span><span className={`ebay-auto-check-status ebay-source-sync-status ${selectedLocalProduct?'checked':'pending'}`}><b>{selectedLocalProduct?'✓ 原商品资料已同步':'等待同步原商品资料'}</b><small>{selectedLocalProduct?`本地快照 V${selectedLocalProduct.versionCount} · ${new Date(selectedLocalProduct.snapshot.capturedAt).toLocaleString('zh-CN')} · ${selectedDownloadedMedia.length} 张图片`:'请先从线上产品下载并建立本地快照'}</small></span></div></header><EbayVisualCompliancePanel media={selectedLocalProduct?.snapshot.media||[]} report={imageVisualReport} running={busy==='visual-compliance-check'} onReview={(mediaId,rule,decision)=>void reviewImageVisualRule(mediaId,rule,decision)} curations={Object.fromEntries(curatedImageSourceEntries.map(entry=>[entry.url,{enabled:entry.enabled,role:entry.role}]))} roleOptions={ebayImageSourceRoles.map(role=>({value:role,label:ebayImageSourceRoleLabels[role]}))} selectedReferenceUrl={selectedSourceImage} onRoleChange={(url,role)=>updateImageSourceCuration(url,role as EbayImageSourceRole)} onToggleEnabled={(url,next)=>updateImageSourceCuration(url,next?'DETAIL':'UNUSED')} onSelectReference={url=>setSelectedSourceImageUrl(url)}/><div className="ebay-remediation-heading"><div><b>图片整改清单</b><small>仅列出图片尺寸、数量、商品一致性、边框、附加文字和水印结果</small></div><span><strong>{diagnosisIssues.filter(item=>item.dimension==='图片展示质量'&&(item.level==='P0'||item.level==='P2')).length}</strong> 必须修改 · {visualPendingCount} 张待视觉确认</span></div><div className="ebay-issue-list ebay-compliance-findings local-findings">{diagnosisIssues.filter(item=>item.dimension==='图片展示质量').map(issue=><article key={`${issue.ruleId}-${issue.title}`}><em className={issue.level.toLowerCase()}>{issue.level==='P0'||issue.level==='P2'?'修改':issue.level==='P1'?'人工确认':'建议'}</em><div><b>{issue.title}</b><p><strong>当前结果：</strong>{issue.evidence}</p><p><strong>eBay 要求影响：</strong>{issue.consequence}</p><p><strong>后续处理：</strong>{issue.remediation}</p><footer><span>{issue.ruleId} · 核验 {issue.lastVerifiedAt}</span>{issue.sourceUrl&&<a href={issue.sourceUrl} target="_blank" rel="noreferrer">eBay官方依据 ↗</a>}</footer></div></article>)}</div>{!diagnosisIssues.some(item=>item.dimension==='图片展示质量')&&<div className="ebay-ai-placeholder">{visualStatusMessage}</div>}<div className="ebay-compliance-knowledge"><span>{complianceIsCurrent?`规则集：${complianceCheck?.ruleSetVersion}`:'当前内容暂无可用检查结论'}</span><span>检查结果保存到当前本地快照，图片或商品内容变化后会自动重检。</span></div></div>}
+      {activeTab==='optimize'&&!lockTitleMode&&selectedListing&&complianceReport&&<div className={`ebay-compliance-strip ${combinedGateClass}`}><div><small>eBay详情页检查结果</small><b>{combinedGateLabel}</b></div><span>{complianceReport.marketplaceLabel} · 对照 eBay 官方图片与描述要求</span><span className="counts"><strong>{combinedBlockingIssues}</strong> 个必须修改 · <strong>{combinedReviewIssues}</strong> 个技术资料不完整 · {combinedAdvisoryIssues} 个建议优化 · {visualPendingCount} 张待视觉确认</span></div>}
+      {activeTab==='optimize'&&<div className={`ebay-optimize-layout${lockTitleMode?' ebay-optimize-single':''}`}>{!lockTitleMode&&<aside><b>优化任务 · V2</b><button className={optimizeMode==='title'?'active':''} onClick={()=>setOptimizeMode('title')}>标题优化 <em>{stageBadge.title}</em></button><button className={optimizeMode==='content'?'active':''} onClick={()=>setOptimizeMode('content')}>描述优化 <em>{stageBadge.content}</em></button><button className={optimizeMode==='image'?'active':''} onClick={()=>setOptimizeMode('image')}>图片优化 <em>{stageBadge.image}</em></button><button className={optimizeMode==='video'?'active':''} onClick={()=>setOptimizeMode('video')}>视频生成 <em>{stageBadge.video}</em></button><button className={optimizeMode==='pricing'?'active':''} onClick={()=>setOptimizeMode('pricing')}>售价设定 <em>{profitReady?`${estimatedProfitCny>=0?'+':''}${estimatedProfitCny.toFixed(0)}`:'待录入'}</em></button></aside>}<section>{selectedListing?<div className="ebay-optimization-workbench"><div className="ebay-selected-product">{selectedLocalPreview?<img src={selectedLocalPreview} alt={selectedTitleEnglish}/>:<span>无本地主图</span>}<div className="ebay-selected-title-pair"><small className="ebay-title-label">{selectedTitle?'已选优化标题':'eBay 原文'}</small><b>{selectedTitle||selectedTitleEnglish}</b><small className="ebay-title-label">中文直译</small><p className="ebay-title-translation">{selectedTitle?(titleVariantTranslations[selectedTitle]||'正在生成中文直译…'):(selectedTitleChinese||'正在生成中文直译…')}</p>{optimizeMode==='title'&&selectedLocalProduct&&<small className="ebay-selected-source-meta">本地快照 V{selectedLocalProduct.versionCount} · 完整度 {selectedLocalProduct.snapshot.completeness}% · 本地图片 {selectedDownloadedMedia.length} 张 · 尺寸达标 {selectedCompliantMedia.length}/{selectedDownloadedMedia.length}{selectedMinimumLongestEdge?` · 最小最长边 ${selectedMinimumLongestEdge}px`:''}</small>}</div></div>
+        {optimizeMode==='image'&&complianceReport&&<div className="ebay-diagnosis-panel ebay-compliance-panel ebay-image-initial-check"><header><div><b>图片优化 · 01 初步检查</b><small>自动对照 eBay 官方图片政策与展示指南，不评价美观和转化率。</small></div><div className="ebay-compliance-actions"><span className={`ebay-auto-check-status ${complianceAutoRunning?'checking':complianceAutoError?'failed':complianceIsCurrent?'checked':'pending'}`}><b>{complianceAutoRunning?'正在自动检查官方规则…':complianceAutoError?'自动检查失败':complianceIsCurrent?'✓ 已自动检查官方规则':'等待自动检查'}</b><small>{complianceAutoRunning?'正在读取当前商品内容':complianceAutoError?complianceAutoError:complianceIsCurrent&&complianceCheck?new Date(complianceCheck.checkedAt).toLocaleString('zh-CN'):'商品内容变化后自动执行'}</small></span><span className={`ebay-auto-check-status ebay-source-sync-status ${selectedLocalProduct?'checked':'pending'}`}><b>{selectedLocalProduct?'✓ 原商品资料已同步':'等待同步原商品资料'}</b><small>{selectedLocalProduct?`本地快照 V${selectedLocalProduct.versionCount} · ${new Date(selectedLocalProduct.snapshot.capturedAt).toLocaleString('zh-CN')} · ${selectedDownloadedMedia.length} 张图片`:'请先从线上产品下载并建立本地快照'}</small></span></div></header><div className="ebay-remediation-heading ebay-source-select-heading"><div><b>02 选择原图</b><small>已选用 {sourceDraftSelection.length}/{selectedSourceImages.length}{confirmedSourceSelection!==null?` · 已确定 ${activeImageSourceImages.length} 张进入生成选择区`:' · 点击“确定”后所选原图才会进入生成选择区'}</small></div><span className="ebay-original-gallery-heading-actions"><button type="button" className="primary" disabled={!selectedSourceImages.length} onClick={confirmSourceSelection}>确定</button><button disabled={busy===`details:${selectedListing.id}`} onClick={()=>void syncListingDetails()}>{busy===`details:${selectedListing.id}`?'正在读取…':selectedSourceImages.length>1?'重新读取eBay原图':'读取eBay全部原图'}</button></span></div>{!selectedSourceImages.length?<div className="ebay-ai-placeholder">尚未读取原商品图集。系统会自动尝试同步，也可以点击上方按钮重新读取。</div>:confirmedSourceSelection!==null&&!sourceGridExpanded?<button type="button" className="ebay-source-collapsed-bar" onClick={()=>setSourceGridExpanded(true)}>✓ 已确定 {activeImageSourceImages.length} 张原图进入生成选择区 · 点击展开重新挑选 ▾</button>:<div className="ebay-original-gallery-extra">{curatedImageSourceEntries.map(({url,originalIndex})=>{const selected=sourceDraftSelection.includes(url);return <article className={selected?'':'excluded'} key={url}><img src={url} alt={`eBay原图 ${originalIndex+1}`}/><span>{originalIndex===0?'原主图':`原图 ${originalIndex+1}`}</span><button type="button" className={selected?'ebay-source-pick selected':'ebay-source-pick'} onClick={()=>toggleSourceDraftSelection(url)}>{selected?'✓ 已选用':'选用'}</button></article>})}</div>}</div>}
         {optimizeMode==='title'&&<div className="ebay-title-workbench">
           {!selectedOriginalTitleVerified&&<div className="ebay-ai-placeholder">原标题尚未取得。请返回“店铺采集”从商品列表重新采集。</div>}
           <section className="ebay-market-research">
@@ -2936,8 +3309,8 @@ function EbayPlatformWorkspace() {
             {marketResearch?<>
               {!marketResearchCurrent&&<div className="ebay-market-stale">检索条件已变化，这份结果不能用于生成标题，请重新检索。</div>}
               <div className="ebay-market-latest">
-                <header><div><b>最新市场结论</b><small>{marketResearch.query} · 近 {marketResearch.periodDays} 天 · {marketResearch.source==='EBAY_PRODUCT_RESEARCH'?'eBay Product Research':'eBay Sold & Completed'}</small></div><button className="ebay-market-source" onClick={()=>activeStore&&void window.desktop.ebay.openProduct(activeStore.id,marketResearch.sourceUrl,'eBay 已成交研究')}>打开研究页 ↗</button></header>
-                <div className="ebay-market-summary"><span><b>{marketResearch.sampleCount}</b><small>有效成交样本</small></span><span><b>{marketResearch.source==='EBAY_PRODUCT_RESEARCH'?'Product Research':'Sold & Completed'}</b><small>数据来源</small></span><span><b>{confirmedMarketTerms}</b><small>已确认市场词</small></span><span><b>{reviewMarketTerms}</b><small>待核对市场词</small></span></div>
+                <header><div><b>最新市场结论</b><small>{marketResearch.query} · 近 {marketResearch.periodDays} 天 · {marketResearch.source==='OMKAR_EBAY_SCRAPER'?'Omkar eBay Scraper':marketResearch.source==='EBAY_PRODUCT_RESEARCH'?'eBay Product Research':'eBay Sold & Completed'}</small></div><button className="ebay-market-source" onClick={()=>activeStore&&void window.desktop.ebay.openProduct(activeStore.id,marketResearch.sourceUrl,'eBay 市场研究')}>打开研究页 ↗</button></header>
+                <div className="ebay-market-summary"><span><b>{marketResearch.sampleCount}</b><small>有效市场样本</small></span><span><b>{marketResearch.source==='OMKAR_EBAY_SCRAPER'?'Omkar Scraper':marketResearch.source==='EBAY_PRODUCT_RESEARCH'?'Product Research':'Sold & Completed'}</b><small>数据来源</small></span><span><b>{confirmedMarketTerms}</b><small>已确认市场词</small></span><span><b>{reviewMarketTerms}</b><small>待核对市场词</small></span></div>
                 <div className="ebay-market-latest-conclusion"><b>{marketDecision?.summary||'已读取最新已成交市场数据。'}</b><p>{marketDecision?.titleReadiness==='READY'?'当前证据可用于生成六套标题方案。':marketDecision?.titleReadiness==='BLOCKED'?'当前样本或市场词不足，请重新检索或确认关键词。':'可继续生成标题，但建议先核对待确认市场词。'}</p></div>
                 <div className="ebay-market-latest-terms"><b>建议用于标题的已确认市场词</b><div>{confirmedMarketTermStats.length?confirmedMarketTermStats.slice(0,8).map(item=><span key={`${item.term}:${item.count}`}>{item.term} · {item.count}次 / {item.coverage}%</span>):<small>尚无已确认市场词，请在下方核对候选词。</small>}</div></div>
                 {reviewMarketTermItems.length?<details className="ebay-market-keyword-review"><summary>核对 {reviewMarketTerms} 个候选市场词</summary>{reviewMarketTermItems.map(item=><article key={`${item.kind}:${item.term}`}><div><b>{item.term}</b><small>{item.count}次 · 覆盖 {item.coverage}% · {item.factSource}</small></div><span className="ebay-market-term-actions"><button disabled={busy===`market-decision:${item.kind}:${item.term}`} onClick={()=>void decideMarketTerm(item.kind,item.term,'CONFIRMED')}>确认使用</button><button className="excluded" disabled={busy===`market-decision:${item.kind}:${item.term}`} onClick={()=>void decideMarketTerm(item.kind,item.term,'EXCLUDED')}>排除</button></span></article>)}</details>:null}
@@ -2950,7 +3323,7 @@ function EbayPlatformWorkspace() {
             {marketResearch?<>
               {!marketResearchCurrent&&<div className="ebay-market-stale">调研条件已变化，这份数据不能用于生成标题，请重新获取。</div>}
               <div className="ebay-market-snapshot-context"><b>本次研究条件</b><span>{marketResearch.query}</span><span>近 {marketResearch.periodDays} 天</span><span>{marketResearch.categoryName||'全部类目'}</span><span>{marketResearch.condition||'未限定 Condition'}</span>{marketResearch.filters?.map((filter,index)=><span key={`${filter.label}:${filter.value}:${index}`}>{filter.value}</span>)}</div>
-              <div className="ebay-market-summary"><span><b>{marketResearch.sampleCount}</b><small>去重有效样本{marketResearch.rawSampleCount&&marketResearch.rawSampleCount!==marketResearch.sampleCount?` / 原始 ${marketResearch.rawSampleCount}`:''}</small></span><span><b>{marketAnalysisSampleCount}</b><small>进入标题分析的前排样本</small></span><span><b>{marketRankingLabel}</b><small>{marketResearch.rankingBasis==='SOLD_QUANTITY'?`销量证据 ${marketResearch.soldQuantityEvidenceCount||0}/${marketResearch.sampleCount}`:'销量字段不足，不冒充销量榜'}</small></span><span><b>{marketResearch.source==='EBAY_PRODUCT_RESEARCH'?'Product Research':'Sold & Completed'}</b><small>{marketResearch.captureMode==='AUTOMATIC'?'后台真实搜索快照':'人工筛选页面快照'}</small></span>{marketResearch.metrics.map(metric=><span key={metric.key}><b>{metric.value}</b><small>{metric.label}{metric.available?'':'（页面未提供）'}</small></span>)}</div>
+              <div className="ebay-market-summary"><span><b>{marketResearch.sampleCount}</b><small>去重有效样本{marketResearch.rawSampleCount&&marketResearch.rawSampleCount!==marketResearch.sampleCount?` / 原始 ${marketResearch.rawSampleCount}`:''}</small></span><span><b>{marketAnalysisSampleCount}</b><small>进入标题分析的前排样本</small></span><span><b>{marketRankingLabel}</b><small>{marketResearch.rankingBasis==='SOLD_QUANTITY'?`销量证据 ${marketResearch.soldQuantityEvidenceCount||0}/${marketResearch.sampleCount}`:'销量字段不足，不冒充销量榜'}</small></span><span><b>{marketResearch.source==='OMKAR_EBAY_SCRAPER'?'Omkar Scraper':marketResearch.source==='EBAY_PRODUCT_RESEARCH'?'Product Research':'Sold & Completed'}</b><small>{marketResearch.captureMode==='AUTOMATIC'?'后台真实搜索快照':'人工筛选页面快照'}</small></span>{marketResearch.metrics.map(metric=><span key={metric.key}><b>{metric.value||'—'}</b><small>{metric.label}{metric.available?'':'（接口未提供）'}</small></span>)}</div>
               {marketResearch.findings?.length?<div className="ebay-market-findings"><b>市场分析报告</b><div>{marketResearch.findings.map(item=><article className={item.level.toLowerCase()} key={item.key}><span>{item.title}</span><strong>{item.conclusion}</strong><small>{item.evidence}</small></article>)}</div></div>:null}
               <details className="ebay-market-history">
                 <summary><span><b>历史研究与趋势</b><small>已保存 {marketResearchHistory.length} 次市场研究 · 同条件历史 {comparableMarketResearch.length} 次</small></span><em>{previousMarketResearch?'可对比':'等待下一次同条件研究'}</em></summary>
@@ -2976,55 +3349,40 @@ function EbayPlatformWorkspace() {
           {titleDecision&&<section className={`ebay-title-save-state ${titleDecisionCurrent?'saved':'stale'}`}><span>{titleDecisionCurrent?'✓':'!'}</span><div><b>{titleDecisionCurrent?'标题方案已确认并保存':'标题方案已变化，需要重新确认'}</b><p>{titleDecisionCurrent?'本环节只保存标题和证据快照，不会打开或写入 eBay。完成其他优化后，在“线上发布”统一检查并交付。':'市场证据或当前选择已变化，旧标题不会进入最终发布资料。'}</p></div><em>{titleDecisionCurrent?'等待最终发布确认':'待重新确认'}</em></section>}
         </div>}
         {optimizeMode==='image'&&<div className="ebay-image-workbench">
-          <div className="ebay-original-gallery-heading"><div><b>eBay 原商品图片 · 已保留 {activeImageSourceImages.length}/{selectedSourceImages.length}</b><small>每张原图的用途、排除/保留与参考选择已合并到上方“图片视觉规则检查”卡片；标记为“不使用”不会删除 eBay 原图。</small></div><span className="ebay-original-gallery-heading-actions">{extraImageSourceEntries.length?<button type="button" className="ebay-original-gallery-collapse" aria-expanded={extraGalleryOpen} onClick={()=>setExtraGalleryOpen(open=>!open)}>{extraGalleryOpen?'收起其他原图 ▴':`展开其他 ${extraImageSourceEntries.length} 张原图 ▾`}</button>:null}<button disabled={busy===`details:${selectedListing.id}`} onClick={()=>void syncListingDetails()}>{busy===`details:${selectedListing.id}`?'正在读取…':selectedSourceImages.length>1?'重新读取eBay原图':'读取eBay全部原图'}</button></span></div>
-          {!selectedSourceImages.length&&<div className="ebay-ai-placeholder">尚未读取原商品图集。系统会自动尝试同步，也可以点击上方按钮重新读取。</div>}
-          {extraGalleryOpen&&extraImageSourceEntries.length?<div className="ebay-original-gallery-extra">{extraImageSourceEntries.map(({url,originalIndex,enabled,role})=><article className={enabled?'':'excluded'} key={url}><img src={url} alt={`eBay原图 ${originalIndex+1}`}/><span>{originalIndex===0?'原主图':`原图 ${originalIndex+1}`}</span><select aria-label={`原图 ${originalIndex+1} 用途`} value={role} onChange={event=>updateImageSourceCuration(url,event.target.value as EbayImageSourceRole)}>{ebayImageSourceRoles.map(option=><option key={option} value={option}>{ebayImageSourceRoleLabels[option]}</option>)}</select><button type="button" onClick={()=>updateImageSourceCuration(url,enabled?'UNUSED':'DETAIL')}>{enabled?'排除':'保留'}</button></article>)}</div>:null}
-          <section className="ebay-image-grounding"><header><div><b>全图商品事实卡</b><small>{imageGroundingPlan?`已由 ${imageGroundingPlan.model} 分析 ${activeImageSourceImages.length} 张已保留原图 · ${new Date(imageGroundingPlan.analyzedAt).toLocaleString()}`:'生成前会先识别已保留原图中的可售商品主体、结构、材质与真实使用关系。'}</small></div><button disabled={!activeImageSourceImages.length||busy==='image-grounding'||busy==='optimize-image'} onClick={()=>void analyzeImageSources()}>{busy==='image-grounding'?'分析中…':imageGroundingPlan?'重新分析已保留原图':'分析已保留原图'}</button></header>{imageGroundingPlan?<><p><b>商品主体：</b>{imageGroundingPlan.productIdentity}</p><div><span><b>锁定事实</b>{imageGroundingPlan.verifiedFacts.slice(0,5).join('；')||'待人工确认'}</span><span><b>用途参照</b>{ebayImagePurposes.map(purpose=>`${ebayImagePurposeLabels[purpose]}：${(imageGroundingPlan.purposeReferences[purpose]||[]).map(index=>`原图${(activeImageSourceEntries[index]?.originalIndex??index)+1}`).join('、')||'未确定'}`).join(' · ')}</span></div>{imageGroundingPlan.warnings.map(warning=><small className="warning" key={warning}>注意：{warning}</small>)}</>:<p>请先为原图标记用途并保留参照，再点击“分析已保留原图”建立生成依据。</p>}</section>
-          <div className="ebay-image-generation-heading"><div><b>图片优化 · 02 AI优化</b><small>系统按比例生成主图、详情图、解决痛点图和应用场景图；草稿不会覆盖原图。</small></div><span className="ebay-image-phase-status">{acceptedImagePurposes.length?`已确认 ${acceptedImagePurposes.length}/4 类`:generatedImageCount?`已生成 ${generatedImageCount} 张，待确认`:'待一键生成'}</span></div>
-          <section className="ebay-image-evidence"><header><b>本次生成依据</b><small>{contentResult?'已读取“描述优化”的事实、购买理由和场景':'尚未生成“描述优化”，本次仅使用原商品标题、属性与初检结果'}</small></header><div><article><strong>{imageVisualReport?.failed||0}</strong><span>初检不通过</span></article><article><strong>{contentResult?.sourceFacts.length||0}</strong><span>已核实事实</span></article><article><strong>{contentResult?.benefits.length||0}</strong><span>购买理由</span></article><article><strong>{contentResult?.scenarios.length||0}</strong><span>应用场景</span></article></div></section>
-          <div className="ebay-image-settings ebay-image-settings-compact"><section><label>固定 AI 生图模型<select value={imageModel} disabled aria-label="固定 AI 生图模型">{imageModels.map(model=><option value={model.id} key={model.id}>{model.name} · 本月已生成 {imageModelUsage[model.id]||0} 张</option>)}</select></label>{selectedImageModel?<p><b>{selectedImageModel.name}</b><span>eBay 图片优化固定使用此模型；{selectedImageModel.description}</span><small>{selectedImageModel.id} · 本项目本月已生成 {imageModelUsage[selectedImageModel.id]||0} 张</small></p>:<div className="ebay-ai-placeholder">暂无可用百炼生图模型</div>}</section><section className="ebay-image-generation-options"><b>生成总数量</b><div>{[4,8,12].map(count=><button type="button" key={count} className={imageTotalCount===count?'active':''} onClick={()=>setImageTotalCount(count)}>{count===4?'快速 4 张':count===8?'推荐 8 张':'完整 12 张'}</button>)}</div><label className="ebay-image-custom-count">自定义总数量<input type="number" min="4" max="20" value={imageTotalCount} onChange={event=>setImageTotalCount(Math.min(20,Math.max(4,Number(event.target.value)||4)))} /></label><small>自动分配：产品主图 {plannedImageCounts.HERO} 张 · 产品详情图 {plannedImageCounts.DETAIL} 张 · 解决痛点图 {plannedImageCounts.PAIN_POINT} 张 · 应用场景图 {plannedImageCounts.SCENE} 张</small><label>补充要求<textarea value={imageExtraPrompt} onChange={event=>setImageExtraPrompt(event.target.value)} placeholder="例如：重点展示已核实的安装方式；不得改变产品颜色。请勿填写未经核实的卖点。"/></label></section></div>
-          {/* 单模型流程不再展示模型 A/B 测试。 */}
-          {/* <section className="ebay-image-model-ab">
-            <header>
-              <div><b>模型 A/B 测试</b><small>同一商品事实卡、同一主图分镜、同一原图参照，各生成 1 张 2K 主图。先以自动质量门槛决定胜出模型，质量分接近时才比较生成耗时。</small></div>
-              <span className={imageDefaultModel?'ready':'pending'}>{imageDefaultModel?`默认：${imageModels.find(model=>model.id===imageDefaultModel)?.name||imageDefaultModel}`:'尚未完成 A/B 测试'}</span>
-            </header>
-            <div className="ebay-image-model-ab-controls">
-              <div className="ebay-image-model-ab-baseline"><b>基准模型</b><strong>{selectedImageModel?.name||'请先选择模型'}</strong><small>使用上方“AI 生图模型”当前选择</small></div>
-              <label>对照模型<select value={imageAbChallenger} onChange={event=>setImageAbChallenger(event.target.value)} disabled={busy==='image-model-ab'}>{imageModels.filter(model=>model.id!==imageModel).map(model=><option key={model.id} value={model.id}>{model.name}</option>)}</select></label>
-              <button type="button" className="primary" disabled={!activeImageSourceImages.length||imageModels.length<2||busy==='image-model-ab'} onClick={()=>void runImageModelAbTest()}>{busy==='image-model-ab'?'正在执行 A/B…':'执行主图 A/B 测试（2 张）'}</button>
-            </div>
-            <p>本次测试会实际调用两个模型，各生成 1 张图片并计入本月模型用量；不会替换当前草稿、原图或 eBay 线上图片。</p>
-            {imageAbRun?<div className="ebay-image-model-ab-result"><header><b>{imageAbRun.winnerModelId?'✓ 已决定默认模型':'A/B 测试未决定默认模型'}</b><small>{new Date(imageAbRun.createdAt).toLocaleString('zh-CN')}</small></header><div>{imageAbRun.candidates.map(candidate=>{const model=imageModels.find(item=>item.id===candidate.modelId);const quality=candidate.review?ebayImageModelQualityScore(candidate.review):0;return <article className={`${candidate.modelId===imageAbRun.winnerModelId?'winner':''} ${candidate.review?.status==='PASSED'?'passed':'blocked'}`} key={candidate.modelId}>{candidate.imageUrl?<img src={candidate.imageUrl} alt={`${model?.name||candidate.modelId} A/B 测试结果`}/>:<span className="ab-image-placeholder">未生成</span>}<b>{model?.name||candidate.modelId}</b>{candidate.review?<small>{candidate.review.status==='PASSED'?`通过 · 综合 ${quality.toFixed(1)}`:`未通过 · ${candidate.review.reason}`}</small>:<small>{candidate.error||'等待生成和复核'}</small>}<em>{candidate.elapsedMs?`${(candidate.elapsedMs/1000).toFixed(1)} 秒`:''}</em></article>})}</div><p>{imageAbRun.reason}</p></div>:null}
-            {imageAbHistory.length>1?<small className="ebay-image-model-ab-history">已保存最近 {imageAbHistory.length} 次 A/B 记录（本机浏览器存储）。</small>:null}
-          </section> */}
-          <section className="ebay-image-storyboard-cards"><header><div><b>强制分镜卡 · {plannedImageShots.length} 张</b><small>每张草稿只能按对应卡片生成；卡片会同时传入生图模型与一致性复核，不符合"镜头任务、内容依据、验收标准、禁止项"的结果会被拦截。</small></div><span>{imageGroundingPlan?'✓ 已绑定全图事实':'等待全图事实卡'}</span></header><div>{plannedImageShots.map(shot=>{const refs=imageShotReferenceIndices(shot);const isEditable=shot.purpose==='PAIN_POINT'||shot.purpose==='SCENE';const isEditing=editingShot===shot.code;const editData=shotEdits[shot.code];const benefit=contentResult?.benefits?.length?contentResult.benefits[shot.index%contentResult.benefits.length]:undefined;const scenario=contentResult?.scenarios?.length?contentResult.scenarios[shot.index%contentResult.scenarios.length]:undefined;const defaultPainPoint=editData?.painPoint!==undefined?editData.painPoint:benefit?.painPoint||'';const defaultSolution=editData?.solution!==undefined?editData.solution:benefit?.solution||'';const defaultBenefit=editData?.customerBenefit!==undefined?editData.customerBenefit:benefit?.customerBenefit||'';const defaultTitle=editData?.title!==undefined?editData.title:scenario?.title||'';const defaultDesc=editData?.description!==undefined?editData.description:scenario?.description||'';const evidence=editData?shot.purpose==='PAIN_POINT'?`已核实痛点：${defaultPainPoint}；对应方案：${defaultSolution}；购买利益：${defaultBenefit}。`:shot.purpose==='SCENE'?`已核实应用场景：${defaultTitle}；${defaultDesc}。`:shot.evidence:shot.evidence;return <article key={shot.code} className={isEditable?'editable':''}><em>{shot.code}</em><div><b>{ebayImagePurposeLabels[shot.purpose]} · {shot.title}</b>{isEditing?<div className="ebay-shot-edit">{(shot.purpose==='PAIN_POINT')&&<><label>痛点：<textarea rows={2} defaultValue={defaultPainPoint} onChange={e=>{const next={...shotEdits,[shot.code]:{...shotEdits[shot.code],painPoint:e.target.value}};setShotEdits(next)}}/></label><label>对应方案：<textarea rows={2} defaultValue={defaultSolution} onChange={e=>{const next={...shotEdits,[shot.code]:{...shotEdits[shot.code],solution:e.target.value}};setShotEdits(next)}}/></label><label>购买利益：<textarea rows={2} defaultValue={defaultBenefit} onChange={e=>{const next={...shotEdits,[shot.code]:{...shotEdits[shot.code],customerBenefit:e.target.value}};setShotEdits(next)}}/></label></>}{(shot.purpose==='SCENE')&&<><label>场景标题：<input defaultValue={defaultTitle} onChange={e=>{const next={...shotEdits,[shot.code]:{...shotEdits[shot.code],title:e.target.value}};setShotEdits(next)}}/></label><label>场景描述：<textarea rows={2} defaultValue={defaultDesc} onChange={e=>{const next={...shotEdits,[shot.code]:{...shotEdits[shot.code],description:e.target.value}};setShotEdits(next)}}/></label></>}<div className="ebay-shot-edit-actions"><button type="button" onClick={()=>setEditingShot(null)}>保存修改</button><button type="button" onClick={()=>{const next={...shotEdits};delete next[shot.code];setShotEdits(next);setEditingShot(null)}}>取消</button></div></div>:<>{isEditable?<small><strong>内容依据：</strong>{evidence}<button type="button" className="ebay-shot-edit-btn" onClick={()=>setEditingShot(shot.code)}>编辑</button></small>:<small><strong>内容依据：</strong>{evidence}</small>}</>}<small><strong>原图参照：</strong>{refs.length?refs.map(index=>{const entry=activeImageSourceEntries[index];return `原图${(entry?.originalIndex??index)+1}${entry?`（${ebayImageSourceRoleLabels[entry.role]}）`:''}`}).join('、'):'待全图分析后确定'}</small><small><strong>验收：</strong>{shot.acceptance}</small><small className="prohibited"><strong>禁止：</strong>{shot.prohibited}</small></div></article>})}</div></section>
-          <section className="ebay-image-quality-gate"><header><div><b>自动质量门槛</b><small>系统自动复核；只有全部达标的草稿才能被选中、确认采用和进入自然化处理。审核服务异常或未完成时同样拦截。</small></div><span>硬性拦截</span></header><div><article><strong>≥ 90</strong><small>商品一致性</small></article><article><strong>≥ 88</strong><small>结构保留</small></article><article><strong>≥ 88</strong><small>事实准确</small></article><article><strong>≥ 85</strong><small>分镜完成</small></article><article><strong>≥ 75</strong><small>同用途差异</small></article></div><p>差异度仅在同用途已有草稿时比较；首张按 100 分计算。任一项不达标，或审核未完成，均不会进入后续确认流程。</p></section>
-          <div className="ebay-image-truth-guard"><b>商品一致性保护</b><span>锁定商品形状、结构、比例、颜色、材质、配件和包装事实</span><span>禁止虚构功能、配件、文字、Logo、水印、促销标签和测量标注</span></div>
-          {generatedImageCount>0&&<section className="ebay-image-candidate-groups"><header><div><b>AI 图片草稿 · {generatedImageCount} 张</b><small>每张草稿均按独立分镜卡、原图参照和自动质量门槛生成。未通过或审核未完成的草稿不能采用；可先查看审核说明，再使用下方“重新生成整套图片”。</small></div></header>{ebayImagePurposes.map(purpose=>{const result=imageResults[purpose];const selectedUrl=selectedGeneratedImages[purpose];return result?<section className="ebay-image-candidates" key={purpose}><header><div><b>{ebayImagePurposeLabels[purpose]} · {result.imageUrls.length} 张</b><small>{purpose==='HERO'?'商品完整、白底、无文字':purpose==='DETAIL'?'结构材质与核心细节':purpose==='PAIN_POINT'?'以已核实痛点和解决方案为依据':'符合真实用途的应用环境'}</small></div><span>{confirmedGeneratedImages[purpose]?'✓ 已确认':'待确认'}</span></header><div className="ebay-generated-images">{result.imageUrls.map((url,index)=>{const review=imageCandidateReviews[purpose]?.find(item=>item.candidateUrl===url);const shot=plannedImageShots.find(item=>item.purpose===purpose&&item.index===index);const passed=review?.status==='PASSED';return <article className={`${selectedUrl===url?'selected':''} ${passed?'passed':'rejected'}`} key={url}><button type="button" disabled={!passed} onClick={()=>setSelectedGeneratedImages(current=>({...current,[purpose]:url}))}><img src={url} alt={`${ebayImagePurposeLabels[purpose]}草稿 ${index+1}`}/><span className="ebay-generated-image-status">{ebayImageCandidateStatus(review)}</span></button><div className="ebay-generated-image-meta"><b>{shot?`${shot.code} · ${shot.title}`:`草稿 ${index+1}`}</b>{shot&&<small>{(()=>{const ed=shotEdits[shot.code];if(!ed)return shot.evidence;const eb=contentResult?.benefits?.[shot.index%contentResult.benefits.length];const es=contentResult?.scenarios?.[shot.index%contentResult.scenarios.length];if(shot.purpose==='PAIN_POINT')return'已核实痛点：'+(ed.painPoint??eb?.painPoint??'')+'；对应方案：'+(ed.solution??eb?.solution??'')+'；购买利益：'+(ed.customerBenefit??eb?.customerBenefit??'')+'。';if(shot.purpose==='SCENE')return'已核实应用场景：'+(ed.title??es?.title??'')+'；'+(ed.description??es?.description??'')+'。';return shot.evidence})()}</small>}{review&&<details><summary>查看审核说明</summary><p>{review.reason}</p></details>}</div></article>})}</div><footer><small>仅已通过自动质量门槛的草稿可确认采用；确认仅保存本地优化选择，不会修改 eBay 线上刊登。</small><button className="primary" disabled={!selectedUrl||imageCandidateReviews[purpose]?.find(item=>item.candidateUrl===selectedUrl)?.status!=='PASSED'} onClick={()=>acceptGeneratedImage(purpose)}>{confirmedGeneratedImages[purpose]===selectedUrl?'✓ 当前图片已确认':`确认采用${ebayImagePurposeLabels[purpose]}`}</button></footer></section>:null})}</section>}
-          {generatedImageCount>0&&<section className="ebay-image-adoption"><header><div><b>最终采用清单</b><small>每类最终图都保留“原图参照、分镜任务、质量门槛和本地最终选择”的追溯记录。</small></div><span>{imageNaturalizationComplete?'✓ 4 类最终图已确认':`已确认 ${acceptedImagePurposes.length}/4 类 · 已完成自然化 ${Object.keys(naturalizeChoices).length}/4 类`}</span></header><div className="ebay-image-adoption-grid">{acceptedImageTrace.map(item=>{const sourceLabels=item.referenceIndices.map(index=>{const entry=activeImageSourceEntries[index];return entry?`原图${entry.originalIndex+1}（${ebayImageSourceRoleLabels[entry.role]}）`:`原图${index+1}`});const finalStatus=!item.imageUrl?'待确认采用':!item.choice?'已确认，待自然化':item.choice==='processed'?'已确认自然化稿':'已保留 AI 优化稿';const quality=item.review?ebayImageModelQualityScore(item.review).toFixed(1):'';return <article className={`${item.imageUrl?'confirmed':'missing'} ${item.choice?'final':''}`} key={item.purpose}>{item.imageUrl?<img src={item.imageUrl} alt={`${ebayImagePurposeLabels[item.purpose]}已确认稿`}/>:<div className="ebay-image-adoption-placeholder">待确认</div>}<div><b>{ebayImagePurposeLabels[item.purpose]}</b><em>{finalStatus}</em><small>{item.shot?`${item.shot.code} · ${item.shot.title}`:'请从已通过质量门槛的草稿中确认采用'}</small><small>原图参照：{sourceLabels.join('、')||'等待全图事实卡'}</small>{item.review&&<small>质量分 {quality} · {item.review.status==='PASSED'?'已通过自动门槛':'未通过自动门槛'}</small>}</div></article>})}</div><footer>四类图片均完成“确认采用 + 最终选择”后，系统才会自动启动最终图集复检；未通过复检或未完成的图片不能进入优品仓库。</footer></section>}
-          <div className="ebay-image-generate-action">
-            {imageGenerationRun.phase!=='IDLE'&&<div className={`ebay-image-run-status ${imageGenerationRun.phase.toLowerCase()}`} role="status"><b>{imageGenerationRun.phase==='GROUNDING'?'正在建立全图事实卡':imageGenerationRun.phase==='GENERATING'?'正在生成图片':imageGenerationRun.phase==='REVIEWING'?'正在复核商品一致性':imageGenerationRun.phase==='DONE'?'本次生成已完成':'本次生成未完成'}</b><span>{imageGenerationRun.message}</span>{imageGenerationRun.total>0&&imageGenerationRun.phase!=='GROUNDING'&&<em>{imageGenerationRun.completed}/{imageGenerationRun.total} 张</em>}</div>}
-            <button className="primary ebay-image-generate" disabled={!activeImageSourceImages.length||!imageModel||busy==='optimize-image'||busy==='image-grounding'} onClick={()=>void optimizeImage()}>{imageGenerationRun.phase==='GROUNDING'?'正在分析已保留原图…':imageGenerationRun.phase==='GENERATING'?'百炼正在按强制分镜生成…':imageGenerationRun.phase==='REVIEWING'?'正在复核商品一致性…':generatedImageCount?'按强制分镜卡重新生成整套图片':`按强制分镜卡生成 ${imageTotalCount} 张图片`}</button>
-          </div>
-          <section className={`ebay-image-naturalize ${acceptedImagePurposes.length?'':'disabled'}`}>
-            <header><div><b>图片优化 · 03 图片自然化处理</b><small>本机调整第二阶段确认稿的纹理、色彩与摄影质感，原图始终保留。</small></div><span>{imageNaturalizationComplete?'✓ 03 已完成':`已确认 ${Object.keys(naturalizeChoices).length}/${acceptedImagePurposes.length}`}</span></header>
-            {acceptedImagePurposes.length?<ImageNaturalizePanel purposes={acceptedImagePurposes} purpose={naturalizePurpose} onPurpose={setNaturalizePurpose} profile={naturalizeProfile} onProfile={setNaturalizeProfile} results={naturalizeResults} choices={naturalizeChoices} busy={busy} onRun={()=>void runImageNaturalization()} onConfirm={choice=>void confirmNaturalizedImage(choice)}/>:<div className="ebay-ai-placeholder">请先在 02 AI优化中生成图片并点击“确认采用当前图片”。</div>}
-          </section>
-          {imageNaturalizationComplete&&<section className={`ebay-final-image-set ${finalImageInspection?.blocked?'blocked':finalImageInspectionPassed?'passed':'checking'}`}>
-            <header><div><b>最终本地图集</b><small>按主图、详情图、解决痛点图、应用场景图顺序替换对应本地优化稿；其余 eBay 原图保持原顺序。</small></div><span>{finalImageChecking||!finalImageInspection?'自动检查中…':finalImageInspection.blocked?`${finalImageInspection.blocked} 张未通过`:`✓ 已检查 ${finalImageInspection.passed} 张`}</span></header>
-            <div>{finalImageUrls.map((url,index)=>{
-              const normalizedUrl=url.replace(/\/s-l\d+(?=\.[a-z0-9]+(?:\?|$))/i,'/s-l1600')
-              const inspection=finalImageInspection?.images.find(item=>item.url===normalizedUrl)
-              const label=index===0?'最终主图':index===1?'最终详情图':index===2?'最终解决痛点图':index===3?'最终应用场景图':`保留原图 ${index+1}`
-              return <article className={inspection?.status==='BLOCKED'?'blocked':''} key={`${finalImageFingerprint}:${index}`}>
-                <img src={url} alt={label}/>
-                <b>{label}</b>
-                <small>{!inspection?'待检查':inspection.status==='PASSED'?`${inspection.width}×${inspection.height} · ${inspection.format.toUpperCase()}`:inspection.findings.join('；')}</small>
-              </article>
-            })}</div>
-            <footer>{finalImageInspectionPassed?'最终图集尺寸、格式与可读性已通过自动检查，可以进入下一环节。':finalImageInspection?.blocked?'未通过图片不会进入优品仓库，请返回对应图片类型重新生成或重新确认。':'正在读取最终图片尺寸、格式与可读性，请稍候。'}</footer>
-          </section>}
+          <EbayImageStagePanel
+            sourceImages={activeImageSourceImages}
+            sourceLabels={activeImageSourceEntries.map(entry=>ebayImageSourceRoleLabels[entry.role])}
+            title={selectedTitle||selectedOriginalTitle||selectedListing.title}
+            description={currentEnglishDescription||''}
+            itemSpecifics={selectedListing.itemSpecifics||[]}
+            imageModels={imageModels}
+            externalBusy={busy}
+            onAllStagesConfirmed={(images)=>{
+              const mapped:Partial<Record<EbayImagePurpose,string[]>>={}
+              const manual:Record<string,string>={}
+              for(const purpose of ebayImagePurposes){
+                const urls=images[purpose]
+                if(!urls||!urls.length)continue
+                mapped[purpose]=urls
+                // 阶段面板确认的图片视为“人工已采纳”，接入旧的可用性判断链（isGeneratedImageUsable）
+                urls.forEach((url,index)=>{manual[`STAGE-${purpose}-${index}`]=url})
+              }
+              setAcceptedGeneratedImages(mapped)
+              setManuallyAcceptedShots(current=>({...current,...manual}))
+              setNotice('全部 4 类图片已确认完成，可进入自然化处理。')
+            }}
+            onNaturalizeComplete={(images)=>{
+              const choices:Record<string,'original'|'processed'>={}
+              const results:Record<string,RealShiftResult>={}
+              for(const [url,payload] of Object.entries(images)){
+                choices[url]=payload.result?'processed':'original'
+                if(payload.result)results[url]=payload.result
+              }
+              setNaturalizeChoices(choices)
+              setNaturalizeResults(results)
+              setNotice('自然化处理已完成，可以进入视频生成环节。')
+            }}
+          />
         </div>}
         {optimizeMode==='content'&&<div className="ebay-description-workbench ebay-content-v2">
           <header><div><b>详情页与多语言核对</b><small>DeepSeek 负责英文内容优化；Qwen-MT Flash 按最终英文逐段翻译，中文仅用于内部核对。</small></div><button className="primary" disabled={!selectedTitle||busy==='optimize-content'} onClick={()=>void optimizeContent()}>{busy==='optimize-content'?'生成中…':contentResult?'重新生成内容方案':'生成详情内容方案'}</button></header>
@@ -3079,7 +3437,7 @@ function EbayPlatformWorkspace() {
           <div className="ebay-profit-formula"><b>核算结果</b><span>当前销售额 ¥{saleRevenueCny.toFixed(2)} − 固定成本 ¥{fixedOperatingCostCny.toFixed(2)} − 平台比例费 ¥{(platformFeeCny-effectivePlatformFixedFeeCny).toFixed(2)} − 推广 ¥{promotionFeeCny.toFixed(2)} − 退货预留 ¥{returnLossCny.toFixed(2)} − 风险缓冲 ¥{riskBufferCny.toFixed(2)} = 预计利润 ¥{estimatedProfitCny.toFixed(2)}</span><span>保本价 = 固定成本 ÷（1 − 综合比例费率 {(variableCostRate*100).toFixed(1)}%）；目标售价再扣除目标毛利率 {profitAssumptions.targetMarginRate.toFixed(1)}%。</span><small>类目费率是本地规则估算，可切换为手动覆盖；最终利润以 eBay 实际账单、广告账单和物流账单为准。参数按本地产品独立保存。</small></div>
         </div>}
         {optimizeMode==='video'&&(contentResult?<EbayVideoStudio listingId={selectedListing.listingId} title={selectedTitle||selectedTitleEnglish} description={currentEnglishDescription} chineseDescription={contentResult.chineseReference||''} imageUrls={finalImageUrls} storyboard={contentResult.storyboard} imagesReady={finalImageInspectionPassed}/>:<div className="ebay-video-storyboard"><header><div><b>15秒产品视频生成</b><small>视频会直接读取描述优化内容和图片优化最终稿。</small></div><button className="primary" disabled={!selectedTitle||busy==='optimize-content'} onClick={()=>void optimizeContent()}>{busy==='optimize-content'?'生成中…':'先生成描述与视频脚本'}</button></header><div className="ebay-ai-placeholder">请先完成02描述优化，系统将自动生成视频脚本并进入方舟视频工作台。</div></div>)}
-        {titleResult&&<div className="ebay-optimization-footer"><div><small>{optimizeMode==='pricing'?'保存后不会直接修改线上商品':`当前环节：${optimizeStageLabels[optimizeMode]}`}</small><b>{optimizeMode==='pricing'?(!complianceCheck?'尚未执行合规知识库检查':complianceCheck.gateStatus==='PASSED'?'合规门禁已通过':complianceCheck.gateStatus==='REVIEW_REQUIRED'&&complianceReviewed?'人工复核已确认':`合规门禁：${complianceCheck.gateStatus}`):nextOptimizeStatus}</b></div>{optimizeMode==='pricing'?<button className="primary" disabled={!selectedTitle||busy==='save-premium'||!complianceCheck||!imageVisualReport||!imageNaturalizationComplete||finalImageChecking||!finalImageInspection||finalImageInspection.blocked>0||finalImageInspection.review>0||complianceCheck.gateStatus==='BLOCKED'||complianceCheck.gateStatus==='RECHECK_REQUIRED'||complianceCheck.gateStatus==='REVIEW_REQUIRED'&&!complianceReviewed} onClick={()=>void saveToPremium()}>{busy==='save-premium'?'保存中…':'确认并存入优品仓库'}</button>:<button className="primary" disabled={!nextOptimizeReady} title={nextOptimizeReady?'进入下一个优化环节':nextOptimizeStatus} onClick={goToNextOptimizeStage}>下一步：{nextOptimizeMode?optimizeStageLabels[nextOptimizeMode]:''}</button>}</div>}</div>:<EbayEmpty title="请选择本地产品" description="AI优化只读取已下载的本地产品快照，请先在线上产品下载，再从本地产品进入。" action="前往本地产品" onAction={()=>setActiveTab('local')}/>}</section></div>}
+        {titleResult&&!lockTitleMode&&<div className="ebay-optimization-footer"><div><small>{optimizeMode==='pricing'?'保存后不会直接修改线上商品':`当前环节：${optimizeStageLabels[optimizeMode]}`}</small><b>{optimizeMode==='pricing'?(!complianceCheck?'尚未执行合规知识库检查':complianceCheck.gateStatus==='PASSED'?'合规门禁已通过':complianceCheck.gateStatus==='REVIEW_REQUIRED'&&complianceReviewed?'人工复核已确认':`合规门禁：${complianceCheck.gateStatus}`):nextOptimizeStatus}</b></div>{optimizeMode==='pricing'?<button className="primary" disabled={!selectedTitle||busy==='save-premium'||!complianceCheck||!imageVisualReport||!imageNaturalizationComplete||finalImageChecking||!finalImageInspection||finalImageInspection.blocked>0||finalImageInspection.review>0||complianceCheck.gateStatus==='BLOCKED'||complianceCheck.gateStatus==='RECHECK_REQUIRED'||complianceCheck.gateStatus==='REVIEW_REQUIRED'&&!complianceReviewed} onClick={()=>void saveToPremium()}>{busy==='save-premium'?'保存中…':'确认并存入优品仓库'}</button>:<button className="primary" disabled={!nextOptimizeReady} title={nextOptimizeReady?'进入下一个优化环节':nextOptimizeStatus} onClick={goToNextOptimizeStage}>下一步：{nextOptimizeMode?optimizeStageLabels[nextOptimizeMode]:''}</button>}</div>}</div>:lockTitleMode?<div className="ebay-title-empty-state"><div className="ebay-title-tools"><div className="ebay-title-tools-row"><button type="button" className={titleBrowserUrl==='https://www.ebay.com/'?'active':''} onClick={()=>void openTitleBrowser('https://www.ebay.com/')}>eBay</button><button type="button" className={titleBrowserUrl==='https://www.gigab2b.com/'?'active':''} onClick={()=>void openTitleBrowser('https://www.gigab2b.com/')}>大健云仓</button><button type="button" className={titleCustomUrlOpen?'active':''} onClick={()=>setTitleCustomUrlOpen(open=>!open)}>新建</button><span className="ebay-title-tools-spacer"/><button type="button" className="primary" disabled={!titleUrlInput.trim()||busy==='read-title-url'} onClick={()=>void readTitleProductByUrl()}>{busy==='read-title-url'?'正在读取…':'读取产品'}</button></div>{titleCustomUrlOpen&&<div className="ebay-title-custom-url-row"><input value={titleCustomUrl} onChange={event=>setTitleCustomUrl(event.target.value)} onKeyDown={event=>{if(event.key==='Enter')openTitleCustomUrl()}} placeholder="输入任意网址，例如 https://www.aliexpress.com"/><button type="button" disabled={!titleCustomUrl.trim()} onClick={openTitleCustomUrl}>访问</button></div>}</div><div className="ebay-title-url-form"><header><b>输入目标产品网址</b><small>粘贴 eBay 商品链接，系统读取产品并建立本地快照后，原地开始标题优化。</small></header><div className="ebay-title-url-row"><input value={titleUrlInput} onChange={event=>setTitleUrlInput(event.target.value)} onKeyDown={event=>{if(event.key==='Enter')void readTitleProductByUrl()}} placeholder="https://www.ebay.com/itm/123456789012"/><button type="button" className="primary" disabled={!titleUrlInput.trim()||busy==='read-title-url'} onClick={()=>void readTitleProductByUrl()}>{busy==='read-title-url'?'正在读取…':'读取产品'}</button></div>{titleUrlError&&<p className="ebay-title-url-error">{titleUrlError}</p>}</div>{titleBrowserUrl&&<div className="ebay-title-browser"><div className="ebay-title-browser-bar"><span title={titleBrowserUrl}>{titleBrowserUrl}</span><button type="button" onClick={closeTitleBrowser}>关闭浏览器</button></div><div ref={titleBrowserSlot} className="ebay-title-browser-slot"><div className="browser-placeholder">正在打开浏览器…</div></div></div>}</div>:<EbayEmpty title="请选择本地产品" description="AI优化只读取已下载的本地产品快照，请先在线上产品下载，再从本地产品进入。" action="前往本地产品" onAction={()=>setActiveTab('local')}/>}</section></div>}
       {activeTab==='premium'&&<div className="ebay-library-layout ebay-premium-layout">
         <aside className="ebay-product-catalog">
           <header><b>优品目录</b><small>复用当前 eBay 店铺目录，仅统计已保存的优化版本</small></header>
@@ -3116,7 +3474,7 @@ function EbayPlatformWorkspace() {
                 <p>{draft.listing.categoryName||'未分类'} · {draft.itemSpecifics.length} 个属性</p>
                 <div className="ebay-premium-tags"><span>{draft.complianceGateStatus?`合规 ${draft.complianceGateStatus}`:'缺少合规快照'}</span><span>{draft.marketDecision?'市场决策已保存':'缺少市场决策'}</span></div>
                 {issues.length?<small className="ebay-premium-issues">{issues.slice(0,3).join(' · ')}</small>:<small className="ebay-premium-ready">标题、图片、详情与属性已通过发布前检查</small>}
-                <button onClick={()=>{setSelectedListingId(draft.listing.id);setSelectedLocalProductId(localProducts.find(product=>product.listingId===draft.listing.listingId)?.id||'');setTitleResult({originalTitle:draft.listing.title,optimizedTitle:draft.selectedTitle,keywords:[],rationale:'已从优品仓库恢复',model:'saved',variants:draft.titleVariants,itemSpecifics:draft.itemSpecifics,description:draft.description,marketDecision:draft.marketDecision});setSelectedTitle(draft.selectedTitle);setSelectedSourceImageUrl(draft.imageUrl||draft.listing.imageUrls?.[0]||draft.listing.imageUrl||'');setImageGroundingPlan(null);setImageCandidateReviews({});setImageResults({});setSelectedGeneratedImages({});setAcceptedGeneratedImages({});setContentResult(null);setComplianceReviewed(Boolean(draft.complianceReviewedAt));setOptimizeMode('image');setActiveTab('optimize')}}>查看优化版本</button>
+                <button onClick={()=>{setSelectedListingId(draft.listing.id);setSelectedLocalProductId(localProducts.find(product=>product.listingId===draft.listing.listingId)?.id||'');setTitleResult({originalTitle:draft.listing.title,optimizedTitle:draft.selectedTitle,keywords:[],rationale:'已从优品仓库恢复',model:'saved',variants:draft.titleVariants,itemSpecifics:draft.itemSpecifics,description:draft.description,marketDecision:draft.marketDecision});setSelectedTitle(draft.selectedTitle);setImageCandidateReviews({});setAcceptedGeneratedImages({});setContentResult(null);setComplianceReviewed(Boolean(draft.complianceReviewedAt));setOptimizeMode('image');setActiveTab('optimize')}}>查看优化版本</button>
               </div>
             </article>
           })}</div>:optimizationDrafts.length?<EbayEmpty title="当前筛选下暂无优品" description="可切换目录、状态或清空搜索条件继续查看。"/>:<EbayEmpty title="优品仓库暂无商品" description="完成产品合规检查和AI内容优化，经人工确认的版本会保存到这里；原线上商品不会被直接覆盖。" action="进入AI优化" onAction={()=>setActiveTab('optimize')}/>}
@@ -3169,7 +3527,7 @@ function EbayPlatformWorkspace() {
               {ready&&task?.video&&<button className="primary" disabled={Boolean(busy)} onClick={()=>void prepareDraftVideoUpload(draft)}>{busy===`publish-video-upload:${draft.id}`?'正在准备视频上传…':'准备上传视频'}</button>}
               {ready&&<button className="primary" disabled={Boolean(busy)} onClick={()=>void prepareDraftInSellerHub(draft)}>{busy===`publish-prepare:${draft.id}`?'正在打开并统一预填…':taskCurrent&&task?.status==='WAITING_CONFIRMATION'?'重新打开并统一预填':'打开 Seller Hub 并统一预填'}</button>}
               {ready&&<button disabled={busy===`publish-export:${draft.id}`} onClick={()=>void exportDraftForPublish(draft)}>{busy===`publish-export:${draft.id}`?'导出中…':'导出素材包'}</button>}
-              {!ready&&<button onClick={()=>{setSelectedListingId(draft.listing.id);setSelectedLocalProductId(localProducts.find(product=>product.listingId===draft.listing.listingId)?.id||'');setTitleResult({originalTitle:draft.listing.title,optimizedTitle:draft.selectedTitle,keywords:[],rationale:'从发布阶段返回完善',model:'saved',variants:draft.titleVariants,itemSpecifics:draft.itemSpecifics,description:draft.description});setSelectedTitle(draft.selectedTitle);setSelectedSourceImageUrl(draft.imageUrl||draft.listing.imageUrls?.[0]||draft.listing.imageUrl||'');setImageGroundingPlan(null);setImageCandidateReviews({});setImageResults({});setSelectedGeneratedImages({});setAcceptedGeneratedImages({});setComplianceReviewed(Boolean(draft.complianceReviewedAt));setOptimizeMode('image');setActiveTab('optimize')}}>返回完善</button>}
+              {!ready&&<button onClick={()=>{setSelectedListingId(draft.listing.id);setSelectedLocalProductId(localProducts.find(product=>product.listingId===draft.listing.listingId)?.id||'');setTitleResult({originalTitle:draft.listing.title,optimizedTitle:draft.selectedTitle,keywords:[],rationale:'从发布阶段返回完善',model:'saved',variants:draft.titleVariants,itemSpecifics:draft.itemSpecifics,description:draft.description});setSelectedTitle(draft.selectedTitle);setImageCandidateReviews({});setAcceptedGeneratedImages({});setComplianceReviewed(Boolean(draft.complianceReviewedAt));setOptimizeMode('image');setActiveTab('optimize')}}>返回完善</button>}
             </div>
           </article>
         })}</div>:<EbayEmpty title="暂无待发布版本" description="请先在AI优化中完成内容与合规检查，再保存到优品仓库。" action="查看优品仓库" onAction={()=>setActiveTab('premium')}/>}
@@ -3197,6 +3555,8 @@ function EbayPlatformWorkspace() {
 function EbayEmpty({title,description,action,onAction}:{title:string;description:string;action?:string;onAction?:()=>void}){
   return <div className="ebay-empty"><span>◎</span><b>{title}</b><small>{description}</small>{action&&onAction&&<button className="primary" onClick={onAction}>{action}</button>}</div>
 }
+
+// 运营知识库：已重构为自研知识库中心（两大类 + 自研文件管理），见 KnowledgeHub.tsx
 
 function ComplianceKnowledgePage(){
   type Tab='overview'|'profiles'|'templates'|'reviews'|'monitoring'|'approvals'|'permits'|'enforcement'|'alerts'|'platform'|'regulations'|'recalls'
@@ -3239,8 +3599,8 @@ function ComplianceKnowledgePage(){
   const visibleRules=workspace.rules.filter(rule=>tab==='platform'?rule.platform!=='ALL':tab==='regulations'?rule.country!=='ALL'||rule.ruleType==='PRODUCT_SAFETY':true)
   return <section className="compliance-page">
     <header className="compliance-hero"><div><small>COMPLIANCE OPERATIONS CENTER</small><h1>合规知识库</h1><p>打通官方数据、规则版本、商品档案、发布许可和在售风险处置的完整合规闭环。</p></div><span>第八版 · 在售持续监管</span></header>
-    <nav className="compliance-tabs"><button className={tab==='overview'?'active':''} onClick={()=>setTab('overview')}>运营总览</button><button className={tab==='profiles'?'active':''} onClick={()=>setTab('profiles')}>商品档案</button><button className={tab==='templates'?'active':''} onClick={()=>setTab('templates')}>类目模板</button><button className={tab==='reviews'?'active':''} onClick={()=>setTab('reviews')}>复核任务</button><button className={tab==='monitoring'?'active':''} onClick={()=>setTab('monitoring')}>持续监测</button><button className={tab==='approvals'?'active':''} onClick={()=>setTab('approvals')}>变更审批{workspace.sourceChanges.some(item=>item.status==='PENDING_REVIEW')?<em>{workspace.sourceChanges.filter(item=>item.status==='PENDING_REVIEW').length}</em>:null}</button><button className={tab==='permits'?'active':''} onClick={()=>setTab('permits')}>发布许可{workspace.metrics.validPermits?<em>{workspace.metrics.validPermits}</em>:null}</button><button className={tab==='enforcement'?'active':''} onClick={()=>setTab('enforcement')}>在售监管{workspace.metrics.openEnforcementCases?<em>{workspace.metrics.openEnforcementCases}</em>:null}</button><button className={tab==='alerts'?'active':''} onClick={()=>setTab('alerts')}>告警审计{workspace.alerts.some(item=>item.status==='OPEN')?<em>{workspace.alerts.filter(item=>item.status==='OPEN').length}</em>:null}</button><button className={tab==='platform'?'active':''} onClick={()=>setTab('platform')}>平台规则</button><button className={tab==='regulations'?'active':''} onClick={()=>setTab('regulations')}>国家法规</button><button className={tab==='recalls'?'active':''} onClick={()=>setTab('recalls')}>风险召回</button></nav>
-    {failure&&<div className="compliance-alert error">{failure}</div>}{message&&<div className="compliance-alert success">{message}<button onClick={()=>setMessage('')}>×</button></div>}
+    <nav className="compliance-tabs" aria-label="合规中心栏目"><button aria-current={tab==='overview'?'page':undefined} className={tab==='overview'?'active':''} onClick={()=>setTab('overview')}>运营总览</button><button aria-current={tab==='profiles'?'page':undefined} className={tab==='profiles'?'active':''} onClick={()=>setTab('profiles')}>商品档案</button><button aria-current={tab==='templates'?'page':undefined} className={tab==='templates'?'active':''} onClick={()=>setTab('templates')}>类目模板</button><button aria-current={tab==='reviews'?'page':undefined} className={tab==='reviews'?'active':''} onClick={()=>setTab('reviews')}>复核任务</button><button aria-current={tab==='monitoring'?'page':undefined} className={tab==='monitoring'?'active':''} onClick={()=>setTab('monitoring')}>持续监测</button><button aria-current={tab==='approvals'?'page':undefined} className={tab==='approvals'?'active':''} onClick={()=>setTab('approvals')}>变更审批{workspace.sourceChanges.some(item=>item.status==='PENDING_REVIEW')?<em>{workspace.sourceChanges.filter(item=>item.status==='PENDING_REVIEW').length}</em>:null}</button><button aria-current={tab==='permits'?'page':undefined} className={tab==='permits'?'active':''} onClick={()=>setTab('permits')}>发布许可{workspace.metrics.validPermits?<em>{workspace.metrics.validPermits}</em>:null}</button><button aria-current={tab==='enforcement'?'page':undefined} className={tab==='enforcement'?'active':''} onClick={()=>setTab('enforcement')}>在售监管{workspace.metrics.openEnforcementCases?<em>{workspace.metrics.openEnforcementCases}</em>:null}</button><button aria-current={tab==='alerts'?'page':undefined} className={tab==='alerts'?'active':''} onClick={()=>setTab('alerts')}>告警审计{workspace.alerts.some(item=>item.status==='OPEN')?<em>{workspace.alerts.filter(item=>item.status==='OPEN').length}</em>:null}</button><button aria-current={tab==='platform'?'page':undefined} className={tab==='platform'?'active':''} onClick={()=>setTab('platform')}>平台规则</button><button aria-current={tab==='regulations'?'page':undefined} className={tab==='regulations'?'active':''} onClick={()=>setTab('regulations')}>国家法规</button><button aria-current={tab==='recalls'?'page':undefined} className={tab==='recalls'?'active':''} onClick={()=>setTab('recalls')}>风险召回</button></nav>
+    {failure&&<div className="compliance-alert error" role="alert">{failure}</div>}{message&&<div className="compliance-alert success" role="status" aria-live="polite">{message}<button aria-label="关闭提示" onClick={()=>setMessage('')}>×</button></div>}
     {tab==='reviews'&&<ComplianceDocumentReview documents={workspace.documents} onChanged={load}/>} 
     {documentDraft&&createPortal(<div className="compliance-editor-backdrop"><form className="compliance-editor" onSubmit={saveDocument}><header><div><b>添加合规文件</b><small>上传后默认待审核，不会直接解除发布门禁</small></div><button type="button" onClick={()=>setDocumentDraft(null)}>×</button></header><div className="editor-grid"><label>文件类型<input required value={documentDraft.documentType} onChange={event=>setDocumentDraft({...documentDraft,documentType:event.target.value})}/></label><label>文件名称<input required value={documentDraft.name} onChange={event=>setDocumentDraft({...documentDraft,name:event.target.value})}/></label><label>证书/文件编号<input value={documentDraft.documentNumber} onChange={event=>setDocumentDraft({...documentDraft,documentNumber:event.target.value})}/></label><label>签发机构<input value={documentDraft.issuer} onChange={event=>setDocumentDraft({...documentDraft,issuer:event.target.value})}/></label><label>适用型号<input value={documentDraft.modelNumbers} onChange={event=>setDocumentDraft({...documentDraft,modelNumbers:event.target.value})}/></label><label>适用国家<input value={documentDraft.countries} onChange={event=>setDocumentDraft({...documentDraft,countries:event.target.value})}/></label><label>签发日期<input type="date" value={documentDraft.issuedAt} onChange={event=>setDocumentDraft({...documentDraft,issuedAt:event.target.value})}/></label><label>有效期<input type="date" value={documentDraft.expiresAt} onChange={event=>setDocumentDraft({...documentDraft,expiresAt:event.target.value})}/></label></div><div className="compliance-file-picker"><button type="button" onClick={()=>void chooseDocument()}>选择文件</button><span>{documentDraft.fileName||'尚未选择文件'}</span></div><footer><button type="button" onClick={()=>setDocumentDraft(null)}>取消</button><button className="primary" disabled={busy==='document'}>保存并提交审核</button></footer></form></div>,document.body)}
     {templateDraft&&createPortal(<div className="compliance-editor-backdrop"><form className="compliance-editor" onSubmit={saveTemplate}><header><div><b>{templateDraft.id?'编辑类目模板':'新建类目模板'}</b><small>模板会根据平台、站点、国家和类目自动匹配</small></div><button type="button" onClick={()=>setTemplateDraft(null)}>×</button></header><div className="editor-grid"><label>模板名称<input required value={templateDraft.name} onChange={event=>setTemplateDraft({...templateDraft,name:event.target.value})}/></label><label>平台<input required value={templateDraft.platform} onChange={event=>setTemplateDraft({...templateDraft,platform:event.target.value})}/></label><label>站点<input value={templateDraft.marketplaceSite} onChange={event=>setTemplateDraft({...templateDraft,marketplaceSite:event.target.value})}/></label><label>国家/地区<input value={templateDraft.country} onChange={event=>setTemplateDraft({...templateDraft,country:event.target.value})}/></label><label>适用类目<input value={templateDraft.category} onChange={event=>setTemplateDraft({...templateDraft,category:event.target.value})}/></label><label><input type="checkbox" checked={templateDraft.requiresManualReview} onChange={event=>setTemplateDraft({...templateDraft,requiresManualReview:event.target.checked})}/>发布前需人工复核</label></div><label>必填字段（逗号分隔）<input value={templateDraft.requiredFields.join(',')} onChange={event=>setTemplateDraft({...templateDraft,requiredFields:event.target.value.split(',').map(value=>value.trim()).filter(Boolean)})}/></label><label>必需文件（逗号分隔）<input value={templateDraft.requiredDocuments.join(',')} onChange={event=>setTemplateDraft({...templateDraft,requiredDocuments:event.target.value.split(',').map(value=>value.trim()).filter(Boolean)})}/></label><label>必需警告（逗号分隔）<input value={templateDraft.requiredWarnings.join(',')} onChange={event=>setTemplateDraft({...templateDraft,requiredWarnings:event.target.value.split(',').map(value=>value.trim()).filter(Boolean)})}/></label><label>物流要求（逗号分隔）<input value={templateDraft.logisticsRequirements.join(',')} onChange={event=>setTemplateDraft({...templateDraft,logisticsRequirements:event.target.value.split(',').map(value=>value.trim()).filter(Boolean)})}/></label><footer><button type="button" onClick={()=>setTemplateDraft(null)}>取消</button><button className="primary" disabled={busy==='template'}>保存模板</button></footer></form></div>,document.body)}
@@ -3284,7 +3644,16 @@ function NavButton({ label, icon, count, active, onClick }: { label: string; ico
     feishu: <><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 12h8M12 8v8"/></>,
     archive: <><path d="M4 7h16v13H4zM3 4h18v3H3z"/><path d="M9 11h6"/></>,
     compliance: <><path d="M12 3l7 3v5c0 4.8-2.8 8.2-7 10-4.2-1.8-7-5.2-7-10V6z"/><path d="M9 12l2 2 4-5"/></>,
-    ebay: <><path d="M4 9h16l-1 11H5zM7 9V7a5 5 0 0110 0v2"/><path d="M8 14h8M8 17h5"/></>
+    ebay: <><path d="M4 9h16l-1 11H5zM7 9V7a5 5 0 0110 0v2"/><path d="M8 14h8M8 17h5"/></>,
+    'ai-crossborder': <><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></>,
+    'ai-advisor': <><path d="M12 2.5a6.3 6.3 0 00-3.9 11.2c.9.8 1.4 1.7 1.6 2.8h4.6c.2-1.1.7-2 1.6-2.8A6.3 6.3 0 0012 2.5z"/><path d="M9.6 19.2h4.8M10.6 21.7h2.8"/></>,
+    'ai-collect': <><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/><path d="M12 12l5.5-5.5"/></>,
+    'ai-art': <><path d="M12 3a9 9 0 100 18c1.4 0 2.1-.9 2.1-1.9 0-1.4-1.8-1.9-1.8-3.2 0-1 .8-1.6 1.9-1.6h1.9A3.9 3.9 0 0020 10.4C20 6.3 16.4 3 12 3z"/><circle cx="7.5" cy="10.5" r="1.1"/><circle cx="11" cy="7" r="1.1"/><circle cx="15.5" cy="7.5" r="1.1"/></>,
+    'ai-video': <><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="M15.5 10.5L21 7v10l-5.5-3.5"/></>,
+    'ai-tasks': <><path d="M9 4.5H7A2.5 2.5 0 004.5 7v12A2.5 2.5 0 007 21.5h10a2.5 2.5 0 002.5-2.5V7A2.5 2.5 0 0017 4.5h-2"/><rect x="9" y="2.5" width="6" height="4" rx="1.2"/><path d="M9 13.5l2.2 2.2 4.3-4.7"/></>,
+        'ai-employee': <><circle cx="12" cy="8" r="4.5"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></>,
+    'ai-planet': <><circle cx="12" cy="12" r="4.2"/><path d="M3.5 15c3 2.5 14 2.5 17-6"/></>,
+    'ai-hq': <><path d="M6 21V4.5l6-2.5v19"/><path d="M12 21V8l6 2.5V21"/><path d="M3 21h18"/><path d="M9 8.5v.01M9 12.5v.01M9 16.5v.01M15 13.5v.01M15 17.5v.01"/></>
   }
   return <button type="button" className={active ? 'nav-active' : ''} onClick={onClick}><span className="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true">{iconPaths[icon]}</svg></span><span className="nav-label">{label}</span>{count ? <em>{count}</em> : null}</button>
 }
@@ -3325,4 +3694,16 @@ function AiSupportFramework() {
       <aside className="context-pane"><div className="context-section"><b>客户与订单上下文</b><div className="context-row"><span>客户</span><em>待关联</em></div><div className="context-row"><span>销售订单</span><em>待关联</em></div><div className="context-row"><span>物流状态</span><em>待查询</em></div><div className="context-row"><span>原始语言</span><em>自动检测</em></div><div className="context-row"><span>回复语言</span><em>跟随客户</em></div></div><div className="context-section"><b>AI 处理边界</b><ul><li>查询订单、库存和物流</li><li>基于知识库建议回复</li><li>低置信度自动转人工</li><li>退款、取消、补发必须审批</li></ul></div><div className="context-section"><b>知识与审计</b><small>保存知识引用、模型版本、翻译记录、工具调用和人工修改，支持全程追溯。</small></div></aside>
     </div>
   </section>
+}
+
+function AmazonDataSourcePage({ onBack }: { onBack: () => void }) {
+  const [settings, setSettings] = useState({ configured: false, site: 'US', pages: 1, maxSamples: 24, cacheHours: 24 })
+  const [apiKey, setApiKey] = useState('')
+  const [status, setStatus] = useState('')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { void window.desktop.aiEmployee.amazonDataSource.get().then(setSettings).catch(error => setStatus(error instanceof Error ? error.message : '读取配置失败')) }, [])
+  const save = async () => { setBusy(true); setStatus(''); try { setSettings(await window.desktop.aiEmployee.amazonDataSource.save({ apiKey, site: 'US', pages: settings.pages, maxSamples: settings.maxSamples, cacheHours: settings.cacheHours })); setApiKey(''); setStatus('配置已安全保存') } catch (error) { setStatus(error instanceof Error ? error.message : '保存失败') } finally { setBusy(false) } }
+  const clear = async () => { setBusy(true); try { await window.desktop.aiEmployee.amazonDataSource.clear(); setSettings(current => ({ ...current, configured: false })); setApiKey(''); setStatus('API Key 已清除') } catch (error) { setStatus(error instanceof Error ? error.message : '清除失败') } finally { setBusy(false) } }
+  const test = async () => { setBusy(true); setStatus('正在测试连接…'); try { const result = await window.desktop.aiEmployee.amazonDataSource.test(); setStatus(result.ok ? `${result.message} · 返回 ${result.samples ?? 0} 条样本` : result.message) } catch (error) { setStatus(error instanceof Error ? error.message : '测试失败') } finally { setBusy(false) } }
+  return <section className="content-page"><div className="page-toolbar"><div><b>Amazon 数据源配置</b><small>Amazon 市场数据抓取与接口配置</small></div><button type="button" onClick={onBack}>返回 大模型API Key</button></div><div className="content-page-grid"><article className="content-card"><h3>数据源与凭据</h3><label>数据源<select defaultValue="omkarcloud"><option value="omkarcloud">omkarcloud Amazon Scraper API</option><option disabled value="browser">内置 Amazon 浏览器抓取（备用）</option><option disabled value="auto">自动优先模式（下一阶段）</option></select></label><label>Amazon API Key<input type="password" value={apiKey} onChange={event => setApiKey(event.target.value)} placeholder={settings.configured ? '已配置，留空表示不修改' : '输入 API Key'} autoComplete="new-password" /></label><div className="content-actions"><button className="primary" disabled={busy || !apiKey.trim()} onClick={() => void save()}>保存配置</button><button disabled={busy || !settings.configured} onClick={() => void test()}>测试连接</button><button disabled={busy || !settings.configured} onClick={() => void clear()}>清除 Key</button></div><p className="content-note">API Key 由桌面端安全存储，不写入浏览器缓存、报告或普通日志。</p></article><article className="content-card"><h3>抓取参数</h3><label>Amazon站点<select value={settings.site} onChange={event => setSettings(current => ({ ...current, site: event.target.value }))}><option value="US">Amazon美国站（US）</option><option disabled value="UK">Amazon英国站（后续支持）</option><option disabled value="DE">Amazon德国站（后续支持）</option><option disabled value="JP">Amazon日本站（后续支持）</option></select></label><label>搜索页数<input type="number" min="1" max="2" value={settings.pages} onChange={event => setSettings(current => ({ ...current, pages: Number(event.target.value) }))} /></label><label>最大样本数<input type="number" min="1" max="48" value={settings.maxSamples} onChange={event => setSettings(current => ({ ...current, maxSamples: Number(event.target.value) }))} /></label><label>缓存时长（小时）<input type="number" min="1" max="168" value={settings.cacheHours} onChange={event => setSettings(current => ({ ...current, cacheHours: Number(event.target.value) }))} /></label></article><article className="content-card"><h3>当前状态</h3><p>凭据状态：{settings.configured ? '已配置' : '未配置'}</p><p>站点：Amazon美国站（US）</p><p>当前策略：omkarcloud API</p>{status && <p role="status">{status}</p>}</article></div></section>
 }

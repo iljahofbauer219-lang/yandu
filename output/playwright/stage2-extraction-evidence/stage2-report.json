@@ -1,0 +1,50 @@
+{
+  "generatedAt": "2026-08-10T01:08:36.403Z",
+  "expectedAssets": [
+    "./assets/index-DPjTm0qI.js",
+    "./assets/index-BAXIcar6.css"
+  ],
+  "loadedAssets": [
+    "./assets/index-DPjTm0qI.js",
+    "./assets/index-BAXIcar6.css"
+  ],
+  "checks": [
+    {
+      "id": "latest-assets",
+      "passed": true,
+      "detail": "实际加载 ./assets/index-DPjTm0qI.js, ./assets/index-BAXIcar6.css"
+    },
+    {
+      "id": "complete-evidence-card",
+      "passed": true,
+      "detail": "详情来源、3张图片角色、OCR、95%视觉结果及证据完整状态均真实可见"
+    },
+    {
+      "id": "full-evidence-sent",
+      "passed": true,
+      "detail": "身份锁、图片角色/来源、详情页、OCR、视觉形态和证据状态均进入真实 ask 请求"
+    },
+    {
+      "id": "conflict-visible",
+      "passed": true,
+      "detail": "详情/标题液体证据与视觉湿巾证据同时保留，并明确标记需人工核对"
+    },
+    {
+      "id": "insufficient-visible",
+      "passed": true,
+      "detail": "缺失详情/OCR/可靠视觉时显示证据不足、OCR警告和人工确认要求"
+    },
+    {
+      "id": "minimum-window",
+      "passed": true,
+      "detail": "1100×720 下证据卡无横向溢出，图片预览仍可见"
+    }
+  ],
+  "sentQueryAssertions": 8,
+  "minLayout": {
+    "width": 940,
+    "scrollWidth": 938,
+    "viewport": 1100,
+    "visibleImages": 1
+  }
+}

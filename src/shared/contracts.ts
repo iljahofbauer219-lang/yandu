@@ -46,6 +46,7 @@ export interface MarketplaceCredentialInput {
 export interface EbayConfigurationStatus {
   environment:'PRODUCTION'
   configured:boolean
+  marketDataConfigured:boolean
   clientIdConfigured:boolean
   clientSecretConfigured:boolean
   ruNameConfigured:boolean
@@ -251,7 +252,7 @@ export interface EbayMarketResearchSnapshot {
   condition:string
   query:string
   periodDays:number
-  source:'EBAY_PRODUCT_RESEARCH'|'EBAY_SOLD_SEARCH'
+  source:'EBAY_PRODUCT_RESEARCH'|'EBAY_SOLD_SEARCH'|'OMKAR_EBAY_SCRAPER'
   sourceUrl:string
   fetchedAt:string
   captureMode?:'MANUAL_RESEARCH_PAGE'|'AUTOMATIC'
@@ -1291,6 +1292,16 @@ export interface ImageModelProfile {
   id: string
   name: string
   description: string
+  /** 单次生成可携带的参照图上限，来自 BailianImageService 模型元数据 */
+  maxReferenceImages?: number
+  /** 服务商标识；缺省视为百炼（bailian） */
+  provider?: 'bailian' | 'volc' | 'openai'
+  /** 功能强项描述，如 "商品一致性·细节还原·全场景适用" */
+  strengths?: string
+  /** 单张成本标签，如 "¥0.22/张" */
+  costLabel?: string
+  /** 该模型需通过 IMAGE_PROXY_URL 代理访问 */
+  requiresProxy?: boolean
 }
 
 export interface ImageModelConnection {
@@ -1316,7 +1327,21 @@ export interface ImageGenerationResult {
   imageUrls: string[]
 }
 
-export type EbayImageGenerationPurpose = 'HERO' | 'DETAIL' | 'PAIN_POINT' | 'SCENE'
+export interface ImageMarketingTranslationRequest {
+  texts:string[]
+  targetLanguage:string
+  protectedTerms?:string[]
+}
+
+export interface ImageMarketingTranslationResult {
+  model:string
+  targetLanguage:string
+  translations:string[]
+  status:'TRANSLATED'|'REVIEW'
+  issues:string[]
+}
+
+export type EbayImageGenerationPurpose = 'HERO' | 'PRODUCT' | 'PAIN_POINT' | 'SCENE'
 
 export interface EbayImageGroundingRequest {
   title: string
@@ -1346,6 +1371,27 @@ export interface EbayImageGroundingPlan {
   analyzedAt: string
 }
 
+export type ImagePackageTextField = 'brand'|'productName'|'model'|'specification'|'quantity'|'barcode'|'otherText'
+export interface ImagePackageTextObservation {
+  sourceIndex:number
+  rawText:string
+  fields:Partial<Record<ImagePackageTextField,string>>
+  confidence:number
+}
+export interface ImagePackageTextExtractionRequest {sourceImages:string[];sourceLabels?:string[]}
+export interface ImagePackageTextExtractionResult {
+  model:string
+  observations:ImagePackageTextObservation[]
+  conflicts:ImagePackageTextField[]
+  combinedText:string
+  warnings:string[]
+  productForm?: string
+  useMethod?: string
+  targetObject?: string
+  visualConfidence?: number
+  analyzedAt:string
+}
+
 export interface EbayImageCandidateReviewRequest {
   title: string
   description: string
@@ -1353,12 +1399,21 @@ export interface EbayImageCandidateReviewRequest {
   purpose: EbayImageGenerationPurpose
   candidateUrl: string
   sourceImages: string[]
+  /** 每张原图的角色标签（与 sourceImages 对齐），用于服务端按角色偏好智能截断 */
+  sourceLabels?: string[]
   referenceIndices: number[]
   protectedAttributes: string[]
   verifiedFacts: string[]
   /** The required visual role for this single generated shot. */
   shotInstruction?: string
-  /** Earlier candidates in the same role, used only to reject near-duplicate shots. */
+  /** Mandatory Style Lock criteria that the candidate must visibly satisfy. */
+  styleInstruction?: string
+  /** Target language for later typography; generated candidates are expected to remain text-free base images. */
+  targetLanguage?:string
+  /** Whether this candidate must contain no generated marketing typography. */
+  baseImageNoMarketingText?:boolean
+  verifiedPackageTexts?:string[]
+  /** Earlier candidates used to reject near-duplicate shots: same role first, then a few cross-role shots. */
   comparisonCandidateUrls?: string[]
 }
 
@@ -1371,8 +1426,146 @@ export interface EbayImageCandidateReview {
   factScore: number
   purposeScore: number
   diversityScore: number
+  /** Style Lock visual match score. Present when styleInstruction was supplied. */
+  styleScore?: number
+  /** No-text base image / target-language compliance score. */
+  languageScore?:number
+  packageTextVisible?:boolean
+  packageTextScore?:number
   reason: string
   referenceIndices: number[]
+  /** 候选图中出现、但任何原图参照角度都不存在的结构部件；非空时一票否决为 REJECTED。 */
+  newStructures?: string[]
+  /** 原图关键结构在候选图中缺失的部件；非空时至少降级为 REVIEW。 */
+  missingStructures?: string[]
+  /** 产品外形/轮廓/几何形态一致性评分（0-100）；低于 80 时不通过。 */
+  geometryScore?: number
+  /** 候选图产品外形/轮廓与原图明显不同时为 true，一票否决为 REJECTED。 */
+  geometryMismatch?: boolean
+}
+
+/** AI 可建议的原图用途角色；不含 UNUSED，排除与否始终由人工决定。 */
+export type EbayImageSourceRoleSuggestion = 'HERO' | 'FRONT' | 'SIDE' | 'BACK' | 'DETAIL' | 'INSTALLATION' | 'SIZE' | 'PAIN_POINT' | 'SCENE'
+
+export interface EbayImageRoleSuggestionRequest {
+  /** Retained source images (http URLs). Anything beyond 12 is truncated by the service. */
+  sourceImages: string[]
+  title?: string
+  productIdentity?: string
+}
+
+export interface EbayImageRoleSuggestionResult {
+  /** url → 建议角色；无法建议的图片不出现在结果中。 */
+  suggestions: Record<string, EbayImageSourceRoleSuggestion>
+  model: string
+}
+
+// ─── 阶段式图片优化（新框架） ───────────────────────────────────────────────
+
+/** 图片优化的 5 个线性阶段 */
+export type EbayImageStage = 'HERO' | 'PRODUCT' | 'PAIN_POINT' | 'SCENE' | 'NATURALIZE'
+
+/** 每个阶段内部的子步骤状态 */
+export type EbayImageStageStep = 'PENDING' | 'SELECTING' | 'GROUNDING' | 'STORYBOARD' | 'GENERATING' | 'REVIEW' | 'CONFIRMED'
+
+/** 阶段进度记录 */
+export interface EbayImageStageProgress {
+  stage: EbayImageStage
+  step: EbayImageStageStep
+  /** 该阶段选用的原图索引列表 */
+  selectedSourceIndices: number[]
+  /** 该阶段选用的 AI 模型 ID */
+  modelId: string
+  /** 确认的最终图片 URL */
+  confirmedImageUrl: string
+  updatedAt: string
+}
+
+/** 单阶段事实卡（中文） */
+export interface EbayStageFactCard {
+  stage: EbayImageStage
+  /** 商品主体描述 */
+  productIdentity: string
+  /** 不可改变的保护属性 */
+  protectedAttributes: string[]
+  /** 从原图中核实的事实 */
+  verifiedFacts: string[]
+  /** 针对该阶段的生成指令（中文） */
+  stageInstruction: string
+  /** 警告信息 */
+  warnings: string[]
+  /** 分析使用的模型 */
+  model: string
+  analyzedAt: string
+}
+
+/** 分镜卡（全中文，可编辑） */
+export interface EbayStageStoryboardCard {
+  id: string
+  stage: EbayImageStage
+  /** 镜头序号（从 1 开始） */
+  index: number
+  /** 镜头标题（中文） */
+  title: string
+  /** 镜头描述/拍摄指令（中文，用户可编辑） */
+  instruction: string
+  /** 参照原图索引列表 */
+  referenceIndices: number[]
+  /** 内容依据（中文） */
+  evidence: string
+  /** 验收标准（中文，用户可编辑） */
+  acceptance: string
+  /** 禁止事项（中文） */
+  prohibited: string
+  /** 用户附加备注（可编辑） */
+  userNote: string
+}
+
+/** 单阶段分镜卡生成请求 */
+export interface EbayStageStoryboardRequest {
+  stage: EbayImageStage
+  title: string
+  description: string
+  itemSpecifics: Array<{ name: string; value: string }>
+  sourceImages: string[]
+  sourceLabels?: string[]
+  factCard: EbayStageFactCard
+  /** 期望生成的分镜数量 */
+  count?: number
+}
+
+/** 单阶段事实卡生成请求 */
+export interface EbayStageGroundingRequest {
+  stage: EbayImageStage
+  title: string
+  description: string
+  itemSpecifics: Array<{ name: string; value: string }>
+  sourceImages: string[]
+  sourceLabels?: string[]
+  /** 前一阶段的事实卡（用于继承全局信息） */
+  previousFactCard?: EbayStageFactCard | null
+}
+
+/** 模型推荐结果 */
+export interface EbayStageModelRecommendation {
+  stage: EbayImageStage
+  recommendations: Array<{
+    modelId: string
+    modelName: string
+    reason: string
+    score: number
+  }>
+}
+
+/** 单阶段图片生成请求 */
+export interface EbayStageGenerateRequest {
+  stage: EbayImageStage
+  modelId: string
+  storyboardCard: EbayStageStoryboardCard
+  factCard: EbayStageFactCard
+  referenceImageUrls: string[]
+  /** 重新生成时的附加指令 */
+  retryDirective?: string
 }
 
 export type RealShiftProfile = 'light' | 'balanced'
@@ -1991,3 +2184,36 @@ export type TaskStage =
   | 'SUPPLY_LIST_COMPLETED'
   | 'PAUSED'
   | 'FAILED'
+
+export type ImageSourceKind = 'LOCAL' | 'URL' | 'INVENTORY'
+export type ImageReferenceRole = 'PRIMARY' | 'DETAIL' | 'PACKAGING' | 'ACCESSORY'
+
+export interface ImportedProductImage {
+  id?: string
+  name: string
+  dataUrl: string
+  source: string
+  mimeType: 'image/jpeg' | 'image/png' | 'image/webp'
+  role?: ImageReferenceRole
+  sourceType?:'GALLERY'|'SKU'|'DESCRIPTION'|'WEBPAGE'
+  sourceText?:string
+}
+
+export interface ProductSourceEvidence {
+  field: 'title' | 'productId' | 'priceText' | 'imageUrl' | 'attribute' | 'sku' | 'description'
+  value: string
+  source: string
+}
+
+export interface ImportedProductSource {
+  sourceKind: Exclude<ImageSourceKind, 'INVENTORY'>
+  sourceLabel: string
+  sourceUrl?: string
+  title: string
+  productId: string
+  priceText: string
+  imageUrl: string
+  images: ImportedProductImage[]
+  evidence?: ProductSourceEvidence[]
+  pageFacts?:Array<{key:string;label:string;value:string;source:string}>
+}

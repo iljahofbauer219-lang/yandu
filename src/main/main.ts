@@ -1,12 +1,18 @@
-import { app, BaseWindow, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, WebContentsView } from 'electron'
+import { app, BaseWindow, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, session, shell, WebContentsView } from 'electron'
 import iconv from 'iconv-lite'
 import fs from 'node:fs'
 import path from 'node:path'
+import nodeNet from 'node:net'
 import { pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
 import { BrowserWorkspace } from './browser/BrowserWorkspace'
 import { AppDatabase } from './database/AppDatabase'
 import { BailianImageService } from './services/BailianImageService'
+import { VolcImageService } from './services/VolcImageService'
+import { OpenAIImageService } from './services/OpenAIImageService'
 import { BailianTranslationService } from './services/BailianTranslationService'
 import { FeishuBotService } from './services/FeishuBotService'
 import { RealShiftService } from './services/RealShiftService'
@@ -16,15 +22,105 @@ import { EbayVideoService } from './services/EbayVideoService'
 import { ArkVideoService } from './services/ArkVideoService'
 import { EbayImageComplianceVisionService } from './services/EbayImageComplianceVisionService'
 import { EbayImageGroundingService } from './services/EbayImageGroundingService'
+import { importProductUrl } from './services/ImageSourceService'
 import { parseEbayListingsReport } from './services/EbayReportService'
+import { ServerProcessManager } from './services/ServerProcessManager'
+import { DeepSeekHarnessProcessManager } from './services/DeepSeekHarnessProcessManager'
+import { RagflowKnowledgeService } from './services/RagflowKnowledgeService'
+import type { KbAgentKey } from './services/RagflowKnowledgeService'
+import { KbGuardianService } from './services/KbGuardianService'
+import { SampleLibraryKbIngestor } from './services/SampleLibraryKbIngestor'
+import { SampleLibraryKbGuardianLauncher, buildSampleLibraryCategoryResolver } from './services/SampleLibraryKbGuardianLauncher'
+import type { GuardianSkillInput } from '../shared/kbGuardian'
+import type { AmazonDataSourceSearchResult } from '../shared/amazonScraper'
+import { describeOmkarCloudError } from '../shared/omkarCloud'
+
+const execFileAsync = promisify(execFile)
+const bundledToolsRoot = () => app.isPackaged ? path.join(process.resourcesPath,'.tools') : path.join(app.getAppPath(),'.tools')
+const watchSkillRoot = () => path.join(bundledToolsRoot(), 'watch-skill')
+type WatchSkillTask = { id:string; videoPath:string; createdAt:string; status:'COMPLETED'|'FAILED'; report:string; framePaths:string[]; error?:string }
+const watchSkillTasksPath = () => path.join(app.getPath('userData'), 'watch-skill-tasks.json')
+const watchSkillVisionOcrPath = () => path.join(app.getPath('userData'), 'watch-skill-runtime', 'vision-ocr')
+const ensureWatchSkillVisionOcr = async () => {
+  if(process.platform!=='darwin')return ''
+  const bundled=path.join(watchSkillRoot(),'vision-ocr')
+  if(fs.existsSync(bundled))return bundled
+  const binary=watchSkillVisionOcrPath(),source=path.join(app.getAppPath(),'src','main','advisor','vision-ocr.swift')
+  if(fs.existsSync(binary))return binary
+  fs.mkdirSync(path.dirname(binary),{recursive:true})
+  await execFileAsync('xcrun',['swiftc',source,'-o',binary],{timeout:2*60_000,maxBuffer:2*1024*1024})
+  return binary
+}
+const readWatchSkillTasks = (): WatchSkillTask[] => { try { return JSON.parse(fs.readFileSync(watchSkillTasksPath(),'utf8')) } catch { return [] } }
+const saveWatchSkillTasks = (tasks: WatchSkillTask[]) => fs.writeFileSync(watchSkillTasksPath(), JSON.stringify(tasks.slice(0,20), null, 2))
+type ResourceSkillDraft = { id:string; sourceTaskId:string; name:string; content:string; createdAt:string; updatedAt:string }
+const resource2SkillRoot = () => path.join(bundledToolsRoot(), 'Resource2Skill')
+const resource2SkillPython311 = () => path.join(bundledToolsRoot(), 'python-official-expanded-3119', 'Python_Framework.pkg', 'Payload', 'Versions', '3.11', 'bin', 'python3.11')
+const resourceSkillLibraryPath = () => path.join(app.getPath('userData'), 'resource2skill-library.json')
+const resource2SkillSettingsPath = () => path.join(app.getPath('userData'), 'resource2skill-settings.json')
+const readResource2SkillSettings = (): { encryptedGeminiKey?: string; baseUrl:string } => { try { const value=JSON.parse(fs.readFileSync(resource2SkillSettingsPath(),'utf8'));return {...value,baseUrl:value.baseUrl||'https://api000.com'} } catch { return {baseUrl:'https://api000.com'} } }
+const readResourceSkillLibrary = ():ResourceSkillDraft[] => { try { return JSON.parse(fs.readFileSync(resourceSkillLibraryPath(),'utf8')) } catch { return [] } }
+const saveResourceSkillLibrary = (items:ResourceSkillDraft[]) => fs.writeFileSync(resourceSkillLibraryPath(),JSON.stringify(items.slice(0,100),null,2))
+const fileStem = (value:string) => path.basename(value,path.extname(value)).replace(/[^\p{L}\p{N}_-]+/gu,'-').replace(/^-|-$/g,'')||'video-skill'
+const makeResourceSkillDraft = (task:WatchSkillTask, domain:string, domainPrompt:string):ResourceSkillDraft => {
+  const name=`${fileStem(task.videoPath)}-skill`, now=new Date().toISOString()
+  const content=`---\nname: ${name}\ndescription: 从视频 ${path.basename(task.videoPath)} 提取的可编辑操作技能草稿\nresource2skill_domain: ${domain}\n---\n\n# ${name}\n\n> 状态：Watch Skill 本地报告适配草稿，未调用官方 Gemini 视频分析。\n> 官方领域：${domain}（配置与蒸馏提示词已校验）\n> 来源任务：${task.id}\n> 来源视频：${task.videoPath}\n> 生成时间：${now}\n\n## 适用场景\n\n根据来源视频复现其中展示的 ${domain} 操作流程。\n\n## 输入要求\n\n- 待处理对象或任务目标\n- 来源视频中要求的账号、素材与权限\n\n## 执行步骤\n\n1. 阅读下方来源证据，识别操作目标和前置条件。\n2. 按时间顺序整理视频中的动作与判断条件。\n3. 按 ${domain} 官方蒸馏提示词的结构补齐工具、参数和验证。\n4. 对高风险提交、发布、删除或付款动作请求人工确认。\n5. 执行后按照验证标准检查结果。\n\n## 来源证据\n\n${task.report||'暂无可用转录；请结合关键帧人工补充步骤。'}\n\n## 官方蒸馏约束\n\n${domainPrompt.slice(0,1800)}\n\n## 验证标准\n\n- 输出结果与来源视频目标一致。\n- 关键步骤可追溯到来源报告或关键帧。\n- 失败时停止后续操作并记录错误。\n\n## 待人工补充\n\n- [ ] 精确操作步骤与时间戳\n- [ ] 条件分支和异常处理\n- [ ] 工具调用参数\n- [ ] 最终结果截图或状态证明\n`
+  return {id:`${Date.now()}-${createHash('sha1').update(task.id).digest('hex').slice(0,8)}`,sourceTaskId:task.id,name,content,createdAt:now,updatedAt:now}
+}
+const assertResourceSkillQuality = (analysis:string,domain:string) => {
+  if(analysis.trim().length<800)throw new Error('质量门禁：蒸馏结果过短')
+  const timestamps=analysis.match(/\[\d{2}:\d{2}\]/g)||[]
+  if(timestamps.length<5)throw new Error(`质量门禁：来源时间戳不足（${timestamps.length}/5）`)
+  if(domain==='general'){
+    const unsupported=['CSS','HTML','glow border','color palette','layout reproduction','UI component']
+    const found=unsupported.filter(term=>analysis.toLowerCase().includes(term.toLowerCase()))
+    if(found.length)throw new Error(`质量门禁：疑似虚构未见视觉细节（${found.join('、')}）`)
+  }
+  return {timestampCount:timestamps.length}
+}
+
+type AmazonDataSourceSettings = { encryptedApiKey?: string; site: string; pages: number; maxSamples: number; cacheHours: number }
+const amazonDataSourcePath = () => path.join(app.getPath('userData'), 'amazon-data-source.json')
+const amazonDataSourceCache = new Map<string, { at: number; result: AmazonDataSourceSearchResult }>()
+let cnyUsdExchangeRateCache: { at: number; usdPerCny: number; source: string } | null = null
+const amazonScraperSearchEndpoint = () => process.env.AMAZON_SCRAPER_API_URL || 'https://amazon-scraper-api.omkar.cloud/amazon/search'
+const ebayScraperSearchEndpoint = () => process.env.EBAY_SCRAPER_API_URL || 'https://ebay-scraper.omkar.cloud/ebay/items/search'
+function readAmazonDataSource(): AmazonDataSourceSettings {
+  try {
+    const value = JSON.parse(fs.readFileSync(amazonDataSourcePath(), 'utf8')) as Partial<AmazonDataSourceSettings>
+    return {
+      encryptedApiKey: value.encryptedApiKey,
+      site: 'US',
+      pages: Math.min(2, Math.max(1, Math.floor(Number(value.pages) || 1))),
+      maxSamples: Math.min(48, Math.max(1, Math.floor(Number(value.maxSamples) || 24))),
+      cacheHours: Math.min(168, Math.max(1, Math.floor(Number(value.cacheHours) || 24)))
+    }
+  } catch { return { site: 'US', pages: 1, maxSamples: 24, cacheHours: 24 } }
+}
+function publicAmazonDataSource(value = readAmazonDataSource()) {
+  return { configured: Boolean(value.encryptedApiKey), site: value.site, pages: value.pages, maxSamples: value.maxSamples, cacheHours: value.cacheHours }
+}
+import { AiEmployeeChatService } from './services/AiEmployeeChatService'
+import { materializeGeneratedMarkdownReply } from './services/generatedReportArtifact'
+import { isLocalServerUrl, readServerUrl, writeServerUrl } from './serverConfig'
+import { autoUpdater } from 'electron-updater'
+import { shutdownAdvisorRuntime } from './advisor/AdvisorRuntime'
 import { auditEbayTitle } from '../shared/ebayTitleAudit'
-import type { BrowserBounds, BrowserTranslationMode, CandidateUpdateRequest, CollectedOzonProduct, CollectedSupplyProduct, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, CollectorPluginProduct, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonUpdateRequest, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceDocumentDraft, ComplianceEnforcementStatus, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReviewStatus, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceTaskStatus, EbayAcceptanceBatch, EbayAcceptanceCheck, EbayAcceptanceItemResult, EbayAcceptanceRunRequest, EbayAcceptanceScenarioResult, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReviewRequest, EbayImageGroundingRequest, EbayImageInspection, EbayImageInspectionReport, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductMedia, EbayLocalProductMediaUploadInput, EbayLocalProductSnapshotInput, EbayLocalProductUpdateInput, EbayMarketKeywordStat, EbayMarketResearchDecisionRequest, EbayMarketResearchFinding, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayProductDetails, EbayPublishAuditEvent, EbayPublishComparisonItem, EbayPublishTask, EbaySellerHubAcceptanceSnapshot, EbayTitleDecisionInput, EbayTitleOptimizationRequest, EbayVideoStudioRequest, ImageGenerationRequest, MarketplaceCredentialInput, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePublishDraftUpdate, NetworkStrategy, Platform, RealShiftRequest, SelectionDecision, SelectionImportRequest, SelectionTask, SelectionTaskDraft, SupplyPlatformCode, TaskProgress } from '../shared/contracts'
+import type { BrowserBounds, BrowserTranslationMode, CandidateUpdateRequest, CollectedOzonProduct, CollectedSupplyProduct, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, CollectorPluginProduct, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonUpdateRequest, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceDocumentDraft, ComplianceEnforcementStatus, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReviewStatus, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceTaskStatus, EbayAcceptanceBatch, EbayAcceptanceCheck, EbayAcceptanceItemResult, EbayAcceptanceRunRequest, EbayAcceptanceScenarioResult, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReviewRequest, EbayImageGroundingRequest, EbayImageInspection, EbayImageInspectionReport, EbayImageRoleSuggestionRequest, EbayImageStage, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductMedia, EbayLocalProductMediaUploadInput, EbayLocalProductSnapshotInput, EbayLocalProductUpdateInput, EbayMarketKeywordStat, EbayMarketResearchDecisionRequest, EbayMarketResearchFinding, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayProductDetails, EbayPublishAuditEvent, EbayPublishComparisonItem, EbayPublishTask, EbaySellerHubAcceptanceSnapshot, EbayStageGroundingRequest, EbayStageStoryboardRequest, EbayTitleDecisionInput, EbayTitleOptimizationRequest, EbayVideoStudioRequest, ImageGenerationRequest, ImageModelProfile, ImportedProductImage, ImportedProductSource, MarketplaceCredentialInput, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePublishDraftUpdate, NetworkStrategy, Platform, RealShiftRequest, SelectionDecision, SelectionImportRequest, SelectionTask, SelectionTaskDraft, SupplyPlatformCode, TaskProgress } from '../shared/contracts'
 
 import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
+import type { AiEmployeeAskRequest } from '../shared/aiEmployee'
+import { buildListingCsv } from '../shared/listingArchive'
+import { escapeHtml, renderMarkdownForWord, wordDocumentCss } from '../shared/wordExport'
+import { reportMarkdownToDocxFile, reportMarkdownToDocxBuffer } from '../shared/reportWordExport'
+import { loadSampleLibrary } from '../shared/sampleLibrary'
+import type { ImageMarketingTranslationRequest, ImageMarketingTranslationResult } from '../shared/contracts'
+import { validateMarketingTranslation } from '../shared/imageProduction'
 
 protocol.registerSchemesAsPrivileged([{scheme:'cross-media',privileges:{standard:true,secure:true,stream:true,supportFetchAPI:true}}])
 
 let mainWindow: BaseWindow | null = null
+let shellWebContents: Electron.WebContents | null = null
 let workspace: BrowserWorkspace | null = null
 let database: AppDatabase | null = null
 let feishuBot: FeishuBotService | null = null
@@ -122,6 +218,14 @@ const imageService = new BailianImageService(
   process.env.BAILIAN_API_KEY || '',
   process.env.BAILIAN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
 )
+const volcImageService = new VolcImageService(
+  process.env.ARK_API_KEY || '',
+  process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3'
+)
+const openaiImageService = new OpenAIImageService(
+  process.env.OPENAI_IMAGE_API_KEY || '',
+  process.env.IMAGE_PROXY_URL || ''
+)
 const ebayImageComplianceVisionService = new EbayImageComplianceVisionService(
   process.env.BAILIAN_API_KEY || '',
   process.env.BAILIAN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
@@ -146,6 +250,11 @@ const ebayOptimizationService = new EbayOptimizationService(
   process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
   process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash'
 )
+const aiEmployeeChatService = new AiEmployeeChatService()
+const ragflowKnowledgeService = new RagflowKnowledgeService()
+const kbGuardianService = new KbGuardianService(ragflowKnowledgeService, event => shellWebContents?.send('kbGuardian:run-event', event))
+// I.2 阶段新增：注入报告样例库的文件名→分类映射器（按文件名走不同分类）
+kbGuardianService.setCategoryResolver(buildSampleLibraryCategoryResolver())
 
 const configuredModels=(value:string|undefined) => [...new Set((value||'').split(',').map(item=>item.trim()).filter(Boolean))]
 const arkVideoService=()=>new ArkVideoService(
@@ -380,6 +489,42 @@ async function downloadEbayLocalProduct(storeId:string,listingId:string):Promise
   const downloadedCount=media.filter(item=>item.downloadStatus==='DOWNLOADED').length
   if(!downloadedCount)throw new Error(`商品图片全部下载失败。${failures.slice(0,3).join('；')}`)
   return database.saveEbayLocalProductSnapshot(completeEbayLocalSnapshot({listing:updated,details:mergedDetails,media,capturedAt}))
+}
+
+async function readEbayProductByUrl(storeId:string,rawUrl:string):Promise<EbayLocalProduct> {
+  if(!database)throw new Error('数据库尚未初始化')
+  const store=database.getEbayStores().find(item=>item.id===storeId)
+  if(!store)throw new Error('eBay 店铺不存在')
+  const input=rawUrl.trim()
+  const listingId=input.match(/\/itm\/(?:[^/?#]+\/)?(\d{9,15})/i)?.[1]||input.match(/[?&]item=(\d{9,15})/i)?.[1]||input.match(/^(\d{9,15})$/)?.[1]||''
+  if(!listingId)throw new Error('无法识别的 eBay 商品网址，请输入类似 https://www.ebay.com/itm/123456789012 的链接')
+  const existing=database.getEbayLocalProducts(storeId).find(item=>item.listingId===listingId)
+  if(existing)return existing
+  if(!workspace)throw new Error('应用内浏览器尚未初始化')
+  const viewUrl=`https://www.ebay.com/itm/${listingId}`
+  const read=()=>workspace!.readEbayProductDetails(`ebay:${store.id}`,`${listingId} · 网址读取`,viewUrl)
+  let details:EbayProductDetails
+  try { details=await read() }
+  catch(error) {
+    if(!(error instanceof Error)||!error.message.includes('请先打开当前eBay店铺'))throw error
+    await openEbaySellerHub(storeId)
+    details=await read()
+  }
+  const title=(details.title||'').trim()
+  if(!title)throw new Error('未能从商品页识别到标题，请确认链接是有效的 eBay 商品页')
+  const marketplaceId=store.marketplaceId||'EBAY_US'
+  const now=new Date().toISOString()
+  const listing:EbayListing={
+    id:`${store.id}:${marketplaceId}:${listingId}`,storeId:store.id,marketplaceId,listingId,sku:'',
+    title,originalTitle:title,translatedTitle:'',originalTitleVerified:true,titleSource:'EBAY_STRUCTURED_DATA',
+    price:details.price||'',currency:(details.currency||'').trim().toUpperCase()||ebayMarketplaceCurrency(marketplaceId),
+    quantity:0,
+    imageUrl:details.imageUrls[0]||'',imageUrls:details.imageUrls||[],
+    categoryId:'',categoryName:'',status:'ACTIVE',viewUrl,updatedAt:now,
+    itemSpecifics:details.itemSpecifics||[],condition:details.condition||''
+  }
+  database.upsertEbayListing(storeId,listing)
+  return downloadEbayLocalProduct(storeId,listingId)
 }
 
 function updateEbayLocalProduct(localProductId:string,changes:EbayLocalProductUpdateInput):EbayLocalProduct {
@@ -790,29 +935,60 @@ function prepareEbayMarketAnalysis(samples:EbayMarketResearchSnapshot['samples']
 
 async function researchEbayMarket(request:EbayMarketResearchRequest):Promise<EbayMarketResearchSnapshot> {
   if(!database)throw new Error('数据库尚未初始化')
-  if(!workspace)throw new Error('应用内浏览器尚未初始化')
   const store=database.getEbayStores().find(item=>item.id===request.storeId)
   const listing=database.getEbayListings(request.storeId).find(item=>item.listingId===request.listingId)
   if(!store||!listing)throw new Error('eBay 店铺或线上产品不存在')
   const query=request.query.replace(/\s+/g,' ').trim()
   if(!query)throw new Error('请先填写能代表当前商品的核心商品词')
+  const omkarSettings=readAmazonDataSource()
+  const omkarKey=omkarSettings.encryptedApiKey&&safeStorage.isEncryptionAvailable()?safeStorage.decryptString(Buffer.from(omkarSettings.encryptedApiKey,'base64')):''
   const marketWorkspace=workspace
-  const readEvidence=()=>marketWorkspace.readEbayMarketResearch(`ebay:${store.id}`,{
-    query,
-    categoryId:listing.categoryId,
-    condition:listing.condition||'',
-    marketplaceId:listing.marketplaceId,
-    periodDays:request.periodDays
-  })
-  let evidence:Awaited<ReturnType<typeof readEvidence>>
-  try {
-    evidence=await readEvidence()
-  } catch(error) {
-    if(!(error instanceof Error&&/登录会话已失效/.test(error.message)))throw error
-    await ensureEbayStoreLogin(request.storeId)
-    evidence=await readEvidence()
+  const readEvidence=async(searchQuery:string)=>{
+    if(omkarKey){
+      const url=new URL(ebayScraperSearchEndpoint())
+      url.searchParams.set('keyword',searchQuery);url.searchParams.set('marketplace','ebay.com');url.searchParams.set('page','1')
+      const response=await fetch(url,{headers:{'API-Key':omkarKey},signal:AbortSignal.timeout(30_000)})
+      const body=await response.json().catch(()=>({})) as {listings?:Array<Record<string,unknown>>;detail?:string;message?:string}
+      if(!response.ok)throw new Error(`Omkar eBay Scraper 返回错误：${body.detail||body.message||`HTTP ${response.status}`}`)
+      if(!Array.isArray(body.listings))throw new Error('Omkar eBay Scraper 返回格式异常')
+      const numberValue=(value:unknown)=>{const parsed=Number(String(value??'').replace(/[^0-9.]/g,''));return Number.isFinite(parsed)?parsed:0}
+      const samples:EbayMarketResearchSnapshot['samples']=body.listings.map(item=>{const price=item.price&&typeof item.price==='object'?item.price as Record<string,unknown>:{};const delivery=item.delivery_info&&typeof item.delivery_info==='object'?item.delivery_info as Record<string,unknown>:{};return {title:String(item.name||item.title||'').trim(),price:String(price.amount??item.price??''),currency:'USD',soldDate:'',url:String(item.url||''),imageUrl:String(item.image||''),itemId:String(item.listing_id||''),shipping:String(delivery.raw||delivery.extracted||''),condition:String(item.condition||''),soldQuantity:String(item.units_sold||'')}}).filter(item=>item.title&&item.url)
+      const prices=samples.map(item=>numberValue(item.price)).filter(value=>value>0),sold=samples.reduce((total,item)=>total+numberValue(item.soldQuantity),0),shipping=samples.map(item=>numberValue(item.shipping)).filter(value=>value>0),freeShipping=samples.filter(item=>/free/i.test(item.shipping||'')).length
+      const metric=(key:EbayMarketResearchSnapshot['metrics'][number]['key'],label:string,value:string,available:boolean):EbayMarketResearchSnapshot['metrics'][number]=>({key,label,value,available})
+      return {source:'OMKAR_EBAY_SCRAPER' as const,sourceUrl:`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(searchQuery)}`,samples,metrics:[metric('TOTAL_SOLD','样本已售数',sold?String(sold):'',sold>0),metric('AVERAGE_SOLD_PRICE','样本平均价',prices.length?`USD ${(prices.reduce((a,b)=>a+b,0)/prices.length).toFixed(2)}`:'',prices.length>0),metric('SOLD_PRICE_RANGE','样本价格范围',prices.length?`USD ${Math.min(...prices).toFixed(2)} – ${Math.max(...prices).toFixed(2)}`:'',prices.length>0),metric('AVERAGE_SHIPPING','平均运费',shipping.length?`USD ${(shipping.reduce((a,b)=>a+b,0)/shipping.length).toFixed(2)}`:'',shipping.length>0),metric('FREE_SHIPPING_RATE','免运费样本',samples.length?`${Math.round(freeShipping/samples.length*100)}%`:'',samples.length>0),metric('SELL_THROUGH_RATE','售出率','',false),metric('SELLER_COUNT','卖家数','',false)]}
+    }
+    if(!marketWorkspace)throw new Error('请先在 AI总部配置 Omkar API Key，或打开 eBay 店铺浏览器')
+    const read=()=>marketWorkspace.readEbayMarketResearch(`ebay:${store.id}`,{
+      query:searchQuery,
+      categoryId:listing.categoryId,
+      condition:listing.condition||'',
+      marketplaceId:listing.marketplaceId,
+      periodDays:request.periodDays
+    })
+    try {
+      return await read()
+    } catch(error) {
+      if(!(error instanceof Error&&/登录会话已失效/.test(error.message)))throw error
+      await ensureEbayStoreLogin(request.storeId)
+      return read()
+    }
   }
-  const analysis=prepareEbayMarketAnalysis(evidence.samples)
+  let evidence=await readEvidence(query)
+  let analysis=prepareEbayMarketAnalysis(evidence.samples)
+  let queryBroadened=''
+  const queryWords=query.split(' ')
+  if(analysis.rankedSamples.length<20&&queryWords.length>2){
+    const broaderQuery=queryWords.slice(1).join(' ')
+    try {
+      const broaderEvidence=await readEvidence(broaderQuery)
+      const broaderAnalysis=prepareEbayMarketAnalysis(broaderEvidence.samples)
+      if(broaderAnalysis.rankedSamples.length>analysis.rankedSamples.length){
+        evidence=broaderEvidence
+        analysis=broaderAnalysis
+        queryBroadened=`${query} → ${broaderQuery}`
+      }
+    } catch { /* 放宽检索失败时保留原查询结果 */ }
+  }
   const analysisSamples=analysis.rankedSamples.slice(0,analysis.analysisSampleCount)
   const conditionFact=(listing.condition||'').split(/[:.]/)[0].trim().slice(0,40)
   const factText=[listing.originalTitle,listing.title,listing.categoryName,conditionFact,...(listing.itemSpecifics||[]).flatMap(item=>[item.name,item.value])].filter(Boolean).join(' ')
@@ -863,7 +1039,8 @@ async function researchEbayMarket(request:EbayMarketResearchRequest):Promise<Eba
     source:evidence.source,sourceUrl:evidence.sourceUrl,fetchedAt:new Date().toISOString(),captureMode:'AUTOMATIC',rawSampleCount:analysis.rawSampleCount,sampleCount:analysis.rankedSamples.length,
     analysisSampleCount:analysis.analysisSampleCount,rankingBasis:analysis.rankingBasis,soldQuantityEvidenceCount:analysis.soldQuantityEvidenceCount,
     metrics:evidence.metrics,samples:analysis.rankedSamples,filters:[
-      {label:'采集方式',value:evidence.source==='EBAY_PRODUCT_RESEARCH'?'eBay Product Research':'eBay Sold & Completed'},
+      {label:'采集方式',value:evidence.source==='OMKAR_EBAY_SCRAPER'?'Omkar eBay Scraper API':evidence.source==='EBAY_PRODUCT_RESEARCH'?'eBay Product Research':'eBay Sold & Completed'},
+      ...(queryBroadened?[{label:'查询词自动放宽',value:queryBroadened}]:[]),
       {label:'原始结果',value:`读取 ${analysis.rawSampleCount} 个，去重后 ${analysis.rankedSamples.length} 个`},
       {label:'标题分析池',value:`前 ${analysis.analysisSampleCount} 个有效样本`},
       {label:'排序依据',value:analysis.rankingBasis==='SOLD_QUANTITY'?'页面已售数量':'eBay 成交结果顺序（无充足销量字段）'}
@@ -1163,8 +1340,25 @@ function scheduleComplianceSourceSync() {
   complianceSyncTimer.unref()
 }
 
-const hasSingleInstanceLock = app.requestSingleInstanceLock()
+const hasSingleInstanceLock = process.env.CODEX_UI_TEST==='1'||app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) app.quit()
+
+// 原生单实例锁在部分 macOS 环境实测失效（曾出现双窗口并存），加固定端口硬锁兜底：
+// 端口被占 → 主实例已存在 → 通知其置前后本实例退出；验证场景（CODEX_UI_TEST / --user-data-dir）豁免
+const SINGLE_INSTANCE_PORT = 47823
+const skipInstanceGuard = process.env.CODEX_UI_TEST === '1' || process.argv.some(arg => arg.startsWith('--user-data-dir'))
+const instanceGuard: Promise<boolean> = skipInstanceGuard ? Promise.resolve(true) : new Promise(resolve => {
+  const server = nodeNet.createServer(() => {
+    if (mainWindow) { mainWindow.restore(); mainWindow.focus() }
+  })
+  server.once('error', () => {
+    const client = nodeNet.connect(SINGLE_INSTANCE_PORT, '127.0.0.1', () => client.end())
+    client.on('error', () => undefined)
+    resolve(false)
+  })
+  server.listen(SINGLE_INSTANCE_PORT, '127.0.0.1', () => resolve(true))
+})
+void instanceGuard.then(ok => { if (!ok) app.quit() })
 
 let mediaProtocolReady=false
 function registerMediaProtocol() {
@@ -1176,6 +1370,8 @@ function registerMediaProtocol() {
       ?path.join(app.getPath('userData'),'ebay-videos')
       :url.hostname==='local'
         ?path.join(app.getPath('userData'),'ebay-local-products')
+        :url.hostname==='watch'
+          ?path.join(app.getPath('userData'),'watch-skill-results')
         :''
     if(!root)return new Response('Not found',{status:404})
     const filePath=url.hostname==='ebay'
@@ -1195,7 +1391,10 @@ function createWindow() {
     height: 900,
     minWidth: 1100,
     minHeight: 720,
-    title: '砚都跨境'
+    title: '砚都跨境',
+    // 隐藏原生标题栏，由渲染层自绘 56px 顶栏（与豆包顶栏同高）；红绿灯垂直居中于顶栏
+    titleBarStyle: 'hidden',
+    trafficLightPosition: { x: 16, y: 22 }
   })
 
   const shell = new WebContentsView({
@@ -1215,14 +1414,27 @@ function createWindow() {
   resizeShell()
   mainWindow.on('resize', resizeShell)
 
+  shellWebContents = shell.webContents
   const devUrl = process.env.VITE_DEV_SERVER_URL
   if (devUrl) void shell.webContents.loadURL(devUrl)
   else void shell.webContents.loadFile(path.join(__dirname, '../../renderer/index.html'))
+
+  shell.webContents.on('console-message', (_event, _level, message, line, sourceId) => {
+    if (/\b(error|exception|failed)\b/i.test(message)) console.error(`[renderer:${line}] ${message} (${sourceId})`)
+  })
+  shell.webContents.on('render-process-gone', (_event, details) => {
+    console.error(`[renderer] process gone: ${details.reason} (exit ${details.exitCode})`)
+  })
+
+  // Windows 下无原生窗口控制按钮，向渲染层推送最大化状态以切换图标
+  mainWindow.on('maximize', () => shellWebContents?.send('window:maximized', true))
+  mainWindow.on('unmaximize', () => shellWebContents?.send('window:maximized', false))
 
   workspace = new BrowserWorkspace(mainWindow, shell.webContents)
   startFeishuBot()
   mainWindow.on('closed', () => {
     mainWindow = null
+    shellWebContents = null
     workspace = null
   })
 }
@@ -1349,11 +1561,722 @@ ipcMain.handle('browser:supply:activate', async (_event, platformCode: '1688' | 
     ?? { platformCode, loginStatus:'UNKNOWN', message:'已取消过期的大健云仓登录检查', url:'', autoLoginAttempted:false }
 })
 ipcMain.handle('browser:open-tab', (_event, platform: Platform, url: string, title?: string) => workspace?.openTab(platform, url, title))
+ipcMain.handle('system:open-vpn-panel', () => shell.openExternal('https://89.208.249.7:54321/5NEmm8ylBTB6cwij1Y/'))
+ipcMain.handle('system:open-external', (_event, url: string) => {
+  const parsed = new URL(url)
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error('仅允许 http/https 链接')
+  return shell.openExternal(url)
+})
+ipcMain.handle('watch-skill:status', async () => {
+  const cli = path.join(watchSkillRoot(), '.venv', 'bin', process.platform === 'win32' ? 'watch-skill.exe' : 'watch-skill')
+  const python = path.join(watchSkillRoot(), '.venv', 'bin', process.platform === 'win32' ? 'python.exe' : 'python')
+  const ffmpegPath = ffmpegInstaller.path.replace('app.asar', 'app.asar.unpacked')
+  const checks: Record<string, boolean> = {
+    repository: fs.existsSync(path.join(watchSkillRoot(), 'pyproject.toml')),
+    engine: fs.existsSync(cli), python: fs.existsSync(python), ffmpeg: fs.existsSync(ffmpegPath),
+    whisper: false, ocr: false
+  }
+  if (checks.python) {
+    try { await execFileAsync(python, ['-c', 'import faster_whisper']); checks.whisper = true } catch {}
+    try { await execFileAsync(python, ['-c', 'import rapidocr']); checks.ocr = true } catch {}
+  }
+  if(!checks.ocr&&process.platform==='darwin'){try{checks.ocr=Boolean(await ensureWatchSkillVisionOcr())}catch{}}
+  return { checks, root: watchSkillRoot(), version: checks.engine ? '1.2.0' : '' }
+})
+ipcMain.handle('watch-skill:pick-video', async () => {
+  const result = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: '视频', extensions: ['mp4','mov','mkv','webm'] }] })
+  return result.canceled ? null : result.filePaths[0] || null
+})
+ipcMain.handle('watch-skill:download-youtube', async (_event, rawUrl:string) => {
+  const url=new URL(String(rawUrl||''))
+  if(url.protocol!=='https:'||!['youtube.com','www.youtube.com','youtu.be'].includes(url.hostname))throw new Error('请输入 YouTube HTTPS 链接')
+  const ytDlp=path.join(watchSkillRoot(),'.venv','bin','yt-dlp')
+  if(!fs.existsSync(ytDlp))throw new Error('yt-dlp 未安装')
+  const downloadDir=path.join(app.getPath('userData'),'watch-skill-downloads');fs.mkdirSync(downloadDir,{recursive:true})
+  const args=['--cookies-from-browser','chrome','--no-playlist','--remote-components','ejs:github','-f','best[ext=mp4][height<=720]/best[height<=720]','--print','after_move:filepath','-o',path.join(downloadDir,'%(id)s.%(ext)s')]
+  if(process.platform==='darwin'){
+    const wrapper=path.join(app.getPath('temp'),'watch-skill-node-runtime')
+    fs.writeFileSync(wrapper,`#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec "${process.execPath.replace(/"/g,'\\"')}" "$@"\n`,{mode:0o700})
+    args.push('--js-runtimes',`node:${wrapper}`)
+  }
+  args.push(url.toString())
+  const {stdout}=await execFileAsync(ytDlp,args,{timeout:30*60_000,maxBuffer:5*1024*1024})
+  const downloaded=stdout.trim().split('\n').filter(Boolean).at(-1)||''
+  if(!downloaded||!fs.existsSync(downloaded))throw new Error('YouTube 下载完成但未找到视频文件')
+  return downloaded
+})
+ipcMain.handle('watch-skill:analyze', async (_event, videoPath: string) => {
+  if (!videoPath || !fs.existsSync(videoPath)) throw new Error('请选择有效的视频文件')
+  const cli = path.join(watchSkillRoot(), '.venv', 'bin', process.platform === 'win32' ? 'watch-skill.exe' : 'watch-skill')
+  const ffmpegPath = ffmpegInstaller.path.replace('app.asar', 'app.asar.unpacked')
+  const env = { ...process.env, PATH: `${path.dirname(ffmpegPath)}${path.delimiter}${process.env.PATH || ''}` }
+  const id = `${Date.now()}-${createHash('sha1').update(videoPath).digest('hex').slice(0,8)}`
+  const outputDir = path.join(app.getPath('userData'), 'watch-skill-results', id)
+  fs.mkdirSync(outputDir, { recursive: true })
+  try {
+    const { stdout, stderr } = await execFileAsync(cli, ['watch', videoPath, '--transcript-only', '--whisper-model', 'small'], { env, timeout: 30 * 60_000, maxBuffer: 10 * 1024 * 1024 })
+    const framePattern = path.join(outputDir, 'frame-%03d.jpg')
+    await execFileAsync(ffmpegPath, ['-y','-i',videoPath,'-vf','fps=1/10,scale=960:-2','-frames:v','12',framePattern], { timeout: 5 * 60_000, maxBuffer: 5 * 1024 * 1024 })
+    let framePaths = fs.readdirSync(outputDir).filter(name=>name.endsWith('.jpg')).sort().map(name=>path.join(outputDir,name))
+    if (!framePaths.length) {
+      const firstFrame = path.join(outputDir, 'frame-001.jpg')
+      await execFileAsync(ffmpegPath, ['-y','-i',videoPath,'-frames:v','1','-vf','scale=960:-2',firstFrame], { timeout: 5 * 60_000, maxBuffer: 5 * 1024 * 1024 })
+      framePaths = fs.existsSync(firstFrame) ? [firstFrame] : []
+    }
+    const ocrLines:string[]=[]
+    try{const ocr=await ensureWatchSkillVisionOcr();for(const frame of framePaths){const {stdout:raw}=await execFileAsync(ocr,[frame],{timeout:60_000,maxBuffer:2*1024*1024});const value=JSON.parse(raw),texts=(value.blocks||[]).map((block:{text:string})=>block.text).filter(Boolean);if(texts.length)ocrLines.push(`- ${path.basename(frame)}: ${texts.join(' | ')}`)}}catch{}
+    const ocrReport=ocrLines.length?`\n\n## Frame OCR\n\n${ocrLines.join('\n')}`:'\n\n## Frame OCR\n\n_No readable text detected._'
+    const task: WatchSkillTask = { id, videoPath, createdAt:new Date().toISOString(), status:'COMPLETED', report:`${stdout}${stderr ? `\n${stderr}` : ''}${ocrReport}`.trim(), framePaths }
+    saveWatchSkillTasks([task,...readWatchSkillTasks()])
+    return task
+  } catch (reason) {
+    const task: WatchSkillTask = { id, videoPath, createdAt:new Date().toISOString(), status:'FAILED', report:'', framePaths:[], error:reason instanceof Error?reason.message:String(reason) }
+    saveWatchSkillTasks([task,...readWatchSkillTasks()]); throw reason
+  }
+})
+ipcMain.handle('watch-skill:tasks', () => readWatchSkillTasks())
+ipcMain.handle('resource2skill:status', async () => {
+  const root = resource2SkillRoot()
+  const python = path.join(root, '.venv', 'bin', 'python')
+  const sourceReady = fs.existsSync(path.join(root, 'README.md')) && fs.existsSync(path.join(root, 'cli.py'))
+  const python311Ready = fs.existsSync(resource2SkillPython311())
+  let officialRuntimeReady = false
+  let note = python311Ready ? 'Python 3.11 已就绪；官方运行时未通过执行验证。' : '未检测到项目内 Python 3.11。'
+  if (sourceReady && fs.existsSync(python)) {
+    try {
+      const { stdout } = await execFileAsync(python, ['cli.py', 'domains'], { cwd: root, timeout: 30_000 })
+      const domains = stdout.split('\n').map(line => line.trim().split(/\s+/)[0]).filter(Boolean)
+      officialRuntimeReady = domains.length > 0
+      note = officialRuntimeReady ? `官方 CLI 已验证；可用域：${domains.join('、')}` : '官方 CLI 未返回可用域。'
+    } catch (reason) {
+      note = `官方 CLI 验证失败：${reason instanceof Error ? reason.message : String(reason)}`
+    }
+  }
+  return { sourceReady, officialRuntimeReady, python311Ready, adapterReady: true, domains: officialRuntimeReady ? note.split('：')[1]?.split('、') || [] : [], note }
+})
+ipcMain.handle('resource2skill:drafts', () => readResourceSkillLibrary())
+ipcMain.handle('resource2skill:model-settings', () => {const value=readResource2SkillSettings();return { configured:Boolean(value.encryptedGeminiKey),baseUrl:value.baseUrl }})
+ipcMain.handle('resource2skill:model-settings-save', (_event, input:{apiKey:string;baseUrl:string}) => {
+  const apiKey=String(input?.apiKey||'').trim(),baseUrl=String(input?.baseUrl||'').trim().replace(/\/$/,'')
+  const parsed=new URL(baseUrl)
+  if(parsed.protocol!=='https:'||parsed.hostname!=='api000.com')throw new Error('当前仅允许 https://api000.com')
+  if(!apiKey)throw new Error('请输入 Gemini API Key')
+  if(!safeStorage.isEncryptionAvailable())throw new Error('当前系统安全存储不可用')
+  fs.writeFileSync(resource2SkillSettingsPath(),JSON.stringify({encryptedGeminiKey:safeStorage.encryptString(apiKey).toString('base64'),baseUrl}),{mode:0o600})
+  return {configured:true,baseUrl}
+})
+ipcMain.handle('resource2skill:model-settings-clear', () => { try{fs.unlinkSync(resource2SkillSettingsPath())}catch{};return {configured:false} })
+ipcMain.handle('resource2skill:generate', async (_event, taskId:string, domain:string) => {
+  const task=readWatchSkillTasks().find(item=>item.id===taskId)
+  if(!task||task.status!=='COMPLETED')throw new Error('请选择已完成的 Watch Skill 解析记录')
+  const allowed=['blender','excel','general','ppt','reaper','web']
+  if(!allowed.includes(domain))throw new Error('请选择有效的 Resource2Skill 官方领域')
+  const python=path.join(resource2SkillRoot(),'.venv','bin','python')
+  await execFileAsync(python,['cli.py','validate-domain','--domain',domain],{cwd:resource2SkillRoot(),timeout:30_000})
+  const promptPath=path.join(resource2SkillRoot(),'domains',domain,'distiller_prompt.md')
+  const draft=makeResourceSkillDraft(task,domain,fs.readFileSync(promptPath,'utf8'))
+  saveResourceSkillLibrary([draft,...readResourceSkillLibrary()])
+  return draft
+})
+ipcMain.handle('resource2skill:official-analyze', async (_event, input:{url:string;domain:string}) => {
+  const url=new URL(String(input.url||''))
+  if(url.protocol!=='https:'||!['youtube.com','www.youtube.com','youtu.be'].includes(url.hostname))throw new Error('请输入公开 YouTube HTTPS 链接')
+  const settings=readResource2SkillSettings()
+  if(!settings.encryptedGeminiKey)throw new Error('请先保存 Gemini API Key')
+  if(!safeStorage.isEncryptionAvailable())throw new Error('当前系统安全存储不可用')
+  const allowed=['blender','excel','general','ppt','reaper','web']
+  if(!allowed.includes(input.domain))throw new Error('请选择有效的 Resource2Skill 官方领域')
+  const python=path.join(resource2SkillRoot(),'.venv','bin','python'),output=path.join(app.getPath('temp'),`resource2skill-${Date.now()}.md`)
+  const env={...process.env,GEMINI_API_KEY:safeStorage.decryptString(Buffer.from(settings.encryptedGeminiKey,'base64')),GEMINI_BASE_URL:settings.baseUrl}
+  try {
+    await execFileAsync(python,['cli.py','analyze','--domain',input.domain,'--video',url.toString(),'--model','gemini-2.5-flash','-o',output],{cwd:resource2SkillRoot(),env,timeout:30*60_000,maxBuffer:10*1024*1024})
+    const analysis=fs.readFileSync(output,'utf8'),now=new Date().toISOString(),name=`youtube-${input.domain}-${Date.now()}`
+    const draft:ResourceSkillDraft={id:`${Date.now()}-${createHash('sha1').update(url.toString()).digest('hex').slice(0,8)}`,sourceTaskId:`youtube:${url}`,name,content:`---\nname: ${name}\nresource2skill_domain: ${input.domain}\nsource: ${url}\n---\n\n# ${name}\n\n> 状态：Resource2Skill 官方 Gemini + YouTube 视频分析结果。\n\n${analysis}`,createdAt:now,updatedAt:now}
+    saveResourceSkillLibrary([draft,...readResourceSkillLibrary()]);return draft
+  } finally { try{fs.unlinkSync(output)}catch{} }
+})
+ipcMain.handle('resource2skill:text-distill', async (_event, input:{reportPath:string;domain:string;sourceUrl?:string}) => {
+  const reportPath=path.resolve(String(input.reportPath||'')),settings=readResource2SkillSettings()
+  if(!reportPath.startsWith(path.resolve(process.cwd())+path.sep)||!fs.existsSync(reportPath))throw new Error('报告文件不存在或不在项目目录内')
+  if(!settings.encryptedGeminiKey)throw new Error('请先保存 Gemini API Key')
+  if(!safeStorage.isEncryptionAvailable())throw new Error('当前系统安全存储不可用')
+  const allowed=['blender','excel','general','ppt','reaper','web']
+  if(!allowed.includes(input.domain))throw new Error('请选择有效的 Resource2Skill 官方领域')
+  const root=resource2SkillRoot(),python=path.join(root,'.venv','bin','python'),output=path.join(app.getPath('temp'),`resource2skill-text-${Date.now()}.md`)
+  const env={...process.env,GEMINI_API_KEY:safeStorage.decryptString(Buffer.from(settings.encryptedGeminiKey,'base64')),GEMINI_BASE_URL:settings.baseUrl}
+  try {
+    await execFileAsync(python,['text_distill.py','--domain',input.domain,'--input',reportPath,'--output',output,'--model','gemini-2.5-flash'],{cwd:root,env,timeout:30*60_000,maxBuffer:10*1024*1024})
+    return {analysis:fs.readFileSync(output,'utf8'),domain:input.domain,sourceUrl:String(input.sourceUrl||''),reportPath}
+  } finally { try{fs.unlinkSync(output)}catch{} }
+})
+ipcMain.handle('resource2skill:distill-watch', async (_event, input:{taskId:string;domain:string}) => {
+  const task=readWatchSkillTasks().find(item=>item.id===String(input.taskId||'')),settings=readResource2SkillSettings()
+  if(!task||task.status!=='COMPLETED'||!task.report.trim())throw new Error('请选择包含报告的 Watch Skill 完成记录')
+  if(!settings.encryptedGeminiKey)throw new Error('请先保存 Gemini API Key')
+  if(!safeStorage.isEncryptionAvailable())throw new Error('当前系统安全存储不可用')
+  const allowed=['blender','excel','general','ppt','reaper','web']
+  if(!allowed.includes(input.domain))throw new Error('请选择有效的 Resource2Skill 官方领域')
+  const root=resource2SkillRoot(),python=path.join(root,'.venv','bin','python')
+  const reportPath=path.join(app.getPath('temp'),`watch-report-${Date.now()}.md`),output=path.join(app.getPath('temp'),`resource2skill-text-${Date.now()}.md`)
+  const env={...process.env,GEMINI_API_KEY:safeStorage.decryptString(Buffer.from(settings.encryptedGeminiKey,'base64')),GEMINI_BASE_URL:settings.baseUrl}
+  try {
+    fs.writeFileSync(reportPath,task.report,{mode:0o600})
+    await execFileAsync(python,['text_distill.py','--domain',input.domain,'--input',reportPath,'--output',output,'--model','gemini-2.5-flash'],{cwd:root,env,timeout:30*60_000,maxBuffer:10*1024*1024})
+    const analysis=fs.readFileSync(output,'utf8'),now=new Date().toISOString(),name=`${fileStem(task.videoPath)}-distilled-skill`
+    assertResourceSkillQuality(analysis,input.domain)
+    const id=`distilled-${createHash('sha1').update(`${task.id}:${input.domain}`).digest('hex').slice(0,12)}`
+    const items=readResourceSkillLibrary(),existing=items.find(item=>item.id===id)
+    const content=`---\nname: ${name}\ndescription: 从 Watch Skill 时间轴报告蒸馏的可编辑技能\nresource2skill_domain: ${input.domain}\nsource: ${task.videoPath}\n---\n\n# ${name}\n\n> 状态：Watch Skill 本地解析 + Resource2Skill Gemini 文本蒸馏。\n\n${analysis}\n`
+    const draft:ResourceSkillDraft={id,sourceTaskId:task.id,name,content,createdAt:existing?.createdAt||now,updatedAt:now}
+    saveResourceSkillLibrary([draft,...items.filter(item=>item.id!==id)])
+    return draft
+  } finally { try{fs.unlinkSync(reportPath)}catch{};try{fs.unlinkSync(output)}catch{} }
+})
+ipcMain.handle('resource2skill:save', (_event, input:{id:string;name:string;content:string}) => {
+  const items=readResourceSkillLibrary(), existing=items.find(item=>item.id===input.id)
+  if(!existing)throw new Error('Skill 草稿不存在')
+  const updated={...existing,name:input.name.trim()||existing.name,content:input.content,updatedAt:new Date().toISOString()}
+  saveResourceSkillLibrary([updated,...items.filter(item=>item.id!==updated.id)])
+  const skillDir=path.join(app.getPath('userData'),'resource2skill-library',updated.name)
+  fs.mkdirSync(skillDir,{recursive:true});fs.writeFileSync(path.join(skillDir,'SKILL.md'),updated.content)
+  return {...updated,filePath:path.join(skillDir,'SKILL.md')}
+})
+
+// Windows/Linux 无边框窗口自绘控制按钮所需 IPC
+ipcMain.on('app:platform', event => { event.returnValue = process.platform })
+ipcMain.handle('window:minimize', () => { mainWindow?.minimize() })
+ipcMain.handle('window:maximize-toggle', () => {
+  if (!mainWindow) return false
+  if (mainWindow.isMaximized()) mainWindow.unmaximize()
+  else mainWindow.maximize()
+  return mainWindow.isMaximized()
+})
+ipcMain.handle('window:close', () => { mainWindow?.close() })
+ipcMain.handle('window:is-maximized', () => mainWindow?.isMaximized() ?? false)
 ipcMain.handle('browser:new-tab', () => workspace?.newTab())
 ipcMain.handle('browser:switch-tab', (_event, tabId: string) => workspace?.switchTab(tabId))
 ipcMain.handle('browser:close-tab', (_event, tabId: string) => workspace?.closeTab(tabId))
 ipcMain.handle('browser:1688-search-url', (_event, keyword: string) => {
   return create1688SearchUrl(keyword)
+})
+// ---------- AI员工：RAGFlow 智能体调用 + 附件/大模型路由（AiEmployeeChatService）+ 内嵌浏览器（与 Chrome 扩展同链路） ----------
+ipcMain.handle('ai-employee:ask', (_event, request: AiEmployeeAskRequest) => aiEmployeeChatService.chat(request))
+ipcMain.handle('ai-employee:chat-models', () => aiEmployeeChatService.listModels())
+ipcMain.handle('ai-employee:pick-attachments', () => aiEmployeeChatService.pickAttachments())
+ipcMain.handle('ai-employee:materialize-markdown-report', (_event, content: string) => materializeGeneratedMarkdownReply(content))
+ipcMain.handle('ai-employee:browser:show', (_event, bounds: BrowserBounds) => workspace?.showAiEmployeeBrowser(bounds))
+ipcMain.handle('ai-employee:browser:hide', () => workspace?.hideAiEmployeeBrowser())
+ipcMain.handle('ai-employee:browser:navigate', (_event, url: string) => workspace?.aiEmployeeNavigate(url))
+ipcMain.handle('ai-employee:browser:back', () => workspace?.aiEmployeeBack())
+ipcMain.handle('ai-employee:browser:forward', () => workspace?.aiEmployeeForward())
+ipcMain.handle('ai-employee:browser:reload', () => workspace?.aiEmployeeReload())
+ipcMain.handle('ai-employee:browser:url', () => workspace?.aiEmployeeGetUrl() || '')
+ipcMain.handle('ai-employee:extract-current', () => workspace?.aiEmployeeExtractInfo())
+ipcMain.handle('ai-employee:cny-usd-rate', async (): Promise<{ usdPerCny: number; fetchedAt: string; source: string } | null> => {
+  const now = Date.now()
+  if (cnyUsdExchangeRateCache && now - cnyUsdExchangeRateCache.at < 60 * 60 * 1000) {
+    return { usdPerCny: cnyUsdExchangeRateCache.usdPerCny, fetchedAt: new Date(cnyUsdExchangeRateCache.at).toISOString(), source: `${cnyUsdExchangeRateCache.source}（1小时缓存）` }
+  }
+  try {
+    const source = 'ExchangeRate-API CNY 基准公开汇率 https://open.er-api.com/v6/latest/CNY'
+    const response = await fetch('https://open.er-api.com/v6/latest/CNY', { signal: AbortSignal.timeout(10_000) })
+    const body = await response.json().catch(() => null) as { result?: string; rates?: { USD?: unknown } } | null
+    const usdPerCny = Number(body?.rates?.USD)
+    if (!response.ok || body?.result !== 'success' || !Number.isFinite(usdPerCny) || usdPerCny <= 0 || usdPerCny > 1) return null
+    cnyUsdExchangeRateCache = { at: now, usdPerCny, source }
+    return { usdPerCny, fetchedAt: new Date(now).toISOString(), source }
+  } catch { return null }
+})
+ipcMain.handle('ai-employee:amazon-resolve', (_event, keyword: string) => workspace?.resolveAmazonTopResult(keyword) ?? Promise.resolve(null))
+ipcMain.handle('ai-employee:amazon-market-stats', (_event, keyword: string) => {
+  const settings = readAmazonDataSource()
+  return workspace?.collectAmazonMarketSamples(keyword, settings) ?? Promise.resolve(null)
+})
+ipcMain.handle('ai-employee:amazon-listing-evidence', (_event, asins: string[]) => {
+  const settings = readAmazonDataSource()
+  return workspace?.collectAmazonListingEvidence(Array.isArray(asins) ? asins : [], { maxListings: 8, cacheHours: settings.cacheHours }) ?? Promise.resolve([])
+})
+ipcMain.handle('ai-employee:amazon-review-evidence', (_event, asins: string[]) => {
+  const settings = readAmazonDataSource()
+  return workspace?.collectAmazonReviewEvidence(Array.isArray(asins) ? asins : [], { maxListings: 5, cacheHours: settings.cacheHours }) ?? Promise.resolve([])
+})
+ipcMain.handle('ai-employee:derive-amazon-keywords', (_event, intent) => aiEmployeeChatService.deriveAmazonKeywords(intent))
+ipcMain.handle('ai-employee:infer-evidence', (_event, input) => aiEmployeeChatService.inferDifferentiationAndCompliance(input))
+ipcMain.handle('amazon-data-source:get', () => publicAmazonDataSource())
+ipcMain.handle('amazon-data-source:save', (_event, input: { apiKey?: string; site: string; pages: number; maxSamples: number; cacheHours: number }) => {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('当前系统安全存储不可用，不能保存 Amazon API Key')
+  const current = readAmazonDataSource()
+  const apiKey = String(input.apiKey || '').trim()
+  const next: AmazonDataSourceSettings = {
+    encryptedApiKey: apiKey ? safeStorage.encryptString(apiKey).toString('base64') : current.encryptedApiKey,
+    site: 'US',
+    pages: Math.min(2, Math.max(1, Math.floor(Number(input.pages) || 1))),
+    maxSamples: Math.min(48, Math.max(1, Math.floor(Number(input.maxSamples) || 24))),
+    cacheHours: Math.min(168, Math.max(1, Math.floor(Number(input.cacheHours) || 24)))
+  }
+  fs.mkdirSync(path.dirname(amazonDataSourcePath()), { recursive: true })
+  fs.writeFileSync(amazonDataSourcePath(), JSON.stringify(next), { mode: 0o600 })
+  amazonDataSourceCache.clear()
+  return publicAmazonDataSource(next)
+})
+ipcMain.handle('amazon-data-source:clear', () => {
+  try { fs.unlinkSync(amazonDataSourcePath()) } catch { /* already clear */ }
+  amazonDataSourceCache.clear()
+})
+ipcMain.handle('amazon-data-source:test', async () => {
+  const settings = readAmazonDataSource()
+  if (!settings.encryptedApiKey) return { ok: false, message: '请先保存 API Key' }
+  const apiKey = safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(Buffer.from(settings.encryptedApiKey, 'base64')) : ''
+  try {
+    const url = new URL(amazonScraperSearchEndpoint())
+    url.searchParams.set('query', 'dog grooming brush')
+    url.searchParams.set('country_code', 'US')
+    const response = await fetch(url, { headers: { 'API-Key': apiKey }, signal: AbortSignal.timeout(20_000) })
+    const body = await response.json().catch(() => ({})) as { results?: unknown[]; detail?: string; message?: string }
+    if (!response.ok) return { ok: false, message: describeOmkarCloudError(response.status, body) }
+    return { ok: true, message: '连接成功', samples: Array.isArray(body.results) ? body.results.length : 0 }
+  } catch (error) { return { ok: false, message: error instanceof Error ? error.message : '连接失败' } }
+})
+// ---------- 大模型API Key 只读状态（仅返回掩码，绝不回传完整 Key） ----------
+function maskLlmKey(value: string): string {
+  if (!value) return ''
+  return value.length > 12 ? `${value.slice(0, 4)}****${value.slice(-4)}` : `${value.slice(0, 2)}****`
+}
+ipcMain.handle('llm-keys:list', () => {
+  const envKeys: Array<{ id: string; key: string }> = [
+    { id: 'bailian', key: String(process.env.BAILIAN_API_KEY || '').trim() },
+    { id: 'deepseek', key: String(process.env.DEEPSEEK_API_KEY || '').trim() },
+    { id: 'ark', key: String(process.env.ARK_API_KEY || '').trim() },
+    { id: 'openai', key: String(process.env.OPENAI_IMAGE_API_KEY || '').trim() },
+    // handler 在 app ready 后执行，此时 loadLocalEnvironment 已完成，直接读 process.env 时序安全
+    { id: 'ragflow', key: String(process.env.RAGFLOW_API_KEY || '').trim() }
+  ]
+  return envKeys.map(item => ({ id: item.id, configured: Boolean(item.key), maskedKey: maskLlmKey(item.key) }))
+})
+// ---------- 大模型API Key 管理：保存（按行回写 .env.local）/ 连接测试 / 一键重启 ----------
+const LLM_KEY_ENV_NAME: Record<string, string> = {
+  bailian: 'BAILIAN_API_KEY',
+  deepseek: 'DEEPSEEK_API_KEY',
+  ark: 'ARK_API_KEY',
+  openai: 'OPENAI_IMAGE_API_KEY',
+  ragflow: 'RAGFLOW_API_KEY'
+}
+// 与 loadLocalEnvironment 的查找顺序保持一致；两者都不存在时默认落到 app.getAppPath()/.env.local
+function envLocalFilePath(): string {
+  const candidates = [path.join(app.getAppPath(), '.env.local'), path.join(process.cwd(), '.env.local')]
+  return candidates.find(candidate => fs.existsSync(candidate)) ?? candidates[0]
+}
+// 按行回写：仅替换 ^KEY= 行的值，保留其余行/注释/顺序与换行风格；缺失则在文件末尾追加；空值写 KEY=（视为清除）
+function writeEnvLocalKey(key: string, value: string): void {
+  const file = envLocalFilePath()
+  const raw = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
+  if (!raw.trim()) {
+    fs.writeFileSync(file, `${key}=${value}\n`, { mode: 0o600 })
+    return
+  }
+  const bom = raw.startsWith('\uFEFF') ? '\uFEFF' : ''
+  const eol = raw.includes('\r\n') ? '\r\n' : '\n'
+  const pattern = new RegExp(`^${key}=`)
+  const lines = raw.replace(/^\uFEFF/, '').split(/\r?\n/)
+  let found = false
+  const next = lines.map(line => {
+    if (pattern.test(line)) { found = true; return `${key}=${value}` }
+    return line
+  })
+  if (!found) {
+    const entry = `${key}=${value}`
+    // 文件以换行结尾时最后的空串代表结尾换行，新键插在其前，避免产生多余空行
+    if (next[next.length - 1] === '') next.splice(next.length - 1, 0, entry)
+    else next.push(entry)
+  }
+  fs.writeFileSync(file, bom + next.join(eol), { mode: 0o600 })
+}
+ipcMain.handle('llm-keys:save', (_event, input: { id?: string; value?: string }) => {
+  try {
+    const envName = LLM_KEY_ENV_NAME[String(input?.id || '')]
+    if (!envName) return { ok: false, error: '未知的提供商' }
+    const value = String(input?.value ?? '').trim()
+    writeEnvLocalKey(envName, value)
+    process.env[envName] = value
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : '保存失败' }
+  }
+})
+const LLM_KEY_TEST_TIMEOUT_MS = 10_000
+// 轻量鉴权探测：仅返回状态码/摘要级错误，绝不回传密钥内容
+async function testLlmKey(id: string): Promise<{ ok: boolean; latencyMs?: number; error?: string }> {
+  const started = Date.now()
+  const latency = (): number => Date.now() - started
+  const signal = AbortSignal.timeout(LLM_KEY_TEST_TIMEOUT_MS)
+  const key = String(process.env[LLM_KEY_ENV_NAME[id]] || '').trim()
+  if (!key) return { ok: false, latencyMs: latency(), error: '未配置 Key' }
+  const authHeaders = { Authorization: `Bearer ${key}` }
+  try {
+    if (id === 'bailian' || id === 'deepseek') {
+      const base = (id === 'bailian'
+        ? process.env.BAILIAN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+        : process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '')
+      const response = await fetch(`${base}/models`, { headers: authHeaders, signal })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return { ok: true, latencyMs: latency() }
+    }
+    if (id === 'ark') {
+      const base = (process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/+$/, '')
+      const modelsResponse = await fetch(`${base}/models`, { headers: authHeaders, signal })
+      if (modelsResponse.ok) return { ok: true, latencyMs: latency() }
+      // /models 不可用时退化为最小 chat 请求（text 模型优先，max_tokens=1）
+      const model = configuredModels(process.env.ARK_TEXT_MODELS)[0] || configuredModels(process.env.ARK_VIDEO_MODELS)[0]
+      if (!model) return { ok: false, latencyMs: latency(), error: `HTTP ${modelsResponse.status}，且未配置 ARK_TEXT_MODELS/ARK_VIDEO_MODELS 无法二次验证` }
+      const chatResponse = await fetch(`${base}/chat/completions`, {
+        method: 'POST',
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }),
+        signal
+      })
+      if (!chatResponse.ok) throw new Error(`HTTP ${chatResponse.status}`)
+      return { ok: true, latencyMs: latency() }
+    }
+    if (id === 'openai') {
+      const proxy = String(process.env.IMAGE_PROXY_URL || '').trim()
+      if (!proxy) return { ok: false, latencyMs: latency(), error: '未配置 IMAGE_PROXY_URL，无法经代理访问 OpenAI' }
+      // 与 OpenAIImageService 相同的独立 session 代理方式
+      const proxySession = session.fromPartition('llm-key-openai-probe')
+      await proxySession.setProxy({ proxyRules: proxy.replace(/^https?:\/\//i, '') })
+      const response = await proxySession.fetch('https://api.openai.com/v1/models', { headers: authHeaders, signal })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return { ok: true, latencyMs: latency() }
+    }
+    if (id === 'ragflow') {
+      // base 与 RagflowKnowledgeService.baseUrl 保持一致：中央服务器地址 + 8090 端口
+      let base: string
+      try {
+        const url = new URL(readServerUrl())
+        url.port = '8090'
+        url.pathname = '/'
+        base = url.toString().replace(/\/+$/, '')
+      } catch {
+        return { ok: false, latencyMs: latency(), error: '未配置中央服务器地址' }
+      }
+      const response = await fetch(`${base}/api/v1/datasets?page=1&page_size=1`, { headers: authHeaders, signal })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const payload = await response.json().catch(() => ({})) as { code?: number; message?: string }
+      if (payload.code !== 0) throw new Error(payload.message || `RAGFlow 业务错误（code=${payload.code}）`)
+      return { ok: true, latencyMs: latency() }
+    }
+    return { ok: false, latencyMs: latency(), error: '未知的提供商' }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : '连接失败'
+    const summary = error instanceof Error && error.name === 'TimeoutError' ? '请求超时（10秒）' : detail.split(key).join('****')
+    return { ok: false, latencyMs: latency(), error: summary }
+  }
+}
+ipcMain.handle('llm-keys:test', async (_event, input: { id?: string }) => {
+  const id = String(input?.id || '')
+  if (!LLM_KEY_ENV_NAME[id]) return { ok: false, error: '未知的提供商' }
+  try {
+    return await testLlmKey(id)
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : '连接测试失败' }
+  }
+})
+ipcMain.handle('llm-keys:restart', () => {
+  app.relaunch()
+  app.exit(0)
+})
+ipcMain.handle('amazon-data-source:search', async (_event, keyword: string): Promise<AmazonDataSourceSearchResult> => {
+  const settings = readAmazonDataSource()
+  if (!settings.encryptedApiKey) return { samples: null, error: 'Amazon API Key 未配置' }
+  if (!safeStorage.isEncryptionAvailable()) return { samples: null, error: '系统安全存储不可用' }
+  const apiKey = safeStorage.decryptString(Buffer.from(settings.encryptedApiKey, 'base64'))
+  const term = String(keyword || '').trim()
+  if (!term) return { samples: null, error: 'Amazon 检索词为空' }
+  const cacheKey = `${settings.site}|${settings.pages}|${settings.maxSamples}|${term.toLowerCase()}`
+  const cached = amazonDataSourceCache.get(cacheKey)
+  if (cached && Date.now() - cached.at < settings.cacheHours * 3600 * 1000) {
+    return { ...cached.result, meta: cached.result.meta ? { ...cached.result.meta, cacheHit: true } : undefined }
+  }
+  try {
+    const all: AmazonDataSourceSearchResult['samples'] = []
+    let rawCount = 0
+    let pagesFetched = 0
+    let partialError = ''
+    const numberValue = (value: unknown): number | null => {
+      if (typeof value === 'number' && Number.isFinite(value)) return value
+      const parsed = Number(String(value ?? '').replace(/[^0-9.]/g, ''))
+      return Number.isFinite(parsed) && String(value ?? '').trim() ? parsed : null
+    }
+    const booleanValue = (value: unknown): boolean => value === true || value === 1 || /^(?:true|yes|sponsored|1)$/i.test(String(value ?? '').trim())
+    const textValue = (value: unknown): string => String(value ?? '')
+      .replace(/&amp;/gi, '&')
+      .replace(/&quot;/gi, '"')
+      .replace(/(?:&#39;|&apos;)/gi, "'")
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number(code)))
+      .replace(/&#x([\da-f]+);/gi, (_match, code) => String.fromCodePoint(Number.parseInt(code, 16)))
+      .replace(/\s+/g, ' ')
+      .trim()
+    for (let page = 1; page <= settings.pages && all.length < settings.maxSamples; page += 1) {
+      const url = new URL(amazonScraperSearchEndpoint())
+      url.searchParams.set('query', term)
+      url.searchParams.set('country_code', 'US')
+      url.searchParams.set('page', String(page))
+      const response = await fetch(url, { headers: { 'API-Key': apiKey }, signal: AbortSignal.timeout(30_000) })
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}))
+        partialError = `第${page}页：${describeOmkarCloudError(response.status, body)}`
+        if (!all.length) return { samples: null, error: `Amazon 数据接口${partialError}` }
+        break
+      }
+      const body = await response.json().catch(() => ({})) as { results?: Array<Record<string, unknown>> }
+      if (!Array.isArray(body.results)) {
+        partialError = `第${page}页返回格式异常`
+        if (!all.length) return { samples: null, error: `Amazon 数据接口${partialError}` }
+        break
+      }
+      pagesFetched += 1
+      rawCount += body.results.length
+      const known = new Set(all.map(item => item.asin))
+      for (const item of body.results) {
+        const asin = String(item.asin || '').trim().toUpperCase()
+        const title = textValue(item.title || item.product_name)
+        if (!asin || !title || known.has(asin)) continue
+        known.add(asin)
+        all.push({
+          asin,
+          title,
+          price: numberValue(item.price ?? item.current_price),
+          rating: numberValue(item.rating),
+          reviews: numberValue(item.reviews ?? item.ratings_total),
+          salesVolume: textValue(item.sales_volume ?? item.salesVolume) || null,
+          bsr: numberValue(item.bsr ?? item.best_sellers_rank ?? item.sales_rank),
+          page,
+          sponsored: booleanValue(item.is_sponsored ?? item.sponsored),
+          source: 'api'
+        })
+        if (all.length >= settings.maxSamples) break
+      }
+      if (body.results.length < 5) break
+    }
+    if (!all.length) return { samples: null, error: 'Amazon 搜索未返回有效商品样本' }
+    const result: AmazonDataSourceSearchResult = {
+      samples: all,
+      ...(partialError ? { error: `Amazon 数据接口部分完成：${partialError}` } : {}),
+      meta: { source: 'api', pagesRequested: settings.pages, pagesFetched, rawCount, uniqueCount: all.length, truncated: all.length >= settings.maxSamples, cacheHit: false }
+    }
+    amazonDataSourceCache.set(cacheKey, { at: Date.now(), result })
+    return result
+  } catch (error) { return { samples: null, error: error instanceof Error ? error.message : 'Amazon 数据接口连接失败' } }
+})
+// ---------- 知识库两大类：RAGFlow 数据集管理 + 本地分类注册表（RagflowKnowledgeService） ----------
+ipcMain.handle('kb:list', () => ragflowKnowledgeService.list())
+ipcMain.handle('kb:create-custom', (_event, request: { name: string; description: string }) => ragflowKnowledgeService.createCustom(request.name, request.description))
+ipcMain.handle('kb:ensure-agent', (_event, agentKey: KbAgentKey) => ragflowKnowledgeService.ensureAgentKb(agentKey))
+ipcMain.handle('kb:delete', (_event, kbId: string) => ragflowKnowledgeService.deleteKb(kbId))
+ipcMain.handle('kb:docs', (_event, kbId: string) => ragflowKnowledgeService.listDocs(kbId))
+ipcMain.handle('kb:upload', (_event, request: { kbId: string; filePaths: string[]; category?: string }) => ragflowKnowledgeService.uploadDocs(request.kbId, request.filePaths, request.category))
+ipcMain.handle('kb:category-create', (_event, request: { kbId: string; name: string; parent?: string }) => ragflowKnowledgeService.createCategory(request.kbId, request.name, request.parent))
+ipcMain.handle('kb:category-rename', (_event, request: { kbId: string; oldName: string; newName: string }) => ragflowKnowledgeService.renameCategory(request.kbId, request.oldName, request.newName))
+ipcMain.handle('kb:category-delete', (_event, request: { kbId: string; name: string }) => ragflowKnowledgeService.deleteCategory(request.kbId, request.name))
+ipcMain.handle('kb:doc-assign', (_event, request: { kbId: string; docIds: string[]; category: string | null }) => ragflowKnowledgeService.assignDocs(request.kbId, request.docIds, request.category))
+ipcMain.handle('kb:parse', (_event, request: { kbId: string; docIds: string[] }) => ragflowKnowledgeService.parseDocs(request.kbId, request.docIds))
+ipcMain.handle('kb:stop-parse', (_event, request: { kbId: string; docIds: string[] }) => ragflowKnowledgeService.stopParse(request.kbId, request.docIds))
+ipcMain.handle('kb:delete-docs', (_event, request: { kbId: string; docIds: string[] }) => ragflowKnowledgeService.deleteDocs(request.kbId, request.docIds))
+// ---------- 报告样例库 → 选品分析师知识库（I 阶段新增）：一键入库 4 真实样例 + 决策门禁 + 决策可追溯硬约束 ----------
+const sampleLibraryKbIngestor = new SampleLibraryKbIngestor(ragflowKnowledgeService)
+ipcMain.handle('sample-library-kb:describe', () => SampleLibraryKbIngestor.describeTarget())
+ipcMain.handle('sample-library-kb:preview', () => sampleLibraryKbIngestor.preview())
+ipcMain.handle('sample-library-kb:ingest', async (_event, options: { parse?: boolean } = {}) => sampleLibraryKbIngestor.ingest(options))
+// I.2 阶段新增：报告样例库 → 守卫自动同步（预置技能）
+ipcMain.handle('sample-library-kb:guardian-launch', () => SampleLibraryKbGuardianLauncher.launchNow(ragflowKnowledgeService, kbGuardianService))
+ipcMain.handle('sample-library-kb:guardian-status', () => SampleLibraryKbGuardianLauncher.status(kbGuardianService))
+// ---------- 知识库守卫：技能注册表 + 定时差异更新（KbGuardianService） ----------
+ipcMain.handle('kbGuardian:list-skills', () => kbGuardianService.state())
+ipcMain.handle('kbGuardian:create-skill', (_event, input: GuardianSkillInput) => kbGuardianService.createSkill(input))
+ipcMain.handle('kbGuardian:update-skill', (_event, id: string, input: GuardianSkillInput) => kbGuardianService.updateSkill(id, input))
+ipcMain.handle('kbGuardian:delete-skill', (_event, id: string) => kbGuardianService.deleteSkill(id))
+ipcMain.handle('kbGuardian:run-now', (_event, id: string) => kbGuardianService.runNow(id))
+ipcMain.handle('kbGuardian:list-logs', (_event, skillId?: string) => kbGuardianService.logs(skillId))
+ipcMain.handle('kbGuardian:pick-dir', () => kbGuardianService.pickDir())
+// J 阶段新增：按 logId 重试该次运行中所有失败的文件（复用 soft + softFallbackHard 路径）
+ipcMain.handle('kbGuardian:retry-failed', (_event, request: { skillId: string; logId: string }) => kbGuardianService.retryFailedFiles(request))
+// J 阶段新增：按 logId 拉取单条日志详情（含 failures 完整明细）
+ipcMain.handle('kbGuardian:get-log-detail', (_event, request: { logId: string }) => {
+  const logId = request?.logId
+  if (!logId) return null
+  return kbGuardianService.logs().then(list => list.find(item => item.id === logId) ?? null)
+})
+ipcMain.handle('ai-employee:export-document', async (_event, request: {
+  title: string
+  roleName: string
+  createdAt: number
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  format: 'word' | 'pdf' | 'markdown'
+}) => {
+  const safeTitle = (request.title || 'AI员工文档').replace(/[\\/:*?"<>|]/g, '-').slice(0, 80)
+  const formatConfig = {
+    word: { extension: 'doc', name: 'Word 文档' },
+    pdf: { extension: 'pdf', name: 'PDF 文档' },
+    markdown: { extension: 'md', name: 'Markdown 文档' }
+  }[request.format]
+  const selected = await dialog.showSaveDialog({
+    title: `下载${formatConfig.name}`,
+    defaultPath: `${safeTitle}.${formatConfig.extension}`,
+    filters: [{ name: formatConfig.name, extensions: [formatConfig.extension] }]
+  })
+  if (selected.canceled || !selected.filePath) return { canceled: true }
+
+  const createdAt = new Date(request.createdAt).toLocaleString('zh-CN')
+  const markdown = [
+    `# ${request.title}`,
+    '',
+    `> 所属 AI 员工：${request.roleName}  `,
+    `> 创建时间：${createdAt}`,
+    '',
+    ...request.messages.flatMap(message => [
+      `## ${message.role === 'user' ? '提问' : `${request.roleName}回答`}`,
+      '',
+      message.content,
+      ''
+    ])
+  ].join('\n')
+
+  if (request.format === 'markdown') {
+    fs.writeFileSync(selected.filePath, markdown, 'utf8')
+    return { canceled: false, filePath: selected.filePath }
+  }
+
+  const sections = request.messages.map(message => `<section><h2>${message.role === 'user' ? '提问' : `${escapeHtml(request.roleName)}回答`}</h2>${renderMarkdownForWord(message.content)}</section>`).join('')
+  const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>${wordDocumentCss}</style></head><body><h1>${escapeHtml(request.title)}</h1><div class="meta">AI员工文档 · ${escapeHtml(request.roleName)} · ${escapeHtml(createdAt)}</div>${sections}</body></html>`
+
+  if (request.format === 'word') {
+    fs.writeFileSync(selected.filePath, `\uFEFF${html}`, 'utf8')
+    return { canceled: false, filePath: selected.filePath }
+  }
+
+  const pdfWindow = new BrowserWindow({ show: false, webPreferences: { sandbox: true } })
+  try {
+    await pdfWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+    const pdf = await pdfWindow.webContents.printToPDF({ printBackground: true, pageSize: 'A4' })
+    fs.writeFileSync(selected.filePath, pdf)
+  } finally {
+    pdfWindow.destroy()
+  }
+  return { canceled: false, filePath: selected.filePath }
+})
+// ---------- AI 员工：导出 Word 报告（F 阶段新增，走真 docx OOXML） ----------
+ipcMain.handle('ai-employee:export-word-report', async (_event, request: {
+  title: string
+  markdown: string
+  roleName?: string
+}) => {
+  const safeTitle = (request.title || '选品分析报告').replace(/[\\/:*?"<>|]/g, '-').slice(0, 80)
+  const selected = await dialog.showSaveDialog({
+    title: '下载 Word 报告',
+    defaultPath: `${safeTitle}.docx`,
+    filters: [{ name: 'Word 文档', extensions: ['docx'] }]
+  })
+  if (selected.canceled || !selected.filePath) return { canceled: true }
+  try {
+    await reportMarkdownToDocxFile(request.markdown, selected.filePath, {
+      title: safeTitle,
+      author: request.roleName || '砚都跨境·选品分析师'
+    })
+    const buf = await reportMarkdownToDocxBuffer(request.markdown, { title: safeTitle })
+    return { canceled: false, filePath: selected.filePath, byteSize: buf.length }
+  } catch (err) {
+    return { canceled: false, filePath: selected.filePath, error: (err as Error).message }
+  }
+})
+// ---------- 报告样例库（G 阶段新增）：打开 .docx ----------
+ipcMain.handle('ai-sample-library:open-docx', async (_event, request: { filePath: string }) => {
+  try {
+    if (!request.filePath) return { ok: false, error: 'filePath 缺失' }
+    if (!fs.existsSync(request.filePath)) return { ok: false, error: '文件不存在：' + request.filePath }
+    const errMsg = await shell.openPath(request.filePath)
+    if (errMsg) return { ok: false, error: errMsg }
+    return { ok: true, filePath: request.filePath }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+})
+// ---------- 报告样例库（G 阶段新增）：列出全部样例元数据 ----------
+ipcMain.handle('ai-sample-library:list', async () => {
+  try {
+    const lib = loadSampleLibrary()
+    return { ok: true, samples: lib.map(s => ({
+      letter: s.letter,
+      decision: s.decision,
+      title: s.title,
+      subtitle: s.subtitle,
+      reason: s.reason,
+      keyMetrics: s.keyMetrics,
+      markdownFile: s.markdownFile,
+      docxFile: s.docxFile,
+      markdownSize: s.markdownSize,
+      docxSize: s.docxSize,
+      failedGates: s.failedGates,
+      markdownPath: s.markdownPath,
+      docxPath: s.docxPath
+    })) }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message, samples: [] }
+  }
+})
+// ---------- Listing 工作台：批次导出（合并 Markdown / Word / CSV，CSV 带 UTF-8 BOM 供 Excel 直开） ----------
+ipcMain.handle('listing:export', async (_event, request: {
+  title: string
+  format: 'word' | 'markdown' | 'csv'
+  material: string
+  packages: Array<{ siteLabel: string; languageCode: string; conclusion: string; content: string }>
+}) => {
+  const safeTitle = (request.title || 'Listing包').replace(/[\\/:*?"<>|]/g, '-').slice(0, 80)
+  const formatConfig = {
+    word: { extension: 'doc', name: 'Word 文档' },
+    markdown: { extension: 'md', name: 'Markdown 文档' },
+    csv: { extension: 'csv', name: 'CSV 表格' }
+  }[request.format]
+  const selected = await dialog.showSaveDialog({
+    title: `下载${formatConfig.name}`,
+    defaultPath: `${safeTitle}.${formatConfig.extension}`,
+    filters: [{ name: formatConfig.name, extensions: [formatConfig.extension] }]
+  })
+  if (selected.canceled || !selected.filePath) return { canceled: true }
+
+  if (request.format === 'csv') {
+    fs.writeFileSync(selected.filePath, `\uFEFF${buildListingCsv(request.packages)}`, 'utf8')
+    return { canceled: false, filePath: selected.filePath }
+  }
+
+  const exportedAt = new Date().toLocaleString('zh-CN')
+  const markdown = [
+    `# ${request.title}`,
+    '',
+    `> 导出时间：${exportedAt} · 共 ${request.packages.length} 个 Listing 包`,
+    '',
+    '## 中文商品素材',
+    '',
+    request.material || '（未提供）',
+    '',
+    ...request.packages.flatMap((item, index) => [
+      `## ${index + 1}. ${item.siteLabel} · ${item.languageCode}${item.conclusion ? ` · ${item.conclusion}` : ''}`,
+      '',
+      item.content,
+      ''
+    ])
+  ].join('\n')
+
+  if (request.format === 'markdown') {
+    fs.writeFileSync(selected.filePath, markdown, 'utf8')
+    return { canceled: false, filePath: selected.filePath }
+  }
+
+  const sections = request.packages.map((item, index) => `<section><h2>${index + 1}. ${escapeHtml(item.siteLabel)} · ${escapeHtml(item.languageCode)}${item.conclusion ? ` · ${escapeHtml(item.conclusion)}` : ''}</h2>${renderMarkdownForWord(item.content)}</section>`).join('')
+  const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>${wordDocumentCss}</style></head><body><h1>${escapeHtml(request.title)}</h1><div class="meta">Listing 包导出 · ${exportedAt} · 共 ${request.packages.length} 包</div><section><h2>中文商品素材</h2>${renderMarkdownForWord(request.material || '（未提供）')}</section>${sections}</body></html>`
+  fs.writeFileSync(selected.filePath, `\uFEFF${html}`, 'utf8')
+  return { canceled: false, filePath: selected.filePath }
 })
 ipcMain.handle('browser:translate', async (_event, mode: BrowserTranslationMode) => {
   if (!workspace) throw new Error('浏览器尚未初始化')
@@ -1419,7 +2342,7 @@ ipcMain.handle('marketplace-publish:list', (_event, marketplaceCode: Marketplace
 ipcMain.handle('marketplace-publish:create', (_event, marketplaceSelectionId: string, storeId: string) => database?.createMarketplacePublishDraft(marketplaceSelectionId,storeId))
 ipcMain.handle('marketplace-publish:update', (_event, request: MarketplacePublishDraftUpdate, action: string) => database?.updateMarketplacePublishDraft(request,action))
 ipcMain.handle('marketplace-publish:audits', (_event, marketplaceCode: MarketplacePlatformCode) => database?.getMarketplacePublishAudits(marketplaceCode) ?? [])
-ipcMain.handle('ebay:status', () => ebayService.configuration())
+ipcMain.handle('ebay:status', () => ({...ebayService.configuration(),marketDataConfigured:Boolean(readAmazonDataSource().encryptedApiKey)}))
 ipcMain.handle('ebay:stores:list', () => database?.getEbayStores() ?? [])
 ipcMain.handle('ebay:stores:create', (_event, name:string, username:string, password:string, marketplaceId:string) => {
   if(!name.trim())throw new Error('请输入 eBay 店铺名称')
@@ -1438,6 +2361,7 @@ ipcMain.handle('ebay:listings:list', (_event, storeId?:string) => database?.getE
 ipcMain.handle('ebay:local-products:list', (_event, storeId?:string) => withEbayLocalMediaFileSizes(database?.getEbayLocalProducts(storeId) ?? []))
 ipcMain.handle('ebay:local-products:snapshots', (_event, localProductId:string) => database?.getEbayLocalProductSnapshots(localProductId) ?? [])
 ipcMain.handle('ebay:local-products:download', (_event, storeId:string, listingId:string) => downloadEbayLocalProduct(storeId,listingId))
+ipcMain.handle('ebay:product:read-url', (_event, storeId:string, url:string) => readEbayProductByUrl(storeId,url))
 ipcMain.handle('ebay:local-products:update', (_event, localProductId:string, changes:EbayLocalProductUpdateInput) => updateEbayLocalProduct(localProductId,changes))
 ipcMain.handle('ebay:local-products:media-data', (_event, localProductId:string, mediaId:string) => readEbayLocalProductMedia(localProductId,mediaId))
 ipcMain.handle('ebay:local-products:media-add', (_event, localProductId:string, input:EbayLocalProductMediaUploadInput) => addEbayLocalProductMedia(localProductId,input))
@@ -1782,15 +2706,100 @@ ipcMain.handle('marketplace:credential:fill', async (_event, accountId: string, 
   const password = safeStorage.decryptString(Buffer.from(row.encrypted_password,'base64'))
   return workspace?.fillActiveLogin(row.username,password,submit)
 })
-ipcMain.handle('image:models', () => imageService.connection())
-ipcMain.handle('image:generate', (_event, request: ImageGenerationRequest) => imageService.generate(request))
+ipcMain.handle('image:models', async () => {
+  if(process.env.CODEX_UI_TEST==='1')return{connected:true,models:[{id:'phase7-mock',name:'阶段7验收模型',description:'批量验收专用',maxReferenceImages:4,costLabel:'¥0.20/张'}],message:'阶段7验收模型已连接'}
+  // 聚合百炼 / 火山方舟 / OpenAI 三个服务商的可用生图模型；单个服务商失败不影响其他模型列表
+  const [bailian, volc, openai] = await Promise.allSettled([
+    imageService.connection(),
+    volcImageService.connection(),
+    openaiImageService.connection()
+  ])
+  const models: ImageModelProfile[] = []
+  if (bailian.status === 'fulfilled') models.push(...bailian.value.models)
+  if (volc.status === 'fulfilled') models.push(...volc.value.models)
+  if (openai.status === 'fulfilled') models.push(...openai.value.models)
+  const connected = models.length > 0
+  return { connected, models, message: connected ? `已聚合 ${models.length} 个生图模型` : '暂无可用生图模型' }
+})
+ipcMain.handle('image:generate', (_event, request: ImageGenerationRequest) => {
+  if(process.env.CODEX_UI_TEST==='1'&&request.model==='phase7-mock'){
+    const svg='<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800"><rect width="800" height="800" fill="#f3efe7"/><rect x="240" y="160" width="320" height="480" rx="28" fill="#45b9d6"/></svg>'
+    return{taskId:`phase7-${Date.now()}`,imageUrls:[`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`]}
+  }
+  // 按模型 ID 路由到对应服务商；默认仍走百炼，保持已有 7 个百炼模型行为不变
+  if (request.model.startsWith('doubao-seedream')) return volcImageService.generate(request)
+  if (request.model === 'gpt-image-2') return openaiImageService.generate(request)
+  return imageService.generate(request)
+})
+ipcMain.handle('image:translate-marketing',async(_event,request:ImageMarketingTranslationRequest):Promise<ImageMarketingTranslationResult>=>{
+  if(process.env.CODEX_UI_TEST==='1')return{model:'phase7-mock-translation',targetLanguage:request.targetLanguage,translations:request.texts.map((_text,index)=>index?'Описание товара':'Товар для дома'),status:'TRANSLATED',issues:[]}
+  const target=request.targetLanguage==='俄语'?'Russian':request.targetLanguage==='英语'?'English':request.targetLanguage==='西班牙语'?'Spanish':request.targetLanguage
+  const domain=`跨境电商图片营销文案。翻译为${request.targetLanguage}。必须完整保留所有数字、尺寸、单位、品牌、型号、SKU和以下术语：${(request.protectedTerms||[]).join('、')||'无'}。不要翻译或改写商品包装上的原文。`
+  const translated=await translationService.translateTexts(request.texts,target,domain),translations=request.texts.map(text=>translated.get(text)||text)
+  const issues=validateMarketingTranslation(request.texts,translations,request.targetLanguage,request.protectedTerms)
+  return{model:'qwen-mt-flash',targetLanguage:request.targetLanguage,translations,status:issues.length?'REVIEW':'TRANSLATED',issues}
+})
 ipcMain.handle('image:ground', (_event, request: EbayImageGroundingRequest) => ebayImageGroundingService.ground(request))
-ipcMain.handle('image:review-candidate', (_event, request: EbayImageCandidateReviewRequest) => ebayImageGroundingService.reviewCandidate(request))
+ipcMain.handle('image:extract-package-text',(_event,request)=>process.env.CODEX_UI_TEST==='1'?{model:'phase9-ocr-mock',observations:[{sourceIndex:0,rawText:'宠物训练垫 M码 50片',fields:{productName:'宠物训练垫',specification:'M码',quantity:'50片'},confidence:96},{sourceIndex:1,rawText:'宠物训练垫 L码 40片',fields:{productName:'宠物训练垫',specification:'L码',quantity:'40片'},confidence:94}],conflicts:['specification','quantity'],combinedText:'图1：宠物训练垫 M码 50片\n图2：宠物训练垫 L码 40片',warnings:['不同参考图存在字段冲突：specification、quantity，必须人工选择正确规格'],analyzedAt:new Date().toISOString()}:ebayImageGroundingService.extractPackageText(request))
+let phase6QaReviewCount=0
+ipcMain.handle('image:review-candidate', (_event, request: EbayImageCandidateReviewRequest) => {
+  if(process.env.CODEX_UI_TEST==='1'&&request.title==='阶段6测试商品'){
+    phase6QaReviewCount+=1
+    const rejected=phase6QaReviewCount>1
+    return {candidateUrl:request.candidateUrl,purpose:request.purpose,status:rejected?'REJECTED' as const:'PASSED' as const,identityScore:rejected?45:96,structuralScore:rejected?40:95,factScore:rejected?35:94,purposeScore:93,diversityScore:90,geometryScore:rejected?40:95,styleScore:91,languageScore:92,reason:rejected?'局部修改引入虚构结构':'局部修改后一致',referenceIndices:[0],newStructures:rejected?['虚构配件']:[],missingStructures:[],geometryMismatch:rejected}
+  }
+  if(process.env.CODEX_UI_TEST==='1'&&request.title==='阶段7批量商品')return {candidateUrl:request.candidateUrl,purpose:request.purpose,status:'PASSED' as const,identityScore:96,structuralScore:95,factScore:94,purposeScore:93,diversityScore:90,geometryScore:95,styleScore:91,languageScore:92,reason:'批量候选符合四层门禁',referenceIndices:request.referenceIndices,newStructures:[],missingStructures:[],geometryMismatch:false}
+  return ebayImageGroundingService.reviewCandidate(request)
+})
+ipcMain.handle('image:suggest-roles', (_event, request: EbayImageRoleSuggestionRequest) => ebayImageGroundingService.suggestRoles(request))
+
+// ─── 阶段式图片优化 IPC ─────────────────────────────────────────────────────
+ipcMain.handle('image:stage-grounding', (_event, request: EbayStageGroundingRequest) => ebayImageGroundingService.stageGround(request))
+ipcMain.handle('image:stage-storyboard', (_event, request: EbayStageStoryboardRequest) => ebayImageGroundingService.generateStageStoryboard(request))
+ipcMain.handle('image:stage-model-recommend', (_event, stage: EbayImageStage) => ebayImageGroundingService.recommendStageModels(stage))
+
 ipcMain.handle('image:realshift', (_event, request: RealShiftRequest) => new RealShiftService().process(request))
+ipcMain.handle('image:realshift:preflight', () => new RealShiftService().preflight())
 ipcMain.handle('image:realshift:select', (_event, reportPath: string, choice: 'original' | 'processed') => new RealShiftService().saveSelection(reportPath, choice))
 ipcMain.handle('image:realshift:pick', async () => {
   const result = await dialog.showOpenDialog({ properties:['openFile'], filters:[{ name:'图片', extensions:['png','jpg','jpeg','webp','bmp','tif','tiff'] }] })
   return result.canceled ? null : result.filePaths[0]
+})
+ipcMain.handle('image:source:pick-local', async ():Promise<ImportedProductSource|null> => {
+  const result = await dialog.showOpenDialog({ title:'选择商品图片', properties:['openFile','multiSelections'], filters:[{ name:'商品图片', extensions:['png','jpg','jpeg','webp'] }] })
+  if (result.canceled || !result.filePaths.length) return null
+  const mimeByExtension:Record<string,ImportedProductImage['mimeType']>={'.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp'}
+  let totalBytes=0
+  const images:ImportedProductImage[]=[]
+  for (const filePath of result.filePaths) {
+    const extension=path.extname(filePath).toLocaleLowerCase()
+    const mimeType=mimeByExtension[extension]
+    if(!mimeType)throw new Error(`不支持的图片格式：${path.basename(filePath)}`)
+    const stats=fs.statSync(filePath)
+    if(stats.size>15*1024*1024)throw new Error(`图片超过 15MB：${path.basename(filePath)}`)
+    totalBytes+=stats.size
+    if(totalBytes>48*1024*1024)throw new Error('本次图片总大小不能超过 48MB')
+    const bytes=fs.readFileSync(filePath)
+    images.push({id:crypto.randomUUID(),name:path.basename(filePath),dataUrl:`data:${mimeType};base64,${bytes.toString('base64')}`,source:filePath,mimeType,role:images.length===0?'PRIMARY':'DETAIL'})
+  }
+  const first=images[0]
+  const title=path.basename(first.name,path.extname(first.name))
+  return {sourceKind:'LOCAL',sourceLabel:'本地图片',title,productId:`LOCAL-${Date.now()}`,priceText:'价格待补充',imageUrl:first.dataUrl,images,evidence:[{field:'title',value:title,source:first.source},...images.map(image=>({field:'imageUrl' as const,value:image.source,source:image.source}))]}
+})
+ipcMain.handle('image:source:read-url', async(_event, value:string):Promise<ImportedProductSource> => {
+  const supplySession=session.fromPartition('persist:supply:1688:default')
+  const cookies=await supplySession.cookies.get({domain:'.1688.com'})
+  const cookieHeader=cookies.map(cookie=>`${cookie.name}=${cookie.value}`).join('; ')
+  let prefetchedHtml:string|undefined
+  if(/https?:\/\/[^/]*1688\.com\//i.test(value)){
+    // 优先复用内置1688浏览器的真实登录态与渲染结果；服务器公网IP会被1688直接风控。
+    if(workspace)prefetchedHtml=await workspace.read1688ProductPage(value)
+    else try{
+      const response=await supplySession.fetch(value,{headers:{'user-agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124.0 Safari/537.36','accept-language':'zh-CN,zh;q=0.9'}})
+      if(response.ok)prefetchedHtml=await response.text()
+    }catch{/* 服务层继续使用安全回退 */}
+  }
+  return importProductUrl(value,cookieHeader,prefetchedHtml)
 })
 
 ipcMain.handle('task:start', async (event, taskId: string) => {
@@ -1818,7 +2827,221 @@ app.on('second-instance', () => {
   }
 })
 
-if (hasSingleInstanceLock) app.whenReady().then(createWindow)
+const serverProcessManager = new ServerProcessManager(app.getAppPath())
+const YANDU_SERVER_HOST = '114.55.149.192'
+const YANDU_SERVER_CERT_FINGERPRINTS = new Set([
+  '25:71:B5:1C:C2:8F:EA:19:21:58:A2:2D:CC:AA:D0:F6:64:50:02:B2',
+  '46:5C:54:0A:F9:ED:69:F5:10:46:21:51:09:D8:8E:A8:AF:FA:91:F1:8D:A6:3E:41:B3:8D:87:C1:6F:C5:04:CA',
+  'sha256/RlxUCvntafUQRiFRCdiOqK/6kfGNpj5Bs42HwW/FBMo='
+])
+const deepSeekHarnessSourceDir = app.isPackaged
+  ? path.join(process.resourcesPath, 'deepseek-harness')
+  : path.join(app.getAppPath(), 'vendor', 'deepseek-harness')
+const deepSeekHarnessProcessManager = new DeepSeekHarnessProcessManager(deepSeekHarnessSourceDir, app.getPath('userData'))
+ipcMain.handle('deepseek-harness:status', () => deepSeekHarnessProcessManager.status())
+ipcMain.handle('deepseek-harness:start', () => deepSeekHarnessProcessManager.start())
+ipcMain.handle('deepseek-harness:connect', async (_event, ticket: unknown) => {
+  if (typeof ticket !== 'string' || !ticket) throw new Error('缺少 Harness 访问票据')
+  const origin = new URL(readServerUrl())
+  if (origin.hostname !== YANDU_SERVER_HOST) throw new Error('Harness 仅支持已配置的中央服务器')
+  origin.protocol = 'https:'
+  const response = await net.fetch(new URL('/harness/session', origin).toString(), {
+    method: 'POST', headers: { authorization: `Bearer ${ticket}` }, signal: AbortSignal.timeout(15_000)
+  })
+  if (!response.ok) throw new Error(`Harness 网关拒绝访问（HTTP ${response.status}）`)
+  const setCookie = response.headers.get('set-cookie')
+  const cookie = setCookie?.match(/^([^=]+)=([^;]+)/)
+  if (!cookie) throw new Error('Harness 网关未返回会话 Cookie')
+  const maxAge = Number(setCookie?.match(/(?:^|;)\s*Max-Age=(\d+)/i)?.[1] ?? 0)
+  await session.defaultSession.cookies.set({
+    url: origin.toString(), name: cookie[1], value: cookie[2], path: '/', secure: true, httpOnly: true,
+    sameSite: 'no_restriction', expirationDate: Math.floor(Date.now() / 1000) + Math.max(1, maxAge)
+  })
+  const harnessUrl = new URL('/harness/', origin)
+  harnessUrl.searchParams.set('session', String(Date.now()))
+  return { url: harnessUrl.toString(), message: '已建立受限云端会话' }
+})
+// 服务器地址配置 IPC（S2 远程模式）：渲染层启动时同步 localStorage 值，登录页保存时写回
+ipcMain.handle('server-config:get', () => readServerUrl())
+ipcMain.handle('server-config:set', (_event, url: unknown) => {
+  if (typeof url !== 'string' || !url.trim()) return readServerUrl()
+  writeServerUrl(url)
+  // 从本地模式切到远程模式时，停掉已拉起的本地服务栈（stop 幂等，未启动时直接返回）
+  if (!isLocalServerUrl(url)) serverProcessManager.stop().catch(() => undefined)
+  return readServerUrl()
+})
+// 登录页版本信息（S4）：当前版本取应用自身，最新版本从 OSS 更新源 latest.yml 读取比对（与 electron-builder.yml publish.url 一致）
+const UPDATE_BASE_URL = 'https://yandu-download.oss-cn-hangzhou.aliyuncs.com/'
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (diff !== 0) return diff > 0 ? 1 : -1
+  }
+  return 0
+}
+ipcMain.handle('app:check-update', async () => {
+  const current = app.getVersion()
+  try {
+    const response = await net.fetch(`${UPDATE_BASE_URL}latest.yml`, { signal: AbortSignal.timeout(10000) })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const text = await response.text()
+    const matched = text.match(/^version:\s*([0-9][^\s]*)/m)
+    const latest = matched ? matched[1] : ''
+    return { current, latest, isLatest: !latest || compareVersions(current, latest) >= 0, error: '' }
+  } catch (error) {
+    return { current, latest: '', isLatest: true, error: error instanceof Error ? error.message : String(error) }
+  }
+})
+ipcMain.handle('app:open-download', () => {
+  void shell.openExternal(`${readServerUrl().replace(/\/+$/, '')}/download/`).catch(() => undefined)
+  return true
+})
+// 运营知识库语言预置：RAGFlow 前端只认同域 localStorage 的 lng 键（不设则回退英文），
+// 且首次加载会自行写入 'en'，因此只要当前值不是中文变体（zh-Hans/zh-Hant 等）就强制写入 zh-Hans，
+// 用隐藏窗口访问 8090 一次，使 iframe 内 RAGFlow（含登录页）默认显示中文
+function presetRagflowLanguage() {
+  const ragflowUrl = (() => {
+    try {
+      const base = new URL(readServerUrl())
+      base.port = '8090'
+      base.pathname = '/'
+      return base.toString()
+    } catch {
+      return null
+    }
+  })()
+  if (!ragflowUrl) return
+  const win = new BrowserWindow({ show: false, width: 100, height: 100, webPreferences: { offscreen: true } })
+  const timer = setTimeout(() => { if (!win.isDestroyed()) win.close() }, 20000)
+  win.loadURL(ragflowUrl)
+    .then(() => win.webContents.executeJavaScript(
+      `(() => { try { const cur = localStorage.getItem('lng'); if (cur && cur.startsWith('zh')) return 'keep:' + cur; localStorage.setItem('lng', 'zh-Hans'); return 'set'; } catch { return 'error'; } })()`
+    ))
+    .then(result => console.log(`[ragflow] 语言预置结果：${String(result)}`))
+    .catch(error => console.warn('[ragflow] 语言预置失败（服务不可达或加载超时）：', error.message))
+    .finally(() => {
+      clearTimeout(timer)
+      if (!win.isDestroyed()) win.close()
+    })
+}
+if (hasSingleInstanceLock) app.whenReady().then(async () => {
+  session.defaultSession.setCertificateVerifyProc((request, callback) => {
+    const cert = request.certificate as { fingerprint?: string }
+    const trusted = request.hostname === YANDU_SERVER_HOST && YANDU_SERVER_CERT_FINGERPRINTS.has(cert.fingerprint ?? '')
+    if (request.hostname === YANDU_SERVER_HOST) {
+      console.info(`[tls] Harness certificate pin matched=${trusted}; fingerprint-present=${Boolean(cert.fingerprint)}`)
+    }
+    callback(trusted ? 0 : -3)
+  })
+  if (!(await instanceGuard)) return
+  const serverUrl = readServerUrl()
+  if (isLocalServerUrl(serverUrl)) {
+    serverProcessManager.start().catch(error => console.error('[server-manager] 本地服务自动拉起失败：', error))
+  } else {
+    console.log(`[server-manager] 服务器地址为远程（${serverUrl}），跳过本地服务拉起`)
+    // RAGFlow 部署在中央服务器上，仅远程模式需要预置；分三次延迟执行（幂等），
+    // 覆盖服务瞬时不可达/加载超时的情况；打开运营知识库时渲染层还会再次触发（ragflow:preset-language）
+    scheduleRagflowPreset()
+  }
+  initAutoUpdate()
+  // 知识库守卫：分钟级调度 + 启动 60s 后补跑错过周期的技能（不依赖打包态，独立于自动更新）
+  kbGuardianService.startScheduler()
+  kbGuardianService.scheduleCatchup()
+  // I.2 阶段新增：启动时幂等保证「报告样例库自动同步」预置技能存在（仅 ensure，不主动 runNow）
+  void SampleLibraryKbGuardianLauncher.ensure(ragflowKnowledgeService, kbGuardianService)
+    .catch(error => console.warn('[sample-library-kb-guardian] 预置技能注册失败：', (error as Error).message))
+  createWindow()
+})
+
+// 启动后分三次预置（幂等）：3s 避开登录初始化高峰，30s/120s 兜底覆盖服务瞬时不可达；
+// 另提供 IPC 供渲染层在打开运营知识库时再次触发
+function scheduleRagflowPreset() {
+  for (const delay of [3000, 30000, 120000]) setTimeout(presetRagflowLanguage, delay)
+}
+ipcMain.handle('ragflow:preset-language', () => {
+  presetRagflowLanguage()
+  return true
+})
+
+// 自动更新：更新源为阿里云 OSS（electron-builder.yml 的 publish.generic）；
+// 下载进度/失败原因通过 app:update-status 推给渲染层（右下角悬浮提示），避免静默失败无感知
+type AppUpdateStatus = { phase: 'downloading' | 'downloaded' | 'error'; version: string; percent?: number; message?: string }
+function sendUpdateStatus(status: AppUpdateStatus) {
+  shellWebContents?.send('app:update-status', status)
+}
+// 已下载完成待安装的目标版本；退出时若存在则静默安装（Windows NSIS），避免用户反复点「稍后」停留在旧版
+let updateDownloadedVersion = ''
+let updateInstallStarted = false
+function initAutoUpdate() {
+  if (!app.isPackaged) return // 开发模式跳过
+  autoUpdater.autoDownload = true
+  let pendingVersion = ''
+  autoUpdater.on('update-available', info => {
+    pendingVersion = info.version
+    console.log(`[updater] 发现新版本 v${info.version}，开始后台下载`)
+    sendUpdateStatus({ phase: 'downloading', version: info.version, percent: 0 })
+  })
+  // 进度事件触发频繁，仅整数百分比变化时推送
+  let lastSentPercent = -1
+  autoUpdater.on('download-progress', progress => {
+    const percent = Math.floor(progress.percent)
+    if (percent === lastSentPercent) return
+    lastSentPercent = percent
+    sendUpdateStatus({ phase: 'downloading', version: pendingVersion, percent })
+  })
+  autoUpdater.on('update-downloaded', info => {
+    lastSentPercent = -1
+    updateDownloadedVersion = info.version
+    sendUpdateStatus({ phase: 'downloaded', version: info.version })
+    void dialog.showMessageBox({
+      type: 'info',
+      title: '发现新版本',
+      message: `新版本 v${info.version} 已下载完成，重启应用即可安装。`,
+      buttons: ['立即重启安装', '稍后'],
+      defaultId: 0
+    }).then(({ response }) => {
+      if (response === 0) {
+        updateInstallStarted = true
+        autoUpdater.quitAndInstall()
+      }
+    })
+  })
+  autoUpdater.on('error', error => {
+    console.error('[updater] 自动更新失败：', error.message)
+    sendUpdateStatus({ phase: 'error', version: pendingVersion || app.getVersion(), message: error.message })
+  })
+  void autoUpdater.checkForUpdates().catch(() => undefined)
+  setInterval(() => { void autoUpdater.checkForUpdates().catch(() => undefined) }, 4 * 60 * 60 * 1000)
+}
+// 渲染层悬浮提示/登录门禁点「重启安装」时触发（与弹窗的「立即重启安装」等价）
+ipcMain.handle('app:install-update', () => {
+  updateInstallStarted = true
+  autoUpdater.quitAndInstall()
+  return true
+})
+let serverShutdownDone = false
+app.on('will-quit', event => {
+  if (serverShutdownDone) return
+  event.preventDefault()
+  Promise.all([
+    serverProcessManager.stop().catch(error => console.error('[server-manager] 关闭本地服务失败：', error)),
+    deepSeekHarnessProcessManager.stop().catch(error => console.error('[deepseek-harness] 关闭本地服务失败：', error)),
+    shutdownAdvisorRuntime().catch(error => console.error('[advisor] 关闭在线参谋运行时失败：', error))
+  ]).finally(() => {
+    serverShutdownDone = true
+    // Windows 下更新包已下载完成时，退出即静默安装并启动新版（差量下载由 blockmap 自动生效）；
+    // macOS 为 dmg 分发无法静默安装，仍走下载完成弹窗流程
+    if (process.platform === 'win32' && updateDownloadedVersion && !updateInstallStarted) {
+      updateInstallStarted = true
+      console.log(`[updater] 退出时静默安装 v${updateDownloadedVersion}`)
+      autoUpdater.quitAndInstall(true, true)
+    } else {
+      app.quit()
+    }
+  })
+})
 app.on('window-all-closed', () => {
   feishuBot?.close()
   if(complianceSyncTimer)clearInterval(complianceSyncTimer)

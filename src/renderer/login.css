@@ -1,0 +1,361 @@
+/* 登录/注册/强制改密页（多人化改造阶段 4），独立前缀 auth- 避免污染主界面样式 */
+
+/* 原生标题栏隐藏后，登录页顶部预留 56px 拖拽条（与主界面顶栏同高），红绿灯悬浮其上 */
+.auth-drag-strip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  -webkit-app-region: drag;
+}
+
+.auth-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, #0d1b1e 0%, #122a2c 55%, #0d1b1e 100%);
+  padding: 24px;
+}
+
+.auth-boot {
+  color: #9fd8d4;
+  font-size: 14px;
+  letter-spacing: 0.1em;
+}
+
+.auth-card {
+  width: 380px;
+  max-width: 100%;
+  background: rgba(18, 34, 36, 0.92);
+  border: 1px solid rgba(10, 186, 181, 0.25);
+  border-radius: 14px;
+  padding: 28px 28px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+  color: #d7e8e6;
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.auth-brand .brand-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+  color: #062b28;
+  background: linear-gradient(135deg, #0abab5, #00e08a);
+}
+
+.auth-brand .brand-mark--link {
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.auth-brand .brand-mark--link:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(10, 186, 181, 0.45);
+}
+
+.auth-get-app {
+  align-self: center;
+  margin-top: -4px;
+  border: 1px solid rgba(77, 227, 221, 0.35);
+  background: rgba(77, 227, 221, 0.08);
+  color: #4de3dd;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.auth-get-app:hover {
+  color: #7ff7f2;
+  border-color: rgba(77, 227, 221, 0.6);
+  background: rgba(77, 227, 221, 0.16);
+}
+
+.auth-brand strong {
+  display: block;
+  font-size: 17px;
+  color: #f0faf9;
+}
+
+.auth-brand small {
+  color: #7fb3ae;
+  font-size: 12px;
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 9px;
+  padding: 4px;
+}
+
+.auth-tabs button {
+  border: none;
+  border-radius: 7px;
+  padding: 8px 0;
+  font-size: 13px;
+  cursor: pointer;
+  background: transparent;
+  color: #8fb8b3;
+}
+
+.auth-tabs button.active {
+  background: rgba(10, 186, 181, 0.18);
+  color: #4de3dd;
+  font-weight: 600;
+}
+
+.auth-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #8fb8b3;
+}
+
+.auth-card input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #eef8f7;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.auth-card input:focus {
+  border-color: #0abab5;
+}
+
+.auth-error {
+  margin: 0;
+  font-size: 12px;
+  color: #ff8a80;
+  background: rgba(255, 82, 82, 0.1);
+  border: 1px solid rgba(255, 82, 82, 0.3);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.auth-notice {
+  margin: 0;
+  font-size: 12px;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.auth-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #6f9d98;
+  text-align: center;
+}
+
+.auth-submit {
+  margin-top: 4px;
+  border: none;
+  border-radius: 9px;
+  padding: 11px 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  cursor: pointer;
+  color: #062b28;
+  background: linear-gradient(135deg, #0abab5, #00e08a);
+}
+
+.auth-submit:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.auth-server-toggle {
+  border: none;
+  background: transparent;
+  color: #5d8783;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 0;
+  text-align: center;
+}
+
+.auth-server-toggle:hover {
+  color: #8fb8b3;
+}
+
+/* 服务器地址下拉选择：免记忆 IP，深色风格与登录卡片输入框一致 */
+.auth-server-select {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #9fd8d4;
+}
+
+.auth-server-select select {
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid rgba(10, 186, 181, 0.35);
+  border-radius: 10px;
+  background: #122a2c;
+  color: #d7e8e6;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+}
+
+.auth-server-select select:focus {
+  border-color: #0abab5;
+  box-shadow: 0 0 0 2px rgba(10, 186, 181, 0.2);
+}
+
+/* 密码可见性切换（眼睛图标）：按钮定位在输入框内右侧（依赖 Field 的 trailing 插槽） */
+.auth-password-field .yd-field__control input {
+  padding-right: 36px;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  right: 6px;
+  top: 3px;
+  bottom: 3px;
+  width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: #7fb3ae;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.auth-password-toggle:hover {
+  color: #4de3dd;
+}
+
+.auth-password-toggle svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.auth-password-toggle:focus-visible {
+  outline: 2px solid var(--yd-brand);
+  outline-offset: 2px;
+  box-shadow: var(--yd-focus-ring);
+}
+
+/* 登录页底部版本信息：当前版本 / 更新状态 / 立即更新入口 */
+.auth-version {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #5d8783;
+  text-align: center;
+}
+.auth-version--latest {
+  color: #4ade80;
+}
+.auth-version--outdated {
+  color: #ffb84d;
+}
+.auth-version-update {
+  border: none;
+  background: transparent;
+  color: #4de3dd;
+  font-size: 11px;
+  padding: 0 0 0 2px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.auth-version-update:hover {
+  color: #7ff7f2;
+}
+
+/* 登录/改密/booting 页的窗口控制按钮：固定右上角 */
+.auth-win-controls { position:fixed; top:12px; right:12px; z-index:60; margin-left:0; }
+
+/* 强制升级门禁（版本过旧拦截，见 SessionGate.tsx） */
+.auth-update-title {
+  margin: 18px 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffb84d;
+  text-align: center;
+}
+.auth-update-desc {
+  margin: 0 0 16px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #9db8b4;
+  text-align: center;
+}
+.auth-update-progress {
+  position: relative;
+  margin: 0 0 16px;
+  padding: 9px 12px;
+  border: 1px solid rgb(77 227 221 / 25%);
+  border-radius: 10px;
+  background: rgb(77 227 221 / 6%);
+  overflow: hidden;
+}
+.auth-update-progress-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgb(77 227 221 / 18%);
+  transition: width .3s ease;
+}
+.auth-update-progress span {
+  position: relative;
+  display: block;
+  font-size: 12px;
+  color: #4de3dd;
+  text-align: center;
+}
+.auth-update-error {
+  margin: 0 0 14px;
+  font-size: 12px;
+  color: #ff8073;
+  text-align: center;
+  word-break: break-all;
+}
+.auth-update-manual {
+  margin-top: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #4de3dd;
+  font-size: 12px;
+  padding: 6px 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.auth-update-manual:hover {
+  color: #7ff7f2;
+}

@@ -1,0 +1,61 @@
+/* Phase 4: business workspace consistency and readability. */
+:is(.catalog-manager, .catalog-panel, .warehouse-dashboard, .publishing-page, .compliance-page) {
+  color: var(--yd-text);
+}
+
+:is(.catalog-manager, .catalog-panel, .warehouse-dashboard, .publishing-page, .compliance-page)
+  :is(small, em, label, button, input, select, textarea, dt, time) {
+  font-size: max(12px, 0.75rem) !important;
+  line-height: 1.45 !important;
+}
+
+:is(.catalog-manager, .catalog-panel, .warehouse-dashboard, .publishing-page, .compliance-page)
+  :is(button, input, select) {
+  min-height: 36px !important;
+}
+
+:is(.catalog-manager, .catalog-panel, .warehouse-dashboard, .publishing-page, .compliance-page)
+  :is(button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--yd-brand);
+  outline-offset: 2px;
+  box-shadow: var(--yd-focus-ring);
+}
+
+:is(.catalog-manager, .catalog-panel, .warehouse-dashboard, .publishing-page, .compliance-page)
+  :is(.catalog-manage-column, .warehouse-dashboard-heading, .warehouse-dashboard-card,
+      .warehouse-dashboard-bottom > section, .publishing-top, .publishing-control,
+      .publishing-workspace, .publishing-checklist, .platform-selection-library,
+      .platform-media-queue, .publish-simple-panel, .compliance-v2-workspace > aside,
+      .compliance-v2-workspace > main, .compliance-template-panel, .compliance-task-panel) {
+  color: var(--yd-text);
+  background: var(--yd-surface);
+  border-color: var(--yd-border);
+}
+
+:is(.catalog-manager, .catalog-panel, .warehouse-dashboard, .publishing-page, .compliance-page)
+  :is(p, small, dt, time) {
+  color: var(--yd-text-secondary);
+}
+
+.publishing-platform-tabs [role="tab"][aria-selected="true"],
+.ozon-publish-subnav [role="tab"][aria-selected="true"],
+.compliance-tabs [aria-current="page"] {
+  color: var(--yd-brand-contrast);
+  background: var(--yd-brand-soft);
+  border-color: var(--yd-brand);
+}
+
+.catalog-row-main[aria-pressed="true"] {
+  color: var(--yd-brand-contrast);
+}
+
+.compliance-alert.error { color: var(--yd-danger); background: var(--yd-danger-soft); }
+.compliance-alert.success { color: var(--yd-success); background: var(--yd-success-soft); }
+
+@media (max-width: 1180px) {
+  .catalog-manager { overflow: auto; }
+  .catalog-manager-columns { min-width: 880px; }
+  .publishing-page { overflow: auto; }
+  .publishing-layout { min-width: 920px; }
+  .compliance-page { overflow: auto; }
+}
