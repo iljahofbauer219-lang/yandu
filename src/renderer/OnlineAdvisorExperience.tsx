@@ -7,6 +7,10 @@ import {
   useRef,
   useState
 } from "react";
+
+const isMac =
+  typeof navigator !== "undefined" &&
+  /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
 import type {
   AdvisorApprovalDecision as ApprovalDecision,
   AdvisorApprovalPrompt as ApprovalPrompt,
@@ -209,6 +213,7 @@ export default function OnlineAdvisorExperience() {
   const [personalizationDraft, setPersonalizationDraft] =
     useState<PersonalizationSettings | null>(null);
   const [personalizationNotice, setPersonalizationNotice] = useState("");
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [messageEdit, setMessageEdit] = useState<MessageEditState | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [messageFeedback, setMessageFeedback] = useState<Record<string, "up" | "down">>(
@@ -289,6 +294,23 @@ export default function OnlineAdvisorExperience() {
   useEffect(() => {
     if (workspacePath) expandProject(projectIdForPath(workspacePath));
   }, [workspacePath]);
+
+  // 全局快捷键：Cmd+/ (Mac) / Ctrl+/ (Win) 打开快捷键面板
+  useEffect(() => {
+    function handleKeydown(event: KeyboardEvent) {
+      if (event.key === "/" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        setShortcutsOpen((open) => !open);
+      } else if (event.key === "k" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        draftRef.current?.focus();
+      } else if (event.key === "Escape" && shortcutsOpen) {
+        setShortcutsOpen(false);
+      }
+    }
+    window.addEventListener("keydown", handleKeydown);
+    return () => window.removeEventListener("keydown", handleKeydown);
+  }, [shortcutsOpen]);
 
   useEffect(() => {
     if (isBusy) {
@@ -2248,6 +2270,71 @@ export default function OnlineAdvisorExperience() {
               </div>
             </footer>
           </section>
+        </div>
+      )}
+      {shortcutsOpen && (
+        <div
+          className="shortcuts-backdrop"
+          role="presentation"
+          onClick={() => setShortcutsOpen(false)}
+        >
+          <div
+            className="shortcuts-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="快捷键面板"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header>
+              <h3>快捷键</h3>
+              <button
+                type="button"
+                aria-label="关闭"
+                onClick={() => setShortcutsOpen(false)}
+              >
+                ×
+              </button>
+            </header>
+            <ul>
+              <li>
+                <span className="shortcut-keys">
+                  <kbd>{isMac ? "⌘" : "Ctrl"}</kbd>
+                  <kbd>/</kbd>
+                </span>
+                <span>打开 / 关闭快捷键面板</span>
+              </li>
+              <li>
+                <span className="shortcut-keys">
+                  <kbd>{isMac ? "⌘" : "Ctrl"}</kbd>
+                  <kbd>Enter</kbd>
+                </span>
+                <span>发送消息</span>
+              </li>
+              <li>
+                <span className="shortcut-keys">
+                  <kbd>Shift</kbd>
+                  <kbd>Enter</kbd>
+                </span>
+                <span>换行</span>
+              </li>
+              <li>
+                <span className="shortcut-keys">
+                  <kbd>Esc</kbd>
+                </span>
+                <span>取消编辑 / 关闭弹窗</span>
+              </li>
+              <li>
+                <span className="shortcut-keys">
+                  <kbd>{isMac ? "⌘" : "Ctrl"}</kbd>
+                  <kbd>K</kbd>
+                </span>
+                <span>聚焦到 Composer</span>
+              </li>
+            </ul>
+            <footer>
+              <small>提示：发送中可输入补充指令并回车（steer 模式）。</small>
+            </footer>
+          </div>
         </div>
       )}
       {imagePreview && (

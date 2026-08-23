@@ -1949,6 +1949,127 @@ button:disabled {
   background: rgba(25, 31, 27, 0.72);
 }
 
+/* === 快捷键面板 (Cmd+/) === */
+.shortcuts-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(15, 20, 32, 0.42);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: ds-fade-in 0.15s ease-out;
+}
+
+.shortcuts-dialog {
+  width: min(420px, 92vw);
+  padding: 20px 22px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-bg);
+  box-shadow: var(--shadow-lg);
+  animation: ds-pop-in 0.18s ease-out;
+}
+
+.shortcuts-dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding: 0;
+  border: 0;
+}
+
+.shortcuts-dialog header h3 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+}
+
+.shortcuts-dialog header button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: var(--color-text-tertiary);
+  background: var(--color-surface);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.shortcuts-dialog header button:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface-2);
+}
+
+.shortcuts-dialog ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.shortcuts-dialog li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  color: var(--color-text-secondary);
+  font-size: var(--fs-sm);
+}
+
+.shortcuts-dialog .shortcut-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.shortcuts-dialog kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  font: 12px/1 var(--font-family, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-weight: 600;
+  box-shadow: 0 1px 0 var(--color-border);
+}
+
+.shortcuts-dialog footer {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.shortcuts-dialog footer small {
+  color: var(--color-text-tertiary);
+  font-size: var(--fs-xs);
+}
+
+@keyframes ds-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes ds-pop-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
 .image-preview-dialog {
   display: grid;
   width: min(900px, 92vw);
