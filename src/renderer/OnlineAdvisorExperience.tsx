@@ -216,19 +216,6 @@ export default function OnlineAdvisorExperience() {
   const [personalizationNotice, setPersonalizationNotice] = useState("");
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">(
-    () => {
-      try {
-        return (localStorage.getItem("advisor-theme:v1") as
-          | "light"
-          | "dark"
-          | "system"
-          | null) ?? "system";
-      } catch {
-        return "system";
-      }
-    }
-  );
   const [messageEdit, setMessageEdit] = useState<MessageEditState | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [messageFeedback, setMessageFeedback] = useState<Record<string, "up" | "down">>(
@@ -329,24 +316,6 @@ export default function OnlineAdvisorExperience() {
     window.addEventListener("keydown", handleKeydown);
     return () => window.removeEventListener("keydown", handleKeydown);
   }, [shortcutsOpen]);
-
-  // 主题：把 user 偏好写入 localStorage，再同步到 document.documentElement
-  useEffect(() => {
-    try {
-      localStorage.setItem("advisor-theme:v1", themeMode);
-    } catch {}
-    if (themeMode === "system") {
-      delete document.documentElement.dataset.theme;
-    } else {
-      document.documentElement.dataset.theme = themeMode;
-    }
-  }, [themeMode]);
-
-  function toggleTheme() {
-    setThemeMode((current) =>
-      current === "dark" ? "light" : current === "light" ? "system" : "dark"
-    );
-  }
 
   useEffect(() => {
     if (isBusy) {
@@ -767,52 +736,6 @@ export default function OnlineAdvisorExperience() {
     setPersonalizationDraft({ ...state.settings });
     setPersonalizationNotice("");
     setPersonalizationOpen(true);
-  }
-
-  /**
-   * 主动连接 harness gateway。
-   * - signed-out  :JWT 未配置,属用户态,使用中性提示而非错误横幅
-   * - unavailable :网关故障,显示错误详情供排查
-   * - harness     :连接成功,chip 状态由主进程推送
-   */
-  async function connectHarness() {
-    setConnection((current) => ({ ...current, label: "连接受限隔离执行器…", detail: "" }));
-    try {
-      await window.desktop.advisor.connect();
-      const status = await window.desktop.advisor.getConnectionStatus();
-      setConnection(status);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "连接失败";
-      if (message.startsWith("ADVISOR_SIGNED_OUT")) {
-        // JWT 未配置 / 已过期:用户态,不展示错误横幅,仅以中性 chip 提示
-        setConnection({
-          connected: false,
-          mode: "signed-out",
-          label: "受限隔离执行器未启用",
-          detail: message.replace(/^ADVISOR_SIGNED_OUT:\s*/, "") || "未配置 YANDU_USER_JWT"
-        });
-        return;
-      }
-      setConnection({
-        connected: false,
-        mode: "unavailable",
-        label: "受限隔离执行器不可用",
-        detail: message
-      });
-    }
-  }
-
-  /**
-   * 主动断开 harness gateway (保留本地 Codex app-server 路径)。
-   */
-  async function disconnectHarness() {
-    try {
-      await window.desktop.advisor.disconnect();
-    } catch {
-      // 断开失败不阻塞 UI 更新
-    }
-    const status = await window.desktop.advisor.getConnectionStatus();
-    setConnection(status);
   }
 
   async function savePersonalization() {
@@ -1261,143 +1184,53 @@ export default function OnlineAdvisorExperience() {
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <button
-            type="button"
-            className="sidebar-toggle"
-            aria-label={sidebarOpen ? "关闭侧栏" : "打开侧栏"}
-            aria-expanded={sidebarOpen}
-            onClick={() => setSidebarOpen((open) => !open)}
-          >
-            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-              <line x1="3.5" y1="6" x2="16.5" y2="6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              <line x1="3.5" y1="10" x2="16.5" y2="10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              <line x1="3.5" y1="14" x2="16.5" y2="14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-          </button>
-          <div className="brand-mark">DS</div>
-          <div>
-            <h1>DeepSeek Codex</h1>
-            <p>桌面智能开发助手</p>
-          </div>
-        </div>
-        <section className="workspace-bar">
-          <div className="workspace-copy">
-            <span>当前项目</span>
-            <strong title={workspacePath}>
-              {workspacePath || "尚未选择项目目录"}
-            </strong>
-          </div>
-          <button
-            className="secondary-button project-button"
-            onClick={chooseProject}
-            title={
-              workspacePath
-                ? `当前项目：${workspacePath}；点击更换项目`
-                : "选择项目目录"
-            }
-            aria-label={
-              workspacePath
-                ? `当前已选择项目 ${selectedProjectName}，点击更换项目`
-                : "选择项目"
-            }
-          >
-            {workspacePath ? `已选：${selectedProjectName}` : "选择项目"}
-          </button>
-        </section>
-        <div className={`connection connection-${connection.mode} ${connection.connected ? "online" : "offline"}`}>
-          <span className="status-dot" />
-          <div>
-            <strong>{connection.label}</strong>
-            <small>{connection.detail}</small>
-          </div>
-          {connection.mode === "harness" ? (
-            <button
-              type="button"
-              className="connection-action"
-              onClick={() => void disconnectHarness()}
-              title="断开受限隔离执行器,使用本地 Codex app-server"
-            >
-              断开
-            </button>
-          ) : connection.mode === "signed-out" ? (
-            // 未配置 JWT:该按钮需修改 .env 后重启才生效,
-            // 这里点击仅重新检查,可能依然处于 signed-out
-            <button
-              type="button"
-              className="connection-action"
-              onClick={() => void connectHarness()}
-              title="受限隔离执行器需在 .env 中配置 YANDU_USER_JWT 后重启应用,点击重试检查"
-            >
-              启用
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="connection-action"
-              onClick={() => void connectHarness()}
-              title="尝试连接受限隔离执行器"
-              disabled={connection.mode === "unknown"}
-            >
-              {connection.mode === "unknown" ? "检查中" : "连接"}
-            </button>
-          )}
-          <button
-            type="button"
-            className="theme-toggle"
-            aria-label={
-              themeMode === "dark"
-                ? "切换为浅色主题"
-                : themeMode === "light"
-                  ? "切换为跟随系统"
-                  : "切换为深色主题"
-            }
-            title={
-              themeMode === "dark"
-                ? "当前：深色，点击切浅色"
-                : themeMode === "light"
-                  ? "当前：浅色，点击切跟随系统"
-                  : "当前：跟随系统，点击切深色"
-            }
-            onClick={toggleTheme}
-          >
-            {themeMode === "dark" ? (
-              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                <path
-                  d="M16 11.5A5.5 5.5 0 0 1 8.5 4a5.5 5.5 0 1 0 7.5 7.5z"
-                  fill="currentColor"
-                />
-              </svg>
-            ) : themeMode === "light" ? (
-              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                <circle cx="10" cy="10" r="3.5" fill="currentColor" />
-                <g stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-                  <line x1="10" y1="1.5" x2="10" y2="3.5" />
-                  <line x1="10" y1="16.5" x2="10" y2="18.5" />
-                  <line x1="1.5" y1="10" x2="3.5" y2="10" />
-                  <line x1="16.5" y1="10" x2="18.5" y2="10" />
-                  <line x1="3.7" y1="3.7" x2="5.1" y2="5.1" />
-                  <line x1="14.9" y1="14.9" x2="16.3" y2="16.3" />
-                  <line x1="3.7" y1="16.3" x2="5.1" y2="14.9" />
-                  <line x1="14.9" y1="5.1" x2="16.3" y2="3.7" />
-                </g>
-              </svg>
-            ) : (
-              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                <path
-                  d="M10 2.5a7.5 7.5 0 1 0 7.45 8.55 5 5 0 0 1-7.4-7.4A7.5 7.5 0 0 0 10 2.5z"
-                  fill="currentColor"
-                  opacity="0.65"
-                />
-              </svg>
-            )}
-          </button>
-        </div>
-      </header>
-
       <section className="content">
         <aside className="sidebar" data-open={sidebarOpen}>
+          <div className="sidebar-header">
+            <button
+              type="button"
+              className="sidebar-toggle"
+              aria-label={sidebarOpen ? "关闭侧栏" : "打开侧栏"}
+              aria-expanded={sidebarOpen}
+              onClick={() => setSidebarOpen((open) => !open)}
+            >
+              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                <line x1="3.5" y1="6" x2="16.5" y2="6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                <line x1="3.5" y1="10" x2="16.5" y2="10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                <line x1="3.5" y1="14" x2="16.5" y2="14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="sidebar-project-button"
+              onClick={chooseProject}
+              title={
+                workspacePath
+                  ? `当前项目：${workspacePath}；点击更换项目`
+                  : "选择项目目录"
+              }
+              aria-label={
+                workspacePath
+                  ? `当前已选择项目 ${selectedProjectName}，点击更换项目`
+                  : "选择项目"
+              }
+            >
+              <span className="brand-mark" aria-hidden="true">DS</span>
+              <span className="sidebar-project-text">
+                <strong className="sidebar-project-name">
+                  {selectedProjectName || "DeepSeek Codex"}
+                </strong>
+                <small
+                  className="sidebar-project-path"
+                  title={workspacePath || "尚未选择项目"}
+                >
+                  {workspacePath
+                    ? workspacePath.split("/").slice(-2).join("/")
+                    : "选择项目目录"}
+                </small>
+              </span>
+            </button>
+          </div>
           <div className="sidebar-primary">
             <div className="sidebar-primary-actions">
               <button
@@ -2088,21 +1921,7 @@ export default function OnlineAdvisorExperience() {
             }}
             onDrop={handleDrop}
           >
-            {connection.mode === "unavailable" && !connection.connected && (
-              // 仅在故障态(unavailable)显示错误横幅;
-              // signed-out 是用户态,本地 Codex 仍可用,不展示错误。
-              <p className="composer-harness-notice" role="status">
-                受限隔离执行器不可用:当前将使用本地 Codex app-server
-                {connection.detail ? `（${connection.detail}）` : ""}。{" "}
-                <button
-                  type="button"
-                  className="link-button"
-                  onClick={() => void connectHarness()}
-                >
-                  重试连接
-                </button>
-              </p>
-            )}
+            {/* unavailable 模式完全静默：不显示错误横幅，受限隔离执行器状态仅在设置页可见 */}
             {approvals.length > 0 && (
               <section className="approval-panel">
                 <div className="approval-heading">
