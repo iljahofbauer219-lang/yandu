@@ -628,6 +628,40 @@ export default function OnlineAdvisorExperience() {
     setPersonalizationOpen(true);
   }
 
+  /**
+   * 主动连接 harness gateway。可用则 chip 进入 harness 模式,
+   * 不可用则 chip 保持 unavailable 并把错误显示给用户。
+   */
+  async function connectHarness() {
+    setConnection((current) => ({ ...current, label: "连接受限隔离执行器…", detail: "" }));
+    try {
+      await window.desktop.advisor.connect();
+      const status = await window.desktop.advisor.getConnectionStatus();
+      setConnection(status);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "连接失败";
+      setConnection({
+        connected: false,
+        mode: "unavailable",
+        label: "受限隔离执行器不可用",
+        detail: message
+      });
+    }
+  }
+
+  /**
+   * 主动断开 harness gateway (保留本地 Codex app-server 路径)。
+   */
+  async function disconnectHarness() {
+    try {
+      await window.desktop.advisor.disconnect();
+    } catch {
+      // 断开失败不阻塞 UI 更新
+    }
+    const status = await window.desktop.advisor.getConnectionStatus();
+    setConnection(status);
+  }
+
   async function savePersonalization() {
     if (!personalizationDraft) return;
     const state = await window.desktop.advisor.savePersonalization(
@@ -1027,12 +1061,32 @@ export default function OnlineAdvisorExperience() {
             {workspacePath ? `已选：${selectedProjectName}` : "选择项目"}
           </button>
         </section>
-        <div className={`connection ${connection.connected ? "online" : "offline"}`}>
+        <div className={`connection connection-${connection.mode} ${connection.connected ? "online" : "offline"}`}>
           <span className="status-dot" />
           <div>
             <strong>{connection.label}</strong>
             <small>{connection.detail}</small>
           </div>
+          {connection.mode === "harness" ? (
+            <button
+              type="button"
+              className="connection-action"
+              onClick={() => void disconnectHarness()}
+              title="断开受限隔离执行器,使用本地 Codex app-server"
+            >
+              断开
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="connection-action"
+              onClick={() => void connectHarness()}
+              title="尝试连接受限隔离执行器"
+              disabled={connection.mode === "unknown"}
+            >
+              {connection.mode === "unknown" ? "检查中" : "连接"}
+            </button>
+          )}
         </div>
       </header>
 
@@ -1504,6 +1558,19 @@ export default function OnlineAdvisorExperience() {
             }}
             onDrop={handleDrop}
           >
+            {connection.mode === "unavailable" && !connection.connected && (
+              <p className="composer-harness-notice" role="status">
+                受限隔离执行器不可用:当前将使用本地 Codex app-server
+                {connection.detail ? `（${connection.detail}）` : ""}。{" "}
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => void connectHarness()}
+                >
+                  重试连接
+                </button>
+              </p>
+            )}
             {approvals.length > 0 && (
               <section className="approval-panel">
                 <div className="approval-heading">

@@ -148,6 +148,61 @@ button:disabled {
   box-shadow: 0 0 0 4px rgba(78, 141, 90, 0.14);
 }
 
+.connection-action {
+  appearance: none;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.72);
+  color: #2f3530;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.connection-action:hover:not(:disabled) {
+  background: rgba(78, 141, 90, 0.16);
+  color: #2f5d36;
+}
+
+.connection-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.connection-harness .connection-action {
+  border-color: rgba(78, 141, 90, 0.36);
+  background: rgba(78, 141, 90, 0.16);
+  color: #2f5d36;
+}
+
+.connection-app-server .connection-action {
+  border-color: rgba(60, 92, 138, 0.36);
+  background: rgba(60, 92, 138, 0.14);
+  color: #2c4a72;
+}
+
+.composer-harness-notice {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(214, 158, 46, 0.12);
+  color: #6f4e0e;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.composer-harness-notice .link-button {
+  appearance: none;
+  border: none;
+  background: none;
+  color: #2c4a72;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 0 0 4px;
+  text-decoration: underline;
+}
+
 .offline .status-dot {
   background: #b05a4b;
   box-shadow: 0 0 0 4px rgba(176, 90, 75, 0.13);
