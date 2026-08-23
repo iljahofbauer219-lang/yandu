@@ -1239,6 +1239,66 @@ button:disabled {
   height: 14px;
 }
 
+.message-recovery {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--fs-sm);
+}
+
+.message-recovery-error {
+  border-color: rgba(245, 74, 69, 0.35);
+  background: rgba(245, 74, 69, 0.06);
+  color: var(--color-text-primary);
+}
+
+.message-recovery-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-radius: 50%;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-2);
+  font-size: 12px;
+}
+
+.message-recovery-error .message-recovery-icon {
+  color: #fff;
+  background: var(--color-error, #f54a45);
+}
+
+.message-recovery-action {
+  margin-left: auto;
+  padding: 4px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.message-recovery-action:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: rgba(22, 93, 255, 0.06);
+}
+
+.message-recovery-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .message-feedback button:hover {
   border-color: var(--color-accent);
   color: var(--color-accent);

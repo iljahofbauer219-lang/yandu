@@ -1767,8 +1767,34 @@ export default function OnlineAdvisorExperience() {
                   )}
                     </>
                   )}
-                  {message.state === "stopped" && <small>任务已停止</small>}
-                  {message.state === "error" && <small>请求失败</small>}
+                  {message.state === "stopped" && (
+                    <div className="message-recovery" role="status">
+                      <span className="message-recovery-icon" aria-hidden="true">⏸</span>
+                      <span>任务已停止，你可以点重试继续生成。</span>
+                      <button
+                        type="button"
+                        className="message-recovery-action"
+                        onClick={() => rerunMessage(message)}
+                        disabled={isBusy}
+                      >
+                        继续生成
+                      </button>
+                    </div>
+                  )}
+                  {message.state === "error" && (
+                    <div className="message-recovery message-recovery-error" role="alert">
+                      <span className="message-recovery-icon" aria-hidden="true">⚠</span>
+                      <span>生成失败：{message.text || "未知错误"}</span>
+                      <button
+                        type="button"
+                        className="message-recovery-action"
+                        onClick={() => rerunMessage(message)}
+                        disabled={isBusy}
+                      >
+                        重试
+                      </button>
+                    </div>
+                  )}
                   {message.role === "assistant" &&
                     !messageEdit &&
                     message.state !== "streaming" &&
