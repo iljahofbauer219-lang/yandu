@@ -115,6 +115,12 @@ export type AdvisorChatEvent =
   | { requestId: string; type: 'approvalResolved'; approvalId: string; decision: AdvisorApprovalDecision }
   | { requestId: string; type: 'done' | 'stopped' }
   | { requestId: string; type: 'error'; message: string }
+  /**
+   * 原对话上下文已丢失（Codex app-server 重启/被清理后 thread/resume 失败）。
+   * 业务层已自动回退到 thread/start 创建新线程，UI 收到该事件后应展示一次性提示。
+   * reason 包含原始错误信息，供调试。
+   */
+  | { requestId: string; type: 'threadReset'; reason: string }
 
 export interface AdvisorStoredTaskEvent {
   at: string
@@ -150,14 +156,28 @@ export interface AdvisorStoredTask {
   events: AdvisorStoredTaskEvent[]
 }
 
-export type AdvisorConnectionMode = 'app-server' | 'harness' | 'unavailable' | 'unknown'
+/**
+ * Advisor 连接模式。
+ * - app-server : Codex app-server 模式 (默认，stdio RPC)
+ * - harness    : harness gateway 已就绪，可选执行器
+ * - signed-out : 当前未配置 YANDU_USER_JWT,受限隔离执行器未启用(非故障状态)
+ * - unavailable: harness gateway 探测失败(故障状态)
+ * - unknown    : 未尝试连接
+ */
+export type AdvisorConnectionMode =
+  | 'app-server'
+  | 'harness'
+  | 'signed-out'
+  | 'unavailable'
+  | 'unknown'
 
 /**
  * Advisor 连接状态。供 UI 顶栏 chip 与 composer 启用判断。
- * - app-server: Codex app-server 模式 (默认，stdio RPC)
- * - harness: harness gateway 已就绪，可选执行器
- * - unavailable: harness gateway 不可用
- * - unknown: 未尝试连接
+ * - app-server : Codex app-server 模式 (默认，stdio RPC)
+ * - harness    : harness gateway 已就绪，可选执行器
+ * - signed-out : 受限隔离执行器未启用(用户未配置 JWT);业务流降级到本地 Codex,不展示错误横幅
+ * - unavailable: harness gateway 不可用(网关或网络故障);业务流降级到本地 Codex
+ * - unknown    : 未尝试连接
  */
 export interface AdvisorConnectionStatus {
   connected: boolean

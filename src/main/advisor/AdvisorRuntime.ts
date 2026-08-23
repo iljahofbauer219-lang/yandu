@@ -40,6 +40,7 @@ import {
   renameStoredTask,
   selectStoredBranch,
   setStoredThreadId,
+  clearStoredThreadId,
   updateStoredTaskStatus,
   updateStoredUsage
 } from "./SessionStore";
@@ -133,7 +134,12 @@ type ChatEvent =
       decision: ApprovalDecision;
     }
   | { requestId: string; type: "done" | "stopped" }
-  | { requestId: string; type: "error"; message: string };
+  | { requestId: string; type: "error"; message: string }
+  /**
+   * 原 thread 上下文已丢失（Codex app-server 找不到 rollout），业务层已自动回退到
+   * thread/start。reason 包含原始错误信息，供调试。UI 收到后展示一次性提示。
+   */
+  | { requestId: string; type: "threadReset"; reason: string };
 
 type ApprovalDecision = "accept" | "decline" | "acceptForSession";
 
@@ -182,6 +188,7 @@ const pendingApprovals = new Map<string, PendingApproval>();
  * harness 网关客户端：当前阶段仅作为在线参谋执行器健康探针。
  * Codex 业务流仍走 AppServerClient (stdio RPC)。
  * - 连接成功：mode = 'harness'，供 UI 顶栏 chip 展示
+ * - 未配置 JWT：mode = 'signed-out'，属用户态而非故障，不展示错误横幅
  * - 连接失败/断开：mode = 'unavailable'，UI 可选择禁用 composer
  * - 未尝试：mode = 'unknown'
  *
@@ -198,6 +205,16 @@ const harnessClient = new HarnessGatewayClient({
   }
 });
 
+/**
+ * 当前是否已为受限隔离执行器配置访问令牌。
+ * - true  : YANDU_USER_JWT 已设置，可尝试连接 harness
+ * - false : 未设置 JWT,连接必然以 ADVISOR_UNAUTHORIZED 失败;
+ *           上层应返回 signed-out 状态(用户态),而不是 unavailable(故障态)
+ */
+function isHarnessSignedIn(): boolean {
+  return Boolean(process.env.YANDU_USER_JWT);
+}
+
 let harnessLastSession: AdvisorRemoteSession | null = null;
 const harnessListeners = new Set<(state: AdvisorConnectionStatus) => void>();
 
@@ -205,15 +222,30 @@ const harnessListeners = new Set<(state: AdvisorConnectionStatus) => void>();
  * 把当前状态推送给所有 UI 订阅者，同时确保 lastSession 与 mode 字段一致。
  * - 'harness'         : harness 通话已建立，业务流可选用 worker (本阶段仅探针)
  * - 'app-server'      : Codex app-server 直连模式 (stdio RPC)
- * - 'unavailable'     : harness 网关探测失败
+ * - 'signed-out'      : 未配置 YANDU_USER_JWT,受限隔离执行器未启用(用户态,非故障)
+ * - 'unavailable'     : harness 网关探测失败(故障态)
  * - 'unknown'         : 启动后尚未探测
  */
 function buildHarnessState(overrides: Partial<AdvisorConnectionStatus> = {}): AdvisorConnectionStatus {
+  const hasSession = Boolean(harnessLastSession);
+  const signedIn = isHarnessSignedIn();
   const base: AdvisorConnectionStatus = {
-    connected: Boolean(harnessLastSession),
-    mode: harnessLastSession ? "harness" : "unavailable",
-    label: harnessLastSession ? "受限隔离执行器已就绪" : "本地执行器",
-    detail: harnessLastSession ? harnessLastSession.message : "Codex app-server · 本机模型代理"
+    connected: hasSession,
+    mode: hasSession
+      ? "harness"
+      : signedIn
+        ? "unavailable"
+        : "signed-out",
+    label: hasSession
+      ? "受限隔离执行器已就绪"
+      : signedIn
+        ? "受限隔离执行器不可用"
+        : "受限隔离执行器未启用",
+    detail: hasSession
+      ? harnessLastSession!.message
+      : signedIn
+        ? "Codex app-server · 本机模型代理"
+        : "未配置 YANDU_USER_JWT · 业务流使用本地 Codex app-server"
   };
   return { ...base, ...overrides };
 }
@@ -825,31 +857,63 @@ async function runCodexTurn(sender: Electron.WebContents, request: ChatRequest) 
       "You are 在线参谋, a model-neutral agent focused on cross-border e-commerce consultation and execution. Answer questions directly, research when current evidence is needed, analyze user attachments, and use structured tools when the user asks you to inspect or change local files, run commands, or produce artifacts. Distinguish verified facts from inference, never invent market data, prices, policies, product facts, or tool results. Continue after tool results, including failures and declined approvals, until the task is verified or a concrete blocker is found. Use the apply_patch file-change tool for auditable source edits and respect every approval decision.",
       personalizationInstructions(personalization)
     ].join("\n\n");
-    const threadResponse =
-      preparedThreadResponse ??
-      ((await appServer.request(
-        executionThreadId ? "thread/resume" : "thread/start",
-        executionThreadId
-          ? {
-              threadId: executionThreadId,
-              model: request.model,
-              modelProvider: modelProfile.providerId,
-              cwd: request.workspacePath,
-              approvalPolicy: approvalPolicyFor(request.permissionMode),
-              sandbox: sandboxFor(request.permissionMode),
-              developerInstructions
-            }
-          : {
-              model: request.model,
-              modelProvider: modelProfile.providerId,
-              cwd: request.workspacePath,
-              runtimeWorkspaceRoots: [request.workspacePath],
-              approvalPolicy: approvalPolicyFor(request.permissionMode),
-              sandbox: sandboxFor(request.permissionMode),
-              ephemeral: false,
-              developerInstructions
-            }
-      )) as Record<string, unknown>);
+    // thread/resume 失败回退：当 stored codexThreadId 指向的线程在 Codex app-server
+    // 端已找不到 rollout（进程重启/被清理）时，自动用 thread/start 创建新线程，
+    // 并向 UI 发送 threadReset 事件以提示上下文已断开。历史消息仍可读。
+    let threadResponse: Record<string, unknown> | null = preparedThreadResponse;
+    if (!threadResponse) {
+      try {
+        threadResponse = (await appServer.request(
+          executionThreadId ? "thread/resume" : "thread/start",
+          executionThreadId
+            ? {
+                threadId: executionThreadId,
+                model: request.model,
+                modelProvider: modelProfile.providerId,
+                cwd: request.workspacePath,
+                approvalPolicy: approvalPolicyFor(request.permissionMode),
+                sandbox: sandboxFor(request.permissionMode),
+                developerInstructions
+              }
+            : {
+                model: request.model,
+                modelProvider: modelProfile.providerId,
+                cwd: request.workspacePath,
+                runtimeWorkspaceRoots: [request.workspacePath],
+                approvalPolicy: approvalPolicyFor(request.permissionMode),
+                sandbox: sandboxFor(request.permissionMode),
+                ephemeral: false,
+                developerInstructions
+              }
+        )) as Record<string, unknown>;
+      } catch (resumeError) {
+        if (!executionThreadId) throw resumeError;
+        // 只在“原 thread 存在但 Codex 端丢失”时才回退。其它错误（如 workspace 权限）继续报错。
+        const reason =
+          resumeError instanceof Error ? resumeError.message : String(resumeError);
+        console.warn(
+          `[advisor] thread/resume 失败，自动回退到 thread/start：${reason}`
+        );
+        await clearStoredThreadId(taskId);
+        executionThreadId = undefined;
+        threadResponse = (await appServer.request("thread/start", {
+          model: request.model,
+          modelProvider: modelProfile.providerId,
+          cwd: request.workspacePath,
+          runtimeWorkspaceRoots: [request.workspacePath],
+          approvalPolicy: approvalPolicyFor(request.permissionMode),
+          sandbox: sandboxFor(request.permissionMode),
+          ephemeral: false,
+          developerInstructions
+        })) as Record<string, unknown>;
+        // 通知 UI 上下文已断开（仅在“真正回退”时发）
+        emitChatEvent(sender, {
+          requestId: request.requestId,
+          type: "threadReset",
+          reason
+        });
+      }
+    }
 
     if (!isRecord(threadResponse.thread) || typeof threadResponse.thread.id !== "string") {
       throw new Error("Codex 未返回有效对话线程。");
@@ -1227,6 +1291,15 @@ app.whenReady().then(() => {
   );
 
   ipcMain.handle("advisor:connection:status", async () => {
+    // 未配置 JWT 时直接返回 signed-out 状态,避免后面启动 app-server 时附带误导错误。
+    if (!harnessLastSession && !isHarnessSignedIn()) {
+      return {
+        connected: false,
+        mode: "signed-out" as AdvisorConnectionMode,
+        label: "受限隔离执行器未启用",
+        detail: "未配置 YANDU_USER_JWT · 业务流使用本地 Codex app-server"
+      };
+    }
     const mode: AdvisorConnectionMode = harnessLastSession
       ? "harness"
       : "unavailable";
@@ -1255,10 +1328,15 @@ app.whenReady().then(() => {
 
   /**
    * 主动建立 harness 网关会话。
-   * - 成功：emit harness 状态,返回会话
-   * - 失败：emit unavailable,抛出 ADVISOR_HARNESS_UNAVAILABLE 错误供渲染层降级
+   * - 未配置 JWT :emit signed-out 状态,抛出 ADVISOR_SIGNED_OUT 供渲染层降级
+   * - 连接失败   :emit unavailable 状态,抛出 ADVISOR_HARNESS_UNAVAILABLE 供渲染层降级
    */
   ipcMain.handle("advisor:connect", async () => {
+    if (!isHarnessSignedIn()) {
+      const state = buildHarnessState({ connected: false });
+      emitHarnessState(state);
+      throw new Error("ADVISOR_SIGNED_OUT: 受限隔离执行器未启用,请先在 .env 中配置 YANDU_USER_JWT");
+    }
     try {
       const session = await harnessClient.connect();
       harnessLastSession = session;
@@ -1268,6 +1346,12 @@ app.whenReady().then(() => {
     } catch (error) {
       harnessLastSession = null;
       const message = error instanceof Error ? error.message : String(error);
+      // 底层 getAccessToken 抛出 ADVISOR_UNAUTHORIZED 同样表示“未配置或已过期”,
+      // 这里将其转成 ADVISOR_SIGNED_OUT 以供 UI 与 getConnectionStatus 保持一致。
+      if (message.startsWith("ADVISOR_UNAUTHORIZED")) {
+        emitHarnessState(buildHarnessState({ connected: false }));
+        throw new Error(`ADVISOR_SIGNED_OUT: ${message.replace(/^ADVISOR_UNAUTHORIZED:\s*/, "")}`);
+      }
       emitHarnessState(buildHarnessState({ connected: false }));
       throw new Error(`ADVISOR_HARNESS_UNAVAILABLE: ${message}`);
     }

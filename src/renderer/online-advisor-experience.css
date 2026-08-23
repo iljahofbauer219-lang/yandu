@@ -223,6 +223,22 @@ button:disabled {
 }
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* === 侧栏切换按钮 (常驻显示,用于折叠侧栏) === */
 .sidebar-toggle {
   display: grid;
@@ -248,6 +264,23 @@ button:disabled {
   width: 18px;
   height: 18px;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 .sidebar {
@@ -796,8 +829,58 @@ button:disabled {
   min-width: 0;
   min-height: 0;
   margin: 0 auto;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   padding: 0 var(--space-6) var(--space-5);
+}
+
+/**
+ * thread-reset-notice：Codex app-server 找不到历史 thread，后端自动用
+ * thread/start 重建后展示的一次性软提示。不出现时 grid 第一行 auto = 0 高，
+ * 不影响现有 chat-heading/message-list/composer 三行布局。
+ */
+.thread-reset-notice {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border: 1px solid rgba(177, 116, 53, 0.22);
+  border-radius: 10px;
+  color: #6e4f1a;
+  background: rgba(247, 237, 220, 0.72);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  animation: thread-reset-notice-fade 0.2s ease;
+}
+
+.thread-reset-notice-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: #ffffff;
+  background: rgba(177, 116, 53, 0.85);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@keyframes thread-reset-notice-fade {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+:host([data-theme="dark"]) .thread-reset-notice {
+  border-color: rgba(214, 165, 95, 0.28);
+  color: #f4d998;
+  background: rgba(60, 41, 14, 0.5);
+}
+
+:host([data-theme="dark"]) .thread-reset-notice-icon {
+  background: rgba(214, 165, 95, 0.85);
 }
 
 .chat-heading {

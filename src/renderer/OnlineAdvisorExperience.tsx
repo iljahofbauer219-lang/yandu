@@ -208,6 +208,9 @@ export default function OnlineAdvisorExperience() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [exportNotice, setExportNotice] = useState("");
+  // 原 Codex thread 上下文在 app-server 端已丢失（重启/被清理），后端自动用
+  // thread/start 重建新线程。这里只展示一次性软提示，不阻断任务执行。
+  const [threadResetNotice, setThreadResetNotice] = useState("");
   const [personalizationOpen, setPersonalizationOpen] = useState(false);
   const [personalization, setPersonalization] =
     useState<PersonalizationState | null>(null);
@@ -436,6 +439,14 @@ export default function OnlineAdvisorExperience() {
           }
           if (event.type === "error") {
             return { ...message, state: "error", text: event.message };
+          }
+          if (event.type === "threadReset") {
+            // 仅展示一次性软提示，不改变消息状态。8 秒后自动清除。
+            setThreadResetNotice(
+              "Codex 上下文已重置：后端找不到历史 thread，已在新线程上继续（历史消息仍可读）。"
+            );
+            window.setTimeout(() => setThreadResetNotice(""), 8000);
+            return message;
           }
           if (
             event.type === "approval" ||
@@ -1463,6 +1474,14 @@ export default function OnlineAdvisorExperience() {
         </aside>
 
         <section className="chat-panel">
+          {threadResetNotice && (
+            <div className="thread-reset-notice" role="status">
+              <span className="thread-reset-notice-icon" aria-hidden="true">
+                ↻
+              </span>
+              <span>{threadResetNotice}</span>
+            </div>
+          )}
           <div className="chat-heading">
             <div>
               <span className="eyebrow">

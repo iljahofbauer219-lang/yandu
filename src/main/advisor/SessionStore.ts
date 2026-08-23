@@ -121,6 +121,22 @@ export async function setStoredThreadId(taskId: string, threadId: string) {
   });
 }
 
+/**
+ * 清除 task 上的 codexThreadId 及当前活跃分支的 threadId。
+ * 场景：Codex app-server 重启/被清理后，thread/resume 失败，需要在干净状态下重新 thread/start。
+ * 历史消息仍保留在 events 中，但后续对话将从新线程开始（上下文已断开）。
+ */
+export async function clearStoredThreadId(taskId: string) {
+  await mutateTask(taskId, (task) => {
+    task.codexThreadId = undefined;
+    const branchId = task.activeBranchId ?? "main";
+    const branches = ensureBranches(task);
+    const branch = branches.find((item) => item.id === branchId);
+    if (branch) branch.threadId = undefined;
+    task.updatedAt = new Date().toISOString();
+  });
+}
+
 export async function createStoredBranch(
   taskId: string,
   input: {
