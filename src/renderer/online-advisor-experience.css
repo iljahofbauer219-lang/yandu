@@ -286,6 +286,35 @@ button:disabled {
   height: 16px;
 }
 
+/* === 侧栏切换按钮 (仅小屏) === */
+.sidebar-toggle {
+  display: none;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.sidebar-toggle:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.sidebar-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+@container (max-width: 480px) {
+  .sidebar-toggle { display: grid; }
+}
+
 .connection-harness .connection-action {
   border-color: rgba(78, 141, 90, 0.36);
   background: rgba(78, 141, 90, 0.16);
@@ -3312,6 +3341,53 @@ a.message-sources-link:hover .message-sources-link-title {
   .content { grid-template-columns: 138px minmax(0, 1fr); }
   .sidebar { padding: 10px 7px; }
   .composer-model-button, .composer-permission-button { max-width: 125px; }
+}
+
+@container (max-width: 480px) {
+  .app-shell { grid-template-rows: 52px minmax(0, 1fr); }
+  .topbar { grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; padding: 0 10px; }
+  .brand-mark { width: 28px; height: 28px; font-size: 10px; }
+
+  /* 侧栏收起为可隐藏的抽屉，640~480 之间还能看到 chat 主体 */
+  .content { grid-template-columns: 0 minmax(0, 1fr); }
+  .sidebar {
+    position: absolute;
+    inset: 52px 0 0 0;
+    z-index: 12;
+    width: min(78%, 280px);
+    border-right: 1px solid var(--color-border);
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+  .sidebar[data-open="true"] { transform: translateX(0); }
+
+  .chat-panel { padding: 0 10px 12px; }
+  .message { max-width: 95%; }
+  .message.assistant { max-width: 95%; }
+
+  /* 顶栏隐藏次要元素，保留主题 + 主功能 */
+  .workspace-bar { gap: 6px; }
+  .composer { padding: 10px 10px; border-radius: 16px; }
+  .composer-model-button, .composer-permission-button { max-width: 100px; }
+  .image-button { padding: 5px 6px; }
+
+  /* message-scroll-to-latest 缩小，避免遮挡 */
+  .message-scroll-to-latest { width: 36px; height: 36px; right: 14px; bottom: 14px; }
+  .message-scroll-to-latest svg { width: 16px; height: 16px; }
+
+  /* message-feedback 在小屏常驻可见，避免 hover-only 失效 */
+  .message.assistant .message-feedback { opacity: 1; }
+  .message.assistant .message-actions { opacity: 1; }
+
+  /* 快捷键面板全屏 */
+  .shortcuts-dialog { width: min(360px, 92vw); padding: 16px 18px; }
+}
+
+@container (max-width: 380px) {
+  .topbar .connection-action { display: none; }
+  .chat-heading h2 { font-size: var(--fs-base); }
+  .message { padding: 10px 12px; }
 }
 
 /* Phase 4 consistency bridge for the advisor's isolated shadow DOM. */

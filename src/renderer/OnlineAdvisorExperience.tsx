@@ -215,6 +215,7 @@ export default function OnlineAdvisorExperience() {
     useState<PersonalizationSettings | null>(null);
   const [personalizationNotice, setPersonalizationNotice] = useState("");
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">(
     () => {
       try {
@@ -1262,6 +1263,19 @@ export default function OnlineAdvisorExperience() {
     <main className="app-shell">
       <header className="topbar">
         <div className="brand">
+          <button
+            type="button"
+            className="sidebar-toggle"
+            aria-label={sidebarOpen ? "关闭侧栏" : "打开侧栏"}
+            aria-expanded={sidebarOpen}
+            onClick={() => setSidebarOpen((open) => !open)}
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+              <line x1="3.5" y1="6" x2="16.5" y2="6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              <line x1="3.5" y1="10" x2="16.5" y2="10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              <line x1="3.5" y1="14" x2="16.5" y2="14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
           <div className="brand-mark">DS</div>
           <div>
             <h1>DeepSeek Codex</h1>
@@ -1383,7 +1397,7 @@ export default function OnlineAdvisorExperience() {
       </header>
 
       <section className="content">
-        <aside className="sidebar">
+        <aside className="sidebar" data-open={sidebarOpen}>
           <div className="sidebar-primary">
             <div className="sidebar-primary-actions">
               <button
