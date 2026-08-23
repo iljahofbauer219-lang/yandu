@@ -18,15 +18,6 @@ files:
   - "!**/*.map"
   - "!node_modules/.bin"
 
-# Harness 在主进程中以 Electron 的 Node 模式运行，不能放入 asar；保留官方
-# 源码、锁定依赖与 Web 构建结果，以支持已安装桌面应用的离线本机启动。
-extraResources:
-  - from: vendor/deepseek-harness
-    to: deepseek-harness
-    filter:
-      - "**/*"
-      - "!**/.git/**"
-
 afterPack: tools/fix-packaged-python-links.cjs
 
 # 本机 dev/构建产物目录不需要进包
