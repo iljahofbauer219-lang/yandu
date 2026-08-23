@@ -1299,6 +1299,113 @@ button:disabled {
   opacity: 0.5;
 }
 
+/* === 参考来源卡片 === */
+.message-sources {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+
+.message-sources header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 0;
+  border: 0;
+}
+
+.message-sources-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.message-sources-title svg {
+  width: 14px;
+  height: 14px;
+  color: var(--color-accent);
+}
+
+.message-sources-count {
+  color: var(--color-text-tertiary);
+  font-size: var(--fs-xs);
+}
+
+.message-sources ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.message-sources li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.message-sources-index {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  border-radius: 4px;
+  color: #fff;
+  background: var(--color-accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.message-sources-link {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  flex: 1;
+  color: inherit;
+  text-decoration: none;
+}
+
+a.message-sources-link:hover .message-sources-link-title {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.message-sources-link-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.message-sources-link-snippet {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+
+.message-sources-link-host {
+  color: var(--color-text-tertiary);
+  font-size: var(--fs-xs);
+}
+
 .message-feedback button:hover {
   border-color: var(--color-accent);
   color: var(--color-accent);

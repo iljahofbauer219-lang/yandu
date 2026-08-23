@@ -40,6 +40,7 @@ type Message = {
   text: string;
   state?: "streaming" | "stopped" | "error";
   taskStatus?: MessageTaskStatus;
+  sources?: Array<{ title: string; url?: string; snippet?: string }>;
   activities?: Array<{
     kind:
       | "plan"
@@ -942,6 +943,43 @@ export default function OnlineAdvisorExperience() {
   }
 
   /**
+   * 从 AI 回答中解析 “参考来源 / Sources / References” 段。
+   * 识别 ## 标题后紧跟的列表项，支持 `- [text](url) - snippet` 与 `- text: url` 两种格式。
+   * 解析结果不修改原文本，只用于底部 sources 卡片展示。
+   */
+  function parseSources(
+    text: string
+  ): Array<{ title: string; url?: string; snippet?: string }> {
+    if (!text) return [];
+    const headers = /(?:^|\n)#{1,3}\s*(?:参考来源|参考|参考资料|来源|参考链接|Sources|References|Citations?|Bibliography)\s*\n/i;
+    const match = text.match(headers);
+    if (!match) return [];
+    const rest = text.slice(match.index! + match[0].length);
+    const lines = rest.split("\n");
+    const sources: Array<{ title: string; url?: string; snippet?: string }> = [];
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line) continue;
+      if (/^#{1,3}\s/.test(line)) break;
+      const item = line.replace(/^[-*+\d.\)]\s+/, "");
+      const mdLink = item.match(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)(?:\s*[—–\-:]\s*(.*))?/);
+      if (mdLink) {
+        sources.push({ title: mdLink[1], url: mdLink[2], snippet: mdLink[3] });
+        continue;
+      }
+      const plainLink = item.match(/^(.{2,80}?)[—–\-:]?\s*(https?:\/\/\S+)$/);
+      if (plainLink) {
+        sources.push({ title: plainLink[1].trim(), url: plainLink[2] });
+        continue;
+      }
+      if (item.length > 2 && sources.length < 12) {
+        sources.push({ title: item });
+      }
+    }
+    return sources;
+  }
+
+  /**
    * 对一条 assistant 消息打正/负反馈,写本地存储供后续上报。
    * 再次点同一项取消,点另一项切换。任务在流式状态不接受反馈。
    */
@@ -1795,6 +1833,76 @@ export default function OnlineAdvisorExperience() {
                       </button>
                     </div>
                   )}
+                  {message.role === "assistant" &&
+                    !messageEdit &&
+                    message.state !== "streaming" &&
+                    (() => {
+                      const sources = parseSources(message.text || "");
+                      if (sources.length === 0) return null;
+                      return (
+                        <div className="message-sources" role="list">
+                          <header>
+                            <span className="message-sources-title">
+                              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                                <path
+                                  d="M9 4.5H5a1.5 1.5 0 0 0-1.5 1.5v8A1.5 1.5 0 0 0 5 15.5h10a1.5 1.5 0 0 0 1.5-1.5V11M11 4.5h5m0 0v5m0-5L9.5 11"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.6"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                              参考来源
+                            </span>
+                            <span className="message-sources-count">
+                              {sources.length} 条
+                            </span>
+                          </header>
+                          <ol>
+                            {sources.map((source, index) => (
+                              <li key={`${index}-${source.url ?? source.title}`} role="listitem">
+                                <span className="message-sources-index">
+                                  {index + 1}
+                                </span>
+                                {source.url ? (
+                                  <a
+                                    href={source.url}
+                                    target="_blank"
+                                    rel="noreferrer noopener"
+                                    className="message-sources-link"
+                                  >
+                                    <span className="message-sources-link-title">
+                                      {source.title}
+                                    </span>
+                                    {source.snippet && (
+                                      <span className="message-sources-link-snippet">
+                                        {source.snippet}
+                                      </span>
+                                    )}
+                                    <span className="message-sources-link-host">
+                                      {(() => {
+                                        try {
+                                          return new URL(source.url).hostname;
+                                        } catch {
+                                          return source.url;
+                                        }
+                                      })()}
+                                    </span>
+                                  </a>
+                                ) : (
+                                  <span className="message-sources-link">
+                                    <span className="message-sources-link-title">
+                                      {source.title}
+                                    </span>
+                                  </span>
+                                )}
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      );
+                    })()}
                   {message.role === "assistant" &&
                     !messageEdit &&
                     message.state !== "streaming" &&
