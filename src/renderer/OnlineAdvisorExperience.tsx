@@ -214,6 +214,19 @@ export default function OnlineAdvisorExperience() {
     useState<PersonalizationSettings | null>(null);
   const [personalizationNotice, setPersonalizationNotice] = useState("");
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">(
+    () => {
+      try {
+        return (localStorage.getItem("advisor-theme:v1") as
+          | "light"
+          | "dark"
+          | "system"
+          | null) ?? "system";
+      } catch {
+        return "system";
+      }
+    }
+  );
   const [messageEdit, setMessageEdit] = useState<MessageEditState | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [messageFeedback, setMessageFeedback] = useState<Record<string, "up" | "down">>(
@@ -304,13 +317,34 @@ export default function OnlineAdvisorExperience() {
       } else if (event.key === "k" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         draftRef.current?.focus();
-      } else if (event.key === "Escape" && shortcutsOpen) {
+      } else if (
+        event.key === "Escape" &&
+        shortcutsOpen
+      ) {
         setShortcutsOpen(false);
       }
     }
     window.addEventListener("keydown", handleKeydown);
     return () => window.removeEventListener("keydown", handleKeydown);
   }, [shortcutsOpen]);
+
+  // 主题：把 user 偏好写入 localStorage，再同步到 document.documentElement
+  useEffect(() => {
+    try {
+      localStorage.setItem("advisor-theme:v1", themeMode);
+    } catch {}
+    if (themeMode === "system") {
+      delete document.documentElement.dataset.theme;
+    } else {
+      document.documentElement.dataset.theme = themeMode;
+    }
+  }, [themeMode]);
+
+  function toggleTheme() {
+    setThemeMode((current) =>
+      current === "dark" ? "light" : current === "light" ? "system" : "dark"
+    );
+  }
 
   useEffect(() => {
     if (isBusy) {
@@ -1257,6 +1291,56 @@ export default function OnlineAdvisorExperience() {
               {connection.mode === "unknown" ? "检查中" : "连接"}
             </button>
           )}
+          <button
+            type="button"
+            className="theme-toggle"
+            aria-label={
+              themeMode === "dark"
+                ? "切换为浅色主题"
+                : themeMode === "light"
+                  ? "切换为跟随系统"
+                  : "切换为深色主题"
+            }
+            title={
+              themeMode === "dark"
+                ? "当前：深色，点击切浅色"
+                : themeMode === "light"
+                  ? "当前：浅色，点击切跟随系统"
+                  : "当前：跟随系统，点击切深色"
+            }
+            onClick={toggleTheme}
+          >
+            {themeMode === "dark" ? (
+              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                <path
+                  d="M16 11.5A5.5 5.5 0 0 1 8.5 4a5.5 5.5 0 1 0 7.5 7.5z"
+                  fill="currentColor"
+                />
+              </svg>
+            ) : themeMode === "light" ? (
+              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                <circle cx="10" cy="10" r="3.5" fill="currentColor" />
+                <g stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                  <line x1="10" y1="1.5" x2="10" y2="3.5" />
+                  <line x1="10" y1="16.5" x2="10" y2="18.5" />
+                  <line x1="1.5" y1="10" x2="3.5" y2="10" />
+                  <line x1="16.5" y1="10" x2="18.5" y2="10" />
+                  <line x1="3.7" y1="3.7" x2="5.1" y2="5.1" />
+                  <line x1="14.9" y1="14.9" x2="16.3" y2="16.3" />
+                  <line x1="3.7" y1="16.3" x2="5.1" y2="14.9" />
+                  <line x1="14.9" y1="5.1" x2="16.3" y2="3.7" />
+                </g>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                <path
+                  d="M10 2.5a7.5 7.5 0 1 0 7.45 8.55 5 5 0 0 1-7.4-7.4A7.5 7.5 0 0 0 10 2.5z"
+                  fill="currentColor"
+                  opacity="0.65"
+                />
+              </svg>
+            )}
+          </button>
         </div>
       </header>
 
