@@ -48,11 +48,6 @@ contextBridge.exposeInMainWorld('desktop', {
     get: (): Promise<string> => ipcRenderer.invoke('server-config:get'),
     set: (url: string): Promise<string> => ipcRenderer.invoke('server-config:set', url)
   },
-  deepSeekHarness: {
-    status: (): Promise<{ running: boolean; url: string; message: string }> => ipcRenderer.invoke('deepseek-harness:status'),
-    start: (): Promise<{ running: boolean; url: string; message: string }> => ipcRenderer.invoke('deepseek-harness:start'),
-    connect: (ticket: string): Promise<{ url: string; message: string }> => ipcRenderer.invoke('deepseek-harness:connect', ticket)
-  },
   appInfo: {
     checkUpdate: (): Promise<{ current: string; latest: string; isLatest: boolean; error: string }> => ipcRenderer.invoke('app:check-update'),
     openDownload: (): Promise<boolean> => ipcRenderer.invoke('app:open-download'),
