@@ -863,6 +863,29 @@ export default function OnlineAdvisorExperience() {
   }
 
   /**
+   * 重新生成：找到该 assistant 消息同 requestId 的 user 消息文本，
+   * 塞入 composer 草稿并聚焦，让用户确认后回车重新提交。
+   * 不自动提交，避免误触发覆盖历史分支。
+   */
+  function rerunMessage(message: Message) {
+    if (isBusy) return;
+    if (message.role !== "assistant") return;
+    const requestId = message.id;
+    const userMessage = messages.find(
+      (item) => item.id === `${requestId}:user`
+    );
+    const text = userMessage?.text?.trim() || message.text.trim();
+    if (!text) return;
+    setDraft(text);
+    setImageError("");
+    requestAnimationFrame(() => {
+      draftRef.current?.focus();
+      const length = text.length;
+      draftRef.current?.setSelectionRange(length, length);
+    });
+  }
+
+  /**
    * 对一条 assistant 消息打正/负反馈,写本地存储供后续上报。
    * 再次点同一项取消,点另一项切换。任务在流式状态不接受反馈。
    */
@@ -1634,6 +1657,30 @@ export default function OnlineAdvisorExperience() {
                     message.state !== "streaming" &&
                     message.text && (
                       <div className="message-actions message-feedback">
+                        <button
+                          type="button"
+                          className="message-action-retry"
+                          aria-label="重新生成这条回答"
+                          title={
+                            isBusy
+                              ? "请先停止当前任务"
+                              : "把这条 user 消息重新填入 Composer"
+                          }
+                          disabled={isBusy}
+                          onClick={() => rerunMessage(message)}
+                        >
+                          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                            <path
+                              d="M3.5 10a6.5 6.5 0 0 1 11.13-4.55M16.5 10a6.5 6.5 0 0 1-11.13 4.55M14.6 3.4v2.55h-2.55M5.4 16.6v-2.55h2.55"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.6"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                          重新生成
+                        </button>
                         <button
                           type="button"
                           className={`feedback-up ${

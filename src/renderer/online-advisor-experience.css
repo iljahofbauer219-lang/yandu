@@ -1208,6 +1208,11 @@ button:disabled {
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
+.message-feedback button.message-action-retry svg {
+  width: 14px;
+  height: 14px;
+}
+
 .message-feedback button:hover {
   border-color: var(--color-accent);
   color: var(--color-accent);
