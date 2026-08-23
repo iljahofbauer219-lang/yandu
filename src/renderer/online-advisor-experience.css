@@ -941,21 +941,24 @@ button:disabled {
   justify-content: space-between;
   min-height: 64px;
   padding: 12px 0;
-  border-bottom: 1px solid rgba(48, 57, 48, 0.1);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .eyebrow {
-  color: #7a8178;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
+  color: var(--color-text-tertiary);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .chat-heading h2 {
   max-width: 680px;
-  margin: 2px 0 0;
+  margin: 4px 0 0;
   overflow: hidden;
+  color: var(--color-text-primary);
   font-size: var(--fs-md);
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1773,45 +1776,53 @@ button:disabled {
 }
 
 .composer {
-  padding: 10px 12px;
-  border: 1px solid rgba(48, 57, 48, 0.15);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.74);
-  box-shadow: 0 8px 26px rgba(48, 57, 48, 0.06);
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  background: var(--color-bg);
+  box-shadow: var(--shadow-sm);
   transition:
     border-color 120ms ease,
     box-shadow 120ms ease;
 }
 
 .composer:focus-within {
-  border-color: rgba(62, 94, 70, 0.34);
+  border-color: var(--color-accent);
   box-shadow:
-    0 0 0 3px rgba(62, 94, 70, 0.07),
-    0 8px 26px rgba(48, 57, 48, 0.06);
+    0 0 0 3px rgba(22, 93, 255, 0.12),
+    var(--shadow-sm);
 }
 
 .composer.drag-active {
-  border-color: rgba(74, 111, 83, 0.58);
+  border-color: var(--color-accent);
+  background: rgba(22, 93, 255, 0.04);
   box-shadow:
-    0 0 0 4px rgba(74, 111, 83, 0.1),
-    0 10px 30px rgba(48, 57, 48, 0.06);
+    0 0 0 4px rgba(22, 93, 255, 0.1),
+    var(--shadow-sm);
 }
 
 .image-button {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 7px;
-  border: 1px solid rgba(48, 57, 48, 0.12);
-  border-radius: 7px;
-  color: #3f5445;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-secondary);
   background: transparent;
-  font-size: 8px;
-  font-weight: 750;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.image-button:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: rgba(22, 93, 255, 0.04);
 }
 
 .image-button span {
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1;
 }
 
@@ -2504,24 +2515,42 @@ button:disabled {
 .send-button,
 .stop-button {
   display: grid;
-  width: 30px;
-  height: 30px;
-  min-width: 30px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
   place-items: center;
   padding: 0;
   border-radius: 50%;
   font-size: 15px;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .send-button {
-  color: #f4f2ea;
-  background: #304634;
+  color: #ffffff;
+  background: var(--color-accent);
+  box-shadow: 0 2px 8px rgba(22, 93, 255, 0.25);
+}
+
+.send-button:hover:not(:disabled) {
+  background: #1453e6;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(22, 93, 255, 0.32);
+}
+
+.send-button:disabled {
+  background: var(--color-surface-2);
+  color: var(--color-text-tertiary);
+  box-shadow: none;
 }
 
 .stop-button {
-  color: #8b4037;
-  background: #f1dcd7;
+  color: #ffffff;
+  background: var(--color-danger, #f56565);
   font-size: 8px;
+}
+
+.stop-button:hover {
+  background: #e04848;
 }
 
 @media (max-width: 940px) {
