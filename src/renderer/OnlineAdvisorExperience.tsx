@@ -1,7 +1,7 @@
 import {
   type ClipboardEvent,
   type DragEvent,
-  FormEvent,
+  type FormEvent,
   useEffect,
   useMemo,
   useRef,
@@ -19,6 +19,7 @@ import type {
   AdvisorTaskStatus as TaskStatus,
   AdvisorVisionAnalysis as VisionAnalysis
 } from "../shared/advisor";
+import AIMessageContent from "./AIMessageContent";
 
 type ModelId = string;
 
@@ -186,6 +187,10 @@ export default function OnlineAdvisorExperience() {
   const [personalizationNotice, setPersonalizationNotice] = useState("");
   const [messageEdit, setMessageEdit] = useState<MessageEditState | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  // 消息流主动跟随底部的开关（仅在用户主动滚上去后关闭）
+  const messageListRef = useRef<HTMLDivElement>(null);
+  const [autoFollow, setAutoFollow] = useState(true);
+  const [pendingNewCount, setPendingNewCount] = useState(0);
 
   const isBusy = activeRequestId !== null;
   const selectedProjectName = useMemo(
@@ -275,6 +280,57 @@ export default function OnlineAdvisorExperience() {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [messageEdit?.requestId]);
+
+  // 跟踪用户是否贴在底部，以决定新消息到达时是否主动跟随。
+  function isAtBottom(element: HTMLDivElement): boolean {
+    const threshold = 80; // 距底 80px 以内认为已贴在底部
+    return (
+      element.scrollHeight - element.scrollTop - element.clientHeight <= threshold
+    );
+  }
+
+  function handleMessageListScroll(event: React.UIEvent<HTMLDivElement>) {
+    const target = event.currentTarget;
+    if (isAtBottom(target)) {
+      if (!autoFollow) {
+        setAutoFollow(true);
+        setPendingNewCount(0);
+      }
+    } else if (autoFollow) {
+      setAutoFollow(false);
+    }
+  }
+
+  function scrollToLatest(smooth = true) {
+    const element = messageListRef.current;
+    if (!element) return;
+    element.scrollTo({
+      top: element.scrollHeight,
+      behavior: smooth ? "smooth" : "auto"
+    });
+    setAutoFollow(true);
+    setPendingNewCount(0);
+  }
+
+  // 消息变化后决定是否主动跟到底部：跟则平滚到末尾，未跟则计 1 条新消息。
+  const lastMessageCountRef = useRef(0);
+  useEffect(() => {
+    const element = messageListRef.current;
+    if (!element) return;
+    if (messages.length > lastMessageCountRef.current) {
+      if (autoFollow) {
+        // raf 双拍保证流式增量后表格/图片已布局完再滚到底
+        const frame = window.requestAnimationFrame(() => {
+          element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
+        });
+        return () => window.cancelAnimationFrame(frame);
+      }
+      setPendingNewCount((count) => count + (messages.length - lastMessageCountRef.current));
+    } else if (messages.length === 0) {
+      setPendingNewCount(0);
+    }
+    lastMessageCountRef.current = messages.length;
+  }, [messages, autoFollow]);
 
   useEffect(() => {
     void window.desktop.advisor.getConnectionStatus().then(setConnection);
@@ -1338,7 +1394,11 @@ export default function OnlineAdvisorExperience() {
             )}
           </div>
 
-          <div className="message-list">
+          <div
+            className="message-list"
+            ref={messageListRef}
+            onScroll={handleMessageListScroll}
+          >
             {messages.length === 0 ? (
               <div className="empty-state">
                 <span>⌁</span>
@@ -1461,10 +1521,21 @@ export default function OnlineAdvisorExperience() {
                       taskStatus={message.taskStatus}
                     />
                   )}
-                  <p className="answer-text">
-                    {message.text ||
-                      (message.role === "assistant" ? "正在处理…" : "")}
-                  </p>
+                  {message.role === "user" ? (
+                    <p className="answer-text answer-user">{message.text}</p>
+                  ) : message.state === "streaming" ? (
+                    <p className="answer-text answer-streaming">
+                      {message.text || "正在处理…"}
+                      <span className="streaming-cursor" aria-hidden="true">▍</span>
+                    </p>
+                  ) : (
+                    <div className="answer-text answer-rendered">
+                      <AIMessageContent
+                        content={message.text || "任务完成。"}
+                        tone="answer"
+                      />
+                    </div>
+                  )}
                     </>
                   )}
                   {message.state === "stopped" && <small>任务已停止</small>}
@@ -1542,6 +1613,22 @@ export default function OnlineAdvisorExperience() {
                   )}
                 </article>
               ))
+            )}
+            {!autoFollow && messages.length > 0 && (
+              <button
+                type="button"
+                className="message-scroll-to-latest"
+                aria-label="跳转到最新消息"
+                title="跳转到最新消息"
+                onClick={() => scrollToLatest()}
+              >
+                <span aria-hidden="true">↓</span>
+                {pendingNewCount > 0 && (
+                  <span className="message-scroll-to-latest-badge">
+                    {pendingNewCount} 条新消息
+                  </span>
+                )}
+              </button>
             )}
           </div>
 
