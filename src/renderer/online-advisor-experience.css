@@ -829,14 +829,24 @@ button:disabled {
   min-width: 0;
   min-height: 0;
   margin: 0 auto;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   padding: 0 var(--space-6) var(--space-5);
 }
 
 /**
+ * 当 chat-panel 内出现 .thread-reset-notice 时，grid 扩展为 4 行以容纳 banner。
+ * 不出现时保持原 3 行 grid 行为，避免 Composer 偏移。
+ * :has() Chromium 105+ / Electron 28+ 完全支持。
+ */
+.chat-panel:has(.thread-reset-notice) {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+/**
  * thread-reset-notice：Codex app-server 找不到历史 thread，后端自动用
- * thread/start 重建后展示的一次性软提示。不出现时 grid 第一行 auto = 0 高，
- * 不影响现有 chat-heading/message-list/composer 三行布局。
+ * thread/start 重建后展示的一次性软提示。仅在 .chat-panel:has(.thread-reset-notice)
+ * 被匹配时才占一 grid 行，不出现时 chat-panel 保持原 3 行布局 (auto/1fr/auto)，
+ * Composer 不会被推下聊天底部。
  */
 .thread-reset-notice {
   display: flex;
