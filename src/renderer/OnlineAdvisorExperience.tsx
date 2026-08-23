@@ -1743,8 +1743,19 @@ export default function OnlineAdvisorExperience() {
                     <p className="answer-text answer-user">{message.text}</p>
                   ) : message.state === "streaming" ? (
                     <p className="answer-text answer-streaming">
-                      {message.text || "正在处理…"}
-                      <span className="streaming-cursor" aria-hidden="true">▍</span>
+                      {message.text ? (
+                        <>
+                          {message.text}
+                          <span className="streaming-cursor" aria-hidden="true">▍</span>
+                        </>
+                      ) : (
+                        <span className="thinking-dots" aria-label="AI 正在思考">
+                          <span aria-hidden="true" />
+                          <span aria-hidden="true" />
+                          <span aria-hidden="true" />
+                          <span className="thinking-dots-label">思考中</span>
+                        </span>
+                      )}
                     </p>
                   ) : (
                     <div className="answer-text answer-rendered">

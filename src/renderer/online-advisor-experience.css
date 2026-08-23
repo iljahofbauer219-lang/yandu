@@ -1518,6 +1518,45 @@ button:disabled {
   50.01%, 100% { opacity: 0; }
 }
 
+.thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  color: var(--color-text-secondary);
+  font-size: var(--fs-sm);
+}
+
+.thinking-dots > span:not(.thinking-dots-label) {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: ds-thinking-bounce 1.2s ease-in-out infinite;
+}
+
+.thinking-dots > span:nth-child(1) { animation-delay: 0s; }
+.thinking-dots > span:nth-child(2) { animation-delay: 0.15s; }
+.thinking-dots > span:nth-child(3) { animation-delay: 0.3s; }
+
+.thinking-dots-label {
+  margin-left: 4px;
+  color: var(--color-text-tertiary);
+  font-size: var(--fs-sm);
+}
+
+@keyframes ds-thinking-bounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+
 .message.user .answer-text.answer-user {
   color: var(--color-text-primary);
   font-size: var(--fs-base);
