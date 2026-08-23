@@ -118,7 +118,7 @@ export class HarnessGatewayClient {
       this.emit('unavailable', wrapped)
       throw wrapped
     }
-    this.cookieJar.setFromSetCookieHeader(res.headers.get('set-cookie'))
+    this.cookieJar.setFromSetCookieHeader(res.headers.get('set-cookie') ?? undefined)
     return this.cookieJar.getCookieHeader()
   }
 
