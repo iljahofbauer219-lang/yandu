@@ -13,8 +13,3 @@ output/resource2skill-input/
 output/playwright/resource2skill/
 output/playwright/watch-skill/
 release/
-
-# Vendored DeepSeek Harness build artifacts. Source is tracked under vendor/deepseek-harness.
-vendor/deepseek-harness/**/lib/
-vendor/deepseek-harness/**/types/
-vendor/deepseek-harness/apps/web/dist/

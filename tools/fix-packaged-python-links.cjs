@@ -7,12 +7,6 @@ module.exports = async context => {
   const projectDir = context.packager.projectDir
   const resources = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents', 'Resources')
   const tools = path.join(resources, '.tools')
-  const harnessSource=path.join(projectDir,'vendor','deepseek-harness','node_modules')
-  const harnessDestination=path.join(resources,'deepseek-harness','node_modules')
-  if(!fs.existsSync(harnessSource))throw new Error(`Missing Harness runtime dependencies: ${harnessSource}`)
-  console.log('[afterPack] copying DeepSeek Harness runtime dependencies')
-  fs.cpSync(harnessSource,harnessDestination,{recursive:true,dereference:false})
-  if(!fs.existsSync(path.join(harnessDestination,'@deepseek-ai')))throw new Error('Packaged Harness runtime dependencies missing after copy')
   fs.mkdirSync(tools, { recursive:true })
   for (const name of ['watch-skill','Resource2Skill','python-official-expanded-3119','python-watch-312']) {
     const source=path.join(projectDir,'.tools',name),destination=path.join(tools,name)
