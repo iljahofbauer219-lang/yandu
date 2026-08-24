@@ -2494,35 +2494,42 @@ a.message-sources-link:hover .message-sources-link-title {
 }
 
 .composer-input-wrap textarea {
-  padding-right: 30px;
+  padding-right: 44px;
 }
 
 .composer-expand-button {
   position: absolute;
-  top: 4px;
-  right: 2px;
+  top: 6px;
+  right: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   padding: 0;
-  border: 0;
-  border-radius: 6px;
-  color: var(--color-text-tertiary);
-  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-2, #f4f4ee);
   cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
 .composer-expand-button:hover {
   color: var(--color-accent);
-  background: rgba(22, 93, 255, 0.06);
+  background: rgba(22, 93, 255, 0.08);
+  border-color: rgba(22, 93, 255, 0.18);
 }
 
 .composer-expand-button svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
+}
+
+.composer.expanded .composer-expand-button {
+  color: var(--color-accent);
+  background: rgba(22, 93, 255, 0.08);
+  border-color: rgba(22, 93, 255, 0.22);
 }
 
 .composer.expanded .composer-input-wrap textarea {
