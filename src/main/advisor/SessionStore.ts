@@ -35,6 +35,13 @@ export type StoredTaskBranch = {
   forkRequestId?: string;
   replacesRequestId?: string;
   threadId?: string;
+  /**
+   * 分支创建/最近一次写入时绑定的 model。turn/start 实际生效的 model 不一定等于
+   * 这里(turn 可临时覆盖),但 provider 由 thread 决定,所以 model/providerId 主要
+   * 用于回答“当前分支用的是什么 provider”以决定是否需要自动 fork。
+   */
+  model?: string;
+  providerId?: string;
   createdAt: string;
 };
 
@@ -110,13 +117,22 @@ export async function beginStoredTurn(
   });
 }
 
-export async function setStoredThreadId(taskId: string, threadId: string) {
+export async function setStoredThreadId(
+  taskId: string,
+  threadId: string,
+  binding?: { model?: string; providerId?: string }
+) {
   await mutateTask(taskId, (task) => {
     task.codexThreadId = threadId;
     const branchId = task.activeBranchId ?? "main";
     const branches = ensureBranches(task);
     const branch = branches.find((item) => item.id === branchId);
-    if (branch) branch.threadId = threadId;
+    if (branch) {
+      branch.threadId = threadId;
+      // 只在调用方明确提供时才覆盖,避免用空值污染已有绑定。
+      if (binding?.model) branch.model = binding.model;
+      if (binding?.providerId) branch.providerId = binding.providerId;
+    }
     task.updatedAt = new Date().toISOString();
   });
 }
@@ -145,6 +161,8 @@ export async function createStoredBranch(
     forkRequestId: string;
     replacesRequestId: string;
     threadId: string;
+    model?: string;
+    providerId?: string;
   }
 ) {
   await mutateTask(taskId, (task) => {

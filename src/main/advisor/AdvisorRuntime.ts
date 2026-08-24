@@ -65,6 +65,24 @@ type ModelId = string;
 
 type PermissionMode = "ask" | "agent" | "fullAccess";
 
+/**
+ * 模型档位表。
+ * - `effort`: 该模型推荐的推理深度,不能硬编码为单一值
+ *   (例如 chat-latest 只支持 medium,硬编码 high 会随每次 turn 报
+ *   "Unsupported value: 'high' is not supported with the 'chat-latest' model.")。
+ * - `providerId`: Codex app-server 的 model_provider,thread 创建后不可在
+ *   turn 级别覆盖。如果 UI 切到不同 provider 的模型,必须 thread/fork
+ *   重新绑 provider。
+ */
+type ModelProfile = {
+  id: ModelId;
+  name: string;
+  providerId: string;
+  supportsTools: boolean;
+  supportsVision: boolean;
+  effort: "low" | "medium" | "high" | "max";
+};
+
 type ChatRequest = {
   requestId: string;
   conversationId?: string;
@@ -168,12 +186,12 @@ type PendingApproval = {
   resolvePreflight?: (approved: boolean) => void;
 };
 
-const modelProfiles = [
-  { id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash", providerId: "deepseek_proxy", supportsTools: true, supportsVision: false },
-  { id: "deepseek/deepseek-v4-pro", name: "DeepSeek V4 Pro", providerId: "deepseek_proxy", supportsTools: true, supportsVision: false },
-  { id: "chat-latest", name: "OpenAI ChatGPT Latest", providerId: "openai_api", supportsTools: true, supportsVision: true }
-] as const;
-const allowedModels = new Map<string, (typeof modelProfiles)[number]>(modelProfiles.map(model => [model.id, model]));
+const modelProfiles: ModelProfile[] = [
+  { id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash", providerId: "deepseek_proxy", supportsTools: true, supportsVision: false, effort: "high" },
+  { id: "deepseek/deepseek-v4-pro", name: "DeepSeek V4 Pro", providerId: "deepseek_proxy", supportsTools: true, supportsVision: false, effort: "high" },
+  { id: "chat-latest", name: "OpenAI ChatGPT Latest", providerId: "openai_api", supportsTools: true, supportsVision: true, effort: "medium" }
+];
+const allowedModels = new Map<string, ModelProfile>(modelProfiles.map(model => [model.id, model]));
 const allowedPermissionModes = new Set<PermissionMode>([
   "ask",
   "agent",
@@ -794,6 +812,13 @@ async function runCodexTurn(sender: Electron.WebContents, request: ChatRequest) 
     let executionThreadId = existingTask?.codexThreadId;
     let preparedThreadResponse: Record<string, unknown> | null = null;
     let branchId = existingTask?.activeBranchId ?? "main";
+    /**
+     * 自动 fork 原因。当前仅在“当前分支绑定的 provider 与新 model 的 provider 不一致”时设为 true：
+     * Codex app-server 的 thread 创建后 model_provider 就被锁住，turn 级别
+     * 只能覆盖 model 不能改 provider（从 TurnStartParams.json schema 验证），
+     * 如果不自动 fork，turn 会用旧 provider 去找新 model → model_not_found。
+     */
+    let autoForkedReason: string | null = null;
     if (existingTask && request.edit) {
       const sourceBranch = (existingTask.branches ?? []).find(
         (item) => item.id === request.edit?.sourceBranchId
@@ -825,8 +850,32 @@ async function runCodexTurn(sender: Electron.WebContents, request: ChatRequest) 
         parentBranchId: request.edit.sourceBranchId,
         forkRequestId: request.edit.replacesRequestId,
         replacesRequestId: request.edit.replacesRequestId,
-        threadId: executionThreadId
+        threadId: executionThreadId,
+        model: request.model,
+        providerId: modelProfile.providerId
       });
+    } else if (
+      existingTask &&
+      executionThreadId
+    ) {
+      // 自动 fork：未走“编辑重发”路径，但 model 所属 provider 与当前分支不一致。
+      // 例：用户先在 chat-latest（openai_api）上发了几条，后来切到
+      //     deepseek/deepseek-v4-flash（deepseek_proxy）继续发，
+      //     如果继续 thread/resume，Codex 会用旧 openai_api provider 找新 model
+      //     → 404 model_not_found。
+      // 处理：跳过 resume，用 thread/start 重建，并在新分支上绑定新 provider。
+      const activeBranch = (existingTask.branches ?? []).find(
+        (item) => item.id === (existingTask.activeBranchId ?? "main")
+      );
+      const currentProviderId = activeBranch?.providerId;
+      if (currentProviderId && currentProviderId !== modelProfile.providerId) {
+        autoForkedReason = `${currentProviderId} → ${modelProfile.providerId}`;
+        console.log(
+          `[advisor] 检测到 provider 切换 (${autoForkedReason})，自动 fork 新分支以避开 thread provider 锁定`
+        );
+        executionThreadId = undefined;
+        branchId = request.requestId;
+      }
     }
     if (existingTask) {
       await beginStoredTurn(taskId, {
@@ -918,7 +967,29 @@ async function runCodexTurn(sender: Electron.WebContents, request: ChatRequest) 
     if (!isRecord(threadResponse.thread) || typeof threadResponse.thread.id !== "string") {
       throw new Error("Codex 未返回有效对话线程。");
     }
-    await setStoredThreadId(taskId, threadResponse.thread.id);
+    if (autoForkedReason) {
+      // 自动 fork 路径：上面的 setStoredThreadId 找不到新 branch（branch 尚未创建），
+      // 这里创建新 branch 并同时绑定 model/provider，作为后续检测的权威来源。
+      await createStoredBranch(taskId, {
+        id: branchId,
+        parentBranchId: existingTask?.activeBranchId ?? "main",
+        forkRequestId: request.requestId,
+        replacesRequestId: request.requestId,
+        threadId: threadResponse.thread.id,
+        model: request.model,
+        providerId: modelProfile.providerId
+      });
+      emitChatEvent(sender, {
+        requestId: request.requestId,
+        type: "threadReset",
+        reason: `模型供应商已切换（${autoForkedReason}），已在新分支上从 ${request.model} 继续；旧分支仍可访问。`
+      });
+    } else {
+      await setStoredThreadId(taskId, threadResponse.thread.id, {
+        model: request.model,
+        providerId: modelProfile.providerId
+      });
+    }
 
     const context: RunContext = {
       requestId: request.requestId,
@@ -1094,7 +1165,10 @@ async function runCodexTurn(sender: Electron.WebContents, request: ChatRequest) 
       approvalPolicy: approvalPolicyFor(request.permissionMode),
       sandboxPolicy: turnSandboxPolicyFor(request.permissionMode),
       model: request.model,
-      effort: "high",
+      // 之前硬编码 "high"，与 chat-latest（仅支持 medium）冲突导致
+      //   "Unsupported value: 'high' is not supported with the 'chat-latest' model."
+      // 改为按模型档位表逐个取正确 effort。
+      effort: effortFor(modelProfile),
       additionalContext:
         Object.keys(additionalContext).length > 0
           ? additionalContext
@@ -1156,6 +1230,16 @@ function permissionLabel(mode: PermissionMode) {
   if (mode === "ask") return "请求批准";
   if (mode === "fullAccess") return "完全访问权限";
   return "替我批准";
+}
+
+/**
+ * 返回该模型在 turn/start 中应使用的 reasoning effort。
+ * 改 hardcoded "high" 之前,chat-latest 会随每次 turn 报
+ *   "Unsupported value: 'high' is not supported with the 'chat-latest' model. Supported values are: 'medium'."
+ * 修正后按档位表走:chat-latest→medium,deepseek→high,避免任何模型档位不匹配。
+ */
+function effortFor(model: ModelProfile): "low" | "medium" | "high" | "max" {
+  return model.effort;
 }
 
 app.whenReady().then(() => {
