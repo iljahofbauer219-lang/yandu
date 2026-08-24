@@ -104,7 +104,7 @@
   min-width: 0;
   align-items: center;
   gap: 8px;
-  padding: 0 var(--sb-x) 12px;
+  padding: 8px var(--sb-x) 12px;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -217,8 +217,8 @@ button:disabled {
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 11px;
   overflow: hidden;
-  /* 横向 padding 下放给子块(变量 --sb-x),滚动容器通铺到侧栏边界,滚动条贴右缘 */
-  padding: 16px 0 0;
+  /* 顶部间距下放到 header(对齐 qoder,紧贴侧栏上边) */
+  padding: 0;
   border-right: 1px solid var(--color-border);
   background: var(--color-bg);
 }
@@ -363,6 +363,23 @@ button:disabled {
   font-size: var(--fs-xs);
 }
 
+.personalization-settings {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-tertiary);
+  transition: color 0.15s ease;
+}
+
+.personalization-settings svg {
+  width: 16px;
+  height: 16px;
+}
+
+.personalization-button:hover .personalization-settings {
+  color: var(--color-accent);
+}
+
 .personalization-avatar {
   display: grid;
   width: 25px;
@@ -490,33 +507,6 @@ button:disabled {
   font-size: 8px;
 }
 
-.project-section-heading-actions {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 6px;
-}
-
-.project-section-heading .create-project-button {
-  padding: 2px 6px;
-  border: 0;
-  border-radius: 6px;
-  color: var(--color-text-secondary);
-  background: transparent;
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.project-section-heading .create-project-button:hover:not(:disabled) {
-  color: var(--color-accent);
-  background: var(--color-surface);
-}
-
-.project-section-heading .create-project-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 
 .project-group-header {
   position: relative;
@@ -3152,7 +3142,7 @@ a.message-sources-link:hover .message-sources-link-title {
 /* Size against the embedded advisor, not the entire Electron window. */
 @container (max-width: 840px) {
   .content { grid-template-columns: 166px minmax(0, 1fr); }
-  .sidebar { --sb-x: 10px; padding: 12px 0; }
+  .sidebar { --sb-x: 10px; padding: 0; }
   .chat-heading { padding-right: 12px; padding-left: 12px; }
   .message-list { padding-right: 12px; padding-left: 12px; }
   .thread-reset-notice { margin-right: 12px; margin-left: 12px; }
@@ -3165,7 +3155,7 @@ a.message-sources-link:hover .message-sources-link-title {
 
 @container (max-width: 640px) {
   .content { grid-template-columns: 138px minmax(0, 1fr); }
-  .sidebar { --sb-x: 7px; padding: 10px 0; }
+  .sidebar { --sb-x: 7px; padding: 0; }
   .composer-model-button, .composer-permission-button { max-width: 125px; }
 }
 

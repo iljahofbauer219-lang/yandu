@@ -1314,25 +1314,6 @@ export default function OnlineAdvisorExperience() {
           </div>
           <div className="sidebar-scroll">
           <div className="history-section project-history-section">
-            <div className="project-section-heading">
-              <span className="section-label">项目</span>
-              <span className="project-section-heading-actions">
-                <button
-                  type="button"
-                  className="create-project-button"
-                  onClick={() => void createNewTask()}
-                  disabled={isBusy}
-                  title="选择目录，创建新项目"
-                >
-                  ＋ 新建项目
-                </button>
-                {(hiddenProjectIds.length > 0 || hiddenTaskIds.length > 0) && (
-                  <button type="button" onClick={restoreHiddenItems}>
-                    恢复隐藏项
-                  </button>
-                )}
-              </span>
-            </div>
             <div className="project-list">
               {filteredProjectGroups.length === 0 ? (
                 <small>{searchQuery ? "没有匹配结果" : "暂无记录"}</small>
@@ -1441,11 +1422,22 @@ export default function OnlineAdvisorExperience() {
                 DS
               </span>
               <span>个性化</span>
-              <small>
-                {personalization?.settings.memoryEnabled
-                  ? `记忆 ${personalization.memoryCount}`
-                  : "记忆已关闭"}
-              </small>
+              <span className="personalization-settings" title="设置" aria-label="设置">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              </span>
             </button>
           </footer>
         </aside>
