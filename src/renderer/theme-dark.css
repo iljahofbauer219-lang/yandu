@@ -11,8 +11,6 @@
 [data-theme="dark"] body { background:var(--bg-app); color:var(--text-primary); }
 [data-theme="dark"] .app-shell { background:var(--bg-app); }
 [data-theme="dark"] .sidebar { color:var(--text-secondary); background:var(--bg-sidebar); border-right:1px solid var(--border-soft); }
-[data-theme="dark"] .brand strong { color:var(--text-primary); } [data-theme="dark"] .brand small { color:var(--text-muted); }
-[data-theme="dark"] .brand-mark { color:#03130c; background:linear-gradient(145deg,#4ff2b2,#00b26e); border-color:rgba(0,224,138,.5); box-shadow:0 0 14px rgba(0,224,138,.28); }
 [data-theme="dark"] nav button { color:var(--text-muted); }
 [data-theme="dark"] nav button:hover { color:var(--accent-contrast); background:rgba(255,255,255,.07); }
 [data-theme="dark"] nav .nav-active { color:var(--accent-contrast); background:var(--accent-soft); box-shadow:inset 3px 0 0 var(--accent); }
