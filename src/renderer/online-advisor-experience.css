@@ -2489,6 +2489,46 @@ a.message-sources-link:hover .message-sources-link-title {
   line-height: var(--lh-normal);
 }
 
+.composer-input-wrap {
+  position: relative;
+}
+
+.composer-input-wrap textarea {
+  padding-right: 30px;
+}
+
+.composer-expand-button {
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--color-text-tertiary);
+  background: transparent;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.composer-expand-button:hover {
+  color: var(--color-accent);
+  background: rgba(22, 93, 255, 0.06);
+}
+
+.composer-expand-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.composer.expanded .composer-input-wrap textarea {
+  max-height: 480px;
+}
+
 .composer-footer {
   display: flex;
   align-items: center;
@@ -2745,14 +2785,14 @@ a.message-sources-link:hover .message-sources-link-title {
 
 .send-button {
   color: #ffffff;
-  background: var(--color-accent);
-  box-shadow: 0 2px 8px rgba(22, 93, 255, 0.25);
+  background: #7fd4c9;
+  box-shadow: 0 2px 8px rgba(127, 212, 201, 0.3);
 }
 
 .send-button:hover:not(:disabled) {
-  background: #1453e6;
+  background: #6cc4b8;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(22, 93, 255, 0.32);
+  box-shadow: 0 4px 12px rgba(127, 212, 201, 0.4);
 }
 
 .send-button:disabled {

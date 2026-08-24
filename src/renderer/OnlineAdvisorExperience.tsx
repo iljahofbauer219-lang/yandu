@@ -173,6 +173,7 @@ export default function OnlineAdvisorExperience() {
   });
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
+  const [composerExpanded, setComposerExpanded] = useState(false);
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
   const [approvals, setApprovals] = useState<ApprovalPrompt[]>([]);
   const [attachments, setAttachments] = useState<AttachmentRecord[]>([]);
@@ -1892,7 +1893,9 @@ export default function OnlineAdvisorExperience() {
           </div>
 
           <form
-            className={`composer ${dragActive ? "drag-active" : ""}`}
+            className={`composer ${dragActive ? "drag-active" : ""} ${
+              composerExpanded ? "expanded" : ""
+            }`}
             onSubmit={submit}
             onDragEnter={(event) => {
               event.preventDefault();
@@ -1988,27 +1991,61 @@ export default function OnlineAdvisorExperience() {
               </div>
             )}
             {imageError && <p className="image-error">{imageError}</p>}
-            <textarea
-              ref={draftRef}
-              rows={1}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder={
-                isBusy
-                  ? "补充当前执行要求…"
-                  : workspacePath
-                  ? "描述你的任务…"
-                  : "请先选择一个项目目录"
-              }
-              disabled={!workspacePath}
-              onPaste={isBusy ? undefined : handlePaste}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  event.currentTarget.form?.requestSubmit();
+            <div className="composer-input-wrap">
+              <textarea
+                ref={draftRef}
+                rows={1}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder={
+                  isBusy
+                    ? "补充当前执行要求…"
+                    : workspacePath
+                    ? "输入你的任务或选择下面的员工开始…"
+                    : "请先选择一个项目目录"
                 }
-              }}
-            />
+                disabled={!workspacePath}
+                onPaste={isBusy ? undefined : handlePaste}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="composer-expand-button"
+                onClick={() => setComposerExpanded((current) => !current)}
+                title={composerExpanded ? "收起对话框" : "拉大对话框高度"}
+                aria-label={composerExpanded ? "收起对话框" : "拉大对话框高度"}
+                aria-pressed={composerExpanded}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  {composerExpanded ? (
+                    <>
+                      <path d="M9 4v6H3" />
+                      <path d="M15 20v-6h6" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M4 9V3h6" />
+                      <path d="M20 15v6h-6" />
+                    </>
+                  )}
+                </svg>
+              </button>
+            </div>
             <div className="composer-footer">
               <div className="composer-tools">
                 <button
