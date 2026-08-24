@@ -2496,24 +2496,9 @@ a.message-sources-link:hover .message-sources-link-title {
   gap: 12px;
 }
 
-.composer-toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 4px 0 6px;
-  border-bottom: 1px dashed rgba(48, 57, 48, 0.12);
-  margin-bottom: 6px;
-}
-
-.composer-toolbar .composer-permission-picker,
-.composer-toolbar .composer-model-picker {
-  position: relative;
-  flex: 0 0 auto;
-}
-
 .composer-tools,
-.composer-submit {
+.composer-submit,
+.composer-footer-pickers {
   display: flex;
   align-items: center;
 }
@@ -2521,6 +2506,11 @@ a.message-sources-link:hover .message-sources-link-title {
 .composer-tools {
   min-width: 0;
   gap: 7px;
+}
+
+.composer-footer-pickers {
+  gap: 6px;
+  margin-left: auto;
 }
 
 .composer-tools small {

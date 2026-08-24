@@ -1988,115 +1988,6 @@ export default function OnlineAdvisorExperience() {
               </div>
             )}
             {imageError && <p className="image-error">{imageError}</p>}
-            <div className="composer-toolbar">
-              <div
-                className={`composer-permission-picker ${
-                  permissionMenuOpen ? "open" : ""
-                }`}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") setPermissionMenuOpen(false);
-                }}
-              >
-                {permissionMenuOpen && (
-                  <div
-                    className="permission-menu"
-                    role="menu"
-                    aria-label="选择访问权限"
-                  >
-                    <span>如何批准 DeepSeek 操作？</span>
-                    {permissionOptions.map((option) => (
-                      <button
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={permissionMode === option.id}
-                        key={option.id}
-                        onClick={() => selectPreferredPermission(option.id)}
-                      >
-                        <span className="permission-menu-check" aria-hidden="true">
-                          {permissionMode === option.id ? "✓" : ""}
-                        </span>
-                        <span>
-                          <strong>{option.name}</strong>
-                          <small>{option.hint}</small>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  className={`composer-permission-button ${
-                    permissionMode === "fullAccess" ? "danger" : ""
-                  }`}
-                  disabled={isBusy}
-                  aria-haspopup="menu"
-                  aria-expanded={permissionMenuOpen}
-                  title="选择如何批准 DeepSeek 操作"
-                  onClick={() => {
-                    setModelMenuOpen(false);
-                    setPermissionMenuOpen((current) => !current);
-                  }}
-                >
-                  <span aria-hidden="true">!</span>
-                  <span>{selectedPermission.name}</span>
-                  <span aria-hidden="true">⌄</span>
-                </button>
-              </div>
-              <div
-                className={`composer-model-picker ${
-                  modelMenuOpen ? "open" : ""
-                }`}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") setModelMenuOpen(false);
-                }}
-              >
-                {modelMenuOpen && (
-                  <div
-                    className="model-menu"
-                    role="menu"
-                    aria-label="选择推理模型"
-                  >
-                    <span>推理模型</span>
-                    {modelOptions.map((option) => (
-                      <button
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={model === option.id}
-                        key={option.id}
-                        onClick={() => selectPreferredModel(option.id)}
-                      >
-                        <span
-                          className="model-menu-check"
-                          aria-hidden="true"
-                        >
-                          {model === option.id ? "✓" : ""}
-                        </span>
-                        <span>
-                          <strong>{option.name}</strong>
-                          <small>{option.hint}</small>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  className="composer-model-button"
-                  disabled={isBusy}
-                  aria-haspopup="menu"
-                  aria-expanded={modelMenuOpen}
-                  title="选择推理模型"
-                  onClick={() => {
-                    setPermissionMenuOpen(false);
-                    setModelMenuOpen((current) => !current);
-                  }}
-                >
-                  <span>{selectedModel.name}</span>
-                  <small>{selectedModel.hint}</small>
-                  <span aria-hidden="true">⌄</span>
-                </button>
-              </div>
-            </div>
             <textarea
               ref={draftRef}
               rows={1}
@@ -2138,6 +2029,115 @@ export default function OnlineAdvisorExperience() {
                 <small className="composer-hint-shortcut">
                   Enter 发送 · Shift + Enter 换行
                 </small>
+              </div>
+              <div className="composer-footer-pickers">
+                <div
+                  className={`composer-permission-picker ${
+                    permissionMenuOpen ? "open" : ""
+                  }`}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setPermissionMenuOpen(false);
+                  }}
+                >
+                  {permissionMenuOpen && (
+                    <div
+                      className="permission-menu"
+                      role="menu"
+                      aria-label="选择访问权限"
+                    >
+                      <span>如何批准 DeepSeek 操作？</span>
+                      {permissionOptions.map((option) => (
+                        <button
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={permissionMode === option.id}
+                          key={option.id}
+                          onClick={() => selectPreferredPermission(option.id)}
+                        >
+                          <span className="permission-menu-check" aria-hidden="true">
+                            {permissionMode === option.id ? "✓" : ""}
+                          </span>
+                          <span>
+                            <strong>{option.name}</strong>
+                            <small>{option.hint}</small>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    className={`composer-permission-button ${
+                      permissionMode === "fullAccess" ? "danger" : ""
+                    }`}
+                    disabled={isBusy}
+                    aria-haspopup="menu"
+                    aria-expanded={permissionMenuOpen}
+                    title="选择如何批准 DeepSeek 操作"
+                    onClick={() => {
+                      setModelMenuOpen(false);
+                      setPermissionMenuOpen((current) => !current);
+                    }}
+                  >
+                    <span aria-hidden="true">!</span>
+                    <span>{selectedPermission.name}</span>
+                    <span aria-hidden="true">⌄</span>
+                  </button>
+                </div>
+                <div
+                  className={`composer-model-picker ${
+                    modelMenuOpen ? "open" : ""
+                  }`}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setModelMenuOpen(false);
+                  }}
+                >
+                  {modelMenuOpen && (
+                    <div
+                      className="model-menu"
+                      role="menu"
+                      aria-label="选择推理模型"
+                    >
+                      <span>推理模型</span>
+                      {modelOptions.map((option) => (
+                        <button
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={model === option.id}
+                          key={option.id}
+                          onClick={() => selectPreferredModel(option.id)}
+                        >
+                          <span
+                            className="model-menu-check"
+                            aria-hidden="true"
+                          >
+                            {model === option.id ? "✓" : ""}
+                          </span>
+                          <span>
+                            <strong>{option.name}</strong>
+                            <small>{option.hint}</small>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    className="composer-model-button"
+                    disabled={isBusy}
+                    aria-haspopup="menu"
+                    aria-expanded={modelMenuOpen}
+                    title="选择推理模型"
+                    onClick={() => {
+                      setPermissionMenuOpen(false);
+                      setModelMenuOpen((current) => !current);
+                    }}
+                  >
+                    <span>{selectedModel.name}</span>
+                    <small>{selectedModel.hint}</small>
+                    <span aria-hidden="true">⌄</span>
+                  </button>
+                </div>
               </div>
               <div className="composer-submit">
                 {isBusy ? (
