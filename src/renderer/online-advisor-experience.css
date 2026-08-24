@@ -98,7 +98,7 @@
 }
 
 
-/* === 侧栏顶部:汉堡 + 项目信息(替代原顶栏) === */
+/* === 侧栏顶部:汉堡 + 应用标题(对齐豆包) === */
 .sidebar-header {
   display: flex;
   min-width: 0;
@@ -108,62 +108,14 @@
   border-bottom: 1px solid var(--color-border);
 }
 
-.sidebar-project-button {
-  display: flex;
-  min-width: 0;
+.sidebar-app-title {
   flex: 1;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 8px 4px 4px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--color-text-primary);
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.sidebar-project-button:hover {
-  background: var(--color-surface);
-}
-
-.sidebar-header .brand-mark {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  place-items: center;
-  border-radius: 9px;
-  color: #ffffff;
-  background: var(--color-accent);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-
-.sidebar-project-text {
-  display: flex;
   min-width: 0;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.sidebar-project-name {
   overflow: hidden;
-  font-size: var(--fs-md);
+  color: var(--color-text-primary);
+  font-size: var(--fs-lg);
   font-weight: 700;
   letter-spacing: -0.01em;
-  color: var(--color-text-primary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebar-project-path {
-  overflow: hidden;
-  font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: var(--fs-xs);
-  color: var(--color-text-tertiary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -239,32 +191,6 @@ button:disabled {
 
 
 
-/* === 侧栏切换按钮 (常驻显示,用于折叠侧栏) === */
-.sidebar-toggle {
-  display: grid;
-  flex: 0 0 30px;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  color: var(--color-text-secondary);
-  background: var(--color-bg);
-  cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease;
-}
-
-.sidebar-toggle:hover {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
-}
-
-.sidebar-toggle svg {
-  width: 18px;
-  height: 18px;
-}
-
 
 
 
@@ -287,12 +213,29 @@ button:disabled {
   display: grid;
   min-height: 0;
   min-width: 0;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 11px;
   overflow: hidden;
   padding: 16px 14px 0;
   border-right: 1px solid var(--color-border);
   background: var(--color-bg);
+}
+
+/* 项目/最近两区共用整列一条滚动条(对齐 qoder 侧栏),头部与 footer 固定 */
+.sidebar-scroll {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 11px;
+  /* 伸出侧栏右 padding,滚动条贴侧栏右缘(对齐 qoder 红框位置) */
+  margin-right: -14px;
+  padding-right: 14px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.sidebar-scroll > .history-section {
+  flex: 0 0 auto;
 }
 
 .new-task-button {
@@ -512,13 +455,9 @@ button:disabled {
 
 .project-list {
   display: flex;
-  min-height: 0;
-  flex: 1;
   flex-direction: column;
   gap: 5px;
   margin-top: 8px;
-  overflow-x: hidden;
-  overflow-y: auto;
 }
 
 .project-list > small {
@@ -548,6 +487,34 @@ button:disabled {
   color: #748078;
   background: transparent;
   font-size: 8px;
+}
+
+.project-section-heading-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.project-section-heading .create-project-button {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.project-section-heading .create-project-button:hover:not(:disabled) {
+  color: var(--color-accent);
+  background: var(--color-surface);
+}
+
+.project-section-heading .create-project-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .project-group-header {
@@ -738,18 +705,6 @@ button:disabled {
   color: #9b4138;
 }
 
-.export-button {
-  width: 100%;
-  margin-top: 9px;
-  padding: 8px;
-  border: 0;
-  border-radius: 9px;
-  color: #32443a;
-  background: #dbe2d7;
-  font-size: 10px;
-  font-weight: 700;
-}
-
 .export-notice {
   display: block;
   margin-top: 6px;
@@ -825,12 +780,12 @@ button:disabled {
 .chat-panel {
   display: grid;
   width: 100%;
-  max-width: 780px;
   min-width: 0;
   min-height: 0;
   margin: 0 auto;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  padding: 0 var(--space-6) var(--space-5);
+  /* 对齐豆包:内容区左右各空置 5%(padding 下放到子元素,滚动条贴窗口右缘,对齐 qoder) */
+  padding: 0 0 var(--space-5);
 }
 
 /**
@@ -853,7 +808,7 @@ button:disabled {
   min-width: 0;
   align-items: center;
   gap: 8px;
-  margin-top: 10px;
+  margin: 10px 5% 0;
   padding: 9px 12px;
   border: 1px solid rgba(177, 116, 53, 0.22);
   border-radius: 10px;
@@ -898,7 +853,7 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   min-height: 64px;
-  padding: 12px 0;
+  padding: 12px 5%;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -921,15 +876,6 @@ button:disabled {
   white-space: nowrap;
 }
 
-.model-chip {
-  padding: 5px 10px;
-  border-radius: 999px;
-  color: var(--color-accent);
-  background: rgba(22, 93, 255, 0.1);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-}
-
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -946,12 +892,12 @@ button:disabled {
   min-height: 0;
   max-height: none;
   overflow-y: auto;
-  padding: 20px 3px;
+  padding: 20px 5%;
 }
 
 .message-scroll-to-latest {
   position: absolute;
-  right: 20px;
+  right: calc(5% + 16px);
   bottom: 20px;
   z-index: 8;
   display: inline-flex;
@@ -1945,6 +1891,7 @@ a.message-sources-link:hover .message-sources-link-title {
 }
 
 .composer {
+  margin: 0 5%;
   padding: 12px 14px;
   border: 1px solid var(--color-border);
   border-radius: 20px;
@@ -3205,8 +3152,11 @@ a.message-sources-link:hover .message-sources-link-title {
 @container (max-width: 840px) {
   .content { grid-template-columns: 166px minmax(0, 1fr); }
   .sidebar { padding: 12px 10px; }
-  .chat-panel { padding-right: 12px; padding-left: 12px; }
-  .composer { padding: 11px 12px; }
+  .sidebar-scroll { margin-right: -10px; padding-right: 10px; }
+  .chat-heading { padding-right: 12px; padding-left: 12px; }
+  .message-list { padding-right: 12px; padding-left: 12px; }
+  .thread-reset-notice { margin-right: 12px; margin-left: 12px; }
+  .composer { margin: 0 12px; padding: 11px 12px; }
   .composer-footer { gap: 7px; }
   .composer-tools { min-width: 0; gap: 6px; }
   .composer-model-button, .composer-permission-button { max-width: 165px; }
@@ -3216,6 +3166,7 @@ a.message-sources-link:hover .message-sources-link-title {
 @container (max-width: 640px) {
   .content { grid-template-columns: 138px minmax(0, 1fr); }
   .sidebar { padding: 10px 7px; }
+  .sidebar-scroll { margin-right: -7px; padding-right: 7px; }
   .composer-model-button, .composer-permission-button { max-width: 125px; }
 }
 
@@ -3234,11 +3185,14 @@ a.message-sources-link:hover .message-sources-link-title {
   }
   .sidebar[data-open="true"] { transform: translateX(0); }
 
-  .chat-panel { padding: 0 10px 12px; }
+  .chat-panel { padding: 0 0 12px; }
+  .chat-heading { padding-right: 10px; padding-left: 10px; }
+  .message-list { padding-right: 10px; padding-left: 10px; }
+  .thread-reset-notice { margin-right: 10px; margin-left: 10px; }
   .message { max-width: 95%; }
   .message.assistant { max-width: 95%; }
 
-  .composer { padding: 10px 10px; border-radius: 16px; }
+  .composer { margin: 0 10px; padding: 10px 10px; border-radius: 16px; }
   .composer-model-button, .composer-permission-button { max-width: 100px; }
   .image-button { padding: 5px 6px; }
 

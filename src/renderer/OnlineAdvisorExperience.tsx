@@ -218,7 +218,8 @@ export default function OnlineAdvisorExperience() {
     useState<PersonalizationSettings | null>(null);
   const [personalizationNotice, setPersonalizationNotice] = useState("");
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // 侧栏折叠入口已移除(对齐豆包),常驻展开;data-open 仍供窄屏抽屉 CSS 使用
+  const sidebarOpen = true;
   const [messageEdit, setMessageEdit] = useState<MessageEditState | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [messageFeedback, setMessageFeedback] = useState<Record<string, "up" | "down">>(
@@ -242,13 +243,14 @@ export default function OnlineAdvisorExperience() {
     () => history.find((task) => task.id === selectedTaskId)?.title,
     [history, selectedTaskId]
   );
-  const selectedTaskModel = useMemo(() => {
-    const storedModel = history.find((task) => task.id === selectedTaskId)?.model;
-    return modelOptions.find((option) => option.id === storedModel);
-  }, [history, selectedTaskId]);
+  const registeredProjectIds = useMemo(
+    () => new Set(registeredProjects.map((project) => project.id)),
+    [registeredProjects]
+  );
   const projectGroups = useMemo(
     () =>
       groupTasksByProject(history, registeredProjects)
+        .filter((project) => registeredProjectIds.has(project.id))
         .filter((project) => !hiddenProjectIds.includes(project.id))
         .map((project) => ({
           ...project,
@@ -260,8 +262,19 @@ export default function OnlineAdvisorExperience() {
       hiddenProjectIds,
       hiddenTaskIds,
       projectAliases,
-      registeredProjects
+      registeredProjects,
+      registeredProjectIds
     ]
+  );
+  // 不属于任何已注册项目的对话进入「最近」区(豆包式平铺,按更新时间倒序)
+  const recentTasks = useMemo(
+    () =>
+      groupTasksByProject(history, registeredProjects)
+        .filter((project) => !registeredProjectIds.has(project.id))
+        .flatMap((project) => project.tasks)
+        .filter((task) => !hiddenTaskIds.includes(task.id))
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    [history, hiddenTaskIds, registeredProjects, registeredProjectIds]
   );
   const filteredProjectGroups = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
@@ -285,6 +298,13 @@ export default function OnlineAdvisorExperience() {
       })
       .filter((project) => project.projectMatches || project.tasks.length > 0);
   }, [projectGroups, searchQuery]);
+  const filteredRecentTasks = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    if (!query) return recentTasks;
+    return recentTasks.filter((task) =>
+      `${task.title} ${task.message}`.toLocaleLowerCase().includes(query)
+    );
+  }, [recentTasks, searchQuery]);
   const selectedModel = useMemo(
     () => modelOptions.find((option) => option.id === model) ?? modelOptions[0],
     [model]
@@ -656,15 +676,6 @@ export default function OnlineAdvisorExperience() {
   async function exportTask(taskId: string) {
     const exported = await window.desktop.advisor.exportSession(taskId);
     setExportNotice(exported ? `已导出：${exported}` : "");
-  }
-
-  async function chooseProject() {
-    const selected = await window.desktop.advisor.selectProject();
-    if (!selected) return;
-    setWorkspacePath(selected);
-    registerProject(selected);
-    expandProject(projectIdForPath(selected));
-    focusDraft();
   }
 
   async function createNewTask() {
@@ -1193,54 +1204,62 @@ export default function OnlineAdvisorExperience() {
     }
   }
 
+  function renderTaskRow(task: StoredTask) {
+    return (
+      <div className="project-task-row" key={task.id}>
+        <button
+          className={`project-task-button ${
+            selectedTaskId === task.id ? "selected" : ""
+          }`}
+          onClick={() => openStoredTask(task)}
+          disabled={isBusy}
+          title={task.title}
+        >
+          <span>{task.title}</span>
+          <small>
+            {taskStatusLabel(task.status, task.pendingApprovalCount)} ·{" "}
+            {formatDuration(task.durationMs)}
+          </small>
+        </button>
+        <button
+          type="button"
+          className="management-trigger task-trigger"
+          aria-label={`管理对话 ${task.title}`}
+          onClick={() =>
+            setOpenManagementMenu((currentMenu) =>
+              currentMenu === `task:${task.id}` ? null : `task:${task.id}`
+            )
+          }
+        >
+          ···
+        </button>
+        {openManagementMenu === `task:${task.id}` && (
+          <div className="management-menu task-menu">
+            <button onClick={() => void renameTask(task)}>重命名</button>
+            <button
+              onClick={() => {
+                void exportTask(task.id);
+                setOpenManagementMenu(null);
+              }}
+            >
+              导出报告
+            </button>
+            <button onClick={() => hideTask(task)}>从列表隐藏</button>
+            <button className="danger" onClick={() => void deleteTask(task)}>
+              删除记录
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <main className="app-shell">
       <section className="content">
         <aside className="sidebar" data-open={sidebarOpen}>
           <div className="sidebar-header">
-            <button
-              type="button"
-              className="sidebar-toggle"
-              aria-label={sidebarOpen ? "关闭侧栏" : "打开侧栏"}
-              aria-expanded={sidebarOpen}
-              onClick={() => setSidebarOpen((open) => !open)}
-            >
-              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                <line x1="3.5" y1="6" x2="16.5" y2="6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                <line x1="3.5" y1="10" x2="16.5" y2="10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                <line x1="3.5" y1="14" x2="16.5" y2="14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              className="sidebar-project-button"
-              onClick={chooseProject}
-              title={
-                workspacePath
-                  ? `当前项目：${workspacePath}；点击更换项目`
-                  : "选择项目目录"
-              }
-              aria-label={
-                workspacePath
-                  ? `当前已选择项目 ${selectedProjectName}，点击更换项目`
-                  : "选择项目"
-              }
-            >
-              <span className="brand-mark" aria-hidden="true">DS</span>
-              <span className="sidebar-project-text">
-                <strong className="sidebar-project-name">
-                  {selectedProjectName || "DeepSeek Codex"}
-                </strong>
-                <small
-                  className="sidebar-project-path"
-                  title={workspacePath || "尚未选择项目"}
-                >
-                  {workspacePath
-                    ? workspacePath.split("/").slice(-2).join("/")
-                    : "选择项目目录"}
-                </small>
-              </span>
-            </button>
+            <span className="sidebar-app-title">AI参谋</span>
           </div>
           <div className="sidebar-primary">
             <div className="sidebar-primary-actions">
@@ -1293,14 +1312,26 @@ export default function OnlineAdvisorExperience() {
               </div>
             )}
           </div>
+          <div className="sidebar-scroll">
           <div className="history-section project-history-section">
             <div className="project-section-heading">
               <span className="section-label">项目</span>
-              {(hiddenProjectIds.length > 0 || hiddenTaskIds.length > 0) && (
-                <button type="button" onClick={restoreHiddenItems}>
-                  恢复隐藏项
+              <span className="project-section-heading-actions">
+                <button
+                  type="button"
+                  className="create-project-button"
+                  onClick={() => void createNewTask()}
+                  disabled={isBusy}
+                  title="选择目录，创建新项目"
+                >
+                  ＋ 新建项目
                 </button>
-              )}
+                {(hiddenProjectIds.length > 0 || hiddenTaskIds.length > 0) && (
+                  <button type="button" onClick={restoreHiddenItems}>
+                    恢复隐藏项
+                  </button>
+                )}
+              </span>
             </div>
             <div className="project-list">
               {filteredProjectGroups.length === 0 ? (
@@ -1377,65 +1408,7 @@ export default function OnlineAdvisorExperience() {
                       </div>
                       {expanded && (
                         <div className="project-task-list">
-                          {project.tasks.map((task) => (
-                            <div className="project-task-row" key={task.id}>
-                              <button
-                                className={`project-task-button ${
-                                  selectedTaskId === task.id ? "selected" : ""
-                                }`}
-                                onClick={() => openStoredTask(task)}
-                                disabled={isBusy}
-                                title={task.title}
-                              >
-                                <span>{task.title}</span>
-                                <small>
-                                  {taskStatusLabel(
-                                    task.status,
-                                    task.pendingApprovalCount
-                                  )}{" "}
-                                  · {formatDuration(task.durationMs)}
-                                </small>
-                              </button>
-                              <button
-                                type="button"
-                                className="management-trigger task-trigger"
-                                aria-label={`管理对话 ${task.title}`}
-                                onClick={() =>
-                                  setOpenManagementMenu((currentMenu) =>
-                                    currentMenu === `task:${task.id}`
-                                      ? null
-                                      : `task:${task.id}`
-                                  )
-                                }
-                              >
-                                ···
-                              </button>
-                              {openManagementMenu === `task:${task.id}` && (
-                                <div className="management-menu task-menu">
-                                  <button onClick={() => void renameTask(task)}>
-                                    重命名
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      void exportTask(task.id);
-                                      setOpenManagementMenu(null);
-                                    }}
-                                  >
-                                    导出报告
-                                  </button>
-                                  <button onClick={() => hideTask(task)}>
-                                    从列表隐藏
-                                  </button>
-                                  <button
-                                    className="danger"
-                                    onClick={() => void deleteTask(task)}
-                                  >
-                                    删除记录
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          ))}
+                          {project.tasks.map((task) => renderTaskRow(task))}
                         </div>
                       )}
                     </section>
@@ -1443,16 +1416,20 @@ export default function OnlineAdvisorExperience() {
                 })
               )}
             </div>
-            {selectedTaskId && (
-              <button
-                className="export-button"
-                onClick={() => exportTask(selectedTaskId)}
-                disabled={isBusy}
-              >
-                导出当前任务报告
-              </button>
-            )}
             {exportNotice && <small className="export-notice">{exportNotice}</small>}
+          </div>
+          <div className="history-section recent-history-section">
+            <div className="project-section-heading">
+              <span className="section-label">最近</span>
+            </div>
+            <div className="project-list recent-list">
+              {filteredRecentTasks.length === 0 ? (
+                searchQuery ? <small>没有匹配结果</small> : null
+              ) : (
+                filteredRecentTasks.map((task) => renderTaskRow(task))
+              )}
+            </div>
+          </div>
           </div>
           <footer className="sidebar-footer">
             <button
@@ -1489,11 +1466,6 @@ export default function OnlineAdvisorExperience() {
               </span>
               <h2>{selectedTaskTitle || selectedProjectName || "开始新任务"}</h2>
             </div>
-            {selectedTaskId && selectedTaskModel && (
-              <span className="model-chip historical-model-chip">
-                {selectedTaskModel.name} · {selectedTaskModel.hint}
-              </span>
-            )}
           </div>
 
           <div
