@@ -361,6 +361,7 @@ model UserLinduoGrant {
   model     LinduoChatModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
 
   @@id([userId, modelId])
+  @@index([modelId])
   @@map("user_linduo_grants")
 }
 
