@@ -15,9 +15,9 @@ enum UserStatus {
 }
 
 model Organization {
-  id          String      @id @default(cuid())
+  id          String       @id @default(cuid())
   name        String
-  createdAt   DateTime    @default(now()) @map("created_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
   users       User[]
   roles       Role[]
   stores      EbayStore[]
@@ -26,86 +26,86 @@ model Organization {
   aiQuotas    AiQuota[]
 
   // ---- 业务域（全部 org 隔离，级联删除） ----
-  selectionTasks               SelectionTask[]
-  supplyPlatforms              SupplyPlatform[]
-  collectionTaskPlatforms      CollectionTaskPlatform[]
-  marketplacePlatforms         MarketplacePlatform[]
-  productWarehouses            ProductWarehouse[]
-  marketplaceAccounts          MarketplaceAccount[]
-  marketplaceAccountCredentials MarketplaceAccountCredential[]
-  taskSelectionRules           TaskSelectionRule[]
-  productEvaluations           ProductEvaluation[]
-  evaluationEvidences          EvaluationEvidence[]
-  productRiskFlags             ProductRiskFlag[]
-  productRejectionRecords      ProductRejectionRecord[]
-  marketCandidates             MarketCandidate[]
-  supplyCandidates             SupplyCandidate[]
-  candidateCollectionRuns      CandidateCollectionRun[]
-  candidateCollectionRecords   CandidateCollectionRecord[]
-  productIntakeRegistries      ProductIntakeRegistry[]
-  comparisonRecords            ComparisonRecord[]
-  selectionRecords             SelectionRecord[]
-  inventoryRecords             InventoryRecord[]
-  listingRecords               ListingRecord[]
-  workflowEvents               WorkflowEvent[]
-  purchaseOrders               PurchaseOrder[]
-  reconciliationRecords        ReconciliationRecord[]
-  supplyWarehouseProducts      SupplyWarehouseProduct[]
-  marketplaceSelectionProducts MarketplaceSelectionProduct[]
-  marketplaceMediaAssets       MarketplaceMediaAsset[]
-  marketplacePublishDrafts     MarketplacePublishDraft[]
-  marketplacePublishAudits     MarketplacePublishAudit[]
-  ebayStoreUrlHistories        EbayStoreUrlHistory[]
-  ebayListings                 EbayListing[]
-  ebayStoreCategories          EbayStoreCategory[]
-  ebayCategorySyncRuns         EbayCategorySyncRun[]
-  ebayProductSyncRuns          EbayProductSyncRun[]
-  ebayProductSyncCheckpoints   EbayProductSyncCheckpoint[]
-  ebayListingAbsenceEvidences  EbayListingAbsenceEvidence[]
-  ebayLocalProducts            EbayLocalProduct[]
-  ebayLocalProductSnapshots    EbayLocalProductSnapshot[]
-  ebayLocalProductMedias       EbayLocalProductMedia[]
-  ebayImageVisualInspections   EbayImageVisualInspection[]
-  ebayImageVisualReviewEvents  EbayImageVisualReviewEvent[]
-  ebayOptimizationDrafts       EbayOptimizationDraft[]
+  selectionTasks                 SelectionTask[]
+  supplyPlatforms                SupplyPlatform[]
+  collectionTaskPlatforms        CollectionTaskPlatform[]
+  marketplacePlatforms           MarketplacePlatform[]
+  productWarehouses              ProductWarehouse[]
+  marketplaceAccounts            MarketplaceAccount[]
+  marketplaceAccountCredentials  MarketplaceAccountCredential[]
+  taskSelectionRules             TaskSelectionRule[]
+  productEvaluations             ProductEvaluation[]
+  evaluationEvidences            EvaluationEvidence[]
+  productRiskFlags               ProductRiskFlag[]
+  productRejectionRecords        ProductRejectionRecord[]
+  marketCandidates               MarketCandidate[]
+  supplyCandidates               SupplyCandidate[]
+  candidateCollectionRuns        CandidateCollectionRun[]
+  candidateCollectionRecords     CandidateCollectionRecord[]
+  productIntakeRegistries        ProductIntakeRegistry[]
+  comparisonRecords              ComparisonRecord[]
+  selectionRecords               SelectionRecord[]
+  inventoryRecords               InventoryRecord[]
+  listingRecords                 ListingRecord[]
+  workflowEvents                 WorkflowEvent[]
+  purchaseOrders                 PurchaseOrder[]
+  reconciliationRecords          ReconciliationRecord[]
+  supplyWarehouseProducts        SupplyWarehouseProduct[]
+  marketplaceSelectionProducts   MarketplaceSelectionProduct[]
+  marketplaceMediaAssets         MarketplaceMediaAsset[]
+  marketplacePublishDrafts       MarketplacePublishDraft[]
+  marketplacePublishAudits       MarketplacePublishAudit[]
+  ebayStoreUrlHistories          EbayStoreUrlHistory[]
+  ebayListings                   EbayListing[]
+  ebayStoreCategories            EbayStoreCategory[]
+  ebayCategorySyncRuns           EbayCategorySyncRun[]
+  ebayProductSyncRuns            EbayProductSyncRun[]
+  ebayProductSyncCheckpoints     EbayProductSyncCheckpoint[]
+  ebayListingAbsenceEvidences    EbayListingAbsenceEvidence[]
+  ebayLocalProducts              EbayLocalProduct[]
+  ebayLocalProductSnapshots      EbayLocalProductSnapshot[]
+  ebayLocalProductMedias         EbayLocalProductMedia[]
+  ebayImageVisualInspections     EbayImageVisualInspection[]
+  ebayImageVisualReviewEvents    EbayImageVisualReviewEvent[]
+  ebayOptimizationDrafts         EbayOptimizationDraft[]
   ebayContentOptimizationRecords EbayContentOptimizationRecord[]
-  ebayTitleDecisions           EbayTitleDecision[]
-  ebayTitleHandoffs            EbayTitleHandoff[]
-  ebayPublishTasks             EbayPublishTask[]
-  ebayAcceptanceBatches        EbayAcceptanceBatch[]
-  ebayMarketResearches         EbayMarketResearch[]
-  ebayMarketResearchHistories  EbayMarketResearchHistory[]
-  complianceSources            ComplianceSource[]
-  complianceSourceChanges      ComplianceSourceChange[]
-  complianceRules              ComplianceRule[]
-  complianceRuleVersions       ComplianceRuleVersion[]
-  complianceRecalls            ComplianceRecall[]
-  complianceCheckRuns          ComplianceCheckRun[]
-  complianceProductProfiles    ComplianceProductProfile[]
-  complianceDocuments          ComplianceDocument[]
-  complianceCategoryTemplates  ComplianceCategoryTemplate[]
-  complianceTasks              ComplianceTask[]
-  complianceAlerts             ComplianceAlert[]
-  complianceAuditEvents        ComplianceAuditEvent[]
-  complianceReleasePermits     ComplianceReleasePermit[]
-  complianceEnforcementCases   ComplianceEnforcementCase[]
+  ebayTitleDecisions             EbayTitleDecision[]
+  ebayTitleHandoffs              EbayTitleHandoff[]
+  ebayPublishTasks               EbayPublishTask[]
+  ebayAcceptanceBatches          EbayAcceptanceBatch[]
+  ebayMarketResearches           EbayMarketResearch[]
+  ebayMarketResearchHistories    EbayMarketResearchHistory[]
+  complianceSources              ComplianceSource[]
+  complianceSourceChanges        ComplianceSourceChange[]
+  complianceRules                ComplianceRule[]
+  complianceRuleVersions         ComplianceRuleVersion[]
+  complianceRecalls              ComplianceRecall[]
+  complianceCheckRuns            ComplianceCheckRun[]
+  complianceProductProfiles      ComplianceProductProfile[]
+  complianceDocuments            ComplianceDocument[]
+  complianceCategoryTemplates    ComplianceCategoryTemplate[]
+  complianceTasks                ComplianceTask[]
+  complianceAlerts               ComplianceAlert[]
+  complianceAuditEvents          ComplianceAuditEvent[]
+  complianceReleasePermits       ComplianceReleasePermit[]
+  complianceEnforcementCases     ComplianceEnforcementCase[]
 
   @@map("organizations")
 }
 
 model User {
-  id                 String       @id @default(cuid())
-  orgId              String       @map("org_id")
-  email              String       @unique
+  id                 String           @id @default(cuid())
+  orgId              String           @map("org_id")
+  email              String           @unique
   name               String
-  passwordHash       String       @map("password_hash")
-  isOwner            Boolean      @default(false) @map("is_owner")
-  status             UserStatus   @default(ACTIVE)
-  mustChangePassword Boolean      @default(false) @map("must_change_password")
-  lastLoginAt        DateTime?    @map("last_login_at")
-  createdAt          DateTime     @default(now()) @map("created_at")
-  updatedAt          DateTime     @updatedAt @map("updated_at")
-  org                Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  passwordHash       String           @map("password_hash")
+  isOwner            Boolean          @default(false) @map("is_owner")
+  status             UserStatus       @default(ACTIVE)
+  mustChangePassword Boolean          @default(false) @map("must_change_password")
+  lastLoginAt        DateTime?        @map("last_login_at")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+  org                Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
   roles              UserRole[]
   storeGrants        UserStoreGrant[]
   refreshTokens      AuthToken[]
@@ -113,8 +113,11 @@ model User {
   aiUsageLogs        AiUsageLog[]
   aiQuotas           AiQuota[]
 
-  @@map("users")
+  preferredLinduoModelId String?           @map("preferred_linduo_model_id")
+  linduoGrants           UserLinduoGrant[]
+
   @@index([orgId])
+  @@map("users")
 }
 
 model Role {
@@ -128,10 +131,10 @@ model Role {
   permissions RolePermission[]
   users       UserRole[]
 
-  @@map("roles")
   @@unique([orgId, name])
   @@unique([orgId, key])
   @@index([orgId])
+  @@map("roles")
 }
 
 model RolePermission {
@@ -154,44 +157,44 @@ model UserRole {
 }
 
 model EbayStore {
-  id                    String           @id @default(cuid())
-  orgId                 String           @map("org_id")
-  name                  String
-  sellerId              String           @default("") @map("seller_id")
-  marketplaceId         String           @default("EBAY_US") @map("marketplace_id")
+  id                         String                          @id @default(cuid())
+  orgId                      String                          @map("org_id")
+  name                       String
+  sellerId                   String                          @default("") @map("seller_id")
+  marketplaceId              String                          @default("EBAY_US") @map("marketplace_id")
   // PENDING（待授权）/ CONNECTED / ERROR
-  status                String           @default("PENDING")
-  encryptedAccessToken  String           @default("") @map("encrypted_access_token")
-  encryptedRefreshToken String           @default("") @map("encrypted_refresh_token")
-  accessTokenExpiresAt  String?          @map("access_token_expires_at")
-  refreshTokenExpiresAt String?          @map("refresh_token_expires_at")
-  lastSyncAt            String?          @map("last_sync_at")
-  syncError             String?          @map("sync_error")
-  publicStoreUrl        String           @default("") @map("public_store_url")
-  publicStoreVerifiedAt String?          @map("public_store_verified_at")
-  createdAt             DateTime         @default(now()) @map("created_at")
-  updatedAt             DateTime         @updatedAt @map("updated_at")
-  org                   Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  grants                UserStoreGrant[]
-  urlHistories          EbayStoreUrlHistory[]
-  listings              EbayListing[]
-  storeCategories       EbayStoreCategory[]
-  categorySyncRuns      EbayCategorySyncRun[]
-  productSyncRuns       EbayProductSyncRun[]
-  productSyncCheckpoints EbayProductSyncCheckpoint[]
-  listingAbsenceEvidences EbayListingAbsenceEvidence[]
-  localProducts         EbayLocalProduct[]
-  optimizationDrafts    EbayOptimizationDraft[]
+  status                     String                          @default("PENDING")
+  encryptedAccessToken       String                          @default("") @map("encrypted_access_token")
+  encryptedRefreshToken      String                          @default("") @map("encrypted_refresh_token")
+  accessTokenExpiresAt       String?                         @map("access_token_expires_at")
+  refreshTokenExpiresAt      String?                         @map("refresh_token_expires_at")
+  lastSyncAt                 String?                         @map("last_sync_at")
+  syncError                  String?                         @map("sync_error")
+  publicStoreUrl             String                          @default("") @map("public_store_url")
+  publicStoreVerifiedAt      String?                         @map("public_store_verified_at")
+  createdAt                  DateTime                        @default(now()) @map("created_at")
+  updatedAt                  DateTime                        @updatedAt @map("updated_at")
+  org                        Organization                    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  grants                     UserStoreGrant[]
+  urlHistories               EbayStoreUrlHistory[]
+  listings                   EbayListing[]
+  storeCategories            EbayStoreCategory[]
+  categorySyncRuns           EbayCategorySyncRun[]
+  productSyncRuns            EbayProductSyncRun[]
+  productSyncCheckpoints     EbayProductSyncCheckpoint[]
+  listingAbsenceEvidences    EbayListingAbsenceEvidence[]
+  localProducts              EbayLocalProduct[]
+  optimizationDrafts         EbayOptimizationDraft[]
   contentOptimizationRecords EbayContentOptimizationRecord[]
-  titleDecisions        EbayTitleDecision[]
-  titleHandoffs         EbayTitleHandoff[]
-  publishTasks          EbayPublishTask[]
-  acceptanceBatches     EbayAcceptanceBatch[]
-  marketResearches      EbayMarketResearch[]
-  marketResearchHistories EbayMarketResearchHistory[]
+  titleDecisions             EbayTitleDecision[]
+  titleHandoffs              EbayTitleHandoff[]
+  publishTasks               EbayPublishTask[]
+  acceptanceBatches          EbayAcceptanceBatch[]
+  marketResearches           EbayMarketResearch[]
+  marketResearchHistories    EbayMarketResearchHistory[]
 
-  @@map("ebay_stores")
   @@index([orgId])
+  @@map("ebay_stores")
 }
 
 model UserStoreGrant {
@@ -201,8 +204,8 @@ model UserStoreGrant {
   store   EbayStore @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@id([userId, storeId])
-  @@map("user_store_grants")
   @@index([storeId])
+  @@map("user_store_grants")
 }
 
 model AuthToken {
@@ -216,8 +219,8 @@ model AuthToken {
   createdAt DateTime  @default(now()) @map("created_at")
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("auth_tokens")
   @@index([userId])
+  @@map("auth_tokens")
 }
 
 model AuditLog {
@@ -233,8 +236,8 @@ model AuditLog {
   org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user       User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  @@map("audit_logs")
   @@index([orgId, createdAt])
+  @@map("audit_logs")
 }
 
 model AiUsageLog {
@@ -249,8 +252,8 @@ model AiUsageLog {
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  @@map("ai_usage_logs")
   @@index([orgId, createdAt])
+  @@map("ai_usage_logs")
 }
 
 model AiQuota {
@@ -319,15 +322,57 @@ model LinduoLoginSession {
   @@map("linduo_login_sessions")
 }
 
+// ===================== Linduo 聊天模型选用 (M1) =====================
+// 启动时跟 src/shared/linduoCatalog.ts 的 LINDUO_MODELS 静态目录对账:
+// - 静态新增 modelId → INSERT enabled=true
+// - 静态已有但 displayName/description 变化 → UPDATE
+// - 静态移除 modelId → UPDATE enabled=false (软关,保留 grants 历史)
+
+model LinduoChatModel {
+  id           String            @id @default(cuid())
+  /// 零度API 模型 id，与 LinduoModelMallPage 静态目录严格一致
+  modelId      String            @unique @map("model_id")
+  /// openai / google / anthropic
+  vendor       String
+  /// UI 展示名
+  displayName  String            @map("display_name")
+  description  String?
+  /// 128K / 1M 等
+  contextLabel String?           @map("context_label")
+  /// JSON 字符串，如 ["CHAT","VISION"]
+  capabilities String            @default("[]")
+  /// 推理深度 low/medium/high/max；M1 全部默认 medium
+  effort       String            @default("medium")
+  enabled      Boolean           @default(true)
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+  grants       UserLinduoGrant[]
+
+  @@index([vendor])
+  @@map("linduo_chat_models")
+}
+
+model UserLinduoGrant {
+  userId    String          @map("user_id")
+  modelId   String          @map("model_id")
+  grantedBy String?         @map("granted_by")
+  grantedAt DateTime        @default(now()) @map("granted_at")
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  model     LinduoChatModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@id([userId, modelId])
+  @@map("user_linduo_grants")
+}
+
 // ===================== 选品 / 采集域（自 SQLite 平移，时间列保持 ISO8601 字符串） =====================
 
 model SelectionTask {
-  id               String                    @id
-  orgId            String                    @map("org_id")
+  id               String                   @id
+  orgId            String                   @map("org_id")
   payload          Json
   stage            String
-  createdAt        String                    @map("created_at")
-  org              Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdAt        String                   @map("created_at")
+  org              Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
   platforms        CollectionTaskPlatform[]
   selectionRule    TaskSelectionRule?
   evaluations      ProductEvaluation[]
@@ -338,8 +383,8 @@ model SelectionTask {
   inventoryRecords InventoryRecord[]
   listingRecords   ListingRecord[]
 
-  @@map("selection_tasks")
   @@index([orgId])
+  @@map("selection_tasks")
 }
 
 model SupplyPlatform {
@@ -410,8 +455,8 @@ model MarketplaceAccount {
   org             Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
   platform        MarketplacePlatform @relation(fields: [orgId, platformCode], references: [orgId, code])
 
-  @@map("marketplace_accounts")
   @@index([orgId])
+  @@map("marketplace_accounts")
 }
 
 model MarketplaceAccountCredential {
@@ -444,23 +489,23 @@ model TaskSelectionRule {
 }
 
 model ProductEvaluation {
-  id               String              @id
-  orgId            String              @map("org_id")
-  taskId           String              @map("task_id")
-  productUrl       String              @map("product_url")
-  totalScore       Float?              @map("total_score")
+  id               String               @id
+  orgId            String               @map("org_id")
+  taskId           String               @map("task_id")
+  productUrl       String               @map("product_url")
+  totalScore       Float?               @map("total_score")
   grade            String?
-  dataCompleteness Float?              @map("data_completeness")
-  dimensionScores  Json                @default("{}") @map("dimension_scores")
+  dataCompleteness Float?               @map("data_completeness")
+  dimensionScores  Json                 @default("{}") @map("dimension_scores")
   recommendation   String?
-  evaluatedAt      String              @map("evaluated_at")
-  org              Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  task             SelectionTask       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  evaluatedAt      String               @map("evaluated_at")
+  org              Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  task             SelectionTask        @relation(fields: [taskId], references: [id], onDelete: Cascade)
   evidences        EvaluationEvidence[]
   riskFlags        ProductRiskFlag[]
 
-  @@map("product_evaluations")
   @@index([taskId, totalScore])
+  @@map("product_evaluations")
 }
 
 model EvaluationEvidence {
@@ -519,8 +564,8 @@ model MarketCandidate {
   org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@id([orgId, platformCode, url])
-  @@map("market_candidates")
   @@index([orgId, platformCode, updatedAt(sort: Desc)])
+  @@map("market_candidates")
 }
 
 model SupplyCandidate {
@@ -536,9 +581,9 @@ model SupplyCandidate {
   task      SelectionTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@id([taskId, url])
-  @@map("supply_candidates")
   @@index([taskId, selected, score])
   @@index([orgId])
+  @@map("supply_candidates")
 }
 
 model CandidateCollectionRun {
@@ -560,8 +605,8 @@ model CandidateCollectionRun {
   org              Organization                @relation(fields: [orgId], references: [id], onDelete: Cascade)
   records          CandidateCollectionRecord[]
 
-  @@map("candidate_collection_runs")
   @@index([orgId, candidateArea, completedAt(sort: Desc)])
+  @@map("candidate_collection_runs")
 }
 
 model CandidateCollectionRecord {
@@ -578,8 +623,8 @@ model CandidateCollectionRecord {
   org              Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@id([collectionRunId, candidateArea, candidateKey])
-  @@map("candidate_collection_records")
   @@index([orgId, candidateArea, candidateKey, collectedAt(sort: Desc)])
+  @@map("candidate_collection_records")
 }
 
 model ProductIntakeRegistry {
@@ -596,8 +641,8 @@ model ProductIntakeRegistry {
   org                Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@id([orgId, identityKey])
-  @@map("product_intake_registry")
   @@index([orgId, platformCode, productId])
+  @@map("product_intake_registry")
 }
 
 // ===================== 比价 / 选品决策 / 工作流 =====================
@@ -621,8 +666,8 @@ model ComparisonRecord {
   task               SelectionTask     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   selections         SelectionRecord[]
 
-  @@map("comparison_records")
   @@index([taskId, status])
+  @@map("comparison_records")
 }
 
 model SelectionRecord {
@@ -641,8 +686,8 @@ model SelectionRecord {
   inventoryRecords  InventoryRecord[]
   warehouseProducts SupplyWarehouseProduct[]
 
-  @@map("selection_records")
   @@index([taskId, decision])
+  @@map("selection_records")
 }
 
 model InventoryRecord {
@@ -663,8 +708,8 @@ model InventoryRecord {
   selection      SelectionRecord? @relation(fields: [selectionId], references: [id], onDelete: SetNull)
   listingRecords ListingRecord[]
 
-  @@map("inventory_records")
   @@index([taskId, status])
+  @@map("inventory_records")
 }
 
 model ListingRecord {
@@ -684,8 +729,8 @@ model ListingRecord {
   task              SelectionTask    @relation(fields: [taskId], references: [id], onDelete: Cascade)
   inventory         InventoryRecord? @relation(fields: [inventoryId], references: [id], onDelete: SetNull)
 
-  @@map("listing_records")
   @@index([taskId, status])
+  @@map("listing_records")
 }
 
 model WorkflowEvent {
@@ -699,8 +744,8 @@ model WorkflowEvent {
   createdAt String       @map("created_at")
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-  @@map("workflow_events")
   @@index([orgId, taskId])
+  @@map("workflow_events")
 }
 
 // 仅被 getWorkflowCounts 计数（无写入方法），保留表以保计数语义
@@ -716,8 +761,8 @@ model PurchaseOrder {
   payload        Json         @default("{}")
   org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-  @@map("purchase_orders")
   @@index([orgId])
+  @@map("purchase_orders")
 }
 
 model ReconciliationRecord {
@@ -737,64 +782,64 @@ model ReconciliationRecord {
   updatedAt       String       @map("updated_at")
   org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-  @@map("reconciliation_records")
   @@index([orgId])
+  @@map("reconciliation_records")
 }
 
 // ===================== 供应仓 / 平台选品发布 =====================
 
 model SupplyWarehouseProduct {
-  id                    String                       @id
-  orgId                 String                       @map("org_id")
-  warehouseCode         String                       @map("warehouse_code")
-  selectionId           String?                      @map("selection_id")
-  sourceUrl             String                       @map("source_url")
-  productId             String                       @default("") @map("product_id")
+  id                    String                        @id
+  orgId                 String                        @map("org_id")
+  warehouseCode         String                        @map("warehouse_code")
+  selectionId           String?                       @map("selection_id")
+  sourceUrl             String                        @map("source_url")
+  productId             String                        @default("") @map("product_id")
   title                 String
-  imageUrl              String                       @default("") @map("image_url")
-  priceText             String                       @default("") @map("price_text")
-  supplierName          String                       @default("") @map("supplier_name")
-  category              String                       @default("未分类")
-  subcategory           String                       @default("待人工分类")
-  tertiaryCategory      String                       @default("待细分") @map("tertiary_category")
-  status                String                       @default("ACTIVE")
-  payload               Json                         @default("{}")
-  createdAt             String                       @map("created_at")
-  updatedAt             String                       @map("updated_at")
-  org                   Organization                 @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  selection             SelectionRecord?             @relation(fields: [selectionId], references: [id], onDelete: SetNull)
+  imageUrl              String                        @default("") @map("image_url")
+  priceText             String                        @default("") @map("price_text")
+  supplierName          String                        @default("") @map("supplier_name")
+  category              String                        @default("未分类")
+  subcategory           String                        @default("待人工分类")
+  tertiaryCategory      String                        @default("待细分") @map("tertiary_category")
+  status                String                        @default("ACTIVE")
+  payload               Json                          @default("{}")
+  createdAt             String                        @map("created_at")
+  updatedAt             String                        @map("updated_at")
+  org                   Organization                  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  selection             SelectionRecord?              @relation(fields: [selectionId], references: [id], onDelete: SetNull)
   marketplaceSelections MarketplaceSelectionProduct[]
 
-  @@map("supply_warehouse_products")
   @@unique([orgId, warehouseCode, sourceUrl])
   @@index([orgId, warehouseCode, status, updatedAt(sort: Desc)])
+  @@map("supply_warehouse_products")
 }
 
 model MarketplaceSelectionProduct {
-  id              String                   @id
-  orgId           String                   @map("org_id")
-  marketplaceCode String                   @map("marketplace_code")
-  supplyProductId String                   @map("supply_product_id")
-  warehouseCode   String                   @map("warehouse_code")
-  sourceUrl       String                   @map("source_url")
-  productId       String                   @default("") @map("product_id")
+  id              String                    @id
+  orgId           String                    @map("org_id")
+  marketplaceCode String                    @map("marketplace_code")
+  supplyProductId String                    @map("supply_product_id")
+  warehouseCode   String                    @map("warehouse_code")
+  sourceUrl       String                    @map("source_url")
+  productId       String                    @default("") @map("product_id")
   title           String
-  imageUrl        String                   @default("") @map("image_url")
-  priceText       String                   @default("") @map("price_text")
-  category        String                   @default("未分类")
-  status          String                   @default("SELECTED")
-  mediaStatus     String                   @default("PENDING") @map("media_status")
-  payload         Json                     @default("{}")
-  createdAt       String                   @map("created_at")
-  updatedAt       String                   @map("updated_at")
-  org             Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  supplyProduct   SupplyWarehouseProduct   @relation(fields: [supplyProductId], references: [id], onDelete: Cascade)
+  imageUrl        String                    @default("") @map("image_url")
+  priceText       String                    @default("") @map("price_text")
+  category        String                    @default("未分类")
+  status          String                    @default("SELECTED")
+  mediaStatus     String                    @default("PENDING") @map("media_status")
+  payload         Json                      @default("{}")
+  createdAt       String                    @map("created_at")
+  updatedAt       String                    @map("updated_at")
+  org             Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  supplyProduct   SupplyWarehouseProduct    @relation(fields: [supplyProductId], references: [id], onDelete: Cascade)
   mediaAssets     MarketplaceMediaAsset[]
   publishDrafts   MarketplacePublishDraft[]
 
-  @@map("marketplace_selection_products")
   @@unique([orgId, marketplaceCode, supplyProductId])
   @@index([orgId, marketplaceCode, status, updatedAt(sort: Desc)])
+  @@map("marketplace_selection_products")
 }
 
 model MarketplaceMediaAsset {
@@ -810,8 +855,8 @@ model MarketplaceMediaAsset {
   org                    Organization                @relation(fields: [orgId], references: [id], onDelete: Cascade)
   selection              MarketplaceSelectionProduct @relation(fields: [marketplaceSelectionId], references: [id], onDelete: Cascade)
 
-  @@map("marketplace_media_assets")
   @@index([marketplaceSelectionId, selected(sort: Desc), createdAt(sort: Desc)])
+  @@map("marketplace_media_assets")
 }
 
 model MarketplacePublishDraft {
@@ -834,10 +879,10 @@ model MarketplacePublishDraft {
   selection              MarketplaceSelectionProduct @relation(fields: [marketplaceSelectionId], references: [id], onDelete: Cascade)
   audits                 MarketplacePublishAudit[]
 
-  @@map("marketplace_publish_drafts")
   @@unique([orgId, marketplaceCode, marketplaceSelectionId])
   @@unique([orgId, marketplaceCode, platformSku])
   @@index([orgId, marketplaceCode, status, updatedAt(sort: Desc)])
+  @@map("marketplace_publish_drafts")
 }
 
 model MarketplacePublishAudit {
@@ -851,8 +896,8 @@ model MarketplacePublishAudit {
   org             Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
   draft           MarketplacePublishDraft? @relation(fields: [draftId], references: [id], onDelete: SetNull)
 
-  @@map("marketplace_publish_audits")
   @@index([orgId, marketplaceCode, createdAt(sort: Desc)])
+  @@map("marketplace_publish_audits")
 }
 
 // ===================== eBay 店铺同步 / 线上产品 =====================
@@ -867,8 +912,8 @@ model EbayStoreUrlHistory {
   org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   store          EbayStore    @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  @@map("ebay_store_url_history")
   @@index([storeId, verifiedAt(sort: Desc)])
+  @@map("ebay_store_url_history")
 }
 
 model EbayListing {
@@ -892,10 +937,10 @@ model EbayListing {
   org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   store         EbayStore    @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  @@map("ebay_listings")
   @@unique([storeId, marketplaceId, listingId])
   @@index([storeId, status])
   @@index([orgId])
+  @@map("ebay_listings")
 }
 
 model EbayStoreCategory {
@@ -915,8 +960,8 @@ model EbayStoreCategory {
   store            EbayStore    @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@id([storeId, categoryId])
-  @@map("ebay_store_categories")
   @@index([storeId, status, parentCategoryId, sortOrder])
+  @@map("ebay_store_categories")
 }
 
 model EbayCategorySyncRun {
@@ -934,8 +979,8 @@ model EbayCategorySyncRun {
   org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   store          EbayStore    @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  @@map("ebay_category_sync_runs")
   @@index([storeId, syncedAt(sort: Desc)])
+  @@map("ebay_category_sync_runs")
 }
 
 model EbayProductSyncRun {
@@ -962,8 +1007,8 @@ model EbayProductSyncRun {
   org                  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   store                EbayStore    @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  @@map("ebay_product_sync_runs")
   @@index([storeId, syncedAt(sort: Desc)])
+  @@map("ebay_product_sync_runs")
 }
 
 model EbayProductSyncCheckpoint {
@@ -982,8 +1027,8 @@ model EbayProductSyncCheckpoint {
   org                  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   store                EbayStore    @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  @@map("ebay_product_sync_checkpoints")
   @@index([storeId, updatedAt(sort: Desc)])
+  @@map("ebay_product_sync_checkpoints")
 }
 
 model EbayListingAbsenceEvidence {
@@ -1020,10 +1065,10 @@ model EbayLocalProduct {
   snapshots         EbayLocalProductSnapshot[]
   visualInspections EbayImageVisualInspection[]
 
-  @@map("ebay_local_products")
   @@unique([storeId, marketplaceId, listingId])
   @@index([storeId, categoryId, updatedAt(sort: Desc)])
   @@index([orgId])
+  @@map("ebay_local_products")
 }
 
 model EbayLocalProductSnapshot {
@@ -1039,9 +1084,9 @@ model EbayLocalProductSnapshot {
   media             EbayLocalProductMedia[]
   visualInspections EbayImageVisualInspection[]
 
-  @@map("ebay_local_product_snapshots")
   @@unique([localProductId, version])
   @@index([localProductId, version(sort: Desc)])
+  @@map("ebay_local_product_snapshots")
 }
 
 model EbayLocalProductMedia {
@@ -1061,8 +1106,8 @@ model EbayLocalProductMedia {
   org            Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
   snapshot       EbayLocalProductSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
 
-  @@map("ebay_local_product_media")
   @@index([snapshotId, sortOrder])
+  @@map("ebay_local_product_media")
 }
 
 model EbayImageVisualInspection {
@@ -1080,8 +1125,8 @@ model EbayImageVisualInspection {
   snapshot       EbayLocalProductSnapshot     @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
   reviewEvents   EbayImageVisualReviewEvent[]
 
-  @@map("ebay_image_visual_inspections")
   @@index([localProductId, snapshotId, checkedAt(sort: Desc)])
+  @@map("ebay_image_visual_inspections")
 }
 
 model EbayImageVisualReviewEvent {
@@ -1097,8 +1142,8 @@ model EbayImageVisualReviewEvent {
   org          Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
   inspection   EbayImageVisualInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
 
-  @@map("ebay_image_visual_review_events")
   @@index([inspectionId, reviewedAt(sort: Desc)])
+  @@map("ebay_image_visual_review_events")
 }
 
 // ===================== eBay 优化 / 发布 / 验收 / 市场研究 =====================
@@ -1116,9 +1161,9 @@ model EbayOptimizationDraft {
   store        EbayStore         @relation(fields: [storeId], references: [id], onDelete: Cascade)
   publishTasks EbayPublishTask[]
 
-  @@map("ebay_optimization_drafts")
   @@unique([storeId, listingId])
   @@index([storeId, updatedAt(sort: Desc)])
+  @@map("ebay_optimization_drafts")
 }
 
 model EbayContentOptimizationRecord {
@@ -1133,9 +1178,9 @@ model EbayContentOptimizationRecord {
   org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   store         EbayStore    @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  @@map("ebay_content_optimization_records")
   @@unique([storeId, listingId])
   @@index([storeId, updatedAt(sort: Desc)])
+  @@map("ebay_content_optimization_records")
 }
 
 model EbayTitleDecision {
@@ -1149,9 +1194,9 @@ model EbayTitleDecision {
   org                Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   store              EbayStore    @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  @@map("ebay_title_decisions")
   @@unique([storeId, listingId])
   @@index([storeId, confirmedAt(sort: Desc)])
+  @@map("ebay_title_decisions")
 }
 
 model EbayTitleHandoff {
@@ -1167,9 +1212,9 @@ model EbayTitleHandoff {
   org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   store           EbayStore    @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  @@map("ebay_title_handoffs")
   @@unique([storeId, listingId])
   @@index([storeId, updatedAt(sort: Desc)])
+  @@map("ebay_title_handoffs")
 }
 
 model EbayPublishTask {
@@ -1186,9 +1231,9 @@ model EbayPublishTask {
   store     EbayStore             @relation(fields: [storeId], references: [id], onDelete: Cascade)
   draft     EbayOptimizationDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
 
-  @@map("ebay_publish_tasks")
   @@unique([storeId, draftId])
   @@index([storeId, updatedAt(sort: Desc)])
+  @@map("ebay_publish_tasks")
 }
 
 model EbayAcceptanceBatch {
@@ -1202,8 +1247,8 @@ model EbayAcceptanceBatch {
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   store     EbayStore    @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  @@map("ebay_acceptance_batches")
   @@index([storeId, createdAt(sort: Desc)])
+  @@map("ebay_acceptance_batches")
 }
 
 model EbayMarketResearch {
@@ -1216,9 +1261,9 @@ model EbayMarketResearch {
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   store     EbayStore    @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  @@map("ebay_market_research")
   @@unique([storeId, listingId])
   @@index([storeId, fetchedAt(sort: Desc)])
+  @@map("ebay_market_research")
 }
 
 model EbayMarketResearchHistory {
@@ -1231,8 +1276,8 @@ model EbayMarketResearchHistory {
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   store     EbayStore    @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  @@map("ebay_market_research_history")
   @@index([storeId, listingId, fetchedAt(sort: Desc)])
+  @@map("ebay_market_research_history")
 }
 
 // ===================== 合规域 =====================
@@ -1240,20 +1285,20 @@ model EbayMarketResearchHistory {
 
 model ComplianceSource {
   id            String
-  orgId         String                    @map("org_id")
+  orgId         String                   @map("org_id")
   name          String
   authority     String
-  sourceType    String                    @map("source_type")
+  sourceType    String                   @map("source_type")
   url           String
-  syncMode      String                    @map("sync_mode")
-  syncStatus    String                    @default("NOT_CONFIGURED") @map("sync_status")
-  lastSyncedAt  String?                   @map("last_synced_at")
-  lastError     String?                   @map("last_error")
-  contentHash   String                    @default("") @map("content_hash")
-  lastCheckedAt String?                   @map("last_checked_at")
-  lastChangedAt String?                   @map("last_changed_at")
-  changeCount   Int                       @default(0) @map("change_count")
-  org           Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  syncMode      String                   @map("sync_mode")
+  syncStatus    String                   @default("NOT_CONFIGURED") @map("sync_status")
+  lastSyncedAt  String?                  @map("last_synced_at")
+  lastError     String?                  @map("last_error")
+  contentHash   String                   @default("") @map("content_hash")
+  lastCheckedAt String?                  @map("last_checked_at")
+  lastChangedAt String?                  @map("last_changed_at")
+  changeCount   Int                      @default(0) @map("change_count")
+  org           Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
   changes       ComplianceSourceChange[]
   recalls       ComplianceRecall[]
 
@@ -1278,30 +1323,30 @@ model ComplianceSourceChange {
   org             Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
   source          ComplianceSource @relation(fields: [orgId, sourceId], references: [orgId, id], onDelete: Cascade)
 
-  @@map("compliance_source_changes")
   @@index([sourceId, detectedAt(sort: Desc)])
+  @@map("compliance_source_changes")
 }
 
 model ComplianceRule {
-  id             String                   @id
-  orgId          String                   @map("org_id")
-  code           String
-  platform       String
+  id              String                  @id
+  orgId           String                  @map("org_id")
+  code            String
+  platform        String
   marketplaceSite String                  @default("ALL") @map("marketplace_site")
-  country        String                   @default("ALL")
-  category       String                   @default("ALL")
-  ruleType       String                   @map("rule_type")
-  riskLevel      String                   @map("risk_level")
-  reviewStatus   String                   @default("DRAFT") @map("review_status")
-  currentVersion Int                      @default(1) @map("current_version")
-  createdAt      String                   @map("created_at")
-  updatedAt      String                   @map("updated_at")
-  org            Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  versions       ComplianceRuleVersion[]
+  country         String                  @default("ALL")
+  category        String                  @default("ALL")
+  ruleType        String                  @map("rule_type")
+  riskLevel       String                  @map("risk_level")
+  reviewStatus    String                  @default("DRAFT") @map("review_status")
+  currentVersion  Int                     @default(1) @map("current_version")
+  createdAt       String                  @map("created_at")
+  updatedAt       String                  @map("updated_at")
+  org             Organization            @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  versions        ComplianceRuleVersion[]
 
-  @@map("compliance_rules")
   @@unique([orgId, code])
   @@index([orgId, platform, marketplaceSite, country, reviewStatus])
+  @@map("compliance_rules")
 }
 
 model ComplianceRuleVersion {
@@ -1319,8 +1364,8 @@ model ComplianceRuleVersion {
   org           Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
   rule          ComplianceRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
 
-  @@map("compliance_rule_versions")
   @@unique([ruleId, version])
+  @@map("compliance_rule_versions")
 }
 
 model ComplianceRecall {
@@ -1336,11 +1381,11 @@ model ComplianceRecall {
   recallDate  String           @default("") @map("recall_date")
   sourceUrl   String           @map("source_url")
   updatedAt   String           @map("updated_at")
-  org           Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  source        ComplianceSource @relation(fields: [orgId, sourceId], references: [orgId, id], onDelete: Restrict)
+  org         Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  source      ComplianceSource @relation(fields: [orgId, sourceId], references: [orgId, id], onDelete: Restrict)
 
-  @@map("compliance_recalls")
   @@unique([orgId, sourceId, externalId])
+  @@map("compliance_recalls")
 }
 
 model ComplianceCheckRun {
@@ -1362,8 +1407,8 @@ model ComplianceCheckRun {
   org              Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
   permits          ComplianceReleasePermit[]
 
-  @@map("compliance_check_runs")
   @@index([orgId, productId, checkedAt(sort: Desc)])
+  @@map("compliance_check_runs")
 }
 
 model ComplianceProductProfile {
@@ -1392,33 +1437,33 @@ model ComplianceProductProfile {
   org                 Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
   documents           ComplianceDocument[]
 
-  @@map("compliance_product_profiles")
   @@unique([orgId, productId])
+  @@map("compliance_product_profiles")
 }
 
 model ComplianceDocument {
-  id             String                  @id
-  orgId          String                  @map("org_id")
-  productId      String                  @map("product_id")
-  documentType   String                  @map("document_type")
+  id             String                   @id
+  orgId          String                   @map("org_id")
+  productId      String                   @map("product_id")
+  documentType   String                   @map("document_type")
   name           String
-  documentNumber String                  @default("") @map("document_number")
-  issuer         String                  @default("")
-  modelNumbers   String                  @default("") @map("model_numbers")
-  countries      String                  @default("")
-  issuedAt       String                  @default("") @map("issued_at")
-  expiresAt      String                  @default("") @map("expires_at")
-  status         String                  @default("PENDING_REVIEW")
-  fileName       String                  @default("") @map("file_name")
-  filePath       String                  @default("") @map("file_path")
-  reviewNote     String                  @default("") @map("review_note")
-  createdAt      String                  @map("created_at")
-  updatedAt      String                  @map("updated_at")
-  org            Organization            @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  documentNumber String                   @default("") @map("document_number")
+  issuer         String                   @default("")
+  modelNumbers   String                   @default("") @map("model_numbers")
+  countries      String                   @default("")
+  issuedAt       String                   @default("") @map("issued_at")
+  expiresAt      String                   @default("") @map("expires_at")
+  status         String                   @default("PENDING_REVIEW")
+  fileName       String                   @default("") @map("file_name")
+  filePath       String                   @default("") @map("file_path")
+  reviewNote     String                   @default("") @map("review_note")
+  createdAt      String                   @map("created_at")
+  updatedAt      String                   @map("updated_at")
+  org            Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
   profile        ComplianceProductProfile @relation(fields: [orgId, productId], references: [orgId, productId], onDelete: Cascade)
 
-  @@map("compliance_documents")
   @@index([orgId, productId, status, expiresAt])
+  @@map("compliance_documents")
 }
 
 model ComplianceCategoryTemplate {
@@ -1439,8 +1484,8 @@ model ComplianceCategoryTemplate {
   updatedAt                 String       @map("updated_at")
   org                       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-  @@map("compliance_category_templates")
   @@index([orgId, platform, marketplaceSite, country, category, active])
+  @@map("compliance_category_templates")
 }
 
 model ComplianceTask {
@@ -1460,8 +1505,8 @@ model ComplianceTask {
   updatedAt  String       @map("updated_at")
   org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-  @@map("compliance_tasks")
   @@index([orgId, status, riskLevel, updatedAt(sort: Desc)])
+  @@map("compliance_tasks")
 }
 
 model ComplianceAlert {
@@ -1478,8 +1523,8 @@ model ComplianceAlert {
   updatedAt String       @map("updated_at")
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-  @@map("compliance_alerts")
   @@index([orgId, status, riskLevel, updatedAt(sort: Desc)])
+  @@map("compliance_alerts")
 }
 
 model ComplianceAuditEvent {
@@ -1492,8 +1537,8 @@ model ComplianceAuditEvent {
   createdAt  String       @map("created_at")
   org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-  @@map("compliance_audit_events")
   @@index([orgId, createdAt(sort: Desc)])
+  @@map("compliance_audit_events")
 }
 
 model ComplianceReleasePermit {
@@ -1514,8 +1559,8 @@ model ComplianceReleasePermit {
   org              Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
   check            ComplianceCheckRun @relation(fields: [checkId], references: [id], onDelete: Cascade)
 
-  @@map("compliance_release_permits")
   @@index([orgId, productId, status, expiresAt(sort: Desc)])
+  @@map("compliance_release_permits")
 }
 
 model ComplianceEnforcementCase {
@@ -1539,6 +1584,6 @@ model ComplianceEnforcementCase {
   updatedAt         String       @map("updated_at")
   org               Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-  @@map("compliance_enforcement_cases")
   @@index([orgId, status, riskLevel, updatedAt(sort: Desc)])
+  @@map("compliance_enforcement_cases")
 }
