@@ -17,6 +17,8 @@ import { storeRoutes } from './modules/stores/routes.js'
 import { authPlugin } from './plugins/auth.js'
 import { codexHarnessRoutes } from './modules/codex-harness/routes.js'
 import { dashboardRoutes } from './modules/dashboard/routes.js'
+import { linduoChatModelsRoutes } from './modules/linduo/chat-models-routes.js'
+import { linduoChatRoutes } from './modules/linduo/chat-routes.js'
 import { linduoPricingRoutes } from './modules/linduo/pricing-routes.js'
 
 export async function buildApp() {
@@ -67,6 +69,10 @@ export async function buildApp() {
   await app.register(codexHarnessRoutes, { prefix: '/api/codex-harness' })
   // 零度API 价格抓取路由（DB 持久化 + 用户名密码自动登录）
   await app.register(linduoPricingRoutes, { prefix: '/api/linduo' })
+  // 零度API 聊天模型选用 + 授权 + preferred-model 管理（M1）
+  await app.register(linduoChatModelsRoutes, { prefix: '/api/linduo' })
+  // 零度API 聊天补全 SSE 端点（M1，plan 漏加，implementer 补上）
+  await app.register(linduoChatRoutes, { prefix: '/api/linduo' })
   // 公共下载路由（local 驱动，HMAC 签名即授权；OSS 驱动下返回 404）
   await app.register(mediaPublicRoutes)
 
