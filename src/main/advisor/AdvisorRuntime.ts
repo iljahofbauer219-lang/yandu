@@ -15,6 +15,8 @@ import type {
   AdvisorConnectionMode,
   AdvisorRemoteSession
 } from "../../shared/advisor";
+import type { LinduoChatSseEvent } from "../../shared/contracts";
+import { getLinduoChatModelsFromServer, streamLinduoChat } from "./linduoServerClient";
 import {
   analyzeSession,
   cloneAttachmentSession,
@@ -41,14 +43,15 @@ import {
   exportStoredTask,
   finishStoredTask,
   listStoredTasks,
-  recoverInterruptedTasks,
   readStoredTask,
+  recoverInterruptedTasks,
   renameStoredTask,
   selectStoredBranch,
   setStoredThreadId,
   clearStoredThreadId,
   updateStoredTaskStatus,
-  updateStoredUsage
+  updateStoredUsage,
+  type StoredTask
 } from "./SessionStore";
 import {
   classifyCommand,
@@ -163,7 +166,15 @@ type ChatEvent =
    * 原 thread 上下文已丢失（Codex app-server 找不到 rollout），业务层已自动回退到
    * thread/start。reason 包含原始错误信息，供调试。UI 收到后展示一次性提示。
    */
-  | { requestId: string; type: "threadReset"; reason: string };
+  | { requestId: string; type: "threadReset"; reason: string }
+  // M1 Linduo 聊天模型：走 server HTTP/SSE，不进 Codex app-server
+  | { requestId: string; type: "linduo_delta"; text: string }
+  | {
+      requestId: string;
+      type: "linduo_done";
+      usage: { promptTokens: number; completionTokens: number; totalTokens: number };
+    }
+  | { requestId: string; type: "linduo_error"; message: string };
 
 type ApprovalDecision = "accept" | "decline" | "acceptForSession";
 
@@ -192,12 +203,24 @@ type PendingApproval = {
   resolvePreflight?: (approved: boolean) => void;
 };
 
-const modelProfiles: ModelProfile[] = [
+// 静态 Codex 档位表（不可变）。M1 Linduo 模型由 reloadLinduoChatModels 动态合并到 modelProfiles。
+// - `effort`: 该模型推荐的推理深度,不能硬编码为单一值
+//   (例如 chat-latest 只支持 medium,硬编码 high 会随每次 turn 报
+//   "Unsupported value: 'high' is not supported with the 'chat-latest' model.")。
+// - `providerId`: Codex app-server 的 model_provider,thread 创建后不可在
+//   turn 级别覆盖。如果 UI 切到不同 provider 的模型,必须 thread/fork
+//   重新绑 provider。
+const STATIC_CODEX_PROFILES: ModelProfile[] = [
   { id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash", providerId: "deepseek_proxy", supportsTools: true, supportsVision: false, effort: "high" },
   { id: "deepseek/deepseek-v4-pro", name: "DeepSeek V4 Pro", providerId: "deepseek_proxy", supportsTools: true, supportsVision: false, effort: "high" },
   { id: "chat-latest", name: "OpenAI ChatGPT Latest", providerId: "openai_api", supportsTools: true, supportsVision: true, effort: "medium" }
 ];
-const allowedModels = new Map<string, ModelProfile>(modelProfiles.map(model => [model.id, model]));
+let modelProfiles: ModelProfile[] = [...STATIC_CODEX_PROFILES];
+let allowedModels: Map<string, ModelProfile> = new Map(
+  modelProfiles.map((model) => [model.id, model])
+);
+const LINDUO_MODEL_PREFIX = "linduo:";
+const LINDUO_PROVIDER_ID = "linduo_proxy";
 const allowedPermissionModes = new Set<PermissionMode>([
   "ask",
   "agent",
@@ -207,6 +230,8 @@ const appServer = new AppServerClient();
 const activeRequests = new Map<string, RunContext>();
 const contextsByThread = new Map<string, RunContext>();
 const pendingApprovals = new Map<string, PendingApproval>();
+/** Linduo 流式 turn 的 AbortController，按 requestId 索引。advisor:chat:stop 会触发对应 abort。 */
+const linduoAbortControllers = new Map<string, AbortController>();
 
 /**
  * harness 网关客户端：当前阶段仅作为在线参谋执行器健康探针。
@@ -800,6 +825,13 @@ async function runCodexTurn(sender: Electron.WebContents, request: ChatRequest) 
   if (!request.message.trim()) throw new Error("消息不能为空。");
   if (!path.isAbsolute(request.workspacePath)) throw new Error("项目目录无效。");
   if (activeRequests.has(request.requestId)) throw new Error("请求编号重复。");
+
+  // M1: Linduo 模型直接走 server HTTP/SSE,跳过整个 Codex app-server 链路(thread/start, turn/start, approval 等)。
+  // 早期切出避免污染 Codex 路径的状态(stop、activeRequests、cleanupContextProcesses 等)。
+  if (modelProfile.providerId === LINDUO_PROVIDER_ID) {
+    await executeLinduoTurn(sender, request, modelProfile);
+    return;
+  }
 
   let taskId = request.requestId;
   try {
@@ -1640,6 +1672,21 @@ app.whenReady().then(() => {
 
   ipcMain.handle("advisor:chat:stop", async (_event, requestId: string) => {
     const context = activeRequests.get(requestId);
+    // M1 Linduo: 通过 AbortController 终止 server fetch。
+    // 不能靠 context.turnId 判断（Linduo 无 turnId），必须查 linduoAbortControllers。
+    const linduoController = linduoAbortControllers.get(requestId);
+    if (linduoController) {
+      if (context) {
+        context.stopped = true;
+        cancelPendingApprovals(context);
+      }
+      try {
+        linduoController.abort();
+      } catch {
+        /* abort 失败不向上传播 */
+      }
+      return true;
+    }
     if (!context?.turnId) return false;
     context.stopped = true;
     cancelPendingApprovals(context);
@@ -1712,8 +1759,305 @@ export async function shutdownAdvisorRuntime() {
     cancelPendingApprovals(context);
     await cleanupContextProcesses(context).catch(() => undefined);
   }
+  // Linduo 流式 turn：主动 abort 任何未结束的 fetch,避免 shutdown 时悬挂 promise。
+  for (const controller of linduoAbortControllers.values()) {
+    try {
+      controller.abort();
+    } catch {
+      /* abort 失败不阻塞 shutdown */
+    }
+  }
+  linduoAbortControllers.clear();
   await Promise.all([appServer.stop(), stopManagedProxy(), harnessClient.disconnect()]);
   harnessLastSession = null;
+}
+
+/**
+ * M1 Linduo turn 执行入口。
+ *
+ * 跳过整个 Codex app-server 链路（thread/start、turn/start、approval、background terminals），
+ * 走 server HTTP/SSE。原因：Linduo 模型不在 Codex app-server 范畴,无须 thread 概念。
+ *
+ * 关键点：
+ * - 用合成 threadId = `linduo:<serverModelId>` 满足 RunContext 类型;contextsByThread 中不注册,
+ *   finishContext 不会污染 app-server 路由。
+ * - AbortController 按 requestId 索引,advisor:chat:stop 触发 abort → server fetch 自动中断。
+ * - 错误码前缀约定:
+ *   - ADVISOR_SIGNED_OUT   未登录 / 401/403
+ *   - LINDUO_MODEL_NOT_FOUND / LINDUO_RATE_LIMITED / LINDUO_UPSTREAM_ERROR 业务错误
+ */
+async function executeLinduoTurn(
+  sender: Electron.WebContents,
+  request: ChatRequest,
+  modelProfile: ModelProfile
+): Promise<void> {
+  const requestId = request.requestId;
+  const serverModelId = request.model.slice(LINDUO_MODEL_PREFIX.length);
+  if (!serverModelId) {
+    emitChatEvent(sender, {
+      requestId,
+      type: "linduo_error",
+      message: "Linduo 模型 id 格式异常,缺少服务端 modelId"
+    });
+    return;
+  }
+
+  // 1. 读取/创建存储任务（与 Codex 路径一致,但不触碰 codexThreadId）。
+  let taskId = request.requestId;
+  const existingTask: StoredTask | null = request.conversationId
+    ? await readStoredTask(request.conversationId)
+    : null;
+  if (request.conversationId && !existingTask) {
+    emitChatEvent(sender, {
+      requestId,
+      type: "linduo_error",
+      message: "要继续的对话不存在。"
+    });
+    return;
+  }
+  if (existingTask && existingTask.workspacePath !== request.workspacePath) {
+    emitChatEvent(sender, {
+      requestId,
+      type: "linduo_error",
+      message: "对话所属项目与当前项目不一致。"
+    });
+    return;
+  }
+  taskId = existingTask?.id ?? request.requestId;
+  try {
+    if (existingTask) {
+      await beginStoredTurn(taskId, {
+        requestId,
+        message: request.message,
+        model: request.model,
+        permissionMode: request.permissionMode,
+        branchId: existingTask.activeBranchId,
+        replacesRequestId: request.edit?.replacesRequestId
+      });
+    } else {
+      await createStoredTask({
+        id: taskId,
+        message: request.message,
+        model: request.model,
+        permissionMode: request.permissionMode,
+        workspacePath: request.workspacePath
+      });
+    }
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "存储任务初始化失败";
+    emitChatEvent(sender, {
+      requestId,
+      type: "linduo_error",
+      message: detail
+    });
+    return;
+  }
+
+  // 2. 构造最小 RunContext（不入 contextsByThread,因 Linduo 无 thread 概念）。
+  const context: RunContext = {
+    requestId,
+    taskId,
+    workspacePath: request.workspacePath,
+    permissionMode: request.permissionMode,
+    sender,
+    threadId: `${LINDUO_MODEL_PREFIX}${serverModelId}`,
+    branchId: existingTask?.activeBranchId ?? "main",
+    turnId: null,
+    stopped: false,
+    proposedDiffs: new Map(),
+    approvedOutsideReadRoots: new Set(),
+    warnedOutsidePaths: new Set()
+  };
+  activeRequests.set(requestId, context);
+
+  const abortController = new AbortController();
+  linduoAbortControllers.set(requestId, abortController);
+
+  try {
+    emitTaskStatus(context, "running");
+    emitActivity(context, {
+      kind: "status",
+      title: "Linduo 模型已连接",
+      detail: `${modelProfile.name} · ${serverModelId} · ${request.workspacePath}`,
+      state: "connected"
+    });
+
+    // 3. 构造 system prompt + messages。
+    // M1 兜底：不传 tools、不传 vision 描述、不做附件分析,
+    //         仅 system + user(text),与 chat-models-sync 的 M1 范围对齐。
+    const personalization = await readPersonalizationSettings();
+    const systemPrompt = [
+      "You are 在线参谋, a model-neutral agent focused on cross-border e-commerce consultation and execution. Answer questions directly, research when current evidence is needed, analyze user attachments, and use structured tools when the user asks you to inspect or change local files, run commands, or produce artifacts. Distinguish verified facts from inference, never invent market data, prices, policies, product facts, or tool results. Continue after tool results, including failures and declined approvals, until the task is verified or a concrete blocker is found.",
+      personalizationInstructions(personalization)
+    ].join("\n\n");
+    const messages: Array<{
+      role: "system" | "user" | "assistant";
+      content: string;
+    }> = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: request.message }
+    ];
+
+    // 4. 发起流式 chat。
+    const response = await streamLinduoChat(
+      { modelId: serverModelId, messages },
+      abortController.signal
+    );
+    if (!response.body) {
+      throw new Error("LINDUO_UPSTREAM_ERROR: empty body");
+    }
+
+    // 5. 读 SSE 事件流,逐个 yield 内部 ChatEvent。
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalUsage: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+    } | null = null;
+    let streamError: string | null = null;
+
+    try {
+      while (true) {
+        if (context.stopped) break;
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx: number;
+        while ((idx = buffer.indexOf("\n\n")) !== -1) {
+          const raw = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          const line = raw.split("\n").find((l) => l.startsWith("data:"));
+          if (!line) continue;
+          const data = line.slice(5).trim();
+          if (!data || data === "[DONE]") continue;
+          let parsed: LinduoChatSseEvent;
+          try {
+            parsed = JSON.parse(data) as LinduoChatSseEvent;
+          } catch {
+            continue;
+          }
+          if (parsed.type === "delta") {
+            emitChatEvent(sender, {
+              requestId,
+              type: "linduo_delta",
+              text: parsed.text
+            });
+          } else if (parsed.type === "done") {
+            finalUsage = parsed.usage;
+            emitChatEvent(sender, {
+              requestId,
+              type: "linduo_done",
+              usage: parsed.usage
+            });
+          } else if (parsed.type === "error") {
+            streamError = parsed.message;
+            emitChatEvent(sender, {
+              requestId,
+              type: "linduo_error",
+              message: parsed.message
+            });
+            break;
+          }
+        }
+        if (streamError) break;
+      }
+      // flush decoder 兑底多字节字符被切断
+      buffer += decoder.decode();
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {
+        /* 释放锁失败不影响 */
+      }
+    }
+
+    // 6. 收尾:根据状态写存储 + emit taskStatus。
+    if (streamError) {
+      emitTaskStatus(context, "failed", streamError);
+      void finishStoredTask(taskId, "failed", {
+        failureReason: streamError,
+        usage: finalUsage ?? undefined
+      });
+    } else if (context.stopped) {
+      emitTaskStatus(context, "stopped");
+      void finishStoredTask(taskId, "stopped", {
+        usage: finalUsage ?? undefined
+      });
+    } else if (finalUsage) {
+      // 业务路径：finishStoredTask 接受 usage 字段,这里调一次足够。
+      emitTaskStatus(context, "completed");
+      void finishStoredTask(taskId, "completed", { usage: finalUsage });
+    } else {
+      // 未收到 done:上游截断 SSE。按失败处理。
+      const detail = "LINDUO_UPSTREAM_ERROR: SSE 流未发出 done 事件";
+      emitChatEvent(sender, {
+        requestId,
+        type: "linduo_error",
+        message: detail
+      });
+      emitTaskStatus(context, "failed", detail);
+      void finishStoredTask(taskId, "failed", { failureReason: detail });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Linduo 请求失败";
+    // 过滤 abort:是用户主动停止,不算错误。
+    if (abortController.signal.aborted) {
+      emitTaskStatus(context, "stopped");
+      void finishStoredTask(taskId, "stopped");
+    } else {
+      emitChatEvent(sender, {
+        requestId,
+        type: "linduo_error",
+        message
+      });
+      emitTaskStatus(context, "failed", message);
+      void finishStoredTask(taskId, "failed", { failureReason: message });
+    }
+  } finally {
+    linduoAbortControllers.delete(requestId);
+    activeRequests.delete(requestId);
+    // Linduo 不调 cleanupContextProcesses(thread/backgroundTerminals/clean 是 Codex 专属)
+  }
+}
+
+/**
+ * M1: 从 server 拉取 enabled LinduoChatModel,合并到 modelProfiles 与 allowedModels。
+ * - 命名空间: linduo:<modelId>,隔离 Codex 命名空间。
+ * - supportsTools / supportsVision 固定 false（M1 兜底,后续可从 LinduoChatModelView.capabilities 推导）。
+ * - 失败时保持上次的 modelProfiles,不抛错（启动路径上不希望拦住 main）。
+ */
+export async function reloadLinduoChatModels(): Promise<{
+  added: number;
+  total: number;
+}> {
+  try {
+    const rows = await getLinduoChatModelsFromServer();
+    const validEffort: ReadonlySet<ModelProfile["effort"]> = new Set([
+      "low",
+      "medium",
+      "high",
+      "max"
+    ]);
+    const linduoProfiles: ModelProfile[] = rows.map((r) => ({
+      id: `${LINDUO_MODEL_PREFIX}${r.modelId}`,
+      name: r.displayName || r.modelId,
+      providerId: LINDUO_PROVIDER_ID,
+      supportsTools: false,
+      supportsVision: false,
+      effort: validEffort.has(r.effort as ModelProfile["effort"])
+        ? (r.effort as ModelProfile["effort"])
+        : "medium"
+    }));
+    modelProfiles = [...STATIC_CODEX_PROFILES, ...linduoProfiles];
+    allowedModels = new Map(modelProfiles.map((m) => [m.id, m]));
+    return { added: linduoProfiles.length, total: modelProfiles.length };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    console.warn(`[advisor] reloadLinduoChatModels 失败,保持现有模型表：${detail}`);
+    return { added: 0, total: modelProfiles.length };
+  }
 }
 
 

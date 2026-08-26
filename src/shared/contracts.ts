@@ -2293,3 +2293,25 @@ export interface UserLinduoGrantView {
   grantedBy: string | null
   grantedAt: string
 }
+
+// ─── M1 主进程 ↔ server Linduo 路由契约 ──────────────────────────────────────
+// 主进程没有 prisma/LinduoChatService,必须经由 server HTTP 拉取模型列表 + 发起流式 chat。
+// 契约与 server 端 server/src/modules/linduo/chat-service.ts 的 LinduoChatEvent / LinduoChatRequest 字段一致。
+// Task 8 会按此契约创建 /api/linduo/chat-models 与 /api/linduo/chat 路由。
+
+/** POST /api/linduo/chat 请求体（不含 AbortSignal，AbortSignal 在 fetch() 上独立传） */
+export interface LinduoChatRequestBody {
+  /** 来自 LinduoChatModelView.modelId（不含 linduo: 前缀） */
+  modelId: string
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
+}
+
+/** POST /api/linduo/chat 的 SSE 事件联合：每条 data: <json>\\n\\n */
+export type LinduoChatSseEvent =
+  | { type: 'delta'; text: string }
+  | {
+      type: 'done'
+      usage: { promptTokens: number; completionTokens: number; totalTokens: number }
+    }
+  | { type: 'error'; message: string }
+
