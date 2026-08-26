@@ -1,0 +1,120 @@
+.linduo-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.linduo-picker-card {
+  background: var(--bg-primary, #fff);
+  border-radius: 12px;
+  width: 520px;
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+
+.linduo-picker-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 24px 12px;
+  border-bottom: 1px solid var(--border-soft, #e5e7eb);
+}
+.linduo-picker-head h2 { margin: 0 0 4px; font-size: 17px; font-weight: 600; }
+.linduo-picker-head small { color: var(--text-secondary, #64748b); font-size: 12px; }
+.linduo-picker-close {
+  border: none; background: transparent; cursor: pointer; font-size: 18px; color: var(--text-secondary);
+  width: 28px; height: 28px; border-radius: 6px;
+}
+.linduo-picker-close:hover { background: var(--bg-soft, #f1f5f9); }
+
+.linduo-picker-body {
+  padding: 16px 20px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.linduo-picker-loading,
+.linduo-picker-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-secondary, #64748b);
+  font-size: 14px;
+}
+.linduo-picker-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.linduo-picker-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.linduo-picker-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 10px 12px;
+  background: var(--bg-soft, #f8fafc);
+  border: 1px solid var(--border-soft, #e5e7eb);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s;
+}
+.linduo-picker-row:hover:not(:disabled) {
+  background: var(--bg-hover, #f1f5f9);
+  border-color: var(--accent, #16a59a);
+}
+.linduo-picker-row:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.linduo-picker-name { font-weight: 600; font-size: 14px; }
+.linduo-picker-ctx {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: var(--bg-soft, #f1f5f9);
+  border-radius: 4px;
+  color: var(--text-secondary, #64748b);
+}
+.linduo-picker-vendor {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.linduo-picker-vendor.vendor-openai { background: #d1fae5; color: #047857; }
+.linduo-picker-vendor.vendor-google { background: #dbeafe; color: #1d4ed8; }
+.linduo-picker-vendor.vendor-anthropic { background: #fef3c7; color: #b45309; }
+.linduo-picker-vendor.vendor-vidu { background: #fce7f3; color: #be185d; }
+.linduo-picker-desc {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+  margin-top: 4px;
+}
+
+.linduo-picker-clear {
+  border-style: dashed;
+  margin-top: 8px;
+}
+.linduo-picker-clear .linduo-picker-name { color: var(--text-secondary); font-weight: 500; }
