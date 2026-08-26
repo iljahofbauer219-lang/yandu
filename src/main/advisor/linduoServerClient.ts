@@ -16,15 +16,54 @@
  */
 import type {
   LinduoChatModelView,
-  LinduoChatRequestBody,
-  LinduoChatSseEvent
+  LinduoChatRequestBody
 } from "../../shared/contracts";
 
 const DEFAULT_SERVER_BASE_URL = "http://127.0.0.1:8787";
-const SERVER_BASE_URL =
-  process.env.LINDUO_SERVER_BASE_URL?.trim() || DEFAULT_SERVER_BASE_URL;
+
+/**
+ * 解析 LINDUO_SERVER_BASE_URL，强制限定为本机回环。
+ * M1 信任模型：Linduo 服务永远跑在用户本机，任意 host 配置会随 Authorization header
+ * 把用户 JWT 泄漏到外部 host。M2+ 如需远程 Linduo，应改用 IPC / mTLS。
+ */
+function resolveServerBaseUrl(): string {
+  const raw = process.env.LINDUO_SERVER_BASE_URL?.trim() || DEFAULT_SERVER_BASE_URL;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(
+      `LINDUO_UPSTREAM_ERROR: LINDUO_SERVER_BASE_URL 非法 (${raw})`
+    );
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(
+      `LINDUO_UPSTREAM_ERROR: LINDUO_SERVER_BASE_URL 协议必须 http(s),实际 ${url.protocol}`
+    );
+  }
+  if (url.hostname !== "127.0.0.1" && url.hostname !== "localhost" && url.hostname !== "::1") {
+    throw new Error(
+      `LINDUO_UPSTREAM_ERROR: LINDUO_SERVER_BASE_URL 仅允许本机回环,实际 ${url.hostname}`
+    );
+  }
+  return url.toString().replace(/\/+$/, "");
+}
+
+const SERVER_BASE_URL = resolveServerBaseUrl();
 
 const CHAT_MODELS_TIMEOUT_MS = 10_000;
+const CHAT_STREAM_TIMEOUT_MS = 120_000;
+
+/**
+ * redact 错误消息里的敏感片段（sk-... / Bearer ... / 长 base64）。
+ * 与 server 端 chat-service.ts 的 redact 规则保持一致，避免被外部 caller 看到明文。
+ */
+function redactErrorBody(body: string): string {
+  return body
+    .replace(/\bsk-[A-Za-z0-9_-]{16,}\b/g, "sk-***REDACTED***")
+    .replace(/\bBearer\s+[A-Za-z0-9_.-]{16,}\b/gi, "Bearer ***REDACTED***")
+    .slice(0, 80);
+}
 
 function authHeaderOrThrow(): Record<string, string> {
   const token = process.env.YANDU_USER_JWT?.trim();
@@ -40,6 +79,7 @@ function classifyHttpError(
   status: number,
   body: string
 ): { code: "ADVISOR_SIGNED_OUT" | "LINDUO_UPSTREAM_ERROR" | "LINDUO_MODEL_NOT_FOUND" | "LINDUO_RATE_LIMITED"; message: string } {
+  const redacted = redactErrorBody(body);
   if (status === 401 || status === 403) {
     return {
       code: "ADVISOR_SIGNED_OUT",
@@ -49,19 +89,19 @@ function classifyHttpError(
   if (status === 404) {
     return {
       code: "LINDUO_MODEL_NOT_FOUND",
-      message: `LINDUO_MODEL_NOT_FOUND: ${body.slice(0, 120)}`
+      message: `LINDUO_MODEL_NOT_FOUND: ${redacted}`
     };
   }
   if (status === 429) {
     return {
       code: "LINDUO_RATE_LIMITED",
-      message: `LINDUO_RATE_LIMITED: ${body.slice(0, 120)}`
+      message: `LINDUO_RATE_LIMITED: ${redacted}`
     };
   }
   // 4xx 业务错误（除上面三类）与 5xx 兜底
   return {
     code: "LINDUO_UPSTREAM_ERROR",
-    message: `LINDUO_UPSTREAM_ERROR: HTTP ${status} ${body.slice(0, 120)}`
+    message: `LINDUO_UPSTREAM_ERROR: HTTP ${status} ${redacted}`
   };
 }
 
@@ -99,7 +139,7 @@ export async function getLinduoChatModelsFromServer(): Promise<
     throw new Error(`LINDUO_UPSTREAM_ERROR: ${detail}`);
   }
 
-  // 响应可能直接是数组，也可能是 { items: [...] }
+  // contract（LinduoChatModelView[]）规定数组形式；遇到 { items: [] } 视为旧版本兜底
   if (Array.isArray(payload)) return payload as LinduoChatModelView[];
   if (
     payload &&
@@ -117,12 +157,23 @@ export async function getLinduoChatModelsFromServer(): Promise<
  * 发起流式 chat 调用,返回未消费的 Response（caller 负责 read SSE 流）。
  * 401/403/5xx/网络异常时抛错；
  * 200 但 Content-Type 非 text/event-stream 时抛错。
+ *
+ * 同时尊重 caller signal 与 120s internal timeout（AbortSignal.any 合并）。
+ * 用 AbortSignal.any 而非 ??：caller 传了 AbortSignal 仍保有 120s 上限，
+ * 避免上游 hung up + 用户没点 stop 时 IPC 永久 hang。
  */
 export async function streamLinduoChat(
   req: LinduoChatRequestBody,
   signal: AbortSignal
 ): Promise<Response> {
   const auth = authHeaderOrThrow();
+  // 快速失败：caller signal 已 aborted 时不必发请求
+  if (signal.aborted) {
+    throw new DOMException("Linduo chat request aborted before send", "AbortError");
+  }
+  const timeoutSignal = AbortSignal.timeout(CHAT_STREAM_TIMEOUT_MS);
+  const combinedSignal = AbortSignal.any([signal, timeoutSignal]);
+
   let response: Response;
   try {
     response = await fetch(`${SERVER_BASE_URL}/api/linduo/chat`, {
@@ -133,7 +184,7 @@ export async function streamLinduoChat(
         Accept: "text/event-stream"
       },
       body: JSON.stringify(req),
-      signal
+      signal: combinedSignal
     });
   } catch (err) {
     const detail = err instanceof Error ? err.message : "网络异常";
@@ -158,49 +209,4 @@ export async function streamLinduoChat(
   }
 
   return response;
-}
-
-/**
- * 解析 SSE 流为事件数组。仅在 caller 想一次拿完结果（调试/测试）时使用；
- * 业务上应直接消费 response.body 以支持流式 yield。
- */
-export async function consumeLinduoChatSse(
-  response: Response
-): Promise<LinduoChatSseEvent[]> {
-  if (!response.body) return [];
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  const events: LinduoChatSseEvent[] = [];
-  let buffer = "";
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let idx: number;
-      while ((idx = buffer.indexOf("\n\n")) !== -1) {
-        const raw = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 2);
-        const line = raw.split("\n").find((l) => l.startsWith("data:"));
-        if (!line) continue;
-        const data = line.slice(5).trim();
-        if (!data || data === "[DONE]") continue;
-        try {
-          const parsed = JSON.parse(data) as LinduoChatSseEvent;
-          events.push(parsed);
-        } catch {
-          // 跳过非 JSON 事件,不动主流程
-        }
-      }
-    }
-    buffer += decoder.decode();
-  } finally {
-    try {
-      reader.releaseLock();
-    } catch {
-      /* 释放失败不影响 */
-    }
-  }
-  return events;
 }

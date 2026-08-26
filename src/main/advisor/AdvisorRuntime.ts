@@ -1372,7 +1372,7 @@ app.whenReady().then(() => {
   // 侧边栏 groupTasksByProject 找不到匹配 group → 任务归入「最近对话」。
   ipcMain.handle("advisor:project:orphan-scratch", async () => {
     const scratch = path.join(os.tmpdir(), "yandu-orphan-scratch");
-    // 兑底创建(codex 需要以该路径为 cwd)
+    // 兜底创建(codex 需要以该路径为 cwd)
     await fs.mkdir(scratch, { recursive: true });
     return scratch;
   });
@@ -1793,6 +1793,9 @@ async function executeLinduoTurn(
 ): Promise<void> {
   const requestId = request.requestId;
   const serverModelId = request.model.slice(LINDUO_MODEL_PREFIX.length);
+  console.log(
+    `[advisor] linduo turn start requestId=${requestId} modelId=${serverModelId} workspace=${request.workspacePath}`
+  );
   if (!serverModelId) {
     emitChatEvent(sender, {
       requestId,
@@ -1930,8 +1933,9 @@ async function executeLinduoTurn(
           buffer = buffer.slice(idx + 2);
           const line = raw.split("\n").find((l) => l.startsWith("data:"));
           if (!line) continue;
+          // trim() 会同时去 \r 头尾，避免 server 未来升级为 \r\n 换行时 JSON.parse 失败
           const data = line.slice(5).trim();
-          if (!data || data === "[DONE]") continue;
+          if (!data) continue;
           let parsed: LinduoChatSseEvent;
           try {
             parsed = JSON.parse(data) as LinduoChatSseEvent;
@@ -1963,8 +1967,42 @@ async function executeLinduoTurn(
         }
         if (streamError) break;
       }
-      // flush decoder 兑底多字节字符被切断
+      // flush decoder 兜底多字节字符被切断
       buffer += decoder.decode();
+      // 兜底：上游关闭前可能只发到最后一个 data 行（未跟 \n\n），这里是最后一帧 SSE 机会。
+      // 静默跳过非 JSON，错误语义交给后续“未收到 done”兜底分支。
+      const trailing = buffer.trim();
+      if (trailing.startsWith("data:")) {
+        const data = trailing.slice(5).trim();
+        if (data && data !== "[DONE]") {
+          try {
+            const parsed = JSON.parse(data) as LinduoChatSseEvent;
+            if (parsed.type === "delta") {
+              emitChatEvent(sender, {
+                requestId,
+                type: "linduo_delta",
+                text: parsed.text
+              });
+            } else if (parsed.type === "done") {
+              finalUsage = parsed.usage;
+              emitChatEvent(sender, {
+                requestId,
+                type: "linduo_done",
+                usage: parsed.usage
+              });
+            } else if (parsed.type === "error") {
+              streamError = parsed.message;
+              emitChatEvent(sender, {
+                requestId,
+                type: "linduo_error",
+                message: parsed.message
+              });
+            }
+          } catch {
+            /* 非 JSON 兜底静默 */
+          }
+        }
+      }
     } finally {
       try {
         reader.releaseLock();
@@ -2019,7 +2057,19 @@ async function executeLinduoTurn(
     linduoAbortControllers.delete(requestId);
     activeRequests.delete(requestId);
     // Linduo 不调 cleanupContextProcesses(thread/backgroundTerminals/clean 是 Codex 专属)
+    console.log(`[advisor] linduo turn end requestId=${requestId}`);
   }
+}
+
+/**
+ * 把 server 返回的 effort 字符串显式收窄到 ModelProfile["effort"]。
+ * 未知值 / null / undefined 一律兜底 "medium"，不抛错。
+ */
+function parseEffort(raw: unknown): ModelProfile["effort"] {
+  if (raw === "low" || raw === "medium" || raw === "high" || raw === "max") {
+    return raw;
+  }
+  return "medium";
 }
 
 /**
@@ -2034,21 +2084,13 @@ export async function reloadLinduoChatModels(): Promise<{
 }> {
   try {
     const rows = await getLinduoChatModelsFromServer();
-    const validEffort: ReadonlySet<ModelProfile["effort"]> = new Set([
-      "low",
-      "medium",
-      "high",
-      "max"
-    ]);
     const linduoProfiles: ModelProfile[] = rows.map((r) => ({
       id: `${LINDUO_MODEL_PREFIX}${r.modelId}`,
       name: r.displayName || r.modelId,
       providerId: LINDUO_PROVIDER_ID,
       supportsTools: false,
       supportsVision: false,
-      effort: validEffort.has(r.effort as ModelProfile["effort"])
-        ? (r.effort as ModelProfile["effort"])
-        : "medium"
+      effort: parseEffort(r.effort)
     }));
     modelProfiles = [...STATIC_CODEX_PROFILES, ...linduoProfiles];
     allowedModels = new Map(modelProfiles.map((m) => [m.id, m]));
