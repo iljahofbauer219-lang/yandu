@@ -6,6 +6,7 @@
 import type { AuthTokens, UserProfile } from '../shared/serverHttp'
 import { ApiError, apiFetch, clearSession, getTokens, saveProfile, saveTokens } from '../shared/serverHttp'
 import type { DashboardSummary } from '../shared/dashboard'
+import type { LinduoChatModelView, UserLinduoGrantView } from '../shared/contracts'
 
 export {
   ApiError,
@@ -151,4 +152,41 @@ export async function rejectMember(id: string): Promise<void> {
 // - VIEWER：仅 kpis（隐藏 myTodos / teamActivities）
 export async function fetchDashboardSummary(): Promise<DashboardSummary> {
   return apiFetch<DashboardSummary>('/api/dashboard/summary', { method: 'GET' })
+}
+
+// ===================== Linduo 聊天模型选用 (M1) =====================
+
+export async function fetchLinduoChatModels(): Promise<LinduoChatModelView[]> {
+  return apiFetch<LinduoChatModelView[]>('/api/linduo/chat-models', { method: 'GET' })
+}
+
+export async function fetchAllLinduoChatModels(): Promise<LinduoChatModelView[]> {
+  return apiFetch<LinduoChatModelView[]>('/api/linduo/chat-models/all', { method: 'GET' })
+}
+
+export async function setLinduoChatModelEnabled(id: string, enabled: boolean): Promise<LinduoChatModelView> {
+  return apiFetch<LinduoChatModelView>(`/api/linduo/chat-models/${encodeURIComponent(id)}/enabled`, {
+    method: 'PATCH',
+    body: { enabled }
+  })
+}
+
+export async function fetchLinduoGrants(): Promise<Array<UserLinduoGrantView & { userName: string }>> {
+  return apiFetch<Array<UserLinduoGrantView & { userName: string }>>('/api/linduo/grants', { method: 'GET' })
+}
+
+export async function setLinduoGrant(userId: string, modelId: string): Promise<void> {
+  await apiFetch('/api/linduo/grants', { method: 'POST', body: { userId, modelId } })
+}
+
+export async function revokeLinduoGrant(userId: string, modelId: string): Promise<void> {
+  await apiFetch('/api/linduo/grants', { method: 'DELETE', body: { userId, modelId } })
+}
+
+export async function fetchLinduoPreferredModel(): Promise<{ modelId: string | null }> {
+  return apiFetch<{ modelId: string | null }>('/api/linduo/preferred-model', { method: 'GET' })
+}
+
+export async function setLinduoPreferredModel(modelId: string | null): Promise<{ modelId: string | null }> {
+  return apiFetch<{ modelId: string | null }>('/api/linduo/preferred-model', { method: 'PUT', body: { modelId } })
 }
