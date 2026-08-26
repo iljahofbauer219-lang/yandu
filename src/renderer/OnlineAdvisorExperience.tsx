@@ -513,6 +513,9 @@ export default function OnlineAdvisorExperience() {
           if (event.type === "delta") {
             return { ...message, text: message.text + event.text };
           }
+          if (event.type === "linduo_delta") {
+            return { ...message, text: message.text + event.text };
+          }
           if (event.type === "activity") {
             return {
               ...message,
@@ -540,6 +543,9 @@ export default function OnlineAdvisorExperience() {
           if (event.type === "error") {
             return { ...message, state: "error", text: event.message };
           }
+          if (event.type === "linduo_error") {
+            return { ...message, state: "error", text: event.message };
+          }
           if (event.type === "threadReset") {
             // 仅展示一次性软提示，不改变消息状态。8 秒后自动清除。
             setThreadResetNotice(
@@ -561,13 +567,18 @@ export default function OnlineAdvisorExperience() {
       if (
         event.type === "done" ||
         event.type === "stopped" ||
-        event.type === "error"
+        event.type === "error" ||
+        event.type === "linduo_done" ||
+        event.type === "linduo_error"
       ) {
         setActiveRequestId(null);
         setApprovals((current) =>
           current.filter((approval) => approval.requestId !== event.requestId)
         );
         window.setTimeout(() => void refreshHistory(), 100);
+      }
+      if (event.type === "linduo_error") {
+        setImageError(`Linduo 调用失败：${event.message}`);
       }
     });
     return dispose;
