@@ -132,6 +132,10 @@ export type AdvisorChatEvent =
    * reason 包含原始错误信息，供调试。
    */
   | { requestId: string; type: 'threadReset'; reason: string }
+  // Linduo 聊天模型选用 (M1)：流式事件
+  | { requestId: string; type: 'linduo_delta'; text: string }
+  | { requestId: string; type: 'linduo_done'; usage: { promptTokens: number; completionTokens: number; totalTokens: number } }
+  | { requestId: string; type: 'linduo_error'; message: string }
 
 export interface AdvisorStoredTaskEvent {
   at: string

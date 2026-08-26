@@ -2267,3 +2267,29 @@ export interface ImportedProductSource {
   evidence?: ProductSourceEvidence[]
   pageFacts?:Array<{key:string;label:string;value:string;source:string}>
 }
+
+// ===================== Linduo 聊天模型选用 (M1) =====================
+
+/** Linduo 聊天模型视图（API 响应） */
+export interface LinduoChatModelView {
+  id: string
+  modelId: string
+  vendor: string
+  displayName: string
+  description: string | null
+  contextLabel: string | null
+  /** 解析后的能力数组（服务端从 JSON 字符串反序列化） */
+  capabilities: string[]
+  effort: string
+  enabled: boolean
+}
+
+/** 用户 Linduo 模型授权视图（API 响应） */
+export interface UserLinduoGrantView {
+  userId: string
+  modelId: string
+  displayName: string
+  vendor: string
+  grantedBy: string | null
+  grantedAt: string
+}
