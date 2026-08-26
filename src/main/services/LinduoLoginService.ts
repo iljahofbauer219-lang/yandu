@@ -14,62 +14,17 @@
  * - getPricing(accessToken)                  → GET  /api/linduo/pricing
  * - refreshPricing(accessToken, credentials?)→ POST /api/linduo/pricing/refresh
  */
-import { readServerUrl } from '../serverConfig'
 import type {
   LinduoLoginStatus,
   LinduoModelPricing,
   LinduoPricingListResponse,
   LinduoPricingRefreshResult
 } from '../../shared/contracts'
+import { callLinduo, ensureToken } from './linduoHttp.js'
 
 const REFRESH_TIMEOUT_MS = 180_000
 /** GET 状态/价格一般几十毫秒，但留 30s 防网络抖动 */
 const NORMAL_TIMEOUT_MS = 30_000
-
-function resolveBaseUrl(): string {
-  return readServerUrl().replace(/\/+$/, '')
-}
-
-function ensureToken(accessToken: string | null | undefined): string {
-  if (!accessToken || typeof accessToken !== 'string') {
-    throw new Error('未登录：请先在登录页完成认证')
-  }
-  return accessToken
-}
-
-async function parseError(response: Response): Promise<Error> {
-  let payload: { error?: string; message?: string } = {}
-  try { payload = await response.json() } catch { /* 响应非 JSON */ }
-  const message = payload.message || payload.error || `零度API 网关错误（HTTP ${response.status}）`
-  return new Error(message)
-}
-
-async function callLinduo<T>(
-  accessToken: string,
-  path: string,
-  init: RequestInit,
-  timeoutMs: number
-): Promise<T> {
-  const url = `${resolveBaseUrl()}/api/linduo${path}`
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const response = await fetch(url, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        ...(init.headers || {})
-      },
-      signal: controller.signal
-    })
-    if (!response.ok) throw await parseError(response)
-    if (response.status === 204) return undefined as T
-    return (await response.json()) as T
-  } finally {
-    clearTimeout(timer)
-  }
-}
 
 export class LinduoLoginService {
   /** 当前零度API 价格抓取登录态（是否已登录、用户名、cookie 过期时间等） */

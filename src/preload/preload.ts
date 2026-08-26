@@ -4,7 +4,7 @@ import type { ComplianceBatchRecheckResult, EbayImageInspectionReport } from '..
 import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
 import type { EbayLocalListingRequirements, EbayLocalRevisionPreparationResult } from '../shared/contracts'
 import type { EbayTitleDecision, EbayTitleDecisionInput } from '../shared/contracts'
-import type { ImagePackageTextExtractionRequest, ImagePackageTextExtractionResult } from '../shared/contracts'
+import type { ImagePackageTextExtractionRequest, ImagePackageTextExtractionResult, LinduoChatModelView, UserLinduoGrantView } from '../shared/contracts'
 import type { AdvisorApprovalDecision, AdvisorChatEvent, AdvisorChatRequest, AdvisorIncomingDocument, AdvisorIncomingImage, AdvisorPersonalizationSettings, AdvisorRemoteSession } from '../shared/advisor'
 import type { AiEmployeeAskRequest, AiEmployeeChatModelProfile, AiEmployeePickResult } from '../shared/aiEmployee'
 import type { ExtractedProductInfo } from '../shared/selectionExtract'
@@ -83,6 +83,24 @@ contextBridge.exposeInMainWorld('desktop', {
     refreshPricing: (accessToken: string, credentials?: { username: string; password: string }): Promise<{
       ok: boolean; count: number; refreshedAt: string; durationMs: number; fromFallback?: boolean; error?: string
     }> => ipcRenderer.invoke('linduo-pricing:refresh', accessToken, credentials)
+  },
+  linduoChat: {
+    listChatModels: (accessToken: string): Promise<LinduoChatModelView[]> =>
+      ipcRenderer.invoke('linduo-chat-models:list', accessToken),
+    listAllChatModels: (accessToken: string): Promise<LinduoChatModelView[]> =>
+      ipcRenderer.invoke('linduo-chat-models:list-all', accessToken),
+    setChatModelEnabled: (accessToken: string, id: string, enabled: boolean): Promise<LinduoChatModelView> =>
+      ipcRenderer.invoke('linduo-chat-models:set-enabled', accessToken, id, enabled),
+    listGrants: (accessToken: string): Promise<Array<UserLinduoGrantView & { userName: string }>> =>
+      ipcRenderer.invoke('linduo-grants:list', accessToken),
+    setGrant: (accessToken: string, userId: string, modelId: string): Promise<{ userId: string; modelId: string; grantedBy: string; grantedAt: string }> =>
+      ipcRenderer.invoke('linduo-grants:set', accessToken, userId, modelId),
+    revokeGrant: (accessToken: string, userId: string, modelId: string): Promise<{ ok: true }> =>
+      ipcRenderer.invoke('linduo-grants:revoke', accessToken, userId, modelId),
+    getPreferredModel: (accessToken: string): Promise<{ modelId: string | null }> =>
+      ipcRenderer.invoke('linduo-preferred:get', accessToken),
+    setPreferredModel: (accessToken: string, modelId: string | null): Promise<{ modelId: string | null }> =>
+      ipcRenderer.invoke('linduo-preferred:set', accessToken, modelId)
   },
   kb: {
     list: (): Promise<KbListView> => ipcRenderer.invoke('kb:list'),

@@ -8,7 +8,7 @@ import type { AdvisorDesktopApi } from '../shared/advisor'
 import type { AiEmployeeAskRequest, AiEmployeeChatModelProfile, AiEmployeePickResult } from '../shared/aiEmployee'
 import type { KbAgentKey, KbDocsView, KbListView, KbView } from '../shared/knowledge'
 import type { GuardianRunEvent, GuardianRunLog, GuardianSkill, GuardianSkillInput, GuardianState } from '../shared/kbGuardian'
-import type { ImagePackageTextExtractionRequest, ImagePackageTextExtractionResult, LinduoLoginStatus, LinduoModelPricing } from '../shared/contracts'
+import type { ImagePackageTextExtractionRequest, ImagePackageTextExtractionResult, LinduoChatModelView, LinduoLoginStatus, LinduoModelPricing, UserLinduoGrantView } from '../shared/contracts'
 import type { AmazonDataSourceSearchResult, AmazonListingEvidence, AmazonMarketSample, AmazonReviewEvidence, AmazonSearchIntent } from '../shared/amazonScraper'
 
 declare module '*.css'
@@ -67,6 +67,16 @@ declare global {
         logout(accessToken: string): Promise<{ ok: true }>
         listPricing(accessToken: string): Promise<{ items: LinduoModelPricing[]; refreshedAt: string | null; allStale: boolean }>
         refreshPricing(accessToken: string, credentials?: { username: string; password: string }): Promise<{ ok: boolean; count: number; refreshedAt: string; durationMs: number; fromFallback?: boolean; error?: string }>
+      }
+      linduoChat: {
+        listChatModels(accessToken: string): Promise<LinduoChatModelView[]>
+        listAllChatModels(accessToken: string): Promise<LinduoChatModelView[]>
+        setChatModelEnabled(accessToken: string, id: string, enabled: boolean): Promise<LinduoChatModelView>
+        listGrants(accessToken: string): Promise<Array<UserLinduoGrantView & { userName: string }>>
+        setGrant(accessToken: string, userId: string, modelId: string): Promise<{ userId: string; modelId: string; grantedBy: string; grantedAt: string }>
+        revokeGrant(accessToken: string, userId: string, modelId: string): Promise<{ ok: true }>
+        getPreferredModel(accessToken: string): Promise<{ modelId: string | null }>
+        setPreferredModel(accessToken: string, modelId: string | null): Promise<{ modelId: string | null }>
       }
       kb: {
         list(): Promise<KbListView>

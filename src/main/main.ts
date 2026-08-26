@@ -15,6 +15,7 @@ import { VolcImageService } from './services/VolcImageService'
 import { OpenAIImageService } from './services/OpenAIImageService'
 import { LinduoImageService } from './services/LinduoImageService'
 import { LinduoLoginService } from './services/LinduoLoginService'
+import { LinduoChatModelService } from './services/LinduoChatModelService'
 import { BailianTranslationService } from './services/BailianTranslationService'
 import { FeishuBotService } from './services/FeishuBotService'
 import { RealShiftService } from './services/RealShiftService'
@@ -234,6 +235,8 @@ const linduoImageService = new LinduoImageService(
 )
 // 零度API 价格抓取 + 登录态 IPC 桥（转发到 Fastify 服务端 /api/linduo/*；playwright 跑在服务端）
 const linduoLoginService = new LinduoLoginService()
+// 零度API 聊天模型选用 + 用户授权 IPC 桥（M1，转发到 Fastify /api/linduo/{chat-models,grants,preferred-model}）
+const linduoChatModelService = new LinduoChatModelService()
 const ebayImageComplianceVisionService = new EbayImageComplianceVisionService(
   process.env.BAILIAN_API_KEY || '',
   process.env.BAILIAN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
@@ -2043,6 +2046,38 @@ ipcMain.handle('linduo-pricing:refresh', async (_event, accessToken: unknown, cr
       ? { username: creds.username, password: creds.password }
       : undefined
   )
+})
+// ---------- 零度API 聊天模型选用 + 授权 IPC 桥 (M1，详见 LinduoChatModelService) ----------
+ipcMain.handle('linduo-chat-models:list', async (_event, accessToken: unknown) => {
+  return linduoChatModelService.listChatModels(typeof accessToken === 'string' ? accessToken : null)
+})
+ipcMain.handle('linduo-chat-models:list-all', async (_event, accessToken: unknown) => {
+  return linduoChatModelService.listAllChatModels(typeof accessToken === 'string' ? accessToken : null)
+})
+ipcMain.handle('linduo-chat-models:set-enabled', async (_event, accessToken: unknown, id: unknown, enabled: unknown) => {
+  if (typeof id !== 'string') throw new Error('模型 id 无效')
+  if (typeof enabled !== 'boolean') throw new Error('enabled 必须为 boolean')
+  return linduoChatModelService.setChatModelEnabled(typeof accessToken === 'string' ? accessToken : null, id, enabled)
+})
+ipcMain.handle('linduo-grants:list', async (_event, accessToken: unknown) => {
+  return linduoChatModelService.listGrants(typeof accessToken === 'string' ? accessToken : null)
+})
+ipcMain.handle('linduo-grants:set', async (_event, accessToken: unknown, userId: unknown, modelId: unknown) => {
+  if (typeof userId !== 'string') throw new Error('userId 无效')
+  if (typeof modelId !== 'string') throw new Error('modelId 无效')
+  return linduoChatModelService.setGrant(typeof accessToken === 'string' ? accessToken : null, userId, modelId)
+})
+ipcMain.handle('linduo-grants:revoke', async (_event, accessToken: unknown, userId: unknown, modelId: unknown) => {
+  if (typeof userId !== 'string') throw new Error('userId 无效')
+  if (typeof modelId !== 'string') throw new Error('modelId 无效')
+  return linduoChatModelService.revokeGrant(typeof accessToken === 'string' ? accessToken : null, userId, modelId)
+})
+ipcMain.handle('linduo-preferred:get', async (_event, accessToken: unknown) => {
+  return linduoChatModelService.getPreferredModel(typeof accessToken === 'string' ? accessToken : null)
+})
+ipcMain.handle('linduo-preferred:set', async (_event, accessToken: unknown, modelId: unknown) => {
+  if (modelId !== null && typeof modelId !== 'string') throw new Error('modelId 无效')
+  return linduoChatModelService.setPreferredModel(typeof accessToken === 'string' ? accessToken : null, modelId as string | null)
 })
 ipcMain.handle('amazon-data-source:search', async (_event, keyword: string): Promise<AmazonDataSourceSearchResult> => {
   const settings = readAmazonDataSource()
