@@ -5,7 +5,7 @@
 // - 静态移除的 modelId → UPDATE enabled=false（软关，保留 grants 历史）
 //
 // 启动时由 src/index.ts 在 app.listen() 之后调用；
-// 失败仅 console.error，不抛（不拖垮主服务）。
+// 失败仅 log.error（见 IIFE catch），不抛（不拖垮主服务）。
 
 import { prisma } from '../../lib/prisma.js'
 import { getLinduoChatModels } from './linduoCatalog.js'
