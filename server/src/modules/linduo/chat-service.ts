@@ -47,18 +47,23 @@ export class LinduoChatService {
   }
 
   async *streamChat(request: LinduoChatRequest): AsyncGenerator<LinduoChatEvent> {
-    if (!this.apiKey) {
-      yield { type: 'error', message: 'LINDUO_KEY_MISSING' }
-      return
-    }
-
     const body = {
       model: request.modelId,
       messages: request.messages,
-      stream: true
+      stream: true,
+      // 让 OpenAI 在最后一个 chunk 附带 usage（prompt/completion tokens），
+      // 否则 done.usage 只能依赖 chunk 计数粗略估算（M1 已知限制）。
+      stream_options: { include_usage: true }
       // M1 兜底：不传 tools
       // M1 兜底：不传 temperature/max_tokens，使用模型默认
     }
+
+    // 同时尊重 caller signal + internal timeout，二者任一触发即 abort。
+    // 用 AbortSignal.any 而非 `??`：caller 传了 AbortSignal 仍保有 120s 上限。
+    const timeoutSignal = AbortSignal.timeout(LinduoChatService.TIMEOUT_MS)
+    const combinedSignal = request.signal
+      ? AbortSignal.any([request.signal, timeoutSignal])
+      : timeoutSignal
 
     let response: Response
     try {
@@ -69,7 +74,7 @@ export class LinduoChatService {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(body),
-        signal: request.signal ?? AbortSignal.timeout(LinduoChatService.TIMEOUT_MS)
+        signal: combinedSignal
       })
     } catch (err) {
       const detail = err instanceof Error ? err.message : '网络异常'
@@ -82,8 +87,13 @@ export class LinduoChatService {
       return
     }
     if (response.status === 404) {
-      // 模型不存在 → 软关
-      await this.softDisableModel(request.modelId).catch(() => {})
+      // 模型不存在 → 软关。失败仅 warn 留痕,不阻塞 caller 拿错误码。
+      await this.softDisableModel(request.modelId).catch((err: unknown) => {
+        console.warn('[linduo-chat] softDisableModel failed', {
+          modelId: request.modelId,
+          err: err instanceof Error ? err.message : String(err)
+        })
+      })
       yield { type: 'error', message: 'LINDUO_MODEL_NOT_FOUND' }
       return
     }
@@ -92,8 +102,18 @@ export class LinduoChatService {
       return
     }
     if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      yield { type: 'error', message: `LINDUO_UPSTREAM_ERROR: HTTP ${response.status} ${text.slice(0, 200)}` }
+      // 错误消息中 redact 任何形如 sk-xxx / Bearer xxx / 长 base64 的敏感串，
+      // 并把上游 body 截断到 80 字避免泄漏内部堆栈/合作伙伴 key/用户 PII。
+      // 完整 body 仅写 server log（调用方可另行抓取）。
+      const rawText = await response.text().catch(() => '')
+      const redacted = rawText
+        .replace(/\bsk-[A-Za-z0-9_-]{16,}\b/g, 'sk-***REDACTED***')
+        .replace(/\bBearer\s+[A-Za-z0-9_.-]{16,}\b/gi, 'Bearer ***REDACTED***')
+        .slice(0, 80)
+      yield {
+        type: 'error',
+        message: `LINDUO_UPSTREAM_ERROR: HTTP ${response.status} ${redacted}`
+      }
       return
     }
 
@@ -138,7 +158,8 @@ export class LinduoChatService {
           if (!choice) continue
           const delta = choice.delta?.content
           if (typeof delta === 'string' && delta.length > 0) {
-            totalCompletion += 1  // 粗略计数
+            // chunk 计数；OpenAI 不带 usage 时的兜底估算。带 usage 的会下面被覆盖。
+            totalCompletion += 1
             yield { type: 'delta', text: delta }
           }
           if (choice.finish_reason) finishReason = choice.finish_reason
@@ -148,6 +169,8 @@ export class LinduoChatService {
           }
         }
       }
+      // 循环结束后 flush decoder，兜底 chunk 边界被切断的 UTF-8 多字节字符。
+      buffer += decoder.decode()
     } catch (err) {
       const detail = err instanceof Error ? err.message : '流式读取失败'
       yield { type: 'error', message: `LINDUO_UPSTREAM_ERROR: ${detail}` }
