@@ -11,7 +11,9 @@ export type GigaReturnRateFilter = 'ANY' | 'LOW' | 'MEDIUM' | 'HIGH'
 
 // ─── 零度API 价格抓取 ──────────────────────────────────────────────────
 export type LinduoBillingType = 'TOKEN' | 'IMAGE' | 'VIDEO' | 'REQUEST'
-export type LinduoVendor = 'openai' | 'google' | 'anthropic' | 'vidu'
+// LinduoVendor 统一真值源在 src/shared/linduoCatalog.ts，contracts 导入 + re-export 以保持现有 import 兼容
+import type { LinduoVendor } from './linduoCatalog'
+export type { LinduoVendor }
 
 export interface LinduoModelPricing {
   modelId: string
