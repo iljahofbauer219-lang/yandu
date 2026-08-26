@@ -55,6 +55,8 @@ export async function linduoChatRoutes(app: FastifyInstance) {
   app.addHook('preHandler', app.authenticate)
 
   app.post('/chat', async (request: FastifyRequest, reply: FastifyReply) => {
+    // 提前 hijack:所有 SSE 路径(错误 + 正常)统一接管,Fastify 不再包装响应
+    reply.hijack()
     const body = chatSchema.parse(request.body)
     const userId = request.user.sub
 
@@ -91,13 +93,10 @@ export async function linduoChatRoutes(app: FastifyInstance) {
     try {
       service = LinduoChatService.fromConfig()
     } catch (err) {
-      // LINDUO_KEY_MISSING（config 没配 LINDUO_API_KEY）
+      // LINDUO_KEY_MISSING（config 没配 LINDUO_API_KEY）；完整 err 已落 server log，client 只需知道是 key 缺失
       request.log.error({ err }, '[linduo-chat] service init failed')
       reply.raw.writeHead(200, sseHeaders())
-      writeSseEvent(reply.raw, {
-        type: 'error',
-        message: `LINDUO_KEY_MISSING${err instanceof Error && err.message ? `: ${err.message}` : ''}`
-      })
+      writeSseEvent(reply.raw, { type: 'error', message: 'LINDUO_KEY_MISSING' })
       reply.raw.end()
       return reply
     }
@@ -110,8 +109,6 @@ export async function linduoChatRoutes(app: FastifyInstance) {
 
     // 4) 写 200 + SSE 头
     reply.raw.writeHead(200, sseHeaders())
-    // Fastify 看到我们直接操作 reply.raw，需要告诉它不要再包装响应
-    reply.hijack()
 
     // 5) 迭代 generator，转写事件。过程中不做 try/catch 抛错(plan 要求不在流中间 throw)；
     //    service 内部已经 try/catch + yield error 事件。

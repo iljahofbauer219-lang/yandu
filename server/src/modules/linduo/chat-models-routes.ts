@@ -13,6 +13,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../../lib/prisma.js'
 import { httpError } from '../../lib/errors.js'
+import { writeAudit } from '../../lib/audit.js'
 import type { LinduoChatModelView, UserLinduoGrantView } from './types.js'
 
 function toModelView(row: {
@@ -59,7 +60,7 @@ export async function linduoChatModelsRoutes(app: FastifyInstance) {
 
   // 当前用户可用的 enabled 模型（按 grant 过滤）
   app.get('/chat-models', async (request) => {
-    const userId = request.user.sub
+    const userId = request.currentUser.id
     const grants = await prisma.userLinduoGrant.findMany({
       where: { userId },
       include: { model: true }
@@ -82,6 +83,11 @@ export async function linduoChatModelsRoutes(app: FastifyInstance) {
     const row = await prisma.linduoChatModel.findUnique({ where: { id } })
     if (!row) throw httpError(404, 'MODEL_NOT_FOUND', '模型不存在')
     const updated = await prisma.linduoChatModel.update({ where: { id }, data: { enabled: body.enabled } })
+    await writeAudit(prisma, {
+      orgId: request.currentUser.orgId, userId: request.currentUser.id,
+      action: 'linduo.chat_model.toggle_enabled', targetType: 'LinduoChatModel', targetId: id,
+      detail: { modelId: row.modelId, enabled: body.enabled }, ip: request.ip
+    })
     return toModelView(updated)
   })
 
@@ -110,8 +116,14 @@ export async function linduoChatModelsRoutes(app: FastifyInstance) {
     if (!user) throw httpError(404, 'USER_NOT_FOUND', '用户不存在')
     const grant = await prisma.userLinduoGrant.upsert({
       where: { userId_modelId: { userId: body.userId, modelId: model.id } },
-      create: { userId: body.userId, modelId: model.id, grantedBy: request.user.sub },
-      update: { grantedBy: request.user.sub, grantedAt: new Date() }
+      create: { userId: body.userId, modelId: model.id, grantedBy: request.currentUser.id },
+      update: { grantedBy: request.currentUser.id, grantedAt: new Date() }
+    })
+    await writeAudit(prisma, {
+      orgId: request.currentUser.orgId, userId: request.currentUser.id,
+      action: 'linduo.grant.create', targetType: 'UserLinduoGrant',
+      targetId: `${body.userId}:${model.id}`,
+      detail: { targetUserId: body.userId, modelId: model.id, modelName: model.displayName }, ip: request.ip
     })
     return { userId: grant.userId, modelId: grant.modelId, grantedBy: grant.grantedBy, grantedAt: grant.grantedAt.toISOString() }
   })
@@ -121,6 +133,10 @@ export async function linduoChatModelsRoutes(app: FastifyInstance) {
     const body = grantSchema.parse(request.body)
     const model = await prisma.linduoChatModel.findUnique({ where: { id: body.modelId } })
     if (!model) throw httpError(404, 'MODEL_NOT_FOUND', '模型不存在')
+    const before = await prisma.user.findUnique({
+      where: { id: body.userId },
+      select: { preferredLinduoModelId: true }
+    })
     await prisma.$transaction([
       prisma.userLinduoGrant.delete({ where: { userId_modelId: { userId: body.userId, modelId: model.id } } }),
       prisma.user.updateMany({
@@ -128,12 +144,18 @@ export async function linduoChatModelsRoutes(app: FastifyInstance) {
         data: { preferredLinduoModelId: null }
       })
     ])
+    await writeAudit(prisma, {
+      orgId: request.currentUser.orgId, userId: request.currentUser.id,
+      action: 'linduo.grant.delete', targetType: 'UserLinduoGrant',
+      targetId: `${body.userId}:${model.id}`,
+      detail: { targetUserId: body.userId, modelId: model.id, modelName: model.displayName, clearedPreferred: before?.preferredLinduoModelId === model.id }, ip: request.ip
+    })
     return { ok: true }
   })
 
   // 当前用户 preferred model
   app.get('/preferred-model', async (request) => {
-    const userId = request.user.sub
+    const userId = request.currentUser.id
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { preferredLinduoModelId: true } })
     return { modelId: user?.preferredLinduoModelId ?? null }
   })
@@ -141,7 +163,7 @@ export async function linduoChatModelsRoutes(app: FastifyInstance) {
   // 设置 preferred model（null = 清空）
   app.put('/preferred-model', async (request) => {
     const body = preferredSchema.parse(request.body)
-    const userId = request.user.sub
+    const userId = request.currentUser.id
     if (body.modelId !== null) {
       // 校验 grant
       const model = await prisma.linduoChatModel.findUnique({ where: { id: body.modelId } })
@@ -153,6 +175,11 @@ export async function linduoChatModelsRoutes(app: FastifyInstance) {
       if (!grant) throw httpError(403, 'LINDUO_MODEL_NOT_GRANTED', '当前用户未被授权使用该模型')
     }
     await prisma.user.update({ where: { id: userId }, data: { preferredLinduoModelId: body.modelId } })
+    await writeAudit(prisma, {
+      orgId: request.currentUser.orgId, userId: request.currentUser.id,
+      action: 'linduo.preferred_model.set', targetType: 'User', targetId: userId,
+      detail: { modelId: body.modelId }, ip: request.ip
+    })
     return { modelId: body.modelId }
   })
 }
