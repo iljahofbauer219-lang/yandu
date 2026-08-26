@@ -5,7 +5,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { MemberView, RoleView } from './serverApi'
-import { ApiError, approveMember, changePassword, createMember, deleteMember, fetchMembers, fetchPendingMembers, fetchRoles, rejectMember, resetMemberPassword, updateMember, updateMemberPermissions } from './serverApi'
+import { ApiError, approveMember, changePassword, createMember, deleteMember, fetchAllLinduoChatModels, fetchLinduoGrants, fetchMembers, fetchPendingMembers, fetchRoles, rejectMember, resetMemberPassword, revokeLinduoGrant, setLinduoGrant, updateMember, updateMemberPermissions } from './serverApi'
+import type { LinduoChatModelView } from '../shared/contracts'
 import { useSession } from './SessionGate'
 import { Button, EmptyState, LoadingState, Notice, StatusBadge } from './ui/primitives'
 import { MENU_PERMISSION_TREE, menuCheckState, summarizeMenuPermissions, toggleMenu, toggleMenuCard } from '../shared/menuPermissionTree'
@@ -95,8 +96,9 @@ function MemberRow(props: {
   member: MemberView
   roles: RoleView[]
   onChanged: () => void
+  onAssignLinduo?: (member: MemberView) => void
 }) {
-  const { member, roles, onChanged } = props
+  const { member, roles, onChanged, onAssignLinduo } = props
   const [editing, setEditing] = useState(false)
   const [changingPwd, setChangingPwd] = useState(false)
   const [name, setName] = useState(member.name)
@@ -194,12 +196,16 @@ function MemberRow(props: {
         changingPwd ? <>
           <button disabled={busy} onClick={() => void doChangeOwnPassword()}>确认修改</button>
           <button disabled={busy} onClick={() => { setChangingPwd(false); setMessage('') }}>取消</button>
-        </> : <button onClick={() => { setChangingPwd(true); setOldPassword(''); setNewPassword(''); setMessage('') }}>修改密码</button>
+        </> : <>
+          <button onClick={() => { setChangingPwd(true); setOldPassword(''); setNewPassword(''); setMessage('') }}>修改密码</button>
+          <span className="member-action-note">OWNER 全开</span>
+        </>
       ) : editing ? <>
         <button disabled={busy} onClick={() => void saveEdit()}>保存</button>
         <button disabled={busy} onClick={() => setEditing(false)}>取消</button>
       </> : <>
         <button onClick={startEdit}>编辑</button>
+        <button disabled={busy} onClick={() => onAssignLinduo?.(member)}>Linduo 选用</button>
         {member.status === 'ACTIVE'
           ? <button className="danger" disabled={busy} onClick={() => void toggleStatus()}>禁用</button>
           : <button disabled={busy} onClick={() => void toggleStatus()}>启用</button>}
@@ -238,6 +244,13 @@ export default function SystemAdmin() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  // Linduo 模型分配 Modal（M1）
+  const [linduoAssignTarget, setLinduoAssignTarget] = useState<MemberView | null>(null)
+  const [linduoAllModels, setLinduoAllModels] = useState<LinduoChatModelView[]>([])
+  const [linduoUserGrants, setLinduoUserGrants] = useState<Set<string>>(new Set())
+  const [linduoLoading, setLinduoLoading] = useState(false)
+  const [linduoMsg, setLinduoMsg] = useState('')
+
   // 新增成员表单
   const [showCreate, setShowCreate] = useState(false)
   const [cPhone, setCPhone] = useState('')
@@ -268,6 +281,45 @@ export default function SystemAdmin() {
       setCreateMsg('')
       await load()
     } catch (err) { setCreateMsg(errorText(err, '创建失败')) } finally { setCreating(false) }
+  }
+
+  const openLinduoAssign = async (member: MemberView) => {
+    setLinduoAssignTarget(member)
+    setLinduoAllModels([])
+    setLinduoUserGrants(new Set())
+    setLinduoMsg('')
+    setLinduoLoading(true)
+    try {
+      // grant 的 modelId 语义 = LinduoChatModel.id（DB cuid，见 UserLinduoGrant 外键），故勾选态用 model.id 对齐
+      const [all, grants] = await Promise.all([fetchAllLinduoChatModels(), fetchLinduoGrants()])
+      setLinduoAllModels(all.filter(m => m.enabled))
+      setLinduoUserGrants(new Set(grants.filter(g => g.userId === member.id).map(g => g.modelId)))
+    } catch (err) {
+      setLinduoMsg(errorText(err, '加载 Linduo 模型失败'))
+    } finally {
+      setLinduoLoading(false)
+    }
+  }
+
+  const toggleLinduoGrant = async (modelId: string, checked: boolean) => {
+    const target = linduoAssignTarget
+    if (!target) return
+    setLinduoMsg('')
+    try {
+      if (checked) {
+        await setLinduoGrant(target.id, modelId)
+      } else {
+        await revokeLinduoGrant(target.id, modelId)
+      }
+      // 请求成功后才更新 Set；失败时 checkbox 因受控自动回弹
+      setLinduoUserGrants(prev => {
+        const next = new Set(prev)
+        if (checked) next.add(modelId); else next.delete(modelId)
+        return next
+      })
+    } catch (err) {
+      setLinduoMsg(errorText(err, '分配失败'))
+    }
   }
 
   const assignableRoles = roles.filter(r => r.key !== 'OWNER')
@@ -311,7 +363,7 @@ export default function SystemAdmin() {
       {loading ? <LoadingState className="sysadmin-loading" label="正在加载成员…" /> : members.length === 0 ? <EmptyState title="暂无成员" description="新增成员后，可在这里分配使用权限。" /> : <table className="sysadmin-table sysadmin-members-table">
         <thead><tr><th>姓名</th><th>手机号</th><th>角色</th><th>使用权限</th><th>状态</th><th>最近登录</th><th>操作</th></tr></thead>
         <tbody>
-          {members.map(member => <MemberRow key={member.id} member={member} roles={roles} onChanged={() => void load()} />)}
+          {members.map(member => <MemberRow key={member.id} member={member} roles={roles} onChanged={() => void load()} onAssignLinduo={m => void openLinduoAssign(m)} />)}
         </tbody>
       </table>}
     </>}
@@ -338,5 +390,39 @@ export default function SystemAdmin() {
         <div className="org-item"><dt>角色列表</dt><dd>{roles.map(r => `${r.name}（${r.memberCount}人）`).join('、') || '—'}</dd></div>
       </dl>
     </div>}
+
+    {linduoAssignTarget && (
+      <div className="linduo-assign-backdrop" role="dialog" aria-modal="true" onClick={e => { if (e.target === e.currentTarget) setLinduoAssignTarget(null) }}>
+        <div className="linduo-assign-card">
+          <header>
+            <h2>为 {linduoAssignTarget.name} 分配 Linduo 聊天模型</h2>
+            <button type="button" className="linduo-assign-close" onClick={() => setLinduoAssignTarget(null)} aria-label="关闭">✕</button>
+          </header>
+          <div className="linduo-assign-body">
+            {linduoMsg && <Notice className="sysadmin-msg" tone="danger" role="alert">{linduoMsg}</Notice>}
+            {linduoLoading && <LoadingState label="正在加载模型列表…" />}
+            {!linduoLoading && linduoAllModels.length === 0 && (
+              <div className="linduo-assign-empty">暂无可用 Linduo 模型（enabled 列表为空）。</div>
+            )}
+            {!linduoLoading && linduoAllModels.map(model => {
+              const checked = linduoUserGrants.has(model.id)
+              return (
+                <label key={model.id} className="linduo-assign-row">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={e => void toggleLinduoGrant(model.id, e.target.checked)}
+                  />
+                  <span>
+                    <strong>{model.displayName}</strong>
+                    <small>{model.vendor} · {model.contextLabel || '—'}</small>
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    )}
   </div>
 }
