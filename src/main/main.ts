@@ -107,7 +107,7 @@ import type { ExecutionEvent } from '../shared/executionEvent'
 import { materializeGeneratedMarkdownReply } from './services/generatedReportArtifact'
 import { isLocalServerUrl, readServerUrl, writeServerUrl } from './serverConfig'
 import { autoUpdater } from 'electron-updater'
-import { shutdownAdvisorRuntime } from './advisor/AdvisorRuntime'
+import { reloadLinduoChatModels, shutdownAdvisorRuntime } from './advisor/AdvisorRuntime'
 import { auditEbayTitle } from '../shared/ebayTitleAudit'
 import type { BrowserBounds, BrowserTranslationMode, CandidateUpdateRequest, CollectedOzonProduct, CollectedSupplyProduct, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, CollectorPluginProduct, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonUpdateRequest, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceDocumentDraft, ComplianceEnforcementStatus, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReviewStatus, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceTaskStatus, EbayAcceptanceBatch, EbayAcceptanceCheck, EbayAcceptanceItemResult, EbayAcceptanceRunRequest, EbayAcceptanceScenarioResult, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReviewRequest, EbayImageGroundingRequest, EbayImageInspection, EbayImageInspectionReport, EbayImageRoleSuggestionRequest, EbayImageStage, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductMedia, EbayLocalProductMediaUploadInput, EbayLocalProductSnapshotInput, EbayLocalProductUpdateInput, EbayMarketKeywordStat, EbayMarketResearchDecisionRequest, EbayMarketResearchFinding, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayProductDetails, EbayPublishAuditEvent, EbayPublishComparisonItem, EbayPublishTask, EbaySellerHubAcceptanceSnapshot, EbayStageGroundingRequest, EbayStageStoryboardRequest, EbayTitleDecisionInput, EbayTitleOptimizationRequest, EbayVideoStudioRequest, ImageGenerationRequest, ImageModelProfile, ImportedProductImage, ImportedProductSource, MarketplaceCredentialInput, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePublishDraftUpdate, NetworkStrategy, Platform, RealShiftRequest, SelectionDecision, SelectionImportRequest, SelectionTask, SelectionTaskDraft, SupplyPlatformCode, TaskProgress } from '../shared/contracts'
 
@@ -2999,6 +2999,22 @@ if (hasSingleInstanceLock) app.whenReady().then(async () => {
   void SampleLibraryKbGuardianLauncher.ensure(maxkbKnowledgeService, kbGuardianService)
     .catch(error => console.warn('[sample-library-kb-guardian] 预置技能注册失败：', (error as Error).message))
   createWindow()
+  // M1: 把 enabled Linduo 模型注入 AdvisorRuntime 模型档位。
+  // server 进程可能晚于 Electron 就绪,重试 3 次(间隔 5s);
+  // reloadLinduoChatModels 内部不抛错,失败返回 added=0,保持 Codex 默认档位。
+  void (async () => {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const result = await reloadLinduoChatModels()
+      if (result.added > 0) {
+        console.log(`[advisor] 已加载 ${result.added} 个 Linduo 模型,共 ${result.total} 个模型档位`)
+        return
+      }
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 5000))
+      }
+    }
+    console.log('[advisor] 未加载到 Linduo 模型(服务未就绪或账号无授权),保持 Codex 默认档位')
+  })()
 })
 
 // 自动更新：更新源为阿里云 OSS（electron-builder.yml 的 publish.generic）；
