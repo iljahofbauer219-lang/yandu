@@ -13,6 +13,8 @@ import { AppDatabase } from './database/AppDatabase'
 import { BailianImageService } from './services/BailianImageService'
 import { VolcImageService } from './services/VolcImageService'
 import { OpenAIImageService } from './services/OpenAIImageService'
+import { LinduoImageService } from './services/LinduoImageService'
+import { LinduoLoginService } from './services/LinduoLoginService'
 import { BailianTranslationService } from './services/BailianTranslationService'
 import { FeishuBotService } from './services/FeishuBotService'
 import { RealShiftService } from './services/RealShiftService'
@@ -25,8 +27,8 @@ import { EbayImageGroundingService } from './services/EbayImageGroundingService'
 import { importProductUrl } from './services/ImageSourceService'
 import { parseEbayListingsReport } from './services/EbayReportService'
 import { ServerProcessManager } from './services/ServerProcessManager'
-import { RagflowKnowledgeService } from './services/RagflowKnowledgeService'
-import type { KbAgentKey } from './services/RagflowKnowledgeService'
+import { MaxkbKnowledgeService } from './services/MaxkbKnowledgeService'
+import type { KbAgentKey } from './services/MaxkbKnowledgeService'
 import { KbGuardianService } from './services/KbGuardianService'
 import { SampleLibraryKbIngestor } from './services/SampleLibraryKbIngestor'
 import { SampleLibraryKbGuardianLauncher, buildSampleLibraryCategoryResolver } from './services/SampleLibraryKbGuardianLauncher'
@@ -100,6 +102,7 @@ function publicAmazonDataSource(value = readAmazonDataSource()) {
   return { configured: Boolean(value.encryptedApiKey), site: value.site, pages: value.pages, maxSamples: value.maxSamples, cacheHours: value.cacheHours }
 }
 import { AiEmployeeChatService } from './services/AiEmployeeChatService'
+import type { ExecutionEvent } from '../shared/executionEvent'
 import { materializeGeneratedMarkdownReply } from './services/generatedReportArtifact'
 import { isLocalServerUrl, readServerUrl, writeServerUrl } from './serverConfig'
 import { autoUpdater } from 'electron-updater'
@@ -225,6 +228,12 @@ const openaiImageService = new OpenAIImageService(
   process.env.OPENAI_IMAGE_API_KEY || '',
   process.env.IMAGE_PROXY_URL || ''
 )
+const linduoImageService = new LinduoImageService(
+  process.env.LINDUO_API_KEY || '',
+  process.env.LINDUO_BASE_URL || 'https://api000.com/v1'
+)
+// 零度API 价格抓取 + 登录态 IPC 桥（转发到 Fastify 服务端 /api/linduo/*；playwright 跑在服务端）
+const linduoLoginService = new LinduoLoginService()
 const ebayImageComplianceVisionService = new EbayImageComplianceVisionService(
   process.env.BAILIAN_API_KEY || '',
   process.env.BAILIAN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
@@ -250,8 +259,12 @@ const ebayOptimizationService = new EbayOptimizationService(
   process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash'
 )
 const aiEmployeeChatService = new AiEmployeeChatService()
-const ragflowKnowledgeService = new RagflowKnowledgeService()
-const kbGuardianService = new KbGuardianService(ragflowKnowledgeService, event => shellWebContents?.send('kbGuardian:run-event', event))
+// 阶段 3.1：知识库服务已完全切到 MaxKB v2.10.5-lts CE
+// - MaxkbKnowledgeService 复用 KbListView/KbDocView/KbDocsView 接口供前端 KnowledgeHub / 守卫调度统一
+// - .env.local 的 MAXKB_* 变量由 .vite 注入后即可使用
+// - 阶段 5 完成 RAGFlow 残留全部清洗（llm-keys:list / preset-language 通道已删除）
+const maxkbKnowledgeService = new MaxkbKnowledgeService()
+const kbGuardianService = new KbGuardianService(maxkbKnowledgeService, event => shellWebContents?.send('kbGuardian:run-event', event))
 // I.2 阶段新增：注入报告样例库的文件名→分类映射器（按文件名走不同分类）
 kbGuardianService.setCategoryResolver(buildSampleLibraryCategoryResolver())
 
@@ -1365,6 +1378,19 @@ function registerMediaProtocol() {
   mediaProtocolReady=true
   protocol.handle('cross-media',request=>{
     const url=new URL(request.url)
+    // project 主机名:工作区项目下的图片，workspacePath 作为防越权根
+    if(url.hostname==='project'){
+      // URL 格式:cross-media://project/<encodedWorkspacePath>/<encodedFileRelativePath>
+      const segments=decodeURIComponent(url.pathname).replace(/^\/+/,'').split('/')
+      if(segments.length<2)return new Response('Bad request',{status:400})
+      const workspacePath=path.resolve(segments[0])
+      const relativePath=segments.slice(1).join('/')
+      const filePath=path.resolve(workspacePath,relativePath)
+      // 安全检查:文件必须在工作区之下，防止讀取项目外的任意文件
+      if(!filePath.startsWith(`${workspacePath}${path.sep}`))return new Response('Forbidden',{status:403})
+      if(!fs.existsSync(filePath))return new Response('Not found',{status:404})
+      return net.fetch(pathToFileURL(filePath).toString())
+    }
     const root=url.hostname==='ebay'
       ?path.join(app.getPath('userData'),'ebay-videos')
       :url.hostname==='local'
@@ -1423,6 +1449,13 @@ function createWindow() {
   })
   shell.webContents.on('render-process-gone', (_event, details) => {
     console.error(`[renderer] process gone: ${details.reason} (exit ${details.exitCode})`)
+  })
+  // 渲染层首次加载完成后：如果还没有 IEBrowserPanel 用的通用 web tab，主进程主动开一个 nav 站点。
+  // 原因：在 renderer 端 IEBrowserPanel 会被 React StrictMode 双调用 useEffect + App.tsx IIFE 路由 remount，
+  // 模块级 flag 不安全。这里改在主进程主动开，不受 renderer 重挂载影响。
+  // 限制为首次加载（once: true），用户手动 reload renderer 时不会重复开。
+  shell.webContents.once('did-finish-load', () => {
+    void workspace?.openDefaultNavIfNeeded()
   })
 
   // Windows 下无原生窗口控制按钮，向渲染层推送最大化状态以切换图标
@@ -1758,8 +1791,20 @@ ipcMain.handle('browser:close-tab', (_event, tabId: string) => workspace?.closeT
 ipcMain.handle('browser:1688-search-url', (_event, keyword: string) => {
   return create1688SearchUrl(keyword)
 })
-// ---------- AI员工：RAGFlow 智能体调用 + 附件/大模型路由（AiEmployeeChatService）+ 内嵌浏览器（与 Chrome 扩展同链路） ----------
-ipcMain.handle('ai-employee:ask', (_event, request: AiEmployeeAskRequest) => aiEmployeeChatService.chat(request))
+// ---------- AI员工：MaxKB 智能体调用 + 附件/大模型路由（AiEmployeeChatService）+ 内嵌浏览器（与 Chrome 扩展同链路） ----------
+ipcMain.handle('ai-employee:ask', (event, request: AiEmployeeAskRequest) => {
+  // P2 阶段:把内部 ExecutionEvent 透传到渲染端 ExecutionPanel
+  const requestId = `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+  const sender = event.sender
+  return aiEmployeeChatService.chat(request, {
+    requestId,
+    onEvent: (payload: ExecutionEvent) => {
+      try {
+        if (!sender.isDestroyed()) sender.send('ai-employee:event', payload)
+      } catch { /* window already gone */ }
+    }
+  })
+})
 ipcMain.handle('ai-employee:chat-models', () => aiEmployeeChatService.listModels())
 ipcMain.handle('ai-employee:pick-attachments', () => aiEmployeeChatService.pickAttachments())
 ipcMain.handle('ai-employee:materialize-markdown-report', (_event, content: string) => materializeGeneratedMarkdownReply(content))
@@ -1847,8 +1892,7 @@ ipcMain.handle('llm-keys:list', () => {
     { id: 'deepseek', key: String(process.env.DEEPSEEK_API_KEY || '').trim() },
     { id: 'ark', key: String(process.env.ARK_API_KEY || '').trim() },
     { id: 'openai', key: String(process.env.OPENAI_IMAGE_API_KEY || '').trim() },
-    // handler 在 app ready 后执行，此时 loadLocalEnvironment 已完成，直接读 process.env 时序安全
-    { id: 'ragflow', key: String(process.env.RAGFLOW_API_KEY || '').trim() }
+    { id: 'linduo', key: String(process.env.LINDUO_API_KEY || '').trim() }
   ]
   return envKeys.map(item => ({ id: item.id, configured: Boolean(item.key), maskedKey: maskLlmKey(item.key) }))
 })
@@ -1858,7 +1902,7 @@ const LLM_KEY_ENV_NAME: Record<string, string> = {
   deepseek: 'DEEPSEEK_API_KEY',
   ark: 'ARK_API_KEY',
   openai: 'OPENAI_IMAGE_API_KEY',
-  ragflow: 'RAGFLOW_API_KEY'
+  linduo: 'LINDUO_API_KEY'
 }
 // 与 loadLocalEnvironment 的查找顺序保持一致；两者都不存在时默认落到 app.getAppPath()/.env.local
 function envLocalFilePath(): string {
@@ -1946,21 +1990,11 @@ async function testLlmKey(id: string): Promise<{ ok: boolean; latencyMs?: number
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       return { ok: true, latencyMs: latency() }
     }
-    if (id === 'ragflow') {
-      // base 与 RagflowKnowledgeService.baseUrl 保持一致：中央服务器地址 + 8090 端口
-      let base: string
-      try {
-        const url = new URL(readServerUrl())
-        url.port = '8090'
-        url.pathname = '/'
-        base = url.toString().replace(/\/+$/, '')
-      } catch {
-        return { ok: false, latencyMs: latency(), error: '未配置中央服务器地址' }
-      }
-      const response = await fetch(`${base}/api/v1/datasets?page=1&page_size=1`, { headers: authHeaders, signal })
+    if (id === 'linduo') {
+      // 零度API 走 OpenAI 兼容的 /v1/models 探测，默认 base https://api000.com/v1
+      const base = (process.env.LINDUO_BASE_URL || 'https://api000.com/v1').replace(/\/+$/, '')
+      const response = await fetch(`${base}/models`, { headers: authHeaders, signal })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const payload = await response.json().catch(() => ({})) as { code?: number; message?: string }
-      if (payload.code !== 0) throw new Error(payload.message || `RAGFlow 业务错误（code=${payload.code}）`)
       return { ok: true, latencyMs: latency() }
     }
     return { ok: false, latencyMs: latency(), error: '未知的提供商' }
@@ -1982,6 +2016,33 @@ ipcMain.handle('llm-keys:test', async (_event, input: { id?: string }) => {
 ipcMain.handle('llm-keys:restart', () => {
   app.relaunch()
   app.exit(0)
+})
+// ---------- 零度API 登录态 + 价格抓取 IPC 桥（详见 LinduoLoginService） ----------
+ipcMain.handle('linduo-login:status', async (_event, accessToken: unknown) => {
+  return linduoLoginService.getLoginStatus(typeof accessToken === 'string' ? accessToken : null)
+})
+ipcMain.handle('linduo-login:login', async (_event, accessToken: unknown, username: unknown, password: unknown) => {
+  if (typeof username !== 'string' || typeof password !== 'string') {
+    throw new Error('请提供零度API 用户名与密码')
+  }
+  return linduoLoginService.login(typeof accessToken === 'string' ? accessToken : null, username, password)
+})
+ipcMain.handle('linduo-login:logout', async (_event, accessToken: unknown) => {
+  return linduoLoginService.logout(typeof accessToken === 'string' ? accessToken : null)
+})
+ipcMain.handle('linduo-pricing:list', async (_event, accessToken: unknown) => {
+  return linduoLoginService.getPricing(typeof accessToken === 'string' ? accessToken : null)
+})
+ipcMain.handle('linduo-pricing:refresh', async (_event, accessToken: unknown, credentials: unknown) => {
+  const creds = (credentials && typeof credentials === 'object')
+    ? credentials as { username?: unknown; password?: unknown }
+    : undefined
+  return linduoLoginService.refreshPricing(
+    typeof accessToken === 'string' ? accessToken : null,
+    creds && typeof creds.username === 'string' && typeof creds.password === 'string'
+      ? { username: creds.username, password: creds.password }
+      : undefined
+  )
 })
 ipcMain.handle('amazon-data-source:search', async (_event, keyword: string): Promise<AmazonDataSourceSearchResult> => {
   const settings = readAmazonDataSource()
@@ -2069,27 +2130,31 @@ ipcMain.handle('amazon-data-source:search', async (_event, keyword: string): Pro
     return result
   } catch (error) { return { samples: null, error: error instanceof Error ? error.message : 'Amazon 数据接口连接失败' } }
 })
-// ---------- 知识库两大类：RAGFlow 数据集管理 + 本地分类注册表（RagflowKnowledgeService） ----------
-ipcMain.handle('kb:list', () => ragflowKnowledgeService.list())
-ipcMain.handle('kb:create-custom', (_event, request: { name: string; description: string }) => ragflowKnowledgeService.createCustom(request.name, request.description))
-ipcMain.handle('kb:ensure-agent', (_event, agentKey: KbAgentKey) => ragflowKnowledgeService.ensureAgentKb(agentKey))
-ipcMain.handle('kb:delete', (_event, kbId: string) => ragflowKnowledgeService.deleteKb(kbId))
-ipcMain.handle('kb:docs', (_event, kbId: string) => ragflowKnowledgeService.listDocs(kbId))
-ipcMain.handle('kb:upload', (_event, request: { kbId: string; filePaths: string[]; category?: string }) => ragflowKnowledgeService.uploadDocs(request.kbId, request.filePaths, request.category))
-ipcMain.handle('kb:category-create', (_event, request: { kbId: string; name: string; parent?: string }) => ragflowKnowledgeService.createCategory(request.kbId, request.name, request.parent))
-ipcMain.handle('kb:category-rename', (_event, request: { kbId: string; oldName: string; newName: string }) => ragflowKnowledgeService.renameCategory(request.kbId, request.oldName, request.newName))
-ipcMain.handle('kb:category-delete', (_event, request: { kbId: string; name: string }) => ragflowKnowledgeService.deleteCategory(request.kbId, request.name))
-ipcMain.handle('kb:doc-assign', (_event, request: { kbId: string; docIds: string[]; category: string | null }) => ragflowKnowledgeService.assignDocs(request.kbId, request.docIds, request.category))
-ipcMain.handle('kb:parse', (_event, request: { kbId: string; docIds: string[] }) => ragflowKnowledgeService.parseDocs(request.kbId, request.docIds))
-ipcMain.handle('kb:stop-parse', (_event, request: { kbId: string; docIds: string[] }) => ragflowKnowledgeService.stopParse(request.kbId, request.docIds))
-ipcMain.handle('kb:delete-docs', (_event, request: { kbId: string; docIds: string[] }) => ragflowKnowledgeService.deleteDocs(request.kbId, request.docIds))
+// ---------- 知识库两大类：MaxKB 数据集管理 + 本地分类注册表（MaxkbKnowledgeService） ----------
+ipcMain.handle('kb:list', () => maxkbKnowledgeService.list())
+ipcMain.handle('kb:create-custom', (_event, request: { name: string; description: string }) => maxkbKnowledgeService.createCustom(request.name, request.description))
+ipcMain.handle('kb:ensure-agent', (_event, agentKey: KbAgentKey) => maxkbKnowledgeService.ensureAgentKb(agentKey))
+ipcMain.handle('kb:delete', (_event, kbId: string) => maxkbKnowledgeService.deleteKb(kbId))
+ipcMain.handle('kb:docs', (_event, kbId: string) => maxkbKnowledgeService.listDocs(kbId))
+ipcMain.handle('kb:upload', (_event, request: { kbId: string; filePaths: string[]; category?: string }) => maxkbKnowledgeService.uploadDocs(request.kbId, request.filePaths, request.category))
+ipcMain.handle('kb:category-create', (_event, request: { kbId: string; name: string; parent?: string }) => maxkbKnowledgeService.createCategory(request.kbId, request.name, request.parent))
+ipcMain.handle('kb:category-rename', (_event, request: { kbId: string; oldName: string; newName: string }) => maxkbKnowledgeService.renameCategory(request.kbId, request.oldName, request.newName))
+ipcMain.handle('kb:category-delete', (_event, request: { kbId: string; name: string }) => maxkbKnowledgeService.deleteCategory(request.kbId, request.name))
+ipcMain.handle('kb:doc-assign', (_event, request: { kbId: string; docIds: string[]; category: string | null }) => maxkbKnowledgeService.assignDocs(request.kbId, request.docIds, request.category))
+ipcMain.handle('kb:parse', (_event, request: { kbId: string; docIds: string[] }) => maxkbKnowledgeService.parseDocs(request.kbId, request.docIds))
+ipcMain.handle('kb:stop-parse', (_event, request: { kbId: string; docIds: string[] }) => maxkbKnowledgeService.stopParse(request.kbId, request.docIds))
+ipcMain.handle('kb:delete-docs', (_event, request: { kbId: string; docIds: string[] }) => maxkbKnowledgeService.deleteDocs(request.kbId, request.docIds))
+// ---------- 阶段 2.4：GraphRAG 集成（取代原 GraphRAG）----------
+ipcMain.handle('kb:graph-stats', () => maxkbKnowledgeService.graphStats())
+ipcMain.handle('kb:graph-expand', (_event, request: { query: string; topK?: number; hops?: number }) => maxkbKnowledgeService.graphExpand(request.query, { topK: request.topK, hops: request.hops }))
+ipcMain.handle('kb:graph-rebuild', () => maxkbKnowledgeService.graphRebuild())
 // ---------- 报告样例库 → 选品分析师知识库（I 阶段新增）：一键入库 4 真实样例 + 决策门禁 + 决策可追溯硬约束 ----------
-const sampleLibraryKbIngestor = new SampleLibraryKbIngestor(ragflowKnowledgeService)
+const sampleLibraryKbIngestor = new SampleLibraryKbIngestor(maxkbKnowledgeService)
 ipcMain.handle('sample-library-kb:describe', () => SampleLibraryKbIngestor.describeTarget())
 ipcMain.handle('sample-library-kb:preview', () => sampleLibraryKbIngestor.preview())
 ipcMain.handle('sample-library-kb:ingest', async (_event, options: { parse?: boolean } = {}) => sampleLibraryKbIngestor.ingest(options))
 // I.2 阶段新增：报告样例库 → 守卫自动同步（预置技能）
-ipcMain.handle('sample-library-kb:guardian-launch', () => SampleLibraryKbGuardianLauncher.launchNow(ragflowKnowledgeService, kbGuardianService))
+ipcMain.handle('sample-library-kb:guardian-launch', () => SampleLibraryKbGuardianLauncher.launchNow(maxkbKnowledgeService, kbGuardianService))
 ipcMain.handle('sample-library-kb:guardian-status', () => SampleLibraryKbGuardianLauncher.status(kbGuardianService))
 // ---------- 知识库守卫：技能注册表 + 定时差异更新（KbGuardianService） ----------
 ipcMain.handle('kbGuardian:list-skills', () => kbGuardianService.state())
@@ -2707,16 +2772,18 @@ ipcMain.handle('marketplace:credential:fill', async (_event, accountId: string, 
 })
 ipcMain.handle('image:models', async () => {
   if(process.env.CODEX_UI_TEST==='1')return{connected:true,models:[{id:'phase7-mock',name:'阶段7验收模型',description:'批量验收专用',maxReferenceImages:4,costLabel:'¥0.20/张'}],message:'阶段7验收模型已连接'}
-  // 聚合百炼 / 火山方舟 / OpenAI 三个服务商的可用生图模型；单个服务商失败不影响其他模型列表
-  const [bailian, volc, openai] = await Promise.allSettled([
+  // 聚合百炼 / 火山方舟 / OpenAI / 零度API 四个服务商的可用生图模型；单个服务商失败不影响其他模型列表
+  const [bailian, volc, openai, linduo] = await Promise.allSettled([
     imageService.connection(),
     volcImageService.connection(),
-    openaiImageService.connection()
+    openaiImageService.connection(),
+    linduoImageService.connection()
   ])
   const models: ImageModelProfile[] = []
   if (bailian.status === 'fulfilled') models.push(...bailian.value.models)
   if (volc.status === 'fulfilled') models.push(...volc.value.models)
   if (openai.status === 'fulfilled') models.push(...openai.value.models)
+  if (linduo.status === 'fulfilled') models.push(...linduo.value.models)
   const connected = models.length > 0
   return { connected, models, message: connected ? `已聚合 ${models.length} 个生图模型` : '暂无可用生图模型' }
 })
@@ -2728,6 +2795,9 @@ ipcMain.handle('image:generate', (_event, request: ImageGenerationRequest) => {
   // 按模型 ID 路由到对应服务商；默认仍走百炼，保持已有 7 个百炼模型行为不变
   if (request.model.startsWith('doubao-seedream')) return volcImageService.generate(request)
   if (request.model === 'gpt-image-2') return openaiImageService.generate(request)
+  if (request.model === 'gpt-image-1' || request.model === 'gemini-2.5-flash-image-preview' || request.model === 'imagen-4.0') {
+    return linduoImageService.generate(request)
+  }
   return imageService.generate(request)
 })
 ipcMain.handle('image:translate-marketing',async(_event,request:ImageMarketingTranslationRequest):Promise<ImageMarketingTranslationResult>=>{
@@ -2870,34 +2940,6 @@ ipcMain.handle('app:open-download', () => {
   void shell.openExternal(`${readServerUrl().replace(/\/+$/, '')}/download/`).catch(() => undefined)
   return true
 })
-// 运营知识库语言预置：RAGFlow 前端只认同域 localStorage 的 lng 键（不设则回退英文），
-// 且首次加载会自行写入 'en'，因此只要当前值不是中文变体（zh-Hans/zh-Hant 等）就强制写入 zh-Hans，
-// 用隐藏窗口访问 8090 一次，使 iframe 内 RAGFlow（含登录页）默认显示中文
-function presetRagflowLanguage() {
-  const ragflowUrl = (() => {
-    try {
-      const base = new URL(readServerUrl())
-      base.port = '8090'
-      base.pathname = '/'
-      return base.toString()
-    } catch {
-      return null
-    }
-  })()
-  if (!ragflowUrl) return
-  const win = new BrowserWindow({ show: false, width: 100, height: 100, webPreferences: { offscreen: true } })
-  const timer = setTimeout(() => { if (!win.isDestroyed()) win.close() }, 20000)
-  win.loadURL(ragflowUrl)
-    .then(() => win.webContents.executeJavaScript(
-      `(() => { try { const cur = localStorage.getItem('lng'); if (cur && cur.startsWith('zh')) return 'keep:' + cur; localStorage.setItem('lng', 'zh-Hans'); return 'set'; } catch { return 'error'; } })()`
-    ))
-    .then(result => console.log(`[ragflow] 语言预置结果：${String(result)}`))
-    .catch(error => console.warn('[ragflow] 语言预置失败（服务不可达或加载超时）：', error.message))
-    .finally(() => {
-      clearTimeout(timer)
-      if (!win.isDestroyed()) win.close()
-    })
-}
 if (hasSingleInstanceLock) app.whenReady().then(async () => {
   session.defaultSession.setCertificateVerifyProc((request, callback) => {
     const cert = request.certificate as { fingerprint?: string }
@@ -2913,28 +2955,15 @@ if (hasSingleInstanceLock) app.whenReady().then(async () => {
     serverProcessManager.start().catch(error => console.error('[server-manager] 本地服务自动拉起失败：', error))
   } else {
     console.log(`[server-manager] 服务器地址为远程（${serverUrl}），跳过本地服务拉起`)
-    // RAGFlow 部署在中央服务器上，仅远程模式需要预置；分三次延迟执行（幂等），
-    // 覆盖服务瞬时不可达/加载超时的情况；打开运营知识库时渲染层还会再次触发（ragflow:preset-language）
-    scheduleRagflowPreset()
   }
   initAutoUpdate()
   // 知识库守卫：分钟级调度 + 启动 60s 后补跑错过周期的技能（不依赖打包态，独立于自动更新）
   kbGuardianService.startScheduler()
   kbGuardianService.scheduleCatchup()
   // I.2 阶段新增：启动时幂等保证「报告样例库自动同步」预置技能存在（仅 ensure，不主动 runNow）
-  void SampleLibraryKbGuardianLauncher.ensure(ragflowKnowledgeService, kbGuardianService)
+  void SampleLibraryKbGuardianLauncher.ensure(maxkbKnowledgeService, kbGuardianService)
     .catch(error => console.warn('[sample-library-kb-guardian] 预置技能注册失败：', (error as Error).message))
   createWindow()
-})
-
-// 启动后分三次预置（幂等）：3s 避开登录初始化高峰，30s/120s 兜底覆盖服务瞬时不可达；
-// 另提供 IPC 供渲染层在打开运营知识库时再次触发
-function scheduleRagflowPreset() {
-  for (const delay of [3000, 30000, 120000]) setTimeout(presetRagflowLanguage, delay)
-}
-ipcMain.handle('ragflow:preset-language', () => {
-  presetRagflowLanguage()
-  return true
 })
 
 // 自动更新：更新源为阿里云 OSS（electron-builder.yml 的 publish.generic）；

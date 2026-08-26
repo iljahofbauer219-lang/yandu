@@ -154,6 +154,55 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 /* Secure marketplace credentials */
 .credential-panel { margin-top:9px; overflow:hidden; border:1px solid #dfe5e6; border-radius:10px; background:#fafcfc; }.credential-toggle { width:100%; display:flex; align-items:center; justify-content:space-between; padding:9px 10px; border:0; background:transparent; text-align:left; }.credential-toggle span b,.credential-toggle span small { display:block; }.credential-toggle span b { font-size:9px; }.credential-toggle span small { margin-top:3px; color:#7e898d; font-size:7px; }.credential-toggle em { color:#778287; font-size:12px; font-style:normal; }.credential-body { padding:0 10px 10px; border-top:1px solid #e8ecee; }.credential-body label { display:block; }.credential-body label input { width:100%; }.credential-check { display:flex!important; align-items:flex-start; gap:7px; }.credential-check input { flex:none; width:14px!important; height:14px; margin:1px 0 0; }.credential-check span { color:#667579; font-size:8px; line-height:13px; }.credential-actions { display:grid; grid-template-columns:repeat(2,1fr); gap:5px; margin-top:9px; }.credential-actions .danger { grid-column:1/-1; }.credential-actions button { min-width:0; padding:7px 4px; font-size:7px; }.credential-body>p { margin:7px 0 0; padding:6px 7px; color:#376b67; background:#e9f7f6; border-radius:7px; font-size:7px; line-height:11px; }.credential-note { display:block; margin-top:7px; color:#8b7540; font-size:7px; line-height:11px; }
 
+/* 零度API 登录凭据面板：卡片内只露状态条 + 「编辑凭据」按钮，详情走 Modal 弹窗 */
+.linduo-credential-panel { display:flex; flex-direction:column; gap:10px; margin-top:10px; padding:10px 12px; border:1px solid var(--border-soft); border-radius:10px; background:var(--bg-soft); }
+.linduo-credential-status { display:flex; align-items:flex-start; gap:9px; }
+.linduo-credential-dot { flex:none; width:9px; height:9px; margin-top:5px; border-radius:50%; box-shadow:0 0 0 3px rgba(0,0,0,.04); }
+.linduo-credential-dot.is-ready { background:#16a59a; box-shadow:0 0 0 3px rgba(22,165,154,.18); }
+.linduo-credential-dot.is-warning { background:#e6a532; box-shadow:0 0 0 3px rgba(230,165,50,.18); }
+.linduo-credential-dot.is-pending { background:#c5423b; box-shadow:0 0 0 3px rgba(197,66,59,.18); }
+.linduo-credential-status-text { flex:1; min-width:0; }
+.linduo-credential-status-text b { display:block; font-size:12px; font-weight:600; color:var(--text-primary); line-height:1.4; }
+.linduo-credential-status-text small { display:block; margin-top:3px; color:var(--text-muted); font-size:10px; line-height:1.4; word-break:break-all; }
+.linduo-credential-edit { width:100%; height:30px; padding:0 12px; border:1px solid var(--border-strong); border-radius:6px; background:var(--bg-panel); color:var(--text-primary); font-size:11px; font-weight:500; cursor:pointer; transition:border-color .15s, color .15s, background .15s; }
+.linduo-credential-edit:hover { border-color:var(--accent); color:var(--accent); }
+
+/* 零度API 凭据 Modal：560px 居中表单弹窗（脱离卡片，避免零度API 卡片与 Amazon 卡片错位） */
+.linduo-credential-modal { position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; padding:24px; }
+.linduo-credential-backdrop { position:absolute; inset:0; background:rgba(13,28,30,.42); backdrop-filter:blur(2px); animation:linduo-modal-fade .18s ease-out; }
+.linduo-credential-card { position:relative; width:min(560px,100%); max-height:calc(100vh - 48px); display:flex; flex-direction:column; background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:14px; box-shadow:0 24px 60px rgba(8,28,30,.28), 0 6px 18px rgba(8,28,30,.12); overflow:hidden; animation:linduo-modal-rise .22s cubic-bezier(.2,.7,.3,1); }
+.linduo-credential-card>header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px; border-bottom:1px solid var(--border-soft); }
+.linduo-credential-card>header>div small { display:block; color:var(--text-muted); font-size:10px; font-weight:700; letter-spacing:.18em; }
+.linduo-credential-card>header>div h3 { margin:4px 0 0; font-size:17px; font-weight:650; color:var(--text-primary); }
+.linduo-credential-close { width:32px; height:32px; padding:0; border:0; border-radius:8px; background:transparent; color:var(--text-muted); font-size:22px; line-height:1; cursor:pointer; transition:background .15s, color .15s; }
+.linduo-credential-close:hover { background:var(--bg-soft); color:var(--text-primary); }
+.linduo-credential-card .credential-body { padding:18px 20px 16px; display:flex; flex-direction:column; gap:14px; overflow-y:auto; }
+.linduo-credential-card .credential-body>label { display:flex; flex-direction:column; gap:6px; color:var(--text-secondary); font-size:12px; font-weight:500; }
+.linduo-credential-card .credential-body>label>input { width:100%; height:36px; padding:0 12px; border:1px solid var(--border-strong); border-radius:7px; background:var(--bg-panel); color:var(--text-primary); font-size:13px; outline:none; transition:border-color .15s, box-shadow .15s; }
+.linduo-credential-card .credential-body>label>input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+.linduo-credential-card .credential-body>label>input:read-only { background:var(--bg-soft); color:var(--text-muted); cursor:default; }
+.linduo-credential-card .credential-body>label>input:disabled { opacity:.6; cursor:not-allowed; }
+.linduo-credential-card .credential-body>label>input::placeholder { color:var(--text-muted); }
+.linduo-credential-card .credential-check { display:flex!important; align-items:center; gap:8px; padding:2px 0 0; }
+.linduo-credential-card .credential-check input { flex:none; width:16px; height:16px; margin:0; accent-color:var(--accent); }
+.linduo-credential-card .credential-check span { color:var(--text-secondary); font-size:12px; line-height:1.4; }
+.linduo-credential-modal-hint { display:block; color:var(--text-muted); font-size:11px; line-height:1.5; padding:8px 10px; background:var(--accent-soft); border:1px solid var(--accent); border-radius:6px; }
+.linduo-credential-card .credential-body>p { margin:0; padding:9px 12px; color:#075955; background:var(--accent-soft); border:1px solid var(--accent); border-radius:7px; font-size:12px; line-height:1.5; }
+.linduo-credential-card .credential-body>p.credential-error { color:#a33b32; background:var(--danger-bg); border-color:#e7b6b3; }
+.linduo-credential-card>footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 20px; border-top:1px solid var(--border-soft); background:var(--bg-soft); }
+.linduo-credential-logout { height:34px; padding:0 14px; border:1px solid #e7b6b3; border-radius:7px; background:var(--bg-panel); color:#a33b32; font-size:12px; font-weight:500; cursor:pointer; transition:background .15s, color .15s, border-color .15s; }
+.linduo-credential-logout:hover:not(:disabled) { background:#c5423b; color:#fff; border-color:#a83730; }
+.linduo-credential-logout:disabled { opacity:.45; cursor:not-allowed; }
+.linduo-credential-footer-right { display:flex; align-items:center; gap:8px; }
+.linduo-credential-footer-right button { height:34px; padding:0 14px; border:1px solid var(--border-strong); border-radius:7px; background:var(--bg-panel); color:var(--text-primary); font-size:12px; font-weight:500; cursor:pointer; transition:border-color .15s, color .15s, background .15s; }
+.linduo-credential-footer-right button:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+.linduo-credential-footer-right button:disabled { opacity:.5; cursor:not-allowed; }
+.linduo-credential-footer-right button.primary { color:#063c3a; background:#79d8d2; border-color:#68ccc6; box-shadow:0 3px 10px rgba(10,186,181,.14); }
+.linduo-credential-footer-right button.primary:hover:not(:disabled) { background:#69d2cc; border-color:#49c4bd; }
+
+@keyframes linduo-modal-fade { from { opacity:0 } to { opacity:1 } }
+@keyframes linduo-modal-rise { from { opacity:0; transform:translateY(8px) scale(.97) } to { opacity:1; transform:translateY(0) scale(1) } }
+
 .collector-plugin-card { margin-top:10px; padding:10px; border:1px solid #cfeae8; border-radius:10px; background:#f1faf9; }.collector-plugin-card>div:first-child { display:grid; grid-template-columns:auto 1fr; column-gap:7px; align-items:center; }.collector-plugin-card>div:first-child .dot { grid-row:1/3; width:7px; height:7px; margin:0; background:var(--tiffany); }.collector-plugin-card>div:first-child b { font-size:9px; }.collector-plugin-card>div:first-child small { color:#70817e; font-size:7px; }.collector-plugin-card>p { margin:8px 0; color:#667774; font-size:8px; line-height:12px; }.collector-plugin-code { display:flex; align-items:center; gap:5px; }.collector-plugin-code>span { margin-right:auto; color:#60716e; font-size:8px; }.collector-plugin-code strong { margin-left:4px; color:#075955; font-size:13px; letter-spacing:.12em; }.collector-plugin-code button { height:28px; padding:0 8px; font-size:8px; }
 .browser-workspace-heading { justify-content:space-between; }.browser-heading-actions { display:flex; align-items:center; gap:8px; }.built-in-collector-trigger { height:32px; padding:0 13px; color:#075955; background:#e8f8f7; border:1px solid #62d0ca; border-radius:8px; font-size:9px; font-weight:750; }.built-in-collector-trigger.active { color:#8a5700; background:#fff4d9; border-color:#e7b64f; }.built-in-collector-card { margin-top:10px; overflow:hidden; border:1px solid #dce4e5; border-radius:10px; background:#f8fafafa; }.built-in-collector-card.active { border-color:#6fd3cd; background:#f0faf9; }.built-in-collector-title { display:flex; align-items:center; gap:8px; padding:9px 10px; }.built-in-collector-title .dot { flex:none; width:7px; height:7px; margin:0; background:#aab4b2; }.built-in-collector-card.active .built-in-collector-title .dot { background:var(--tiffany); }.built-in-collector-title b,.built-in-collector-title small { display:block; }.built-in-collector-title b { font-size:9px; }.built-in-collector-title small { margin-top:2px; color:#788582; font-size:7px; }.built-in-collector-list { max-height:210px; overflow:auto; padding:0 7px; }.built-in-collector-list article { display:grid; grid-template-columns:38px minmax(0,1fr) 24px; gap:7px; align-items:center; margin-bottom:5px; padding:6px; background:#fff; border:1px solid #e2e8e8; border-radius:8px; }.built-in-collector-list img,.built-in-collector-list article>span { width:38px; height:38px; object-fit:contain; display:grid; place-items:center; color:#9aa4a2; background:#f1f4f4; border-radius:6px; font-size:6px; }.built-in-collector-list article div { min-width:0; }.built-in-collector-list article b,.built-in-collector-list article small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.built-in-collector-list article b { font-size:8px; }.built-in-collector-list article small { margin-top:3px; color:#86918f; font-size:7px; }.built-in-collector-list article button { width:24px; height:24px; padding:0; border:0; color:#8b9694; background:transparent; font-size:15px; }.built-in-collector-card>p { margin:0; padding:5px 10px 8px; color:#617572; font-size:7px; line-height:11px; }.built-in-collector-actions { display:grid; grid-template-columns:1fr 1.45fr; gap:5px; padding:7px 9px 9px; border-top:1px solid #e3e9e9; }.built-in-collector-actions>button:only-child { grid-column:1/-1; }.built-in-collector-actions button { height:30px; padding:0 6px; font-size:8px; }
 
@@ -425,3 +474,76 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .update-pill-action { border:1px solid #b9e333; background:#c9f542; color:#142018; padding:4px 10px; border-radius:8px; font-size:12px; font-weight:650; cursor:pointer; flex:none; }
 .update-pill-close { border:none; background:transparent; color:var(--text-muted); font-size:14px; line-height:1; padding:2px 4px; cursor:pointer; flex:none; }
 .update-pill-close:hover { color:var(--text-primary); }
+
+/* 零度API 模型广场页（LinduoModelMallPage.tsx）：左栏筛选 + 右侧模型卡片网格 */
+.linduo-mall-page { flex:1; min-height:0; display:flex; flex-direction:column; margin:14px; padding:0; gap:12px; }
+.linduo-mall-page .page-toolbar { padding:0 4px; }
+.linduo-mall-toolbar-actions { display:flex; align-items:center; gap:10px; }
+.linduo-mall-status { padding:5px 10px; border-radius:8px; font-size:11px; color:var(--text-secondary); background:var(--bg-soft); border:1px solid var(--border-soft); }
+.linduo-mall-status.ready { color:#075955; background:var(--accent-soft); border-color:var(--accent); }
+.linduo-mall-status.pending { color:#a33b32; background:var(--danger-bg); border-color:var(--danger); }
+.linduo-mall-layout { flex:1; min-height:0; display:grid; grid-template-columns:240px minmax(0,1fr); gap:14px; }
+.linduo-mall-filter { display:flex; flex-direction:column; gap:14px; padding:16px; background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:13px; box-shadow:var(--shadow-card); overflow-y:auto; }
+.linduo-mall-filter-section { display:flex; flex-direction:column; gap:8px; }
+.linduo-mall-filter-section>b { font-size:12px; color:var(--text-primary); }
+.linduo-mall-filter-section input[type='search'] { width:100%; height:34px; padding:0 10px; border:1px solid var(--border-strong); border-radius:8px; background:var(--bg-panel); color:var(--text-primary); font-size:12px; outline:none; }
+.linduo-mall-filter-section input[type='search']:focus { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); }
+.linduo-mall-chip { display:flex; align-items:center; justify-content:space-between; gap:6px; padding:6px 10px; border:1px solid var(--border-strong); border-radius:8px; background:var(--bg-panel); color:var(--text-secondary); font-size:11px; cursor:pointer; transition:all .15s ease; }
+.linduo-mall-chip:hover { border-color:var(--accent); color:var(--text-primary); }
+.linduo-mall-chip.active { font-weight:650; }
+.linduo-mall-chip em { font-style:normal; font-size:10px; padding:1px 6px; border-radius:10px; background:var(--bg-soft); color:var(--text-muted); }
+.linduo-mall-chip-icon { font-size:14px; line-height:1; flex:none; }
+.linduo-mall-filter-hint { margin-top:auto; padding-top:12px; border-top:1px solid var(--border-soft); color:var(--text-muted); font-size:11px; }
+.linduo-mall-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; padding:16px; background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:13px; box-shadow:var(--shadow-card); overflow-y:auto; align-content:start; }
+.linduo-mall-empty { grid-column:1/-1; text-align:center; padding:60px 20px; color:var(--text-muted); font-size:12px; }
+.linduo-mall-card { display:flex; flex-direction:column; gap:10px; padding:14px; border:1px solid var(--border-soft); border-radius:12px; background:var(--bg-panel); transition:all .15s ease; }
+.linduo-mall-card:hover { border-color:var(--accent); box-shadow:0 6px 18px rgba(10,186,181,.12); }
+.linduo-mall-card-head { display:flex; align-items:center; justify-content:space-between; padding:6px 10px; border-radius:8px; border:1px solid transparent; }
+.linduo-mall-card-vendor { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:650; }
+.linduo-mall-card-vendor-icon { font-size:14px; line-height:1; }
+.linduo-mall-card-context { font-size:10px; padding:2px 6px; border-radius:6px; background:rgba(255,255,255,.6); color:var(--text-secondary); }
+.linduo-mall-card-body { display:flex; flex-direction:column; gap:6px; }
+.linduo-mall-card-name { margin:0; font-size:14px; font-weight:700; color:var(--text-primary); line-height:18px; }
+.linduo-mall-card-id { display:block; padding:2px 6px; border-radius:4px; background:var(--bg-soft); color:var(--text-muted); font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; word-break:break-all; }
+.linduo-mall-card-desc { margin:0; color:var(--text-secondary); font-size:11px; line-height:16px; min-height:48px; }
+.linduo-mall-card-tags { display:flex; flex-wrap:wrap; gap:5px; }
+.linduo-mall-card-tag { padding:2px 7px; border:1px solid transparent; border-radius:10px; font-size:10px; font-weight:600; }
+.linduo-mall-card-tag-wired { color:#075955 !important; background:var(--accent-soft) !important; border-color:var(--accent) !important; }
+.linduo-mall-card-foot { display:flex; align-items:center; justify-content:flex-start; padding-top:8px; border-top:1px solid var(--border-soft); font-size:11px; }
+.linduo-mall-card-foot em { font-style:normal; padding:3px 8px; border-radius:6px; }
+.linduo-mall-card-foot em.ready { color:#075955; background:var(--accent-soft); }
+.linduo-mall-card-foot .linduo-mall-card-pending { color:#a33b32; background:var(--danger-bg); }
+
+/* 零度API 价格行：每张模型卡片底部输入/输出/缓存读单价；TOKEN 模型三格，IMAGE/VIDEO/REQUEST 一格 */
+.linduo-mall-pricing { position:relative; padding:8px 10px; border:1px solid var(--border-soft); border-radius:8px; background:linear-gradient(180deg,var(--accent-soft) 0%,transparent 100%); display:flex; flex-direction:column; gap:6px; }
+.linduo-mall-pricing-empty { color:var(--text-muted); font-size:11px; text-align:center; padding:14px 0; background:var(--bg-soft); }
+.linduo-mall-pricing-stale { opacity:.78; }
+.linduo-mall-pricing-stale-tag { position:absolute; top:-6px; right:8px; padding:1px 7px; border-radius:9px; background:#fbbf24; color:#7c2d12; font-size:10px; font-weight:700; box-shadow:0 1px 3px rgba(124,45,18,.25); }
+.linduo-mall-pricing-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+.linduo-mall-pricing-cell { display:flex; flex-direction:column; gap:1px; padding:4px 6px; border-radius:6px; background:var(--bg-panel); border:1px solid var(--border-soft); }
+.linduo-mall-pricing-label { font-size:10px; color:var(--text-muted); letter-spacing:.02em; }
+.linduo-mall-pricing-value { font-size:13px; font-weight:700; color:var(--text-primary); font-variant-numeric:tabular-nums; }
+.linduo-mall-pricing-value small { font-size:10px; font-weight:500; color:var(--text-muted); margin-left:2px; }
+/* 单格变体：IMAGE/VIDEO/REQUEST 模型只展示一个「单价」格，让它横向铺满 */
+.linduo-mall-pricing .linduo-mall-pricing-grid { grid-template-columns:1fr; }
+.linduo-mall-pricing-meta { display:block; margin-top:4px; color:var(--text-muted); font-size:11px; }
+.linduo-mall-pricing-error { margin:0 14px; padding:8px 14px; border-radius:8px; background:var(--danger-bg); color:var(--danger); font-size:12px; border:1px solid var(--danger); }
+
+/* 零度API 登录态面板：嵌入 LlmApiKeysPage 零度API 卡片底部 */
+.linduo-pricing-login { display:flex; flex-direction:column; gap:8px; width:100%; margin-top:6px; padding:10px 12px; border-top:1px dashed var(--border-soft); }
+.linduo-pricing-login-status { display:flex; flex-direction:column; gap:2px; }
+.linduo-pricing-login-status em { font-style:normal; padding:2px 7px; border-radius:6px; font-size:11px; align-self:flex-start; }
+.linduo-pricing-login-status em.ready { color:#075955; background:var(--accent-soft); }
+.linduo-pricing-login-pending { color:#a33b32; background:var(--danger-bg); }
+.linduo-pricing-login-meta { color:var(--text-muted); font-size:10px; }
+.linduo-pricing-login-row { display:grid; grid-template-columns:1fr 1fr auto; gap:6px; align-items:center; }
+.linduo-pricing-login-row input { height:30px; padding:0 8px; border:1px solid var(--border-strong); border-radius:6px; background:var(--bg-panel); color:var(--text-primary); font-size:11px; outline:none; }
+.linduo-pricing-login-row input:focus { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); }
+.linduo-pricing-eye { width:30px; height:30px; padding:0; border:1px solid var(--border-strong); border-radius:6px; background:var(--bg-panel); color:var(--text-secondary); cursor:pointer; font-size:14px; }
+.linduo-pricing-eye:hover { border-color:var(--accent); color:var(--text-primary); }
+.linduo-pricing-login-actions { display:flex; flex-wrap:wrap; gap:6px; }
+.linduo-pricing-login-actions button { height:30px; padding:0 12px; border:1px solid var(--border-strong); border-radius:6px; background:var(--bg-panel); color:var(--text-primary); font-size:11px; cursor:pointer; }
+.linduo-pricing-login-actions button:hover:not(:disabled) { border-color:var(--accent); }
+.linduo-pricing-login-actions button:disabled { opacity:.6; cursor:not-allowed; }
+.linduo-pricing-hint { color:var(--text-muted); font-size:10px; line-height:1.5; }
+

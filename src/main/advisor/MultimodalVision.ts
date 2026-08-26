@@ -21,8 +21,11 @@ export async function describeAttachments(
   userRequest: string
 ): Promise<MultimodalVisionResult[]> {
   const results: MultimodalVisionResult[] = [];
+  // 文档（PDF/DOCX/...）走 documentContext 路径抽取纯文本,这里只把图片交给 vision-sidecar。
+  // 默认 kind 为 image,以兼容旧的 manifest 记录（重构前没有 kind 字段）。
   for (const attachment of attachments
     .filter((item) => item.available)
+    .filter((item) => (item.kind ?? "image") === "image")
     .slice(0, maxImagesPerTurn)) {
     results.push(await describeAttachment(attachment, userRequest));
   }

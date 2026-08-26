@@ -1,0 +1,134 @@
+[
+  {
+    "case": "Amazon-US-en",
+    "conclusion_run1": "需人工复核后发布",
+    "conclusion_run2": "需人工复核后发布",
+    "conclusion_stable": true,
+    "sections_run1": [
+      "一",
+      "三",
+      "二",
+      "五",
+      "六",
+      "四"
+    ],
+    "sections_run2": [
+      "一",
+      "三",
+      "二",
+      "五",
+      "六",
+      "四"
+    ],
+    "sections_stable": true,
+    "terms_run1": {
+      "stainless steel": true,
+      "no-forbidden": true
+    },
+    "terms_run2": {
+      "stainless steel": true,
+      "no-forbidden": true
+    },
+    "terms_stable": true,
+    "similarity": 0.358
+  },
+  {
+    "case": "Amazon-DE-de",
+    "conclusion_run1": "需人工复核后发布",
+    "conclusion_run2": "需人工复核后发布",
+    "conclusion_stable": true,
+    "sections_run1": [
+      "一",
+      "三",
+      "二",
+      "五",
+      "六",
+      "四"
+    ],
+    "sections_run2": [
+      "一",
+      "三",
+      "二",
+      "五",
+      "六",
+      "四"
+    ],
+    "sections_stable": true,
+    "terms_run1": {
+      "Edelstahl": true,
+      "no-forbidden": true
+    },
+    "terms_run2": {
+      "Edelstahl": true,
+      "no-forbidden": true
+    },
+    "terms_stable": true,
+    "similarity": 0.362
+  },
+  {
+    "case": "Shopee-MY-ms",
+    "conclusion_run1": "需人工复核后发布",
+    "conclusion_run2": "需人工复核后发布",
+    "conclusion_stable": true,
+    "sections_run1": [
+      "一",
+      "三",
+      "二",
+      "五",
+      "六",
+      "四"
+    ],
+    "sections_run2": [
+      "一",
+      "三",
+      "二",
+      "五",
+      "六",
+      "四"
+    ],
+    "sections_stable": true,
+    "terms_run1": {
+      "local-term(rak/sink)": true,
+      "no-forbidden": true
+    },
+    "terms_run2": {
+      "local-term(rak/sink)": true,
+      "no-forbidden": true
+    },
+    "terms_stable": true,
+    "similarity": 0.281
+  },
+  {
+    "case": "eBay-US-en",
+    "conclusion_run1": "需人工复核后发布",
+    "conclusion_run2": "需人工复核后发布",
+    "conclusion_stable": true,
+    "sections_run1": [
+      "一",
+      "三",
+      "二",
+      "五",
+      "六",
+      "四"
+    ],
+    "sections_run2": [
+      "一",
+      "三",
+      "二",
+      "五",
+      "六",
+      "四"
+    ],
+    "sections_stable": true,
+    "terms_run1": {
+      "stainless steel": true,
+      "no-forbidden": true
+    },
+    "terms_run2": {
+      "stainless steel": true,
+      "no-forbidden": true
+    },
+    "terms_stable": true,
+    "similarity": 0.468
+  }
+]

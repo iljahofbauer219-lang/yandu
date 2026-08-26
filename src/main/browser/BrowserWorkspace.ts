@@ -1754,7 +1754,7 @@ export class BrowserWorkspace {
     const tab: DetailTab = { id, platform, title: initialTitle || (platform === 'ozon' ? 'Ozon 详情' : platform === 'web' ? '新标签页' : '1688 搜款'), view, generic: platform === 'web' }
     this.detailTabs.set(id, tab)
     view.webContents.setWindowOpenHandler(({ url: nextUrl }) => {
-      if (this.isAllowedUrl(platform, nextUrl)) void view.webContents.loadURL(nextUrl)
+      if (this.isAllowedUrl(platform, nextUrl)) void this.openTab(platform, nextUrl)
       return { action: 'deny' }
     })
     view.webContents.on('will-navigate', (event, nextUrl) => {
@@ -1786,6 +1786,23 @@ export class BrowserWorkspace {
     return id
   }
 
+  // 冷启动时如果还没有 IEBrowserPanel 使用的通用 web tab（无 scopeId），自动打开默认 nav 站点。
+  // 调用于 main.ts createWindow 末尾的 shell 'did-finish-load' 回调。
+  // 特点：
+  //   - 查 detailTabs 中所有 platform==='web' && !scopeId 的 tab（与 IEBrowserPanel 的 onTabs filter 一致）
+  //   - 已有就不动（remount/重启 electron 但 tab 仍在）→ 实现 IE 浏览页的“保留原状”语义
+  //   - 没有就开一个，导航到默认 IP 站点
+  //   - 仅在冷启动到 mainWindow ready 期间调一次，避免被 IEBrowserPanel 误触发
+  async openDefaultNavIfNeeded(url = 'http://114.55.149.192/nav/') {
+    const genericWebTabs = [...this.detailTabs.values()].filter(tab => tab.platform === 'web' && !tab.scopeId)
+    if (genericWebTabs.length > 0) return
+    try {
+      await this.openTab('web', url, '跨境导航')
+    } catch (reason) {
+      console.warn('[BrowserWorkspace] 自动打开默认 nav 站点失败：', reason instanceof Error ? reason.message : String(reason))
+    }
+  }
+
   async newTab() {
     if (this.visibleTabCount() >= 8) throw new Error('最多同时打开8个浏览标签，请先关闭不需要的标签')
     const id = crypto.randomUUID()
@@ -1794,7 +1811,10 @@ export class BrowserWorkspace {
     view.webContents.setUserAgent(view.webContents.getUserAgent().replace(/\sElectron\/[^\s]+/g, '').replace(/\scross-border-sourcing-desktop\/[^\s]+/g, ''))
     const tab: DetailTab = { id, platform: 'web', title: '新标签页', view, generic: true }
     this.detailTabs.set(id, tab)
-    view.webContents.setWindowOpenHandler(({ url }) => { if (this.isAllowedUrl('web', url)) void view.webContents.loadURL(url); return { action: 'deny' } })
+    view.webContents.setWindowOpenHandler(({ url: nextUrl }) => {
+      if (this.isAllowedUrl('web', nextUrl)) void this.openTab('web', nextUrl)
+      return { action: 'deny' }
+    })
     view.webContents.on('will-navigate', (event, url) => { if (!this.isAllowedUrl('web', url)) event.preventDefault() })
     const emit = () => { if (this.activeTabId === id) this.emitState('web'); this.emitTabs() }
     view.webContents.on('did-navigate', (_event, url) => {

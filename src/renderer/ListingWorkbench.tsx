@@ -180,7 +180,7 @@ export default function ListingWorkbench() {
     }
     setBatch(newBatch)
     setRunning(true)
-    // 串行生成：单包为六段长文，避免并发拖垮中央 RAGFlow 服务
+    // 串行生成：单包为六段长文，避免并发拖垮中央 MaxKB 服务
     for (const task of newBatch.tasks) {
       if (cancelRef.current) break
       const site = sites.find(item => item.id === task.siteId)

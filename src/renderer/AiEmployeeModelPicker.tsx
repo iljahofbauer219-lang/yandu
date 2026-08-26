@@ -7,7 +7,7 @@ type AiEmployeeModelPickerProps = {
   onSelect: (id: string) => void
 }
 
-const DEFAULT_MODEL_ID = 'ragflow-agent'
+const DEFAULT_MODEL_ID = 'amazon-skills'
 
 // AI员工对话大模型选择器：向上弹出的 role=menu 菜单，Escape / 点击外部关闭
 export default function AiEmployeeModelPicker({ models, selectedId, onSelect }: AiEmployeeModelPickerProps) {

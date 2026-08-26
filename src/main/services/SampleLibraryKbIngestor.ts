@@ -1,18 +1,18 @@
 /**
- * 报告样例库 → RAGFlow 知识库入库服务（I 阶段新增）。
+ * 报告样例库 → MaxKB 知识库入库服务（I 阶段新增）。
  *
  * 目的：把 4 真实样例 + 决策门禁汇总 + 决策可追溯硬约束以 KB 文档形式归档到
- *   「选品分析师」RAGFlow 知识库（agentKey='sourcing'），让所有 AI 员工
+ *   「选品分析师」MaxKB 知识库（agentKey='sourcing'），让所有 AI 员工
  *   在跨任务中都能参考这 4 个标准答案与硬约束。
  *
  * 设计原则：
  *   - 幂等：按文件名去重，重复运行只解析新文档
- *   - 单库入口：统一调用 RagflowKnowledgeService，不重复造轮子
- *   - 多级分类：报告样例库/{A|B|C|D|决策门禁|可追溯约束} 由叶子名落 RAGFlow meta_fields.category
+ *   - 单库入口：统一调用 MaxkbKnowledgeService，不重复造轮子
+ *   - 多级分类：报告样例库/{A|B|C|D|决策门禁|可追溯约束} 由叶子名落 MaxKB doc.meta.category
  *   - 错误聚合：单文件失败不影响其他文件上传；最终结果聚合返回
  *   - 预览支持：preview() 不触网，只返回 buildSampleLibraryKbIngestPlan() 的统计
  */
-import { RagflowKnowledgeService, KB_AGENTS } from './RagflowKnowledgeService'
+import { MaxkbKnowledgeService, KB_AGENTS } from './MaxkbKnowledgeService'
 import type { KbView } from '../../shared/knowledge'
 import {
   SAMPLE_LIBRARY_KB_TARGET,
@@ -23,7 +23,7 @@ import {
 } from '../../shared/sampleLibraryKbIngest'
 
 export class SampleLibraryKbIngestor {
-  constructor(private readonly kb: RagflowKnowledgeService = new RagflowKnowledgeService()) {}
+  constructor(private readonly kb: MaxkbKnowledgeService = new MaxkbKnowledgeService()) {}
 
   /**
    * 预览入库计划（不触网；只走本地文件 size 检测）。
@@ -50,7 +50,7 @@ export class SampleLibraryKbIngestor {
     const plan = buildSampleLibraryKbIngestPlan()
     const errors: Array<{ file: string; error: string }> = []
 
-    // 1) 确保目标 KB 存在（智能体键 → RAGFlow 数据集）
+    // 1) 确保目标 KB 存在（智能体键 → MaxKB 应用）
     const kb = await this.kb.ensureAgentKb(SAMPLE_LIBRARY_KB_TARGET.agentKey)
 
     // 2) 创建/补齐多级分类（叶子名 = ${root}/${sub}）
@@ -102,7 +102,7 @@ export class SampleLibraryKbIngestor {
       }
     }
 
-    // 6) 给新上传文档兜底分类（RAGFlow uploadDocs 的 category 已在服务端写入；这里 double-check）
+    // 6) 给新上传文档兜底分类（MaxKB 上传时已写入 category；这里 double-check）
     for (const item of newlyUploadedMeta) {
       try {
         const refreshed = (await this.kb.listDocs(kb.id)).docs.find(d => d.id === item.id)
@@ -137,8 +137,8 @@ export class SampleLibraryKbIngestor {
   }
 
   /**
-   * 补齐 6 个叶子分类。RAGFlow 服务端只存 meta 不存目录树，
-   * 树存 RagflowKnowledgeService 本地注册表；这里幂等创建。
+   * 补齐 6 个叶子分类。MaxKB 服务端只存 meta 不存目录树，
+   * 树存 MaxkbKnowledgeService 本地注册表；这里幂等创建。
    */
   private async ensureCategories(kbId: string, plan: SampleLibraryKbDoc[]): Promise<void> {
     // 先建根节点

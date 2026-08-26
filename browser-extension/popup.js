@@ -102,24 +102,26 @@ analyzeBtn.addEventListener('click', async () => {
   }
 })
 
-// ---------- RAGFlow 设置 ----------
+// ---------- MaxKB 设置 ----------
 async function loadSettings() {
-  const result = await chrome.runtime.sendMessage({ type: 'RAGFLOW_STATUS' })
+  const result = await chrome.runtime.sendMessage({ type: 'MAXKB_STATUS' })
   if (!result?.ok) return
-  document.querySelector('#ragflowUrl').value = result.url
+  document.querySelector('#maxkbUrl').value = result.url
+  document.querySelector('#maxkbAppId').value = result.appId
   if (result.usingDefault) {
-    document.querySelector('#ragflowKey').placeholder = '已内置默认 Key，无需填写'
+    document.querySelector('#maxkbToken').placeholder = '已内置默认 Token，无需填写'
   } else {
-    const stored = await chrome.storage.local.get('ragflowKey')
-    if (stored.ragflowKey) document.querySelector('#ragflowKey').value = stored.ragflowKey
+    const stored = await chrome.storage.local.get('maxkbToken')
+    if (stored.maxkbToken) document.querySelector('#maxkbToken').value = stored.maxkbToken
   }
 }
 
-document.querySelector('#saveRagflow').addEventListener('click', async () => {
-  const url = document.querySelector('#ragflowUrl').value.trim()
-  const key = document.querySelector('#ragflowKey').value.trim()
-  if (!url || !key) return show('请填写服务地址和 API Key', 'error')
-  const result = await chrome.runtime.sendMessage({ type: 'RAGFLOW_SAVE', url, key })
+document.querySelector('#saveMaxkb').addEventListener('click', async () => {
+  const url = document.querySelector('#maxkbUrl').value.trim()
+  const token = document.querySelector('#maxkbToken').value.trim()
+  const appId = document.querySelector('#maxkbAppId').value.trim()
+  if (!url || !token || !appId) return show('请填写服务地址、Token 与 application_id', 'error')
+  const result = await chrome.runtime.sendMessage({ type: 'MAXKB_SAVE', url, token, appId })
   show(result?.ok ? '设置已保存' : (result?.message || '保存失败'), result?.ok ? 'ok' : 'error')
 })
 

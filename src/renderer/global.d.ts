@@ -8,7 +8,7 @@ import type { AdvisorDesktopApi } from '../shared/advisor'
 import type { AiEmployeeAskRequest, AiEmployeeChatModelProfile, AiEmployeePickResult } from '../shared/aiEmployee'
 import type { KbAgentKey, KbDocsView, KbListView, KbView } from '../shared/knowledge'
 import type { GuardianRunEvent, GuardianRunLog, GuardianSkill, GuardianSkillInput, GuardianState } from '../shared/kbGuardian'
-import type { ImagePackageTextExtractionRequest, ImagePackageTextExtractionResult } from '../shared/contracts'
+import type { ImagePackageTextExtractionRequest, ImagePackageTextExtractionResult, LinduoLoginStatus, LinduoModelPricing } from '../shared/contracts'
 import type { AmazonDataSourceSearchResult, AmazonListingEvidence, AmazonMarketSample, AmazonReviewEvidence, AmazonSearchIntent } from '../shared/amazonScraper'
 
 declare module '*.css'
@@ -55,14 +55,18 @@ declare global {
         installUpdate(): Promise<boolean>
         onUpdateStatus(callback: (status: { phase: 'downloading' | 'downloaded' | 'error'; version: string; percent?: number; message?: string }) => void): () => void
       }
-      ragflow: {
-        presetLanguage(): Promise<boolean>
-      }
       llmKeys: {
         list(): Promise<LlmKeyStatus[]>
         save(id: string, value: string): Promise<{ ok: boolean; error?: string }>
         test(id: string): Promise<{ ok: boolean; latencyMs?: number; error?: string }>
         restart(): Promise<void>
+      }
+      linduoLogin: {
+        getStatus(accessToken: string): Promise<LinduoLoginStatus>
+        login(accessToken: string, username: string, password: string): Promise<{ ok: true; expiresAt: string | null }>
+        logout(accessToken: string): Promise<{ ok: true }>
+        listPricing(accessToken: string): Promise<{ items: LinduoModelPricing[]; refreshedAt: string | null; allStale: boolean }>
+        refreshPricing(accessToken: string, credentials?: { username: string; password: string }): Promise<{ ok: boolean; count: number; refreshedAt: string; durationMs: number; fromFallback?: boolean; error?: string }>
       }
       kb: {
         list(): Promise<KbListView>
@@ -174,6 +178,8 @@ declare global {
         exportListing(request: { title: string; format: 'word' | 'markdown' | 'csv'; material: string; packages: Array<{ siteLabel: string; languageCode: string; conclusion: string; content: string }> }): Promise<{ canceled: boolean; filePath?: string }>
         onBrowserUrl(callback: (url: string) => void): () => void
         onBrowserLoading(callback: (loading: boolean) => void): () => void
+        // P2 阶段:订阅执行步骤事件
+        onEvent(callback: (event: import('../shared/executionEvent').ExecutionEvent) => void): () => void
       }
       browser: {
         show(platform: Platform): Promise<void>

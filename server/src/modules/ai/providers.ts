@@ -271,7 +271,54 @@ export async function generateImage(profile: AiImageModelProfile, input: AiImage
     case 'bailian': return bailianGenerate(profile, input)
     case 'volc': return volcGenerate(profile, input)
     case 'openai': return openaiGenerate(profile, input)
+    case 'linduo': return linduoGenerate(profile, input)
   }
+}
+
+// ---------------------------------------------------------------- 零度API（api000.com）生图
+
+function linduoSize(size: string): string {
+  if (size === '2K') return '1024x1024'
+  if (size === '1K') return '1024x1024'
+  if (/^\d+x\d+$/.test(size)) return size
+  return '1024x1024'
+}
+
+async function linduoGenerate(profile: AiImageModelProfile, input: AiImageGenerateInput): Promise<AiImageGenerateOutput> {
+  ensureKey(config.linduoApiKey, '零度API LINDUO_API_KEY')
+  const endpoint = `${(config.linduoBaseUrl || 'https://api000.com/v1').replace(/\/+$/, '')}/images/generations`
+  const referenceLimit = profile.maxReferenceImages
+  const references = referenceLimit > 0 ? dedupReferences(input.referenceImageUrls, referenceLimit) : []
+  const body: Record<string, unknown> = {
+    model: input.model,
+    prompt: input.prompt,
+    size: linduoSize(input.size),
+    n: Math.max(1, Math.min(4, input.count)),
+    response_format: 'url'
+  }
+  // 零度API 的 OpenAI 兼容层：参照图通过 image 字段（数组）传入，与火山方舟语义一致
+  if (references.length > 0) body.image = references
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${config.linduoApiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+  })
+  const payload = await response.json().catch(() => ({})) as {
+    data?: Array<{ url?: string; b64_json?: string }>
+    error?: { message?: string; code?: string }
+    message?: string
+  }
+  if (!response.ok) {
+    const detail = payload.error?.message || payload.message || payload.error?.code || response.statusText
+    throw httpError(502, 'AI_PROVIDER_ERROR', `${input.model} 零度API 生图失败（HTTP ${response.status}）：${detail}`)
+  }
+  const imageUrls = (payload.data || [])
+    .map(item => item?.url || (item?.b64_json ? `data:image/png;base64,${item.b64_json}` : ''))
+    .filter(url => Boolean(url))
+  if (imageUrls.length === 0) throw httpError(502, 'AI_PROVIDER_ERROR', `${input.model} 零度API 生图失败：API 未返回图片结果`)
+  return { provider: 'linduo', model: input.model, taskId: `linduo-${Date.now()}`, imageUrls }
 }
 
 /** 百炼模型列表探测（/models 过滤可用生图模型；与原版 connection() 行为一致） */
@@ -281,6 +328,23 @@ export async function bailianAvailableModelIds(): Promise<Set<string> | null> {
     const response = await fetch(`${config.bailianBaseUrl.replace(/\/+$/, '')}/models`, {
       headers: { Authorization: `Bearer ${config.bailianApiKey}` },
       signal: AbortSignal.timeout(20_000)
+    })
+    if (!response.ok) return null
+    const payload = await response.json().catch(() => ({})) as { data?: Array<{ id?: unknown }> }
+    if (!Array.isArray(payload.data)) return null
+    return new Set(payload.data.map(item => (typeof item.id === 'string' ? item.id : '')).filter(Boolean))
+  } catch {
+    return null
+  }
+}
+
+/** 零度API 模型列表探测（/v1/models）：用于服务端的 /api/ai/models 聚合返回 */
+export async function linduoAvailableModelIds(): Promise<Set<string> | null> {
+  if (!config.linduoApiKey) return null
+  try {
+    const response = await fetch(`${(config.linduoBaseUrl || 'https://api000.com/v1').replace(/\/+$/, '')}/models`, {
+      headers: { Authorization: `Bearer ${config.linduoApiKey}` },
+      signal: AbortSignal.timeout(10_000)
     })
     if (!response.ok) return null
     const payload = await response.json().catch(() => ({})) as { data?: Array<{ id?: unknown }> }

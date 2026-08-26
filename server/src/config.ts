@@ -33,5 +33,16 @@ export const config = {
   openaiImageBaseUrl: read('OPENAI_IMAGE_BASE_URL', 'https://api.openai.com/v1'),
   deepseekApiKey: read('DEEPSEEK_API_KEY', ''),
   deepseekBaseUrl: read('DEEPSEEK_BASE_URL', 'https://api.deepseek.com'),
-  deepseekModel: read('DEEPSEEK_MODEL', 'deepseek-v4-flash')
+  deepseekModel: read('DEEPSEEK_MODEL', 'deepseek-v4-flash'),
+  // 零度API（api000.com）：一把 Key 聚合 37 个大模型（OpenAI/Anthropic/Google/Vidu）。
+  // 兼容 OpenAI 协议；密钥仅驻留服务端，零下发客户端。
+  linduoApiKey: read('LINDUO_API_KEY', ''),
+  linduoBaseUrl: read('LINDUO_BASE_URL', 'https://api000.com/v1'),
+  // 零度API 价格抓取（playwright-core 驱动）
+  linduoPricingUsername: read('LINDUO_PRICING_USERNAME', ''),
+  linduoPricingPassword: read('LINDUO_PRICING_PASSWORD', ''),
+  linduoPricingAesKey: read('LINDUO_PRICING_AES_KEY', ''),
+  linduoPricingChromePath: read('LINDUO_PRICING_CHROME_PATH', ''),
+  linduoPricingBaseUrl: read('LINDUO_PRICING_BASE_URL', 'https://api000.com'),
+  linduoPricingRefreshHour: Number(read('LINDUO_PRICING_REFRESH_HOUR', '6'))
 }

@@ -13,14 +13,18 @@
 
 1. 打开任意 1688 商品详情页（`detail.1688.com/offer/...`）。
 2. 点击扩展图标，在「AI 选品分析」区域点击「提取并分析」。
-3. 扩展自动提取当前商品的标题、价格、规格属性、图片等信息，调用 RAGFlow「选品分析师」智能体，约 20-60 秒后返回完整评估报告（商品摘要 → 市场分析 → 合规分析 → 毛利测算与综合建议）。
+3. 扩展自动提取当前商品的标题、价格、规格属性、图片等信息，调用 MaxKB「选品分析师」智能体（v0.3.0+），约 20-60 秒后返回完整评估报告（商品摘要 → 市场分析 → 合规分析 → 毛利测算与综合建议）。
 
-**首次使用需配置**：展开弹窗底部「RAGFlow 设置」，填写服务地址与 API Key（默认已填服务地址，需填入 API Key），点击保存。
+**首次使用需配置**：展开弹窗底部「MaxKB 设置」，填写服务地址、Application ID、Secret Token（默认已填服务地址与 Application ID，仅 Token 需要填入），点击保存。
 
 > 说明：1688 详情页从服务器（阿里云 IP）抓取会被平台风控拦截，因此改为在用户浏览器中提取商品信息（用户浏览器为真实网络环境，不受影响），再调用智能体分析。
 
 ## 技术说明
 
-- 版本 0.2.0（MV3）：新增 `content-script-1688.js`（商品页信息提取）、`service-worker.js` 新增 `ANALYZE_1688 / RAGFLOW_SAVE / RAGFLOW_STATUS` 消息、popup 新增 AI 分析区与设置区。
-- 当前版本支持大健云仓与 1688。页面结构调整时，商品按钮位置可能需要同步更新；右下角详情页采集入口不依赖商品卡片布局。
+- 版本 0.3.0（MV3）：服务地址与智能体调用从 RAGFlow（8090）切到 MaxKB v2.10.5-lts CE（8080）；默认智能体为 sourcing 选品分析师（MAXKB_SOURCING_APPLICATION_ID + secret_key）。
+- 阶段 3.6 切换：
+  - `service-worker.js`：`ANALYZE_1688` 改走 `/chat/api/{application_id}/chat/completions` + Bearer secret_key；新增 `MAXKB_SAVE / MAXKB_STATUS`。
+  - `manifest.json`：`host_permissions` 增加 `http://114.55.149.192:8080/*`；保留 8090 用于 30 天回退期。
+  - `popup.html` / `popup.js`：设置区改名为「MaxKB 设置」，新增 `maxkbAppId` 输入框。
+- 采集功能（大健云仓）继续走桌面端 17321 API，与 MaxKB 切换无关。
 - 端到端验证脚本：`tools/verify-extension-1688.cjs`（Playwright 加载扩展 + 真实 1688 页面提取 + 智能体调用）。

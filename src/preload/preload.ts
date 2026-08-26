@@ -5,7 +5,7 @@ import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts
 import type { EbayLocalListingRequirements, EbayLocalRevisionPreparationResult } from '../shared/contracts'
 import type { EbayTitleDecision, EbayTitleDecisionInput } from '../shared/contracts'
 import type { ImagePackageTextExtractionRequest, ImagePackageTextExtractionResult } from '../shared/contracts'
-import type { AdvisorApprovalDecision, AdvisorChatEvent, AdvisorChatRequest, AdvisorIncomingImage, AdvisorPersonalizationSettings, AdvisorRemoteSession } from '../shared/advisor'
+import type { AdvisorApprovalDecision, AdvisorChatEvent, AdvisorChatRequest, AdvisorIncomingDocument, AdvisorIncomingImage, AdvisorPersonalizationSettings, AdvisorRemoteSession } from '../shared/advisor'
 import type { AiEmployeeAskRequest, AiEmployeeChatModelProfile, AiEmployeePickResult } from '../shared/aiEmployee'
 import type { ExtractedProductInfo } from '../shared/selectionExtract'
 import type { AmazonDataSourceSearchResult, AmazonListingEvidence, AmazonMarketSample, AmazonReviewEvidence, AmazonSearchIntent } from '../shared/amazonScraper'
@@ -58,14 +58,31 @@ contextBridge.exposeInMainWorld('desktop', {
       return () => ipcRenderer.removeListener('app:update-status', listener)
     }
   },
-  ragflow: {
-    presetLanguage: (): Promise<boolean> => ipcRenderer.invoke('ragflow:preset-language')
-  },
   llmKeys: {
     list: (): Promise<Array<{ id: string; configured: boolean; maskedKey: string }>> => ipcRenderer.invoke('llm-keys:list'),
     save: (id: string, value: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('llm-keys:save', { id, value }),
     test: (id: string): Promise<{ ok: boolean; latencyMs?: number; error?: string }> => ipcRenderer.invoke('llm-keys:test', { id }),
     restart: (): Promise<void> => ipcRenderer.invoke('llm-keys:restart')
+  },
+  linduoLogin: {
+    getStatus: (accessToken: string): Promise<{
+      loggedIn: boolean; username: string | null; expiresAt: string | null; lastUsedAt: string | null; expiresInSeconds: number | null
+    }> => ipcRenderer.invoke('linduo-login:status', accessToken),
+    login: (accessToken: string, username: string, password: string): Promise<{ ok: true; expiresAt: string | null }> =>
+      ipcRenderer.invoke('linduo-login:login', accessToken, username, password),
+    logout: (accessToken: string): Promise<{ ok: true }> => ipcRenderer.invoke('linduo-login:logout', accessToken),
+    listPricing: (accessToken: string): Promise<{
+      items: Array<{
+        modelId: string; vendor: string; inputPrice: number | null; outputPrice: number | null; cachePrice: number | null
+        currency: 'USD'; billingType: string; pricePerUnit: number | null; unitLabel: string | null
+        fetchedAt: string; stale: boolean
+      }>
+      refreshedAt: string | null
+      allStale: boolean
+    }> => ipcRenderer.invoke('linduo-pricing:list', accessToken),
+    refreshPricing: (accessToken: string, credentials?: { username: string; password: string }): Promise<{
+      ok: boolean; count: number; refreshedAt: string; durationMs: number; fromFallback?: boolean; error?: string
+    }> => ipcRenderer.invoke('linduo-pricing:refresh', accessToken, credentials)
   },
   kb: {
     list: (): Promise<KbListView> => ipcRenderer.invoke('kb:list'),
@@ -102,6 +119,12 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   aiEmployee: {
     ask: (request: AiEmployeeAskRequest): Promise<{ ok: boolean; content: string }> => ipcRenderer.invoke('ai-employee:ask', request),
+    // P2 阶段:订阅执行步骤事件
+    onEvent: (callback: (event: import('../shared/executionEvent').ExecutionEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: import('../shared/executionEvent').ExecutionEvent) => callback(payload)
+      ipcRenderer.on('ai-employee:event', listener)
+      return () => ipcRenderer.removeListener('ai-employee:event', listener)
+    },
     models: (): Promise<AiEmployeeChatModelProfile[]> => ipcRenderer.invoke('ai-employee:chat-models'),
     pickAttachments: (): Promise<AiEmployeePickResult> => ipcRenderer.invoke('ai-employee:pick-attachments'),
     materializeMarkdownReport: (content: string): Promise<{ content: string; materialized: boolean }> => ipcRenderer.invoke('ai-employee:materialize-markdown-report', content),
@@ -404,8 +427,10 @@ contextBridge.exposeInMainWorld('desktop', {
     deleteSession: (taskId: string) => ipcRenderer.invoke('advisor:sessions:delete', taskId),
     exportSession: (taskId: string) => ipcRenderer.invoke('advisor:sessions:export', taskId),
     getDefaultProject: () => ipcRenderer.invoke('advisor:project:default'),
+    getOrphanScratch: () => ipcRenderer.invoke('advisor:project:orphan-scratch'),
     selectProject: () => ipcRenderer.invoke('advisor:project:select'),
     revealProject: (projectPath: string) => ipcRenderer.invoke('advisor:project:reveal', projectPath),
+    downloadOutputFile: (filePath: string) => ipcRenderer.invoke('advisor:download-output-file', { filePath }),
     getConnectionStatus: () => ipcRenderer.invoke('advisor:connection:status'),
     connect: (): Promise<AdvisorRemoteSession> => ipcRenderer.invoke('advisor:connect'),
     disconnect: (): Promise<void> => ipcRenderer.invoke('advisor:disconnect'),
@@ -423,6 +448,11 @@ contextBridge.exposeInMainWorld('desktop', {
     analyzeImages: (sessionId: string) => ipcRenderer.invoke('advisor:images:analysis', sessionId),
     saveImages: (sessionId: string, images: AdvisorIncomingImage[]) => ipcRenderer.invoke('advisor:images:save', { sessionId, images }),
     removeImage: (sessionId: string, id: string) => ipcRenderer.invoke('advisor:images:remove', { sessionId, id }),
+    selectDocuments: (sessionId: string) => ipcRenderer.invoke('advisor:documents:select', sessionId),
+    listDocuments: (sessionId: string) => ipcRenderer.invoke('advisor:documents:list', sessionId),
+    saveDocuments: (sessionId: string, documents: AdvisorIncomingDocument[]) => ipcRenderer.invoke('advisor:documents:save', { sessionId, documents }),
+    removeDocument: (sessionId: string, id: string) => ipcRenderer.invoke('advisor:documents:remove', { sessionId, id }),
+    selectAttachments: (sessionId: string) => ipcRenderer.invoke('advisor:attachments:select', sessionId),
     resolveApproval: (approvalId: string, decision: AdvisorApprovalDecision) => ipcRenderer.invoke('advisor:approval:resolve', { approvalId, decision }),
     onChatEvent: (callback: (event: AdvisorChatEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: AdvisorChatEvent) => callback(payload)

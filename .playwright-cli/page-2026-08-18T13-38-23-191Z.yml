@@ -1,0 +1,55 @@
+- generic [ref=f1e3]:
+  - generic [ref=f1e4]:
+    - strong [ref=f1e5]: 砚都跨境
+    - generic [ref=f1e6]:
+      - button "刷新" [ref=f1e7] [cursor=pointer]
+      - button "主题" [ref=f1e11] [cursor=pointer]
+      - button "设置" [ref=f1e15] [cursor=pointer]
+      - button "退出" [ref=f1e19] [cursor=pointer]
+  - complementary [ref=f1e23]:
+    - generic [ref=f1e24]:
+      - generic [ref=f1e25]: 砚
+      - strong [ref=f1e27]: 砚都跨境
+    - navigation [ref=f1e28]:
+      - button "AI跨境" [ref=f1e29] [cursor=pointer]
+      - button "AI参谋" [active] [ref=f1e35] [cursor=pointer]
+      - button "AI采集" [ref=f1e41] [cursor=pointer]
+      - button "AI美工" [ref=f1e48] [cursor=pointer]
+      - button "AI视频" [ref=f1e56] [cursor=pointer]
+      - button "AI任务" [ref=f1e62] [cursor=pointer]
+      - button "AI员工" [ref=f1e69] [cursor=pointer]
+      - button "AI星球" [ref=f1e75] [cursor=pointer]
+      - button "AI总部" [ref=f1e81] [cursor=pointer]
+  - main [ref=f1e88]:
+    - generic [ref=f1e143]:
+      - generic [ref=f1e144]:
+        - heading "AI参谋" [level=2] [ref=f1e145]
+        - paragraph [ref=f1e146]: 选品与运营决策支持入口
+      - generic [ref=f1e147]:
+        - generic [ref=f1e148] [cursor=pointer]:
+          - generic [ref=f1e154]: 报告样例库
+          - emphasis [ref=f1e155]: 进入
+        - generic [ref=f1e156] [cursor=pointer]:
+          - generic [ref=f1e160]: 在线参谋
+          - emphasis [ref=f1e161]: 进入
+        - generic [ref=f1e162] [cursor=pointer]:
+          - generic [ref=f1e167]: DeepSeek Harness
+          - emphasis [ref=f1e168]: 进入
+        - generic [ref=f1e169]:
+          - generic [ref=f1e175]: 竞品分析
+          - emphasis [ref=f1e176]: 即将上线
+        - generic [ref=f1e177]:
+          - generic [ref=f1e181]: 产品定价
+          - emphasis [ref=f1e182]: 即将上线
+        - generic [ref=f1e183]:
+          - generic [ref=f1e190]: 类目优选
+          - emphasis [ref=f1e191]: 即将上线
+        - generic [ref=f1e192]:
+          - generic [ref=f1e197]: 数据复盘
+          - emphasis [ref=f1e198]: 即将上线
+        - generic [ref=f1e199]:
+          - generic [ref=f1e204]: 产品仓库
+          - emphasis [ref=f1e205]: 即将上线
+        - generic [ref=f1e206]:
+          - generic [ref=f1e213]: 物流成本
+          - emphasis [ref=f1e214]: 即将上线

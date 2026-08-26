@@ -1,17 +1,24 @@
+// 砚都跨境采集助手 service worker（阶段 3.6 切到 MaxKB）
+// - 阶段 3.6：1688 AI 选品分析从 RAGFlow 切到 MaxKB v2.10.5-lts CE
+//   - 默认服务地址：远端中央 MaxKB 8080（与桌面端 .env.local 一致）
+//   - 默认智能体：sourcing 选品分析师（MAXKB_SOURCING_APPLICATION_ID + secret_key）
+//   - 鉴权：Bearer secret_key（直连 chat，不需要 admin token）
+// - 采集入口（PAIR / STATUS / COLLECT）继续走桌面端 17321（与 MaxKB 切换无关）
 const API = 'http://127.0.0.1:17321'
-const RAGFLOW_DEFAULT_URL = 'http://114.55.149.192:8090'
-const RAGFLOW_DEFAULT_KEY = 'ragflow-QSmWWnQG96rLlX-_tpHKT6hKSQ_j-85vyY4s7OMXNTA'
-const RAGFLOW_AGENT_ID = '8563cdb690e611f1b36bf39ef484774d'
+const MAXKB_DEFAULT_URL = 'http://114.55.149.192:8080'
+const MAXKB_DEFAULT_TOKEN = 'agent-9bd465c72fe21d328d51ceefa18ef679'
+const MAXKB_APPLICATION_ID = '01a02f8c-66d2-7803-b02b-e67d1cc6e02b'
 
 async function storedToken() {
   return (await chrome.storage.local.get('collectorToken')).collectorToken || ''
 }
 
-async function ragflowConfig() {
-  const cfg = await chrome.storage.local.get(['ragflowUrl', 'ragflowKey'])
+async function maxkbConfig() {
+  const cfg = await chrome.storage.local.get(['maxkbUrl', 'maxkbToken', 'maxkbAppId'])
   return {
-    url: (cfg.ragflowUrl || RAGFLOW_DEFAULT_URL).replace(/\/$/, ''),
-    key: cfg.ragflowKey || RAGFLOW_DEFAULT_KEY
+    url: (cfg.maxkbUrl || MAXKB_DEFAULT_URL).replace(/\/$/, ''),
+    token: cfg.maxkbToken || MAXKB_DEFAULT_TOKEN,
+    appId: cfg.maxkbAppId || MAXKB_APPLICATION_ID
   }
 }
 
@@ -44,32 +51,31 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return { ok: true, ...result }
     }
     if (message.type === 'ANALYZE_1688') {
-      const cfg = await ragflowConfig()
-      if (!cfg.key) return { ok: false, message: '请先在设置中填写 RAGFlow API Key' }
-      const response = await fetch(`${cfg.url}/api/v1/agents/chat/completions`, {
+      const cfg = await maxkbConfig()
+      if (!cfg.token || !cfg.appId) return { ok: false, message: '请先在设置中填写 MaxKB Token 与 application_id' }
+      const response = await fetch(`${cfg.url}/chat/api/${cfg.appId}/chat/completions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.key}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` },
         body: JSON.stringify({
-          agent_id: RAGFLOW_AGENT_ID,
           messages: [{ role: 'user', content: message.prompt }],
-          "openai-compatible": true,
           stream: false
         })
       })
-      const body = await response.json().catch(() => ({ message: '响应解析失败' }))
+      const body = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(body.message || `分析请求失败（${response.status}）`)
-      const content = body?.choices?.[0]?.message?.content
+      const content = body?.data?.content || body?.choices?.[0]?.message?.content
       if (!content) throw new Error('智能体未返回内容')
       return { ok: true, content }
     }
-    if (message.type === 'RAGFLOW_SAVE') {
-      await chrome.storage.local.set({ ragflowUrl: message.url, ragflowKey: message.key })
+    if (message.type === 'MAXKB_SAVE') {
+      await chrome.storage.local.set({ maxkbUrl: message.url, maxkbToken: message.token, maxkbAppId: message.appId })
       return { ok: true }
     }
-    if (message.type === 'RAGFLOW_STATUS') {
-      const cfg = await ragflowConfig()
-      const custom = (await chrome.storage.local.get('ragflowKey')).ragflowKey
-      return { ok: true, url: cfg.url, configured: true, usingDefault: !custom }
+    if (message.type === 'MAXKB_STATUS') {
+      const cfg = await maxkbConfig()
+      const custom = (await chrome.storage.local.get(['maxkbToken', 'maxkbAppId']))
+      const usingDefault = !custom.maxkbToken && !custom.maxkbAppId
+      return { ok: true, url: cfg.url, appId: cfg.appId, configured: true, usingDefault }
     }
     throw new Error('未知操作')
   })().then(sendResponse).catch(error => sendResponse({ ok: false, message: error instanceof Error ? error.message : '操作失败' }))

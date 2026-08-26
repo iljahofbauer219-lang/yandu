@@ -1,0 +1,38 @@
+{
+  "started_at": "2026-08-24T01:10:01.858Z",
+  "checks": [
+    {
+      "name": "stage3.6:static-files-maxkb",
+      "status": "pass",
+      "detail": {
+        "sw": true,
+        "popup": true,
+        "popupJs": true,
+        "manifest": true
+      }
+    },
+    {
+      "name": "stage3.6:1688-analyze-end-to-end",
+      "status": "pass",
+      "detail": {
+        "status": 200,
+        "elapsed_ms": 6438,
+        "content_preview": "MaxKB选品分析师基于AI与大数据，自动分析市场趋势与竞品数据，智能推荐高潜力商品，助力商家高效精准选品。"
+      }
+    },
+    {
+      "name": "stage3.6:manifest-valid-mv3",
+      "status": "pass",
+      "detail": {
+        "manifest_version": 3,
+        "host_permissions_count": 8
+      }
+    }
+  ],
+  "finished_at": "2026-08-24T01:10:08.304Z",
+  "summary": {
+    "total": 3,
+    "pass": 3,
+    "fail": 0
+  }
+}

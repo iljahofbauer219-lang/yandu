@@ -1,0 +1,169 @@
+{
+  "started_at": "2026-08-24T01:08:30.496Z",
+  "checks": [
+    {
+      "name": "stage2.1:total-docs-19",
+      "status": "pass",
+      "detail": {
+        "total": 19,
+        "with_category": 19,
+        "by_category": {
+          "运维/安装": 1,
+          "Listing精造师/智能体": 1,
+          "Listing精造师/样例": 1,
+          "Listing精造师/术语": 1,
+          "Listing精造师/规则": 1,
+          "Listing精造师/词库": 1,
+          "Listing精造师/方法论": 1,
+          "案例库/宠物": 2,
+          "选品方法论/品类矩阵": 1,
+          "选品方法论/评估表": 1,
+          "选品方法论/智能体": 1,
+          "选品方法论/报告样例": 1,
+          "选品方法论/报告模板": 3,
+          "选品方法论/总论": 1,
+          "选品方法论/验收": 1,
+          "选品方法论/方法论": 1
+        }
+      }
+    },
+    {
+      "name": "stage2.2:old-ragflow-docs-categorized",
+      "status": "pass",
+      "detail": {
+        "old_docs": [
+          {
+            "name": "选品分析方法论.md",
+            "category": "选品方法论/总论"
+          },
+          {
+            "name": "选品分析师-验收标准.md",
+            "category": "选品方法论/验收"
+          },
+          {
+            "name": "选品分析师-新版方法论.md",
+            "category": "选品方法论/方法论"
+          },
+          {
+            "name": "跨境AI选品分析师-标准报告模板-v1.3.md",
+            "category": "选品方法论/报告模板"
+          }
+        ]
+      }
+    },
+    {
+      "name": "stage2.3:multi-level-categories",
+      "status": "pass",
+      "detail": {
+        "top_level_count": 4,
+        "top_levels": [
+          "运维",
+          "Listing精造师",
+          "案例库",
+          "选品方法论"
+        ],
+        "expected": ">= 4"
+      }
+    },
+    {
+      "name": "stage2.4:graph-rag-integration-real-data",
+      "status": "pass",
+      "detail": {
+        "stats": {
+          "docCount": 20,
+          "chunkCount": 20,
+          "termCount": 109,
+          "builtAt": 1787533713064,
+          "indexBytes": 82663
+        },
+        "expand_count": 5,
+        "top": [
+          {
+            "doc": "选品分析师-报告模板-v1.2.md",
+            "score": "10.62",
+            "matched": [
+              "选品",
+              "品方",
+              "方法",
+              "法论"
+            ]
+          },
+          {
+            "doc": "选品分析师-报告模板-v1.1.md",
+            "score": "10.62",
+            "matched": [
+              "选品",
+              "品方",
+              "方法",
+              "法论"
+            ]
+          },
+          {
+            "doc": "跨境AI选品分析师-标准报告模板-v1.3.md",
+            "score": "10.62",
+            "matched": [
+              "选品",
+              "品方",
+              "方法",
+              "法论"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "stage2.5:provider-renamed-to-maxkb",
+      "status": "pass",
+      "detail": {
+        "shared_type_has_maxkb": true,
+        "provider_maxkb_count": 4
+      }
+    },
+    {
+      "name": "stage2.6:5-apps-chat-after-migration",
+      "status": "pass",
+      "detail": {
+        "results": [
+          {
+            "label": "amazon-skills",
+            "ok": true,
+            "elapsed_ms": 5225
+          },
+          {
+            "label": "default",
+            "ok": true,
+            "elapsed_ms": 8161
+          },
+          {
+            "label": "sourcing",
+            "ok": true,
+            "elapsed_ms": 11190
+          },
+          {
+            "label": "listing",
+            "ok": true,
+            "elapsed_ms": 38504
+          },
+          {
+            "label": "guardian",
+            "ok": true,
+            "elapsed_ms": 25612
+          }
+        ]
+      }
+    },
+    {
+      "name": "stage2.7:ragflow-fully-down",
+      "status": "pass",
+      "detail": {
+        "note": "RAGFlow 9380 不可达（已 down -v）"
+      }
+    }
+  ],
+  "finished_at": "2026-08-24T01:10:01.762Z",
+  "summary": {
+    "total": 7,
+    "pass": 7,
+    "fail": 0
+  }
+}

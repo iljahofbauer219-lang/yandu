@@ -1,0 +1,33 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - strong [ref=e5]: 砚都跨境
+    - generic [ref=e6]:
+      - button "刷新" [ref=e7] [cursor=pointer]
+      - button "主题" [ref=e11] [cursor=pointer]
+      - button "设置" [ref=e15] [cursor=pointer]
+      - button "退出" [ref=e19] [cursor=pointer]
+  - complementary [ref=e23]:
+    - generic [ref=e24]:
+      - generic [ref=e25]: 砚
+      - strong [ref=e27]: 砚都跨境
+    - navigation [ref=e28]:
+      - button "AI跨境" [ref=e29] [cursor=pointer]
+      - button "AI参谋" [ref=e35] [cursor=pointer]
+      - button "AI采集" [ref=e41] [cursor=pointer]
+      - button "AI美工" [ref=e48] [cursor=pointer]
+      - button "AI视频" [ref=e56] [cursor=pointer]
+      - button "AI任务" [ref=e62] [cursor=pointer]
+      - button "AI员工" [ref=e69] [cursor=pointer]
+      - button "AI星球" [ref=e75] [cursor=pointer]
+      - button "AI总部" [ref=e81] [cursor=pointer]
+  - main [ref=e88]:
+    - generic [ref=e231]:
+      - generic [ref=e232]:
+        - generic [ref=e233]:
+          - generic [ref=e234]: DeepSeek Harness
+          - generic [ref=e235]: 官方 Web UI · 认证网关 · 受限云端执行器
+        - generic [ref=e236]:
+          - text: 已建立受限云端会话
+          - button "重新连接" [ref=e237] [cursor=pointer]
+      - iframe [ref=e238]:
+        - generic [ref=f1e1]: "{\"error\":\"HARNESS_UNAVAILABLE\"}"

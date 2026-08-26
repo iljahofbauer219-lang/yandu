@@ -32,9 +32,20 @@ export interface AdvisorAttachment {
   thumbnailPath: string
   previewUrl: string
   available?: boolean
+  /**
+   * 附件类型。重构后区分 image（需要交给 vision-sidecar）与 document（需要抽取纯文本后拼到 message）。
+   * 旧 manifest 中没有该字段，读取时默认 image。
+   */
+  kind?: 'image' | 'document'
 }
 
 export interface AdvisorIncomingImage {
+  name: string
+  mimeType: string
+  bytes: Uint8Array
+}
+
+export interface AdvisorIncomingDocument {
   name: string
   mimeType: string
   bytes: Uint8Array
@@ -210,8 +221,14 @@ export interface AdvisorDesktopApi {
   deleteSession(taskId: string): Promise<boolean>
   exportSession(taskId: string): Promise<string | null>
   getDefaultProject(): Promise<string>
+  getOrphanScratch(): Promise<string>
   selectProject(): Promise<string | null>
   revealProject(projectPath: string): Promise<boolean>
+  /**
+   * 下载 AI 输出文件：弹原生保存对话框，把 os.tmpdir() 下的临时文件复制到用户指定位置。
+   * 后端仅允许 os.tmpdir() 之下的路径(防越权)，用户取消返回 canceled:true。
+   */
+  downloadOutputFile(filePath: string): Promise<{ ok: true; filePath: string; byteSize: number; fileName: string } | { canceled: true } | { ok: false; error: string }>
   getConnectionStatus(): Promise<AdvisorConnectionStatus>
   getPersonalization(): Promise<AdvisorPersonalizationState>
   savePersonalization(settings: Partial<AdvisorPersonalizationSettings>): Promise<AdvisorPersonalizationState>
@@ -227,6 +244,20 @@ export interface AdvisorDesktopApi {
   analyzeImages(sessionId: string): Promise<AdvisorVisionAnalysis[]>
   saveImages(sessionId: string, images: AdvisorIncomingImage[]): Promise<AdvisorAttachment[]>
   removeImage(sessionId: string, id: string): Promise<boolean>
+  /**
+   * 文档附件：通过系统文件选择器选 PDF/DOCX/DOC/RTF/TXT/MD，上传到当前 session。
+   * listDocuments 返回的 records 中 `kind === 'document'`，不需要缩略图与预览。
+   */
+  selectDocuments(sessionId: string): Promise<AdvisorAttachment[]>
+  listDocuments(sessionId: string): Promise<AdvisorAttachment[]>
+  saveDocuments(sessionId: string, documents: AdvisorIncomingDocument[]): Promise<AdvisorAttachment[]>
+  removeDocument(sessionId: string, id: string): Promise<boolean>
+  /**
+   * 统一附件选择入口：一次系统对话框多选，混选图片与文档。
+   * 后端按扩展名分桶走 saveIncomingImages / saveIncomingDocuments，返回合并后的 records。
+   * 与 selectImages / selectDocuments 并存（不破坏旧调用方）。
+   */
+  selectAttachments(sessionId: string): Promise<AdvisorAttachment[]>
   resolveApproval(approvalId: string, decision: AdvisorApprovalDecision): Promise<boolean>
   onChatEvent(listener: (event: AdvisorChatEvent) => void): () => void
   /** 主动建立 harness 网关会话 */

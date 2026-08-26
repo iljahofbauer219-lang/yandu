@@ -359,7 +359,7 @@ export default function SampleLibrary({ onBackToHub }: { onBackToHub?: () => voi
             className="sample-library-ingest-btn"
             onClick={handleIngest}
             disabled={ingest.phase === 'previewing' || ingest.phase === 'ingesting' || ingest.phase === 'loading-target'}
-            title="把 4 样例 + 决策门禁 + 决策可追溯硬约束一键上传到「选品分析师」RAGFlow 知识库"
+            title="把 4 样例 + 决策门禁 + 决策可追溯硬约束一键上传到「选品分析师」MaxKB 知识库"
           >
             {ingest.phase === 'previewing' ? '⏳ 预览中…'
               : ingest.phase === 'ingesting' ? '⏳ 入库中…'
@@ -400,7 +400,7 @@ export default function SampleLibrary({ onBackToHub }: { onBackToHub?: () => voi
         </div>
         {onBackToHub && (
           <button className="sample-library-back" onClick={onBackToHub} type="button">
-            ← 返回 AI 参谋
+            ← 返回 AI 总部
           </button>
         )}
       </header>
@@ -436,7 +436,8 @@ export default function SampleLibrary({ onBackToHub }: { onBackToHub?: () => voi
               onClick={handleToggleSyncMode}
               title={(guardian.skill.syncMode ?? 'soft') === 'soft'
                 ? '点击切换为硬同步（I.2 默认行为：先删旧 docId 再传新，丢旧 chunk）'
-                : '点击切换为软同步（推荐：保留旧 docId + RAGFlow update_doc 替换文件，重解析期间旧 chunk 仍可检索）'}
+                : '点击切换为软同步（推荐：保留旧 docId + MaxKB 替换文件，重解析期间旧 chunk 仍可检索）'
+              }
             >
               切到 {(guardian.skill.syncMode ?? 'soft') === 'soft' ? '硬同步' : '软同步'}
             </button>

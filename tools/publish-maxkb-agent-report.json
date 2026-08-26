@@ -1,0 +1,62 @@
+{
+  "started_at": "2026-08-23T17:13:55.604Z",
+  "base_url": "http://114.55.149.192:8080",
+  "results": [
+    {
+      "id": "01a02f8c-9210-7ec1-902b-87e07315ba57",
+      "name": "知识库守卫 MaxKB",
+      "is_publish_before": true,
+      "put_publish_code": 200,
+      "maxkb_response_code": 200,
+      "elapsed_ms": 63,
+      "status": "success",
+      "is_publish_after": true
+    },
+    {
+      "id": "01a02f8c-917e-7232-b62f-f087f70af6b2",
+      "name": "Listing 精造师 MaxKB",
+      "is_publish_before": true,
+      "put_publish_code": 200,
+      "maxkb_response_code": 200,
+      "elapsed_ms": 67,
+      "status": "success",
+      "is_publish_after": true
+    },
+    {
+      "id": "01a02f8c-66d2-7803-b02b-e67d1cc6e02b",
+      "name": "选品分析师 MaxKB",
+      "is_publish_before": true,
+      "put_publish_code": 200,
+      "maxkb_response_code": 200,
+      "elapsed_ms": 64,
+      "status": "success",
+      "is_publish_after": true
+    },
+    {
+      "id": "01a005f0-a471-7403-9d78-8702d5765816",
+      "name": "Amazon-Skills智能体",
+      "is_publish_before": true,
+      "put_publish_code": 200,
+      "maxkb_response_code": 200,
+      "elapsed_ms": 60,
+      "status": "success",
+      "is_publish_after": true
+    },
+    {
+      "id": "01a00100-09be-7320-94e7-d4998db7df2b",
+      "name": "MaxKB智体",
+      "is_publish_before": true,
+      "put_publish_code": 200,
+      "maxkb_response_code": 200,
+      "elapsed_ms": 68,
+      "status": "success",
+      "is_publish_after": true
+    }
+  ],
+  "finished_at": "2026-08-23T17:13:56.426Z",
+  "summary": {
+    "total": 5,
+    "success": 5,
+    "failed": 0
+  }
+}

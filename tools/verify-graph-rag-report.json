@@ -1,0 +1,170 @@
+{
+  "started_at": "2026-08-24T01:10:12.507Z",
+  "checks": [
+    {
+      "name": "build-index",
+      "status": "pass",
+      "detail": {
+        "docCount": 4,
+        "chunkCount": 4,
+        "termCount": 126,
+        "sample_terms": [
+          "top",
+          "v1",
+          "选品",
+          "品方",
+          "方法",
+          "法论",
+          "包含",
+          "含五",
+          "五个",
+          "个维"
+        ]
+      }
+    },
+    {
+      "name": "stats",
+      "status": "pass",
+      "detail": {
+        "docCount": 4,
+        "chunkCount": 4,
+        "termCount": 126,
+        "builtAt": 1787533812516,
+        "indexBytes": 36001
+      }
+    },
+    {
+      "name": "expand-seed-terms",
+      "status": "pass",
+      "detail": {
+        "query": "选品方法论 v1.3",
+        "top": [
+          {
+            "doc": "选品方法论 v1.3.md",
+            "score": "12.750",
+            "matched": [
+              "v1",
+              "选品",
+              "品方",
+              "方法",
+              "法论"
+            ]
+          },
+          {
+            "doc": "亚马逊宠物用品评估表.md",
+            "score": "5.250",
+            "matched": [
+              "选品",
+              "个维",
+              "批量",
+              "量评",
+              "评估"
+            ]
+          },
+          {
+            "doc": "苦苹果防咬喷雾.md",
+            "score": "1.000",
+            "matched": [
+              "需求",
+              "求验"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "expand-cross-doc",
+      "status": "pass",
+      "detail": {
+        "query": "需求验证 竞争分析",
+        "docs_hit": [
+          "选品方法论 v1.3.md",
+          "宠物美容刷.md",
+          "亚马逊宠物用品评估表.md",
+          "苦苹果防咬喷雾.md"
+        ],
+        "top": [
+          {
+            "doc": "选品方法论 v1.3.md",
+            "score": "12.450"
+          },
+          {
+            "doc": "宠物美容刷.md",
+            "score": "11.250"
+          },
+          {
+            "doc": "亚马逊宠物用品评估表.md",
+            "score": "10.950"
+          },
+          {
+            "doc": "苦苹果防咬喷雾.md",
+            "score": "10.650"
+          }
+        ]
+      }
+    },
+    {
+      "name": "expand-hops-1",
+      "status": "pass",
+      "detail": {
+        "query": "苦苹果",
+        "top_matched_terms": [
+          "苦苹",
+          "苹果",
+          "果防",
+          "防咬",
+          "咬喷",
+          "喷雾",
+          "雾是",
+          "是宠",
+          "宠物"
+        ],
+        "chunks": 3
+      }
+    },
+    {
+      "name": "rebuild-idempotent",
+      "status": "pass",
+      "detail": {
+        "before": {
+          "docs": 4,
+          "chunks": 4
+        },
+        "after": {
+          "docs": 4,
+          "chunks": 4
+        }
+      }
+    },
+    {
+      "name": "stopwords-all-empty",
+      "status": "pass",
+      "detail": {
+        "query": "的 了 和 是",
+        "result_count": 0
+      }
+    },
+    {
+      "name": "index-persisted",
+      "status": "pass",
+      "detail": {
+        "file": "/tmp/maxkb-graph-test-1787533812507.json",
+        "size_bytes": 36001,
+        "keys": [
+          "version",
+          "builtAt",
+          "docCount",
+          "chunkCount",
+          "nodes",
+          "chunks"
+        ]
+      }
+    }
+  ],
+  "finished_at": "2026-08-24T01:10:12.602Z",
+  "summary": {
+    "total": 8,
+    "pass": 8,
+    "fail": 0
+  }
+}

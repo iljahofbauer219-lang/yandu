@@ -15,7 +15,7 @@
  */
 import { resolveSampleLibraryArtifactDir, SAMPLE_LIBRARY_KB_TARGET, SAMPLE_LIBRARY_KB_DOCS, type SampleLibraryKbLeafCategory } from '../../shared/sampleLibraryKbIngest'
 import type { GuardianSkill, GuardianSkillInput, GuardianState } from '../../shared/kbGuardian'
-import type { RagflowKnowledgeService } from './RagflowKnowledgeService'
+import type { MaxkbKnowledgeService } from './MaxkbKnowledgeService'
 import type { KbGuardianService, GuardianCategoryResolver } from './KbGuardianService'
 
 // 预置守卫技能唯一名（KnowledgeHub 上展示）
@@ -43,9 +43,9 @@ export class SampleLibraryKbGuardianLauncher {
    * 如未存在则创建；存在则按当前期望参数修正（仅当字段漂移时写回）。
    * 不会主动 runNow；如需立即跑请另调 launchNow()。
    */
-  static async ensure(ragflowKb: RagflowKnowledgeService, kbGuardian: KbGuardianService): Promise<GuardianSkill | null> {
+  static async ensure(maxkbKb: MaxkbKnowledgeService, kbGuardian: KbGuardianService): Promise<GuardianSkill | null> {
     // 1) 保证目标 KB 存在
-    const kb = await ragflowKb.ensureAgentKb(SAMPLE_LIBRARY_KB_TARGET.agentKey)
+    const kb = await maxkbKb.ensureAgentKb(SAMPLE_LIBRARY_KB_TARGET.agentKey)
     // 2) 读取当前注册表
     const state = await kbGuardian.state()
     const existing = state.skills.find(skill => skill.name === SAMPLE_LIBRARY_KB_GUARDIAN_NAME) ?? null
@@ -64,11 +64,11 @@ export class SampleLibraryKbGuardianLauncher {
         { name: SAMPLE_LIBRARY_KB_TARGET.categoryRoot },
         ...Array.from(new Set(SAMPLE_LIBRARY_KB_DOCS.map(spec => spec.category.split('/')[1]))).map(sub => ({ name: sub!, parent: SAMPLE_LIBRARY_KB_TARGET.categoryRoot }))
       ],
-      // I.5 阶段新增：预置技能默认走软同步（保留旧 docId + RAGFlow update_doc）
+      // I.5 阶段新增：预置技能默认走软同步（保留旧 docId + MaxKB 替换文件）
       syncMode: 'soft',
       // I.6 阶段新增：预置技能默认走孤儿文档清理（源文件被删/重命名后 KB 中旧 docId 会被删掉）
       orphanCleanup: true,
-      // I.7 阶段新增：预置技能默认走软→硬回退（docId 失效/RAGFlow 老版本时自动 deleteDocs + uploadAndParse 恢复）
+      // I.7 阶段新增：预置技能默认走软→硬回退（docId 失效/MaxKB 老版本时自动 deleteDocs + uploadAndParse 恢复）
       softFallbackHard: true
     }
     // 4) 不存在则创建
@@ -109,8 +109,8 @@ export class SampleLibraryKbGuardianLauncher {
    * 立即跑一次预置技能（用户点「启用守卫」或「立即同步」按钮时调用）。
    * 检测到未注册时自动 ensure；存在则只 runNow。
    */
-  static async launchNow(ragflowKb: RagflowKnowledgeService, kbGuardian: KbGuardianService): Promise<SampleLibraryGuardianStatus> {
-    const skill = await this.ensure(ragflowKb, kbGuardian)
+  static async launchNow(maxkbKb: MaxkbKnowledgeService, kbGuardian: KbGuardianService): Promise<SampleLibraryGuardianStatus> {
+    const skill = await this.ensure(maxkbKb, kbGuardian)
     if (!skill) {
       const state = await kbGuardian.state()
       return { present: false, skill: null, state, ranNow: false, runNowReason: '预置技能创建失败' }

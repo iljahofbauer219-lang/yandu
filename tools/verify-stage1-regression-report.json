@@ -1,0 +1,177 @@
+{
+  "started_at": "2026-08-23T17:19:18.979Z",
+  "base_url": "http://114.55.149.192:8080",
+  "checks": [
+    {
+      "name": "stage1.1:all-5-apps-published",
+      "status": "pass",
+      "detail": {
+        "expected": 5,
+        "found": 5,
+        "published": [
+          {
+            "name": "知识库守卫 MaxKB",
+            "is_publish": true
+          },
+          {
+            "name": "Listing 精造师 MaxKB",
+            "is_publish": true
+          },
+          {
+            "name": "选品分析师 MaxKB",
+            "is_publish": true
+          },
+          {
+            "name": "Amazon-Skills智能体",
+            "is_publish": true
+          },
+          {
+            "name": "MaxKB智体",
+            "is_publish": true
+          }
+        ],
+        "elapsed_ms": 109
+      }
+    },
+    {
+      "name": "stage1.2:5-apps-chat-all-pass",
+      "status": "pass",
+      "detail": {
+        "results": [
+          {
+            "label": "amazon-skills",
+            "http": 200,
+            "ok": true,
+            "elapsed_ms": 1944,
+            "content_len": 41
+          },
+          {
+            "label": "default",
+            "http": 200,
+            "ok": true,
+            "elapsed_ms": 2656,
+            "content_len": 88
+          },
+          {
+            "label": "sourcing",
+            "http": 200,
+            "ok": true,
+            "elapsed_ms": 6722,
+            "content_len": 25
+          },
+          {
+            "label": "listing",
+            "http": 200,
+            "ok": true,
+            "elapsed_ms": 26433,
+            "content_len": 3481
+          },
+          {
+            "label": "guardian",
+            "http": 200,
+            "ok": true,
+            "elapsed_ms": 11442,
+            "content_len": 172
+          }
+        ],
+        "total_elapsed_ms": 49197,
+        "avg_ms": 9839
+      }
+    },
+    {
+      "name": "stage1.3:kb-list-all-pass",
+      "status": "pass",
+      "detail": {
+        "kbs": [
+          {
+            "kb_id": "01a00117-e215-7e90-b6ed-e782da8ddbb1",
+            "http": 200,
+            "doc_count": 4,
+            "sample": [
+              {
+                "name": "选品分析方法论.md",
+                "status": "nnn2"
+              },
+              {
+                "name": "选品分析师-验收标准.md",
+                "status": "nnn2"
+              }
+            ]
+          },
+          {
+            "kb_id": "01a000fb-15ce-7d12-b850-8fc588c31ec1",
+            "http": 200,
+            "doc_count": 1,
+            "sample": [
+              {
+                "name": "maxkb-验收样例.txt",
+                "status": "nnn2"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "stage1.4:kb-crud-blocked-confirmed",
+      "status": "pass",
+      "detail": {
+        "POST": {
+          "http": 200,
+          "body_code": 500,
+          "msg": "方法 “POST” 不被允许。"
+        },
+        "PATCH": {
+          "http": 200,
+          "body_code": 500,
+          "msg": "方法 “PATCH” 不被允许。"
+        },
+        "expected": "POST/PATCH 实际不生效（body.code !== 200）"
+      }
+    },
+    {
+      "name": "stage1.5:meta-category-persist",
+      "status": "pass",
+      "detail": {
+        "put_http": 200,
+        "get_http": 200,
+        "sent_category": "__regression_1787505609222__",
+        "got_category": "__regression_1787505609222__",
+        "doc": "选品分析方法论.md"
+      }
+    },
+    {
+      "name": "stage1.6:graph-rag-build-with-real-kb",
+      "status": "pass",
+      "detail": {
+        "docCount": 5,
+        "chunkCount": 5,
+        "termCount": 24,
+        "expand_count": 5,
+        "expand_top": [
+          {
+            "doc": "选品分析师-新版方法论.md",
+            "score": "7.69"
+          },
+          {
+            "doc": "选品分析方法论.md",
+            "score": "6.94"
+          }
+        ]
+      }
+    },
+    {
+      "name": "stage1.7:republish-idempotent",
+      "status": "pass",
+      "detail": {
+        "note": "5/5 application 重新 publish 成功（幂等）"
+      }
+    }
+  ],
+  "finished_at": "2026-08-23T17:20:10.304Z",
+  "summary": {
+    "total": 7,
+    "pass": 7,
+    "fail": 0
+  }
+}

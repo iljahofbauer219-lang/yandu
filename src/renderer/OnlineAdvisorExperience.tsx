@@ -1,4 +1,5 @@
 import {
+  Fragment,
   type ClipboardEvent,
   type DragEvent,
   type FormEvent,
@@ -102,9 +103,8 @@ const preferredModelStorageKey = "deepseek-codex.preferred-model";
 const preferredPermissionStorageKey = "deepseek-codex.preferred-permission";
 const projectAliasesStorageKey = "deepseek-codex.project-aliases";
 const registeredProjectsStorageKey = "deepseek-codex.registered-projects";
-const hiddenProjectsStorageKey = "deepseek-codex.hidden-projects";
-const hiddenTasksStorageKey = "deepseek-codex.hidden-tasks";
 const messageFeedbackStorageKey = "deepseek-codex.message-feedback";
+const hiddenTasksStorageKey = "deepseek-codex.hidden-tasks";
 
 const promptSuggestions: Array<{ id: string; title: string; body: string }> = [
   {
@@ -165,6 +165,9 @@ export default function OnlineAdvisorExperience() {
     readPreferredPermission()
   );
   const [permissionMenuOpen, setPermissionMenuOpen] = useState(false);
+  // 点击菜单外部自动关闭：把 menu 外层容器作为 ref，判断 click 落点是否在它内
+  const modelMenuRef = useRef<HTMLDivElement>(null);
+  const permissionMenuRef = useRef<HTMLDivElement>(null);
   const [connection, setConnection] = useState<ConnectionStatus>({
     connected: false,
     mode: "unknown",
@@ -173,7 +176,6 @@ export default function OnlineAdvisorExperience() {
   });
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
-  const [composerExpanded, setComposerExpanded] = useState(false);
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
   const [approvals, setApprovals] = useState<ApprovalPrompt[]>([]);
   const [attachments, setAttachments] = useState<AttachmentRecord[]>([]);
@@ -183,8 +185,13 @@ export default function OnlineAdvisorExperience() {
   const attachmentSessionRef = useRef<string | null>(null);
   const openTaskSequenceRef = useRef(0);
   const [imageError, setImageError] = useState("");
+  const [attachmentError, setAttachmentError] = useState("");
   const [imagePreview, setImagePreview] =
     useState<ImagePreviewState | null>(null);
+  // 报告里点缩略图弹大图：轻量版（不跑视觉分析），独立于 imagePreview 避免互相影响
+  const [lightboxImage, setLightboxImage] = useState<
+    { url: string; fileName: string } | null
+  >(null);
   const [dragActive, setDragActive] = useState(false);
   const [history, setHistory] = useState<StoredTask[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -197,9 +204,6 @@ export default function OnlineAdvisorExperience() {
   const [registeredProjects, setRegisteredProjects] = useState<
     RegisteredProject[]
   >(() => readRegisteredProjects());
-  const [hiddenProjectIds, setHiddenProjectIds] = useState<string[]>(() =>
-    readStoredStringList(hiddenProjectsStorageKey)
-  );
   const [hiddenTaskIds, setHiddenTaskIds] = useState<string[]>(() =>
     readStoredStringList(hiddenTasksStorageKey)
   );
@@ -230,6 +234,12 @@ export default function OnlineAdvisorExperience() {
   const messageListRef = useRef<HTMLDivElement>(null);
   const [autoFollow, setAutoFollow] = useState(true);
   const [pendingNewCount, setPendingNewCount] = useState(0);
+  // 「+」新建孤儿对话专用路径：由主进程返回临时目录下不会跟任何已注册项目冲突的目录，
+  // 让新任务出现在「最近对话」而不是当前项目下。
+  const [orphanScratchPath, setOrphanScratchPath] = useState("");
+  useEffect(() => {
+    void window.desktop.advisor.getOrphanScratch().then(setOrphanScratchPath);
+  }, []);
 
   const isBusy = activeRequestId !== null;
   const selectedProjectName = useMemo(
@@ -252,7 +262,6 @@ export default function OnlineAdvisorExperience() {
     () =>
       groupTasksByProject(history, registeredProjects)
         .filter((project) => registeredProjectIds.has(project.id))
-        .filter((project) => !hiddenProjectIds.includes(project.id))
         .map((project) => ({
           ...project,
           name: projectAliases[project.id] || project.name,
@@ -260,7 +269,6 @@ export default function OnlineAdvisorExperience() {
         })),
     [
       history,
-      hiddenProjectIds,
       hiddenTaskIds,
       projectAliases,
       registeredProjects,
@@ -347,6 +355,40 @@ export default function OnlineAdvisorExperience() {
       setPermissionMenuOpen(false);
     }
   }, [isBusy]);
+
+  // 点击 composer 外的任意位置关闭 model/permission 下拉菜单。
+  // pointerdown 先于 click 发生，且能拦住后续的 click 事件——避免点击不背身双关调在外的 button 造成俩菜单同时打卡。
+  useEffect(() => {
+    if (!modelMenuOpen && !permissionMenuOpen) return;
+    const closeOnOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (modelMenuOpen && modelMenuRef.current && !modelMenuRef.current.contains(target)) {
+        setModelMenuOpen(false);
+      }
+      if (permissionMenuOpen && permissionMenuRef.current && !permissionMenuRef.current.contains(target)) {
+        setPermissionMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutside);
+    return () => document.removeEventListener("pointerdown", closeOnOutside);
+  }, [modelMenuOpen, permissionMenuOpen]);
+
+  // 关闭侧边栏管理菜单(项目/对话的 "…" 上下文菜单)。
+  // 这类菜单在 DOM 里是动态映射出来的 4 个实例(项目、renderTaskRow、renderRecentTaskRow、renderProjectTaskRow)，
+  // 用 closest 选择器一次击点命中全部，避免为每个实例各加 ref。
+  // 只监听 pointerdown(与上面 model/permission 关闭逻辑保持一致),且能拦截紧随其后的 click 事件。
+  useEffect(() => {
+    if (!openManagementMenu) return;
+    const closeOnOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      // 命中菜单本身或触发按钮就不关——后者由 React onClick 自己 toggle
+      if (target.closest(".management-menu, .management-trigger")) return;
+      setOpenManagementMenu(null);
+    };
+    document.addEventListener("pointerdown", closeOnOutside);
+    return () => document.removeEventListener("pointerdown", closeOnOutside);
+  }, [openManagementMenu]);
 
   useEffect(() => {
     if (!messageEdit) return;
@@ -631,12 +673,30 @@ export default function OnlineAdvisorExperience() {
     setOpenManagementMenu(null);
   }
 
-  function hideProject(project: ProjectGroup) {
-    const next = [...new Set([...hiddenProjectIds, project.id])];
-    setHiddenProjectIds(next);
-    saveStoredValue(hiddenProjectsStorageKey, next);
-    if (normalizedProjectPath(workspacePath) === project.path) resetTaskState();
+  async function deleteProject(project: ProjectGroup) {
+    const taskCount = project.tasks.length;
+    const folderHint = "项目文件夹会保留在磁盘上,可以稍后重新注册。";
+    const message =
+      taskCount > 0
+        ? `永久删除项目“${project.name}”下的 ${taskCount} 个对话？${folderHint}此操作无法撤销。`
+        : `从侧边栏移除项目“${project.name}”？${folderHint}`;
+    if (!window.confirm(message)) return;
+    // 1. 删该项目下所有对话（走 IPC，真删后端存储）
+    for (const task of project.tasks) {
+      await window.desktop.advisor.deleteSession(task.id);
+    }
+    // 2. 取消注册（从侧边栏移除），保留磁盘文件夹不动
+    const nextRegistered = registeredProjects.filter(
+      (item) => item.id !== project.id
+    );
+    setRegisteredProjects(nextRegistered);
+    saveStoredValue(registeredProjectsStorageKey, nextRegistered);
+    // 3. 如果当前选的就是这个项目，重置状态
+    if (normalizedProjectPath(workspacePath) === project.path) {
+      resetTaskState();
+    }
     setOpenManagementMenu(null);
+    await refreshHistory();
   }
 
   async function renameTask(task: StoredTask) {
@@ -667,13 +727,6 @@ export default function OnlineAdvisorExperience() {
     setOpenManagementMenu(null);
   }
 
-  function restoreHiddenItems() {
-    setHiddenProjectIds([]);
-    setHiddenTaskIds([]);
-    saveStoredValue(hiddenProjectsStorageKey, []);
-    saveStoredValue(hiddenTasksStorageKey, []);
-  }
-
   async function exportTask(taskId: string) {
     const exported = await window.desktop.advisor.exportSession(taskId);
     setExportNotice(exported ? `已导出：${exported}` : "");
@@ -687,6 +740,19 @@ export default function OnlineAdvisorExperience() {
     registerProject(selected);
     expandProject(projectIdForPath(selected));
     focusDraft();
+  }
+
+  // 「最近对话」区加按钮调用：
+  // - 已有项目 → 切到孤儿 scratch 路径，下一次发送的 task 不会与任何项目关联 → 出现在「最近对话」
+  // - 无项目 / 孤儿路径未就绪 → 走原 selectProject 流程
+  async function createNewConversation() {
+    if (workspacePath && orphanScratchPath) {
+      resetTaskState();
+      setWorkspacePath(orphanScratchPath);
+      focusDraft();
+    } else {
+      await createNewTask();
+    }
   }
 
   function resetTaskState() {
@@ -969,30 +1035,54 @@ export default function OnlineAdvisorExperience() {
     setMessageEdit(null);
   }
 
-  async function addEditImageFiles(files: File[]) {
+  async function addEditFiles(files: File[]) {
     if (!messageEdit) return;
-    const images = await Promise.all(
-      files
-        .filter((file) => file.type.startsWith("image/"))
-        .map(async (file) => ({
+    const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+    const documentFiles = files.filter((file) => isDocumentFile(file));
+    if (imageFiles.length === 0 && documentFiles.length === 0) return;
+    const sessionId = messageEdit.requestId;
+    const [imagePayload, documentPayload] = await Promise.all([
+      Promise.all(
+        imageFiles.map(async (file) => ({
           name: file.name || `clipboard-${Date.now()}.png`,
           mimeType: file.type || "image/png",
           bytes: new Uint8Array(await file.arrayBuffer())
         }))
-    );
-    if (images.length === 0) return;
-    const saved = await window.desktop.advisor.saveImages(
-      messageEdit.requestId,
-      images
-    );
+      ),
+      Promise.all(
+        documentFiles.map(async (file) => ({
+          name: file.name || `document-${Date.now()}`,
+          mimeType: file.type || "application/octet-stream",
+          bytes: new Uint8Array(await file.arrayBuffer())
+        }))
+      )
+    ]);
+    const [savedImages, savedDocuments] = await Promise.all([
+      imagePayload.length
+        ? window.desktop.advisor.saveImages(sessionId, imagePayload)
+        : Promise.resolve([] as AttachmentRecord[]),
+      documentPayload.length
+        ? window.desktop.advisor.saveDocuments(sessionId, documentPayload)
+        : Promise.resolve([] as AttachmentRecord[])
+    ]);
+    const next = [...savedImages, ...savedDocuments];
+    if (next.length === 0) return;
     setMessageEdit((current) =>
-      current ? { ...current, attachments: saved } : current
+      current
+        ? { ...current, attachments: [...current.attachments, ...next] }
+        : current
     );
   }
 
-  async function removeEditImage(id: string) {
+  async function removeEditAttachment(id: string) {
     if (!messageEdit) return;
-    if (await window.desktop.advisor.removeImage(messageEdit.requestId, id)) {
+    const target = messageEdit.attachments.find((item) => item.id === id);
+    if (!target) return;
+    const isDocument = (target.kind ?? "image") === "document";
+    const removed = isDocument
+      ? await window.desktop.advisor.removeDocument(messageEdit.requestId, id)
+      : await window.desktop.advisor.removeImage(messageEdit.requestId, id);
+    if (removed) {
       setMessageEdit((current) =>
         current
           ? {
@@ -1088,38 +1178,87 @@ export default function OnlineAdvisorExperience() {
     return sessionId;
   }
 
-  async function chooseImages() {
+  async function chooseAttachments() {
     if (isBusy) return;
     try {
-      setImageError("");
-      const records = await window.desktop.advisor.selectImages(
+      setAttachmentError("");
+      const records = await window.desktop.advisor.selectAttachments(
         ensureAttachmentSession()
       );
       setAttachments(records);
     } catch (error) {
-      setImageError(error instanceof Error ? error.message : "图片上传失败");
+      setAttachmentError(
+        error instanceof Error ? error.message : "附件上传失败"
+      );
     }
   }
 
-  async function addImageFiles(files: File[]) {
+  const SUPPORTED_DOCUMENT_EXTENSIONS = new Set([
+    "pdf",
+    "docx",
+    "doc",
+    "rtf",
+    "txt",
+    "md"
+  ]);
+  const SUPPORTED_DOCUMENT_MIME_PREFIXES = ["text/", "application/pdf"];
+  const SUPPORTED_DOCUMENT_MIME_EXACT = new Set([
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/rtf"
+  ]);
+
+  function isDocumentFile(file: File) {
+    const name = file.name || "";
+    const dot = name.lastIndexOf(".");
+    const ext = dot >= 0 ? name.slice(dot + 1).toLowerCase() : "";
+    if (ext && SUPPORTED_DOCUMENT_EXTENSIONS.has(ext)) return true;
+    if (SUPPORTED_DOCUMENT_MIME_EXACT.has(file.type)) return true;
+    return SUPPORTED_DOCUMENT_MIME_PREFIXES.some((prefix) =>
+      file.type.startsWith(prefix)
+    );
+  }
+
+  async function addAttachmentFiles(files: File[]) {
     const images = files.filter((file) => file.type.startsWith("image/"));
-    if (images.length === 0) return;
+    const documents = files.filter((file) => isDocumentFile(file));
+    if (images.length === 0 && documents.length === 0) return;
     try {
-      setImageError("");
-      const payload = await Promise.all(
-        images.map(async (file) => ({
-          name: file.name || `clipboard-${Date.now()}.png`,
-          mimeType: file.type || "image/png",
-          bytes: new Uint8Array(await file.arrayBuffer())
-        }))
-      );
-      const records = await window.desktop.advisor.saveImages(
-        ensureAttachmentSession(),
-        payload
-      );
-      setAttachments(records);
+      setAttachmentError("");
+      const sessionId = ensureAttachmentSession();
+      const [savedImages, savedDocuments] = await Promise.all([
+        images.length
+          ? window.desktop.advisor.saveImages(
+              sessionId,
+              await Promise.all(
+                images.map(async (file) => ({
+                  name: file.name || `clipboard-${Date.now()}.png`,
+                  mimeType: file.type || "image/png",
+                  bytes: new Uint8Array(await file.arrayBuffer())
+                }))
+              )
+            )
+          : Promise.resolve([] as AttachmentRecord[]),
+        documents.length
+          ? window.desktop.advisor.saveDocuments(
+              sessionId,
+              await Promise.all(
+                documents.map(async (file) => ({
+                  name: file.name || `document-${Date.now()}`,
+                  mimeType: file.type || "application/octet-stream",
+                  bytes: new Uint8Array(await file.arrayBuffer())
+                }))
+              )
+            )
+          : Promise.resolve([] as AttachmentRecord[])
+      ]);
+      const next = [...savedImages, ...savedDocuments];
+      if (next.length > 0) setAttachments(next);
     } catch (error) {
-      setImageError(error instanceof Error ? error.message : "图片上传失败");
+      setAttachmentError(
+        error instanceof Error ? error.message : "附件上传失败"
+      );
     }
   }
 
@@ -1127,6 +1266,27 @@ export default function OnlineAdvisorExperience() {
     const sessionId = attachmentSessionRef.current;
     if (!sessionId) return;
     if (await window.desktop.advisor.removeImage(sessionId, id)) {
+      setAttachments((current) => {
+        const next = current.filter((item) => item.id !== id);
+        if (next.length === 0) {
+          setAttachmentSessionId(null);
+          attachmentSessionRef.current = null;
+        }
+        return next;
+      });
+    }
+  }
+
+  async function removeAttachment(id: string) {
+    const sessionId = attachmentSessionRef.current;
+    if (!sessionId) return;
+    const target = attachments.find((item) => item.id === id);
+    if (!target) return;
+    const isDocument = (target.kind ?? "image") === "document";
+    const removed = isDocument
+      ? await window.desktop.advisor.removeDocument(sessionId, id)
+      : await window.desktop.advisor.removeImage(sessionId, id);
+    if (removed) {
       setAttachments((current) => {
         const next = current.filter((item) => item.id !== id);
         if (next.length === 0) {
@@ -1194,15 +1354,20 @@ export default function OnlineAdvisorExperience() {
   function handleDrop(event: DragEvent<HTMLElement>) {
     event.preventDefault();
     setDragActive(false);
-    void addImageFiles(Array.from(event.dataTransfer.files));
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length > 0) void addAttachmentFiles(files);
   }
 
   function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
     const files = Array.from(event.clipboardData.files);
-    if (files.some((file) => file.type.startsWith("image/"))) {
-      event.preventDefault();
-      void addImageFiles(files);
-    }
+    if (files.length === 0) return;
+    const supported = files.some(
+      (file) =>
+        file.type.startsWith("image/") || isDocumentFile(file)
+    );
+    if (!supported) return;
+    event.preventDefault();
+    void addAttachmentFiles(files);
   }
 
   function renderTaskRow(task: StoredTask) {
@@ -1255,13 +1420,166 @@ export default function OnlineAdvisorExperience() {
     );
   }
 
+  // 「项目」一级行图标：文件夹（current/expanded 变蓝）
+  function projectIconGlyph() {
+    return (
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.6a2 2 0 0 1 1.4.6L11.9 7h6.6A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9z" />
+      </svg>
+    );
+  }
+
+  // 「最近」区豆包式行：小图标（按状态着色）+ 标题，去掉状态/时间副标题
+  function recentTaskIconGlyph(status: TaskStatus) {
+    switch (status) {
+      case "running":
+        return (
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-3.5-7.1" />
+            <path d="M21 4v5h-5" />
+          </svg>
+        );
+      case "waitingApproval":
+        return (
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v6l4 2" />
+          </svg>
+        );
+      case "failed":
+        return (
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 3l10 18H2L12 3z" />
+            <path d="M12 10v4" />
+            <circle cx="12" cy="17.5" r="0.6" fill="currentColor" stroke="none" />
+          </svg>
+        );
+      case "stopped":
+        return (
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="6" y="6" width="12" height="12" rx="2" />
+          </svg>
+        );
+      case "completed":
+      default:
+        return (
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 11.5a8.5 8.5 0 1 1-3.4-6.8" />
+            <path d="M21 4v5h-5" />
+            <path d="M10.5 13.5l2 2 4-4.5" />
+          </svg>
+        );
+    }
+  }
+
+  function renderRecentTaskRow(task: StoredTask) {
+    return (
+      <div className="recent-task-row" key={task.id}>
+        <button
+          className={`recent-task-button ${
+            selectedTaskId === task.id ? "selected" : ""
+          }`}
+          onClick={() => openStoredTask(task)}
+          disabled={isBusy}
+          title={task.title}
+        >
+          <span
+            className={`task-status-dot status-${task.status}`}
+            aria-hidden="true"
+          />
+          <span className="recent-task-title">{task.title}</span>
+        </button>
+        <button
+          type="button"
+          className="management-trigger task-trigger"
+          aria-label={`管理对话 ${task.title}`}
+          onClick={() =>
+            setOpenManagementMenu((currentMenu) =>
+              currentMenu === `task:${task.id}` ? null : `task:${task.id}`
+            )
+          }
+        >
+          ···
+        </button>
+        {openManagementMenu === `task:${task.id}` && (
+          <div className="management-menu task-menu">
+            <button onClick={() => void renameTask(task)}>重命名</button>
+            <button
+              onClick={() => {
+                void exportTask(task.id);
+                setOpenManagementMenu(null);
+              }}
+            >
+              导出报告
+            </button>
+            <button onClick={() => hideTask(task)}>从列表隐藏</button>
+            <button className="danger" onClick={() => void deleteTask(task)}>
+              删除记录
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 「项目」区子项：圈点（按状态着色）+ 标题 + 右侧相对时间，状态/耗时不再显示
+  function renderProjectTaskRow(task: StoredTask) {
+    return (
+      <div className="project-task-row" key={task.id}>
+        <button
+          className={`project-task-button ${
+            selectedTaskId === task.id ? "selected" : ""
+          }`}
+          onClick={() => openStoredTask(task)}
+          disabled={isBusy}
+          title={task.title}
+        >
+          <span
+            className={`task-status-dot status-${task.status}`}
+            aria-hidden="true"
+          />
+          <span className="project-task-title">{task.title}</span>
+          <span className="project-task-updated">
+            {formatRelativeTime(task.updatedAt)}
+          </span>
+        </button>
+        <button
+          type="button"
+          className="management-trigger task-trigger"
+          aria-label={`管理对话 ${task.title}`}
+          onClick={() =>
+            setOpenManagementMenu((currentMenu) =>
+              currentMenu === `task:${task.id}` ? null : `task:${task.id}`
+            )
+          }
+        >
+          ···
+        </button>
+        {openManagementMenu === `task:${task.id}` && (
+          <div className="management-menu task-menu">
+            <button onClick={() => void renameTask(task)}>重命名</button>
+            <button
+              onClick={() => {
+                void exportTask(task.id);
+                setOpenManagementMenu(null);
+              }}
+            >
+              导出报告
+            </button>
+            <button onClick={() => hideTask(task)}>从列表隐藏</button>
+            <button className="danger" onClick={() => void deleteTask(task)}>
+              删除记录
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <main className="app-shell">
       <section className="content">
         <aside className="sidebar" data-open={sidebarOpen}>
-          <div className="sidebar-header">
-            <span className="sidebar-app-title">AI参谋</span>
-          </div>
           <div className="sidebar-primary">
             <div className="sidebar-primary-actions">
               <button
@@ -1270,7 +1588,7 @@ export default function OnlineAdvisorExperience() {
                 disabled={isBusy}
               >
                 <span aria-hidden="true">＋</span>
-                新建任务
+                新建项目
               </button>
               <button
                 type="button"
@@ -1338,17 +1656,29 @@ export default function OnlineAdvisorExperience() {
                           title={project.path}
                           aria-expanded={expanded}
                         >
-                          <span className="project-chevron" aria-hidden="true">
-                            {expanded ? "⌄" : "›"}
-                          </span>
-                          <span className="project-folder" aria-hidden="true">
-                            ▱
+                          <span
+                            className={`project-icon ${
+                              current ? "active" : ""
+                            } ${expanded ? "expanded" : ""}`}
+                            aria-hidden="true"
+                          >
+                            {projectIconGlyph()}
                           </span>
                           <span className="project-name">
                             <strong>{project.name}</strong>
-                            <small>{project.path}</small>
                           </span>
-                          <small>{project.tasks.length}</small>
+                          <span className="project-updated">
+                            {(() => {
+                              const latest = project.tasks.reduce<string | undefined>(
+                                (acc, t) =>
+                                  !acc || t.updatedAt.localeCompare(acc) > 0
+                                    ? t.updatedAt
+                                    : acc,
+                                undefined
+                              );
+                              return formatRelativeTime(latest);
+                            })()}
+                          </span>
                         </button>
                         <button
                           type="button"
@@ -1382,15 +1712,18 @@ export default function OnlineAdvisorExperience() {
                             <button onClick={() => renameProject(project)}>
                               修改显示名称
                             </button>
-                            <button onClick={() => hideProject(project)}>
-                              从侧边栏隐藏
+                            <button
+                              className="danger"
+                              onClick={() => void deleteProject(project)}
+                            >
+                              删除项目
                             </button>
                           </div>
                         )}
                       </div>
                       {expanded && (
                         <div className="project-task-list">
-                          {project.tasks.map((task) => renderTaskRow(task))}
+                          {project.tasks.map((task) => renderProjectTaskRow(task))}
                         </div>
                       )}
                     </section>
@@ -1402,13 +1735,23 @@ export default function OnlineAdvisorExperience() {
           </div>
           <div className="history-section recent-history-section">
             <div className="project-section-heading">
-              <span className="section-label">最近</span>
+              <span className="section-label">最近对话</span>
+              <button
+                type="button"
+                className="section-add-button"
+                aria-label="新建对话"
+                title="新建对话"
+                disabled={isBusy}
+                onClick={() => void createNewConversation()}
+              >
+                <span aria-hidden="true">＋</span>
+              </button>
             </div>
             <div className="project-list recent-list">
               {filteredRecentTasks.length === 0 ? (
                 searchQuery ? <small>没有匹配结果</small> : null
               ) : (
-                filteredRecentTasks.map((task) => renderTaskRow(task))
+                filteredRecentTasks.map((task) => renderRecentTaskRow(task))
               )}
             </div>
           </div>
@@ -1452,14 +1795,6 @@ export default function OnlineAdvisorExperience() {
               <span>{threadResetNotice}</span>
             </div>
           )}
-          <div className="chat-heading">
-            <div>
-              <span className="eyebrow">
-                {selectedTaskId ? "任务" : "新任务"}
-              </span>
-              <h2>{selectedTaskTitle || selectedProjectName || "开始新任务"}</h2>
-            </div>
-          </div>
 
           <div
             className="message-list"
@@ -1501,369 +1836,486 @@ export default function OnlineAdvisorExperience() {
                 )}
               </div>
             ) : (
-              messages.map((message) => (
-                <article key={message.id} className={`message ${message.role}`}>
-                  <div className="message-label">
-                    {message.role === "user" ? "你" : "DeepSeek"}
-                  </div>
-                  {message.role === "assistant" && message.taskStatus && (
-                    <div
-                      className={`task-state ${message.taskStatus.status}`}
-                      role="status"
-                    >
-                      <span className="task-state-dot" />
-                      <div>
-                        <strong>{message.taskStatus.label}</strong>
-                        {(message.taskStatus.detail ||
-                          message.taskStatus.pendingApprovalCount > 0) && (
-                          <small>
-                            {message.taskStatus.detail ||
-                              `${message.taskStatus.pendingApprovalCount} 项操作等待处理`}
-                          </small>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {messageEdit &&
-                  message.id === `${messageEdit.sourceRequestId}:user` ? (
-                    <form className="message-editor" onSubmit={submitMessageEdit}>
-                      {messageEdit.attachments.length > 0 && (
-                        <div className="edit-image-list">
-                          {messageEdit.attachments.map((attachment) => (
-                            <figure key={attachment.id}>
-                              <img
-                                src={attachment.previewUrl}
-                                alt={attachment.fileName}
-                              />
-                              <button
-                                type="button"
-                                aria-label={`删除图片 ${attachment.fileName}`}
-                                onClick={() => void removeEditImage(attachment.id)}
-                              >
-                                ×
-                              </button>
-                            </figure>
-                          ))}
-                        </div>
-                      )}
-                      <textarea
-                        aria-label="编辑消息内容"
-                        value={messageEdit.text}
-                        onChange={(event) =>
-                          setMessageEdit((current) =>
-                            current
-                              ? { ...current, text: event.target.value }
-                              : current
-                          )
-                        }
-                        onPaste={(event) => {
-                          const files = Array.from(event.clipboardData.files);
-                          if (files.some((file) => file.type.startsWith("image/"))) {
-                            event.preventDefault();
-                            void addEditImageFiles(files);
-                          }
-                        }}
-                      />
-                      <div className="message-editor-footer">
-                        <label className="edit-image-add">
-                          ＋ 图片
-                          <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            onChange={(event) => {
-                              void addEditImageFiles(
-                                Array.from(event.target.files ?? [])
-                              );
-                              event.currentTarget.value = "";
-                            }}
-                          />
-                        </label>
-                        <span />
-                        <button
-                          type="button"
-                          onClick={() => void cancelMessageEdit()}
-                        >
-                          取消
-                        </button>
-                        <button type="submit" className="primary">
-                          保存并重新执行
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    <>
-                  {message.attachments && message.attachments.length > 0 && (
-                    <MessageImages
-                      attachments={message.attachments}
-                      onOpen={(index) =>
-                        void openMessageImage(message.attachments!, index)
-                      }
-                    />
-                  )}
-                  {message.activities && message.activities.length > 0 && (
-                    <ExecutionLog
-                      messageId={message.id}
-                      activities={message.activities}
-                      taskStatus={message.taskStatus}
-                    />
-                  )}
-                  {message.role === "user" ? (
-                    <p className="answer-text answer-user">{message.text}</p>
-                  ) : message.state === "streaming" ? (
-                    <p className="answer-text answer-streaming">
-                      {message.text ? (
-                        <>
+              messages.map((message) => {
+                const isUser = message.role === "user";
+                const isEditing =
+                  messageEdit &&
+                  message.id === `${messageEdit.sourceRequestId}:user`;
+
+                // Qoder 风格：user 提问框不渲染「你」label，日期/复制/编辑按钮移动到 message 框外下方右侧
+                if (isUser && !isEditing) {
+                  return (
+                    <Fragment key={message.id}>
+                      <article className="message user">
+                        {message.attachments &&
+                          message.attachments.length > 0 && (
+                            <MessageImages
+                              attachments={message.attachments}
+                              onOpen={(index) =>
+                                void openMessageImage(
+                                  message.attachments!,
+                                  index
+                                )
+                              }
+                            />
+                          )}
+                        {message.activities &&
+                          message.activities.length > 0 && (
+                            <ExecutionLog
+                              messageId={message.id}
+                              activities={message.activities}
+                              taskStatus={message.taskStatus}
+                            />
+                          )}
+                        <p className="answer-text answer-user">
                           {message.text}
-                          <span className="streaming-cursor" aria-hidden="true">▍</span>
-                        </>
-                      ) : (
-                        <span className="thinking-dots" aria-label="AI 正在思考">
-                          <span aria-hidden="true" />
-                          <span aria-hidden="true" />
-                          <span aria-hidden="true" />
-                          <span className="thinking-dots-label">思考中</span>
-                        </span>
-                      )}
-                    </p>
-                  ) : (
-                    <div className="answer-text answer-rendered">
-                      <AIMessageContent
-                        content={message.text || "任务完成。"}
-                        tone="answer"
-                      />
-                    </div>
-                  )}
-                    </>
-                  )}
-                  {message.state === "stopped" && (
-                    <div className="message-recovery" role="status">
-                      <span className="message-recovery-icon" aria-hidden="true">⏸</span>
-                      <span>任务已停止，你可以点重试继续生成。</span>
-                      <button
-                        type="button"
-                        className="message-recovery-action"
-                        onClick={() => rerunMessage(message)}
-                        disabled={isBusy}
-                      >
-                        继续生成
-                      </button>
-                    </div>
-                  )}
-                  {message.state === "error" && (
-                    <div className="message-recovery message-recovery-error" role="alert">
-                      <span className="message-recovery-icon" aria-hidden="true">⚠</span>
-                      <span>生成失败：{message.text || "未知错误"}</span>
-                      <button
-                        type="button"
-                        className="message-recovery-action"
-                        onClick={() => rerunMessage(message)}
-                        disabled={isBusy}
-                      >
-                        重试
-                      </button>
-                    </div>
-                  )}
-                  {message.role === "assistant" &&
-                    !messageEdit &&
-                    message.state !== "streaming" &&
-                    (() => {
-                      const sources = parseSources(message.text || "");
-                      if (sources.length === 0) return null;
-                      return (
-                        <div className="message-sources" role="list">
-                          <header>
-                            <span className="message-sources-title">
-                              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                                <path
-                                  d="M9 4.5H5a1.5 1.5 0 0 0-1.5 1.5v8A1.5 1.5 0 0 0 5 15.5h10a1.5 1.5 0 0 0 1.5-1.5V11M11 4.5h5m0 0v5m0-5L9.5 11"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.6"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
-                              参考来源
-                            </span>
-                            <span className="message-sources-count">
-                              {sources.length} 条
-                            </span>
-                          </header>
-                          <ol>
-                            {sources.map((source, index) => (
-                              <li key={`${index}-${source.url ?? source.title}`} role="listitem">
-                                <span className="message-sources-index">
-                                  {index + 1}
-                                </span>
-                                {source.url ? (
-                                  <a
-                                    href={source.url}
-                                    target="_blank"
-                                    rel="noreferrer noopener"
-                                    className="message-sources-link"
-                                  >
-                                    <span className="message-sources-link-title">
-                                      {source.title}
-                                    </span>
-                                    {source.snippet && (
-                                      <span className="message-sources-link-snippet">
-                                        {source.snippet}
-                                      </span>
-                                    )}
-                                    <span className="message-sources-link-host">
-                                      {(() => {
-                                        try {
-                                          return new URL(source.url).hostname;
-                                        } catch {
-                                          return source.url;
-                                        }
-                                      })()}
-                                    </span>
-                                  </a>
-                                ) : (
-                                  <span className="message-sources-link">
-                                    <span className="message-sources-link-title">
-                                      {source.title}
-                                    </span>
-                                  </span>
-                                )}
-                              </li>
-                            ))}
-                          </ol>
-                        </div>
-                      );
-                    })()}
-                  {message.role === "assistant" &&
-                    !messageEdit &&
-                    message.state !== "streaming" &&
-                    message.text && (
-                      <div className="message-actions message-feedback">
+                        </p>
+                      </article>
+                      <div className="message-actions message-actions-outside">
+                        <time dateTime={message.createdAt}>
+                          {formatMessageTime(message.createdAt)}
+                        </time>
                         <button
                           type="button"
-                          className="message-action-retry"
-                          aria-label="重新生成这条回答"
+                          aria-label="复制消息"
+                          title="复制"
+                          onClick={() => void copyMessage(message)}
+                        >
+                          {copiedMessageId === message.id ? (
+                            <span className="message-action-label">已复制</span>
+                          ) : (
+                            <svg
+                              viewBox="0 0 20 20"
+                              aria-hidden="true"
+                              focusable="false"
+                            >
+                              <rect
+                                x="7.5"
+                                y="7.5"
+                                width="9"
+                                height="10"
+                                rx="1.6"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.4"
+                              />
+                              <path
+                                d="M5.5 12.5h-1A1.5 1.5 0 0 1 3 11V4.5A1.5 1.5 0 0 1 4.5 3H11a1.5 1.5 0 0 1 1.5 1.5v1"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.4"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="编辑消息"
                           title={
                             isBusy
                               ? "请先停止当前任务"
-                              : "把这条 user 消息重新填入 Composer"
+                              : message.turnId
+                                ? "编辑并重新执行"
+                                : "此历史消息暂不支持编辑"
                           }
-                          disabled={isBusy}
-                          onClick={() => rerunMessage(message)}
+                          disabled={isBusy || !message.turnId}
+                          onClick={() => void beginMessageEdit(message)}
                         >
-                          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                          <svg
+                            viewBox="0 0 20 20"
+                            aria-hidden="true"
+                            focusable="false"
+                          >
                             <path
-                              d="M3.5 10a6.5 6.5 0 0 1 11.13-4.55M16.5 10a6.5 6.5 0 0 1-11.13 4.55M14.6 3.4v2.55h-2.55M5.4 16.6v-2.55h2.55"
+                              d="M3.5 14.5V16.5h2L15 7l-2-2L3.5 14.5Z"
                               fill="none"
                               stroke="currentColor"
-                              strokeWidth="1.6"
+                              strokeWidth="1.4"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="m12 4 1.6-1.6a1.4 1.4 0 0 1 2 2L14 6"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.4"
                               strokeLinecap="round"
                               strokeLinejoin="round"
                             />
                           </svg>
-                          重新生成
                         </button>
+                        {message.branchOptions &&
+                          message.branchOptions.length > 1 && (
+                            <span className="message-branch-switcher">
+                              <button
+                                type="button"
+                                aria-label="上一个消息版本"
+                                disabled={isBusy}
+                                onClick={() => {
+                                  const index = Math.max(
+                                    0,
+                                    (message.activeBranchIndex ?? 0) - 1
+                                  );
+                                  void selectMessageBranch(
+                                    message.branchOptions![index].id
+                                  );
+                                }}
+                              >
+                                ‹
+                              </button>
+                              <span>
+                                {(message.activeBranchIndex ?? 0) + 1} /{" "}
+                                {message.branchOptions.length}
+                              </span>
+                              <button
+                                type="button"
+                                aria-label="下一个消息版本"
+                                disabled={isBusy}
+                                onClick={() => {
+                                  const index = Math.min(
+                                    message.branchOptions!.length - 1,
+                                    (message.activeBranchIndex ?? 0) + 1
+                                  );
+                                  void selectMessageBranch(
+                                    message.branchOptions![index].id
+                                  );
+                                }}
+                              >
+                                ›
+                              </button>
+                            </span>
+                          )}
+                      </div>
+                    </Fragment>
+                  );
+                }
+
+                return (
+                  <article
+                    key={message.id}
+                    className={`message ${message.role}`}
+                  >
+                    {!isUser && (
+                      <div className="message-label">DeepSeek</div>
+                    )}
+                    {message.role === "assistant" && message.taskStatus && (
+                      <div
+                        className={`task-state ${message.taskStatus.status}`}
+                        role="status"
+                      >
+                        <span className="task-state-dot" />
+                        <div>
+                          <strong>{message.taskStatus.label}</strong>
+                          {(message.taskStatus.detail ||
+                            message.taskStatus.pendingApprovalCount > 0) && (
+                            <small>
+                              {message.taskStatus.detail ||
+                                `${message.taskStatus.pendingApprovalCount} 项操作等待处理`}
+                            </small>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {isEditing ? (
+                      <form
+                        className="message-editor"
+                        onSubmit={submitMessageEdit}
+                      >
+                        {messageEdit.attachments.length > 0 && (
+                          <div className="edit-image-list">
+                            {messageEdit.attachments.map((attachment) => {
+                              const isDocument =
+                                (attachment.kind ?? "image") === "document";
+                              return (
+                                <figure
+                                  key={attachment.id}
+                                  className={
+                                    isDocument
+                                      ? "attachment-document"
+                                      : "attachment-image"
+                                  }
+                                >
+                                  {isDocument ? (
+                                    <div
+                                      className="document-chip"
+                                      aria-hidden="true"
+                                    >
+                                      <span className="document-icon">📄</span>
+                                      <span className="document-label">
+                                        文档
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <img
+                                      src={attachment.previewUrl}
+                                      alt={attachment.fileName}
+                                    />
+                                  )}
+                                  <button
+                                    type="button"
+                                    aria-label={`删除附件 ${attachment.fileName}`}
+                                    onClick={() =>
+                                      void removeEditAttachment(attachment.id)
+                                    }
+                                  >
+                                    ×
+                                  </button>
+                                </figure>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <textarea
+                          aria-label="编辑消息内容"
+                          value={messageEdit.text}
+                          onChange={(event) =>
+                            setMessageEdit((current) =>
+                              current
+                                ? { ...current, text: event.target.value }
+                                : current
+                            )
+                          }
+                          onPaste={(event) => {
+                            const files = Array.from(
+                              event.clipboardData.files
+                            );
+                            const hasImage = files.some((file) =>
+                              file.type.startsWith("image/")
+                            );
+                            const hasDocument = files.some((file) =>
+                              isDocumentFile(file)
+                            );
+                            if (!hasImage && !hasDocument) return;
+                            event.preventDefault();
+                            void addEditFiles(files);
+                          }}
+                        />
+                        <div className="message-editor-footer">
+                          <label
+                            className="edit-image-add"
+                            data-tip="上传本地图片或文档（png/jpg/webp/pdf/docx/txt/md）"
+                            title="上传本地图片或文档（png/jpg/webp/pdf/docx/txt/md）"
+                          >
+                            <span aria-hidden="true">📎</span>
+                            上传
+                            <input
+                              type="file"
+                              accept="image/*,.pdf,.docx,.doc,.rtf,.txt,.md"
+                              multiple
+                              onChange={(event) => {
+                                void addEditFiles(
+                                  Array.from(event.target.files ?? [])
+                                );
+                                event.currentTarget.value = "";
+                              }}
+                            />
+                          </label>
+                          <span />
+                          <button
+                            type="button"
+                            onClick={() => void cancelMessageEdit()}
+                          >
+                            取消
+                          </button>
+                          <button type="submit" className="primary">
+                            保存并重新执行
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <>
+                        {message.attachments &&
+                          message.attachments.length > 0 && (
+                            <MessageImages
+                              attachments={message.attachments}
+                              onOpen={(index) =>
+                                void openMessageImage(
+                                  message.attachments!,
+                                  index
+                                )
+                              }
+                            />
+                          )}
+                        {message.activities &&
+                          message.activities.length > 0 && (
+                            <ExecutionLog
+                              messageId={message.id}
+                              activities={message.activities}
+                              taskStatus={message.taskStatus}
+                            />
+                          )}
+                        {message.role === "user" ? (
+                          <p className="answer-text answer-user">
+                            {message.text}
+                          </p>
+                        ) : message.state === "streaming" ? (
+                          <p className="answer-text answer-streaming">
+                            {message.text ? (
+                              <>
+                                {message.text}
+                                <span
+                                  className="streaming-cursor"
+                                  aria-hidden="true"
+                                >
+                                  ▍
+                                </span>
+                              </>
+                            ) : (
+                              <span
+                                className="thinking-dots"
+                                aria-label="AI 正在思考"
+                              >
+                                <span aria-hidden="true" />
+                                <span aria-hidden="true" />
+                                <span aria-hidden="true" />
+                                <span className="thinking-dots-label">
+                                  思考中
+                                </span>
+                              </span>
+                            )}
+                          </p>
+                        ) : (
+                          <div className="answer-text answer-rendered">
+                            <AIMessageContent
+                              content={message.text || "任务完成。"}
+                              tone="answer"
+                              feedback={{
+                                currentRating: messageFeedback[message.id],
+                                isBusy,
+                                onRerun: () => rerunMessage(message),
+                                onRate: (rating) => rateMessage(message, rating),
+                              }}
+                              workspacePath={workspacePath}
+                              onImageClick={(info) => setLightboxImage(info)}
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {message.state === "stopped" && (
+                      <div className="message-recovery" role="status">
+                        <span
+                          className="message-recovery-icon"
+                          aria-hidden="true"
+                        >
+                          ⏸
+                        </span>
+                        <span>任务已停止，你可以点重试继续生成。</span>
                         <button
                           type="button"
-                          className={`feedback-up ${
-                            messageFeedback[message.id] === "up" ? "active" : ""
-                          }`}
-                          aria-label="这条回答有帮助"
-                          aria-pressed={messageFeedback[message.id] === "up"}
-                          title="这条回答有帮助"
-                          onClick={() => rateMessage(message, "up")}
+                          className="message-recovery-action"
+                          onClick={() => rerunMessage(message)}
+                          disabled={isBusy}
                         >
-                          <span aria-hidden="true">👍</span>
-                          有帮助
-                        </button>
-                        <button
-                          type="button"
-                          className={`feedback-down ${
-                            messageFeedback[message.id] === "down" ? "active" : ""
-                          }`}
-                          aria-label="这条回答需要改进"
-                          aria-pressed={messageFeedback[message.id] === "down"}
-                          title="这条回答需要改进"
-                          onClick={() => rateMessage(message, "down")}
-                        >
-                          <span aria-hidden="true">👎</span>
-                          需要改进
+                          继续生成
                         </button>
                       </div>
                     )}
-                  {message.role === "user" && !messageEdit && (
-                    <div className="message-actions">
-                      <time dateTime={message.createdAt}>
-                        {formatMessageTime(message.createdAt)}
-                      </time>
-                      <button
-                        type="button"
-                        aria-label="复制消息"
-                        title="复制"
-                        onClick={() => void copyMessage(message)}
+                    {message.state === "error" && (
+                      <div
+                        className="message-recovery message-recovery-error"
+                        role="alert"
                       >
-                        {copiedMessageId === message.id ? "已复制" : "▢"}
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="编辑消息"
-                        title={
-                          isBusy
-                            ? "请先停止当前任务"
-                            : message.turnId
-                              ? "编辑并重新执行"
-                              : "此历史消息暂不支持编辑"
-                        }
-                        disabled={isBusy || !message.turnId}
-                        onClick={() => void beginMessageEdit(message)}
-                      >
-                        ✎
-                      </button>
-                      {message.branchOptions &&
-                        message.branchOptions.length > 1 && (
-                          <span className="message-branch-switcher">
-                            <button
-                              type="button"
-                              aria-label="上一个消息版本"
-                              disabled={isBusy}
-                              onClick={() => {
-                                const index = Math.max(
-                                  0,
-                                  (message.activeBranchIndex ?? 0) - 1
-                                );
-                                void selectMessageBranch(
-                                  message.branchOptions![index].id
-                                );
-                              }}
-                            >
-                              ‹
-                            </button>
-                            <span>
-                              {(message.activeBranchIndex ?? 0) + 1} /{" "}
-                              {message.branchOptions.length}
-                            </span>
-                            <button
-                              type="button"
-                              aria-label="下一个消息版本"
-                              disabled={isBusy}
-                              onClick={() => {
-                                const index = Math.min(
-                                  message.branchOptions!.length - 1,
-                                  (message.activeBranchIndex ?? 0) + 1
-                                );
-                                void selectMessageBranch(
-                                  message.branchOptions![index].id
-                                );
-                              }}
-                            >
-                              ›
-                            </button>
-                          </span>
-                        )}
-                    </div>
-                  )}
-                </article>
-              ))
+                        <span
+                          className="message-recovery-icon"
+                          aria-hidden="true"
+                        >
+                          ⚠
+                        </span>
+                        <span>
+                          生成失败：{message.text || "未知错误"}
+                        </span>
+                        <button
+                          type="button"
+                          className="message-recovery-action"
+                          onClick={() => rerunMessage(message)}
+                          disabled={isBusy}
+                        >
+                          重试
+                        </button>
+                      </div>
+                    )}
+                    {message.role === "assistant" &&
+                      !messageEdit &&
+                      message.state !== "streaming" &&
+                      (() => {
+                        const sources = parseSources(message.text || "");
+                        if (sources.length === 0) return null;
+                        return (
+                          <div className="message-sources" role="list">
+                            <header>
+                              <span className="message-sources-title">
+                                <svg
+                                  viewBox="0 0 20 20"
+                                  aria-hidden="true"
+                                  focusable="false"
+                                >
+                                  <path
+                                    d="M9 4.5H5a1.5 1.5 0 0 0-1.5 1.5v8A1.5 1.5 0 0 0 5 15.5h10a1.5 1.5 0 0 0 1.5-1.5V11M11 4.5h5m0 0v5m0-5L9.5 11"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.6"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
+                                参考来源
+                              </span>
+                              <span className="message-sources-count">
+                                {sources.length} 条
+                              </span>
+                            </header>
+                            <ol>
+                              {sources.map((source, index) => (
+                                <li
+                                  key={`${index}-${source.url ?? source.title}`}
+                                  role="listitem"
+                                >
+                                  <span className="message-sources-index">
+                                    {index + 1}
+                                  </span>
+                                  {source.url ? (
+                                    <a
+                                      href={source.url}
+                                      target="_blank"
+                                      rel="noreferrer noopener"
+                                      className="message-sources-link"
+                                    >
+                                      <span className="message-sources-link-title">
+                                        {source.title}
+                                      </span>
+                                      {source.snippet && (
+                                        <span className="message-sources-link-snippet">
+                                          {source.snippet}
+                                        </span>
+                                      )}
+                                      <span className="message-sources-link-host">
+                                        {(() => {
+                                          try {
+                                            return new URL(source.url).hostname;
+                                          } catch {
+                                            return source.url;
+                                          }
+                                        })()}
+                                      </span>
+                                    </a>
+                                  ) : (
+                                    <span className="message-sources-link">
+                                      <span className="message-sources-link-title">
+                                        {source.title}
+                                      </span>
+                                    </span>
+                                  )}
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        );
+                      })()}
+                  </article>
+                );
+              })
             )}
             {!autoFollow && messages.length > 0 && (
               <button
@@ -1893,9 +2345,7 @@ export default function OnlineAdvisorExperience() {
           </div>
 
           <form
-            className={`composer ${dragActive ? "drag-active" : ""} ${
-              composerExpanded ? "expanded" : ""
-            }`}
+            className={`composer ${dragActive ? "drag-active" : ""}`}
             onSubmit={submit}
             onDragEnter={(event) => {
               event.preventDefault();
@@ -1973,95 +2423,87 @@ export default function OnlineAdvisorExperience() {
             )}
             {attachments.length > 0 && (
               <div className="attachment-grid">
-                {attachments.map((attachment) => (
-                  <figure key={attachment.id}>
-                    <img src={attachment.previewUrl} alt={attachment.fileName} />
-                    <figcaption title={attachment.fileName}>
-                      {attachment.fileName}
-                    </figcaption>
-                    <button
-                      type="button"
-                      aria-label={`删除 ${attachment.fileName}`}
-                      onClick={() => removeImage(attachment.id)}
+                {attachments.map((attachment) => {
+                  const isDocument =
+                    (attachment.kind ?? "image") === "document";
+                  return (
+                    <figure
+                      key={attachment.id}
+                      className={
+                        isDocument ? "attachment-document" : "attachment-image"
+                      }
                     >
-                      ×
-                    </button>
-                  </figure>
-                ))}
+                      {isDocument ? (
+                        <div className="document-chip" aria-hidden="true">
+                          <span className="document-icon">📄</span>
+                          <span className="document-label">文档</span>
+                        </div>
+                      ) : (
+                        <img
+                          src={attachment.previewUrl}
+                          alt={attachment.fileName}
+                        />
+                      )}
+                      <figcaption title={attachment.fileName}>
+                        <span className="attachment-name">
+                          {attachment.fileName}
+                        </span>
+                        <span className="attachment-size">
+                          {formatBytes(attachment.size)}
+                        </span>
+                      </figcaption>
+                      <button
+                        type="button"
+                        aria-label={`删除附件 ${attachment.fileName}`}
+                        onClick={() => removeAttachment(attachment.id)}
+                      >
+                        ×
+                      </button>
+                    </figure>
+                  );
+                })}
               </div>
             )}
             {imageError && <p className="image-error">{imageError}</p>}
-            <div className="composer-input-wrap">
-              <textarea
-                ref={draftRef}
-                rows={1}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder={
-                  isBusy
-                    ? "补充当前执行要求…"
-                    : workspacePath
-                    ? "输入你的任务或选择下面的员工开始…"
-                    : "请先选择一个项目目录"
+            {attachmentError && <p className="image-error">{attachmentError}</p>}
+            <textarea
+              ref={draftRef}
+              rows={1}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder={
+                isBusy
+                  ? "补充当前执行要求…"
+                  : workspacePath
+                  ? "输入你的任务或选择下面的员工开始…"
+                  : "请先选择一个项目目录"
+              }
+              disabled={!workspacePath}
+              onPaste={isBusy ? undefined : handlePaste}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
                 }
-                disabled={!workspacePath}
-                onPaste={isBusy ? undefined : handlePaste}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    event.currentTarget.form?.requestSubmit();
-                  }
-                }}
-              />
-              <button
-                type="button"
-                className="composer-expand-button"
-                onClick={() => setComposerExpanded((current) => !current)}
-                title={composerExpanded ? "收起对话框" : "拉大对话框高度"}
-                aria-label={composerExpanded ? "收起对话框" : "拉大对话框高度"}
-                aria-pressed={composerExpanded}
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  {composerExpanded ? (
-                    <>
-                      <path d="M9 4v6H3" />
-                      <path d="M15 20v-6h6" />
-                    </>
-                  ) : (
-                    <>
-                      <path d="M4 9V3h6" />
-                      <path d="M20 15v6h-6" />
-                    </>
-                  )}
-                </svg>
-              </button>
-            </div>
+              }}
+            />
             <div className="composer-footer">
               <div className="composer-tools">
                 <button
                   type="button"
                   className="image-button"
-                  onClick={chooseImages}
+                  onClick={() => void chooseAttachments()}
                   disabled={isBusy}
-                  title="添加图片，也可以拖放或粘贴"
+                  data-tip="上传本地图片或文档（png/jpg/webp/pdf/docx/txt/md）"
+                  title="上传本地图片或文档（png/jpg/webp/pdf/docx/txt/md）"
                 >
-                  <span aria-hidden="true">＋</span>
-                  图片
+                  <span aria-hidden="true">📎</span>
+                  上传
                 </button>
                 <small>
                   {attachmentSessionId
                     ? "附件已保存"
-                    : "可拖放或粘贴图片"}
+                    : "可拖放或粘贴图片与文档"}
                 </small>
                 <small className="composer-hint-shortcut">
                   Enter 发送 · Shift + Enter 换行
@@ -2072,6 +2514,7 @@ export default function OnlineAdvisorExperience() {
                   className={`composer-permission-picker ${
                     permissionMenuOpen ? "open" : ""
                   }`}
+                  ref={permissionMenuRef}
                   onKeyDown={(event) => {
                     if (event.key === "Escape") setPermissionMenuOpen(false);
                   }}
@@ -2125,6 +2568,7 @@ export default function OnlineAdvisorExperience() {
                   className={`composer-model-picker ${
                     modelMenuOpen ? "open" : ""
                   }`}
+                  ref={modelMenuRef}
                   onKeyDown={(event) => {
                     if (event.key === "Escape") setModelMenuOpen(false);
                   }}
@@ -2206,7 +2650,7 @@ export default function OnlineAdvisorExperience() {
                     aria-label="发送"
                     title="发送"
                   >
-                    ↑
+                    发送
                   </button>
                 )}
               </div>
@@ -2417,6 +2861,38 @@ export default function OnlineAdvisorExperience() {
               <small>提示：发送中可输入补充指令并回车（steer 模式）。</small>
             </footer>
           </div>
+        </div>
+      )}
+      {lightboxImage && (
+        <div
+          className="lightbox-image-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target) setLightboxImage(null)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setLightboxImage(null)
+          }}
+          tabIndex={-1}
+        >
+          <figure
+            className="lightbox-image-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`查看图片 ${lightboxImage.fileName}`}
+          >
+            <img src={lightboxImage.url} alt={lightboxImage.fileName} />
+            <figcaption>
+              <span>{lightboxImage.fileName}</span>
+              <button
+                type="button"
+                onClick={() => setLightboxImage(null)}
+                aria-label="关闭大图预览"
+              >
+                ×
+              </button>
+            </figcaption>
+          </figure>
         </div>
       )}
       {imagePreview && (
@@ -2796,11 +3272,26 @@ function formatMessageTime(value?: string) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  });
+  // Qoder 风格：完整年月日 + 时分，例如 "2026-08-25 01:06"
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mi = String(date.getMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+}
+
+/**
+ * 把字节数格式化为 "1.2 MB" / "832 KB" / "12 B"，供附件 chip 显示文件大小。
+ * 用 1024 进制，与 macOS Finder / 系统文件属性保持一致。
+ */
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const power = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  const value = bytes / Math.pow(1024, power);
+  const fractionDigits = power === 0 || value >= 100 ? 0 : 1;
+  return `${value.toFixed(fractionDigits)} ${units[power]}`;
 }
 
 async function hydrateConversationAttachments(messages: Message[]) {
@@ -2987,6 +3478,20 @@ function formatDuration(durationMs?: number) {
   if (durationMs === undefined) return "未完成";
   if (durationMs < 1000) return `${durationMs} ms`;
   return `${(durationMs / 1000).toFixed(1)} s`;
+}
+
+// 「项目」区右侧元信息 / 子项时间：ISO 字符串 -> 相对时间
+function formatRelativeTime(iso: string | undefined, now: number = Date.now()): string {
+  if (!iso) return "";
+  const at = new Date(iso).getTime();
+  if (Number.isNaN(at)) return "";
+  const diff = now - at;
+  if (diff < 60_000) return "刚刚";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`;
+  if (diff < 86_400_000 * 7) return `${Math.floor(diff / 86_400_000)} 天前`;
+  const d = new Date(at);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
 function taskStatusLabel(status: TaskStatus, pendingApprovalCount = 0) {

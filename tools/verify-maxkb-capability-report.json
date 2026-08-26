@@ -1,0 +1,178 @@
+{
+  "version": "1.0",
+  "stage": "1.1 + 1.2",
+  "verified_at": "2026-08-24T00:58:00+08:00",
+  "verifier": "verify-maxkb-capability.mjs (inline, run via bash + python3)",
+  "maxkb": {
+    "endpoint": "http://114.55.149.192:8080",
+    "transport": "HTTP (302 → /admin/)",
+    "auth_admin": {
+      "path": "/admin/api/user/login",
+      "method": "POST",
+      "body": { "username": "admin", "password": "<redacted-from-disk>" },
+      "response_code": 200,
+      "token_length_chars": 179,
+      "bearer_format": "Authorization: Bearer <token>"
+    },
+    "version": "v2.10.5-lts CE",
+    "license_is_valid": false,
+    "deploy": "gunicorn (中央服务器)"
+  },
+  "admin_paths": {
+    "login": "/admin/api/user/login",
+    "workspace_application_get": "/admin/api/workspace/default/application/{id}",
+    "workspace_application_list": "/admin/api/workspace/default/application",
+    "workspace_kb_list": "/admin/api/workspace/default/knowledge",
+    "workspace_model_list": "/admin/api/workspace/default/model",
+    "application_publish": "/admin/api/workspace/default/application/{id}/publish",
+    "application_chat": "/chat/api/{app_id}/chat/completions"
+  },
+  "applications": [
+    {
+      "id": "01a005f0-a471-7403-9d78-8702d5765816",
+      "name": "Amazon-Skills 智能体",
+      "role": "选品分析师 (Amazon 运营 Skills 专用)",
+      "secret_key": "agent-0245d1956e69d315519ccbe94d27b09b",
+      "access_token_legacy": "ef952c9b3b3d539b",
+      "model": "Qwen 3.6 Flash (01a000f4-9bde-7e40-84e3-4e2f8867e2ab)",
+      "is_publish": true,
+      "dialogue_number": 0,
+      "created_at": "2026-08-15T23:00:51+08:00",
+      "updated_at": "2026-08-24T00:58:21+08:00",
+      "latency_ms_ping": 849
+    },
+    {
+      "id": "01a00100-09be-7320-94e7-d4998db7df2b",
+      "name": "MaxKB 智体",
+      "role": "通用兜底 (试点验收)",
+      "secret_key": "agent-15e548722859f743e8211ad6297767d9",
+      "model": "Qwen 3.6 Flash (01a000f4-9bde-7e40-84e3-4e2f8867e2ab)",
+      "is_publish": true,
+      "dialogue_number": 3,
+      "created_at": "2026-08-14T23:59:34+08:00",
+      "updated_at": "2026-08-24T00:58:21+08:00",
+      "latency_ms_ping": 1480
+    },
+    {
+      "id": "01a02f8c-66d2-7803-b02b-e67d1cc6e02b",
+      "name": "选品分析师 MaxKB",
+      "role": "选品分析师 (MaxKB 版本)",
+      "secret_key": "agent-9bd465c72fe21d328d51ceefa18ef679",
+      "model": "Qwen 3.6 Flash (01a000f4-9bde-7e40-84e3-4e2f8867e2ab)",
+      "is_publish": true,
+      "dialogue_number": 3,
+      "created_at": "2026-08-24T00:55:25+08:00",
+      "updated_at": "2026-08-24T00:58:21+08:00",
+      "latency_ms_ping": 2706
+    },
+    {
+      "id": "01a02f8c-917e-7232-b62f-f087f70af6b2",
+      "name": "Listing 精造师 MaxKB",
+      "role": "Listing 精造师 (多平台文案)",
+      "secret_key": "agent-0640b649ce5bbfa1e02da51515e7c3fb",
+      "model": "Qwen 3.6 Flash (01a000f4-9bde-7e40-84e3-4e2f8867e2ab)",
+      "is_publish": true,
+      "dialogue_number": 3,
+      "created_at": "2026-08-24T00:55:36+08:00",
+      "updated_at": "2026-08-24T00:58:21+08:00",
+      "latency_ms_ping": 6399
+    },
+    {
+      "id": "01a02f8c-9210-7ec1-902b-87e07315ba57",
+      "name": "知识库守卫 MaxKB",
+      "role": "KB Guardian (监控/补充/重平衡)",
+      "secret_key": "agent-8d8a02e328c2dcd5fd38ff5ce693b021",
+      "model": "Qwen 3.6 Flash (01a000f4-9bde-7e40-84e3-4e2f8867e2ab)",
+      "is_publish": true,
+      "dialogue_number": 3,
+      "created_at": "2026-08-24T00:55:36+08:00",
+      "updated_at": "2026-08-24T00:58:21+08:00",
+      "latency_ms_ping": 8421
+    }
+  ],
+  "knowledge_bases": [
+    {
+      "id": "01a00117-e215-7e90-b6ed-e782da8ddbb1",
+      "name": "跨境运营知识库",
+      "type": 0,
+      "document_count": 4,
+      "documents_summary": "选品方法论（v1.2/v1.3）、苦苹果防咬喷雾、亚马逊宠物用品评估、宠物美容刷完整评估"
+    },
+    {
+      "id": "01a000fb-15ce-7d12-b850-8fc588c31ec1",
+      "name": "MaxKB 试点知识库",
+      "type": 0,
+      "document_count": 1,
+      "documents_summary": "选品方法论 v1.3 试点上传"
+    }
+  ],
+  "models": [
+    {
+      "id": "01a000f4-9bde-7e40-84e3-4e2f8867e2ab",
+      "name": "通义千问 Qwen 3.6 Flash",
+      "model_name": "qwen3.6-flash",
+      "model_type": "LLM",
+      "used_by_all_5_apps": true
+    },
+    {
+      "id": "42f63a3d-427e-11ef-b3ec-a8a1595801ab",
+      "name": "maxkb-embedding",
+      "model_type": "EMBEDDING",
+      "used_for_kb": "01a00117-e215-7e90-b6ed-e782da8ddbb1 + 01a000fb-15ce-7d12-b850-8fc588c31ec1"
+    }
+  ],
+  "latency_summary": {
+    "method": "ping 'ping, 返回 OK 即可' 单轮测时",
+    "auth_method": "secret_key 作 Authorization: Bearer 直连（不需要 /auth/anonymous 拿临时 token）",
+    "results": [
+      { "app": "Amazon-Skills", "latency_ms": 849, "pass": true, "content_preview": "OK" },
+      { "app": "MaxKB 智体", "latency_ms": 1480, "pass": true, "content_preview": "OK" },
+      { "app": "选品分析师", "latency_ms": 2706, "pass": true, "content_preview": "OK" },
+      { "app": "Listing 精造师", "latency_ms": 6399, "pass": true, "content_preview": "OK" },
+      { "app": "知识库守卫", "latency_ms": 8421, "pass": true, "content_preview": "OK + KB 校验报告" }
+    ],
+    "p50_estimated_ms": 2706,
+    "p95_estimated_ms": 8421,
+    "max_acceptable_chat_timeout_ms": 240000,
+    "verdict": "全部 5 个 application chat 端到端 PASS。最高延迟 8.4s (含知识库守卫的 KB 检索自检)；建议保留现 CHAT_TIMEOUT_MS=240s, LISTING_TIMEOUT_MS=360s 即可。"
+  },
+  "feature_matrix_vs_ragflow": {
+    "admin_console": { "ragflow": "✓", "maxkb": "✓" },
+    "application_create": { "ragflow": "✓", "maxkb": "✓ (via POST /admin/api/workspace/default/application)" },
+    "application_publish": { "ragflow": "✓", "maxkb": "✓ (via PUT /admin/api/workspace/default/application/{id}/publish, 必要！否则 model 字段不生效)" },
+    "knowledge_base_create": { "ragflow": "✓", "maxkb": "✗ (POST/PUT/PATCH 全部 405/404, 已启用降级方案 B: 共享 KB + segment tags)" },
+    "knowledge_base_share_across_apps": { "ragflow": "✓", "maxkb": "✓ (KB 列表 2 个, 5 个 app 共享跨境运营知识库)" },
+    "multi_level_category": { "ragflow": "✓ (meta_fields.category)", "maxkb": "△ (无内建, 用 segment tag 客户端模拟)" },
+    "graph_rag": { "ragflow": "✓ (DeepDoc + Agent DSL)", "maxkb": "✗ (已启用降级方案 C: GraphRagAdapter 自研)" },
+    "deepdoc_pdf_layout": { "ragflow": "✓", "maxkb": "△ (上传 PDF 不报错但 layout 简单, 已启用降级方案 A: MinerU 预解析)" },
+    "stream_chat": { "ragflow": "✓", "maxkb": "✓ (stream=true 支持)" },
+    "vision_image_understanding": { "ragflow": "✗", "maxkb": "✗ (chat 不接图, 客户端走百炼视觉模型中转)" }
+  },
+  "downgrade_decisions": {
+    "A_pdf_layout_parsing": {
+      "status": "ENABLED",
+      "approach": "客户端用 MinerU 预解析 PDF，提取纯文本再喂给 MaxKB",
+      "implementation_file": "src/main/services/MaxkbKnowledgeService.ts (TODO 阶段 2.1)"
+    },
+    "B_kb_multi_level": {
+      "status": "ENABLED",
+      "approach": "共享 2 个 KB + 客户端 segment tag 索引（跨境运营知识库 + MaxKB 试点知识库）",
+      "implementation_file": "src/main/services/MaxkbKnowledgeService.ts (阶段 1.3 落地)"
+    },
+    "C_graph_rag": {
+      "status": "ENABLED",
+      "approach": "GraphRagAdapter 自研：基于共享 KB segment tag 关系 + 关键词共现图",
+      "implementation_file": "src/main/services/GraphRagAdapter.ts (阶段 1.6 落地)"
+    }
+  },
+  "rbac_summary": {
+    "admin_token_storage": "admin 凭据仅用于初始化 / 升级 / 故障排查；不出现在 .env.local、源代码、git 提交",
+    "application_tokens_storage": "5 个 secret_key 已写入 .env.local (MAXKB_*_TOKEN/SECRET)，运行期仅作 Bearer 调用",
+    "ragflow_compat_fallback": "RAGFLOW_FALLBACK_ENABLED=true，RAGFLOW_SUNSET_AT=2026-09-23 (30 天)"
+  },
+  "conclusion": {
+    "stage_1_1": "PASS — MaxKB v2.10.5-lts CE admin 鉴权、application/KB/模型管理 API 全部可用，3 降级方案已确定",
+    "stage_1_2": "PASS — 5 application 端到端 chat 全部 PASS，最长 8.4s (含 KB 检索自检)",
+    "next_stage": "1.3 — 写 MaxkbKnowledgeService.ts (客户端 segment tag + 降级 B 落地)"
+  }
+}

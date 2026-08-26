@@ -3,7 +3,7 @@ export type GuardianFrequency = 'manual' | 'daily' | 'weekly'
 export type GuardianRunStatus = 'ok' | 'partial' | 'failed'
 export type GuardianRunTrigger = 'manual' | 'schedule' | 'catchup'
 // I.5 阶段新增：同步模式
-// - soft：保留旧 docId，调 RAGFlow update_doc 替换文件 + 重解析（旧 chunk 在重解析期间仍可被检索）
+// - soft：保留旧 docId，调 MaxKB 文档 PUT 替换文件 + 重解析（旧 chunk 在重解析期间仍可被检索）
 // - hard：先删旧 docId + 再上传新文件 + 重解析（I.2 阶段默认行为；保留作回退路径）
 export type GuardianSyncMode = 'soft' | 'hard'
 
@@ -14,7 +14,7 @@ export interface GuardianSkillStats {
   failed: number
   // I.6 阶段新增：本次清理的孤儿文档数（源文件被删/重命名后 KB 中残留的旧 docId）
   orphansRemoved: number
-  // I.7 阶段新增：软同步失败时自动回退到硬同步的次数（docId 失效/老版本 RAGFlow 时的自动恢复）
+  // I.7 阶段新增：软同步失败时自动回退到硬同步的次数（docId 失效/PUT 200 但未持久化时的自动恢复）
   fallbackToHard: number
 }
 
@@ -33,11 +33,11 @@ export interface GuardianSkill {
   category?: string
   // I.2 阶段新增：启动时幂等补齐的分类（树形；父不存在时按顺序创建）
   ensureCategories?: GuardianCategorySpec[]
-  // I.5 阶段新增：同步模式（缺省 soft：保留旧 docId + RAGFlow update_doc；hard：先删旧再传新，I.2 默认行为）
+  // I.5 阶段新增：同步模式（缺省 soft：保留旧 docId + MaxKB 文档 PUT；hard：先删旧再传新，I.2 默认行为）
   syncMode?: GuardianSyncMode
   // I.6 阶段新增：孤儿清理开关（缺省 true：源文件被删/重命名后 KB 中残留的旧 docId 会被自动清理；运行时可用 options.orphanCleanup 临时覆盖）
   orphanCleanup?: boolean
-  // I.7 阶段新增：软同步失败时是否自动回退到硬同步（缺省 true：docId 失效/RAGFlow 老版本时自动 deleteDocs + uploadAndParse 恢复）
+  // I.7 阶段新增：软同步失败时是否自动回退到硬同步（缺省 true：docId 失效/PUT 异常时自动 deleteDocs + uploadAndParse 恢复）
   softFallbackHard?: boolean
   lastRunAt?: number
   lastStats?: GuardianSkillStats
@@ -111,7 +111,7 @@ export interface GuardianRunOptions {
   syncMode?: GuardianSyncMode
   // I.6 阶段新增（可选）：是否清理孤儿文档（缺省 true；源文件被删/重命名后 KB 中残留的旧 docId 会被删除）
   orphanCleanup?: boolean
-  // I.7 阶段新增（可选）：软同步失败时是否自动回退到硬同步（缺省 true：docId 失效/RAGFlow 老版本时自动 deleteDocs + uploadAndParse 恢复；false 维持 I.5 行为只 push failure）
+  // I.7 阶段新增（可选）：软同步失败时是否自动回退到硬同步（缺省 true：docId 失效/PUT 异常时自动 deleteDocs + uploadAndParse 恢复；false 维持 I.5 行为只 push failure）
   softFallbackHard?: boolean
 }
 

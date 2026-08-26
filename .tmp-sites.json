@@ -1,0 +1,1271 @@
+[
+  {
+    "id": "亚马逊",
+    "name": "亚马逊",
+    "region": "hot",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202403/1711417194425507_1682645116800_%E4%BA%9A%E9%A9%AC%E9%80%8A%282%29.jpeg",
+    "description": "亚马逊（Amazon），是美国最大的一家电商企业，位于华盛顿州的西雅图，它是最早开始运营电商业务的公司之一",
+    "homepageUrl": "https://www.amz123.com/amazon?from=kd",
+    "openGuideUrl": "https://www.amz123.com/amazon/guide"
+  },
+  {
+    "id": "tiktok美区",
+    "name": "TikTok美区",
+    "region": "hot",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1681278556452_tiktoklogo.png",
+    "description": "TikTok Shop（也称TikTok 电商）是创新型电商平台，汇集商家、达人和买家。 TikTok Shop为商家和品牌提供一站式电子商务解决方案，助力在TikTok上实现销售和增长",
+    "homepageUrl": "https://www.amz123.com/tiktok?from=kd",
+    "openGuideUrl": "https://www.amz123.com/tiktok/guide"
+  },
+  {
+    "id": "emag",
+    "name": "eMAG",
+    "region": "hot",
+    "logoUrl": "https://img.amz123.com/upload/pingtai-img/20210715/60f01186043c7.png",
+    "description": "罗马尼亚在线零售商，以电子及IT产品起家，后增加服装、化妆品、园艺等类别的产品",
+    "homepageUrl": "https://www.amz123.com/form/ajka4Z?from=rmpt",
+    "openGuideUrl": "https://www.amz123.com/form/guide"
+  },
+  {
+    "id": "walmart",
+    "name": "Walmart",
+    "region": "hot",
+    "logoUrl": "https://img.amz123.com/upload/pingtai-img/20210715/60efcdc70a3cf.png",
+    "description": "沃尔玛百货有限公司，是一家美国的世界性连锁企业，沃尔玛主要有沃尔玛购物广场、山姆会员店、沃尔玛商店、沃尔玛社区店等四种营业方式。",
+    "homepageUrl": "https://www.amz123.com/walmart?from=kd",
+    "openGuideUrl": "https://www.amz123.com/walmart/guide"
+  },
+  {
+    "id": "wayfair",
+    "name": "Wayfair",
+    "region": "hot",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202607/1782876007670119_%E5%9B%BE%E7%89%871.webp",
+    "description": "专注于家具家居的垂直电商平台，覆盖美国、加拿大、英国、爱尔兰4大站点，助力中国及东南亚供应商成功开启跨境之旅",
+    "homepageUrl": "https://www.amz123.com/wayfair",
+    "openGuideUrl": "https://www.amz123.com/wayfair/guide"
+  },
+  {
+    "id": "allegro",
+    "name": "Allegro",
+    "region": "hot",
+    "logoUrl": "https://img.amz123.com/image_cloud/202302/1677201647459_allegro.png",
+    "description": "Allegro创建于波兰，是中东欧最大的电商平台——已有上万名中国商家通过Allegro接触波兰、捷克与斯洛伐克的潜在客户",
+    "homepageUrl": "https://www.amz123.com/allegro?from=kd",
+    "openGuideUrl": "https://www.amz123.com/allegro/guide"
+  },
+  {
+    "id": "lazada",
+    "name": "Lazada",
+    "region": "hot",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202411/1732257952655170_Logo.jpg",
+    "description": "阿里巴巴集团东南亚旗舰电商平台，东南亚地区最大的在线购物网站之一。",
+    "homepageUrl": "https://www.amz123.com/lazada?from=kd",
+    "openGuideUrl": "https://www.amz123.com/lazada/guide"
+  },
+  {
+    "id": "美客多",
+    "name": "美客多",
+    "region": "hot",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202509/1757055493344475_LOGO200x200.webp",
+    "description": "拉美领先的电商与金融科技平台，致力于帮助中国品牌开拓拉美市场",
+    "homepageUrl": "https://mercadolibre.cn/",
+    "openGuideUrl": ""
+  },
+  {
+    "id": "coupang",
+    "name": "Coupang",
+    "region": "hot",
+    "logoUrl": "https://img.amz123.com/upload/pingtai-img/20210715/60efca1582e26.png",
+    "description": "Coupang是韩国Top级电商网站，被评为韩国最受欢迎的购物APP，在2020第一季度跃升成为韩国第一大线上零售商。截止2018年，该网站的注册会员数超过了2500万。",
+    "homepageUrl": "https://work.weixin.qq.com/ca/cawcdeb722cfbe32bf",
+    "openGuideUrl": ""
+  },
+  {
+    "id": "日本趣天",
+    "name": "日本趣天",
+    "region": "hot",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202604/1777279174033491_ScreenShot_2026-04-27_163848_660.webp",
+    "description": "日本趣天是面向日本市场的网上商城，由eBay Japan联合公司运营",
+    "homepageUrl": "https://www.amz123.com/qoo10jp?from=kd",
+    "openGuideUrl": "https://www.amz123.com/qoo10jp/guide"
+  },
+  {
+    "id": "shein",
+    "name": "SHEIN",
+    "region": "hot",
+    "logoUrl": "https://img.amz123.com/image_cloud/202302/1676869573597_SHEIN.png",
+    "description": "SHEIN是一家跨境B2C快时尚电商平台，业务范围包括服装、家居产品、童装、女装等。",
+    "homepageUrl": "https://www.amz123.com/shein?from=kd",
+    "openGuideUrl": "https://www.amz123.com/shein/guide"
+  },
+  {
+    "id": "tiktok东南亚",
+    "name": "TikTok东南亚",
+    "region": "hot",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1681278556452_tiktoklogo.png",
+    "description": "TikTok Shop（也称TikTok 电商）是创新型电商平台，汇集商家、达人和买家。 TikTok Shop东南亚市场包含新加坡、菲律宾、泰国、越南、马来西亚等五个国家",
+    "homepageUrl": "https://www.amz123.com/tiktokdny?from=kd",
+    "openGuideUrl": "https://www.amz123.com/tiktokdny/guide"
+  },
+  {
+    "id": "速卖通全托管",
+    "name": "速卖通全托管",
+    "region": "hot",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202405/1716276858728315_60f0438d9061b.png",
+    "description": "阿里旗下外贸在线交易平台，面向国际市场的跨境电商平台，被广大卖家称为“国际版淘宝",
+    "homepageUrl": "https://www.amz123.com/aliexpressqtg?from=kd",
+    "openGuideUrl": "https://www.amz123.com/aliexpressqtg/guide"
+  },
+  {
+    "id": "tiktok全托管",
+    "name": "TikTok全托管",
+    "region": "hot",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1681278556452_tiktoklogo.png",
+    "description": "TikTok Shop全托管模式是商家与供货商负责开发、提报商品，而平台负责帮助商家进行销售、履约、售后等环节",
+    "homepageUrl": "https://www.amz123.com/tiktokqtg?from=kd",
+    "openGuideUrl": "https://www.amz123.com/tiktokqtg/guide"
+  },
+  {
+    "id": "亚马逊",
+    "name": "亚马逊",
+    "region": "na",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1682645116800_%E4%BA%9A%E9%A9%AC%E9%80%8A%20(2).jpg",
+    "description": "美国最大的电商平台，最早开始运营电商业务的公司之一",
+    "homepageUrl": "https://www.amazon.com/",
+    "openGuideUrl": "https://www.amz123.com/amazon/guide"
+  },
+  {
+    "id": "temu",
+    "name": "Temu",
+    "region": "na",
+    "logoUrl": "https://img.amz123.com/image_cloud/202302/1676868321659_temuapp.png",
+    "description": "拼多多旗下的全品类跨境电商平台，平台首站面向北美市场",
+    "homepageUrl": "https://www.temu.com/",
+    "openGuideUrl": "https://www.amz123.com/temu/guide"
+  },
+  {
+    "id": "shein",
+    "name": "SHEIN",
+    "region": "na",
+    "logoUrl": "https://img.amz123.com/image_cloud/202302/1676869573597_SHEIN.png",
+    "description": "跨境B2C快时尚电商平台，业务范围包括服装、家居产品、童装、女装等",
+    "homepageUrl": "https://us.shein.com/",
+    "openGuideUrl": "https://www.amz123.com/shein/guide"
+  },
+  {
+    "id": "ebay",
+    "name": "eBay",
+    "region": "na",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/610134a65df33.jpeg/icon52",
+    "description": "美国线上拍卖及购物网站，可让全球民众在网上买卖物品",
+    "homepageUrl": "https://www.ebay.com/",
+    "openGuideUrl": "https://www.amz123.com/ebay/guide"
+  },
+  {
+    "id": "沃尔玛",
+    "name": "沃尔玛",
+    "region": "na",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202409/1725446263789889_%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20240904183651.png",
+    "description": "美国的世界性连锁企业，致力于为卖家提供专业的运营服务",
+    "homepageUrl": "https://www.walmart.com/",
+    "openGuideUrl": "https://www.amz123.com/walmart/guide"
+  },
+  {
+    "id": "yami",
+    "name": "YAMI",
+    "region": "na",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202512/1765503711255919_%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20251212092344_11_819.webp",
+    "description": "北美领先的亚洲商品购物平台，海外华人购物首选",
+    "homepageUrl": "https://www.yami.com/zh",
+    "openGuideUrl": "https://www.amz123.com/yamibuy/guide"
+  },
+  {
+    "id": "速卖通",
+    "name": "速卖通",
+    "region": "na",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7ec728ee.png/icon52",
+    "description": "阿里巴巴旗下面向国际市场打造的跨境电商平台",
+    "homepageUrl": "https://www.aliexpress.com/",
+    "openGuideUrl": "https://www.amz123.com/aliexpress/guide"
+  },
+  {
+    "id": "etsy",
+    "name": "Etsy",
+    "region": "na",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7f56b497.png/icon52",
+    "description": "专注手工艺品销售的美国在线C2C电商平台，销售的产品包括艺术品、服装、珠宝和其他装饰物品以及工艺品",
+    "homepageUrl": "https://www.etsy.com/",
+    "openGuideUrl": "https://www.amz123.com/etsy/guide"
+  },
+  {
+    "id": "wayfair",
+    "name": "Wayfair",
+    "region": "na",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202607/1782876007670119_%E5%9B%BE%E7%89%871.webp",
+    "description": "北美和欧洲最大的家居品类电商平台之一，主要销售家具和家居用品",
+    "homepageUrl": "https://www.wayfair.com/",
+    "openGuideUrl": "https://www.amz123.com/wayfair/guide"
+  },
+  {
+    "id": "bed-bath-amp-beyond",
+    "name": "Bed Bath &amp; Beyond",
+    "region": "na",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/61004302e63fa.jpeg/icon52",
+    "description": "美国最大的出售高品质床上用品和家庭用品的连锁商店",
+    "homepageUrl": "https://www.bedbathandbeyond.com/",
+    "openGuideUrl": "https://www.amz123.com/bedbathandbeyond/guide"
+  },
+  {
+    "id": "home-depot",
+    "name": "Home Depot",
+    "region": "na",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7ec959f9.png/icon52",
+    "description": "美国第二大零售商，是全球领先的家居建材用品零售",
+    "homepageUrl": "https://www.homedepot.com/",
+    "openGuideUrl": "https://www.amz123.com/homedepot/guide"
+  },
+  {
+    "id": "lowes",
+    "name": "Lowe's",
+    "region": "na",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7ecb8c17.png/icon52",
+    "description": "全球最大的家居装饰零售商之一，销售近40,000种商品",
+    "homepageUrl": "https://www.lowes.com/",
+    "openGuideUrl": "https://www.amz123.com/lowes/guide"
+  },
+  {
+    "id": "wish",
+    "name": "Wish",
+    "region": "na",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/6101369ff0590.png/icon52",
+    "description": "美国跨境零售电商平台，通过愿望清单的模式为用户提供产品",
+    "homepageUrl": "https://www.wish.com/",
+    "openGuideUrl": "https://www.amz123.com/wish/guide"
+  },
+  {
+    "id": "newegg",
+    "name": "Newegg",
+    "region": "na",
+    "logoUrl": "https://img.amz123.com/award/sp_logo/202212/1670295445725_%E6%96%B0%E8%9B%8B.png",
+    "description": "北美第二大3C电商平台，产品包括计算机硬件和消费电子产品",
+    "homepageUrl": "https://www.newegg.com/",
+    "openGuideUrl": "https://www.amz123.com/newegg/guide"
+  },
+  {
+    "id": "mercari煤炉",
+    "name": "Mercari煤炉",
+    "region": "na",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/6100e05a438cf.png/icon52",
+    "description": "知名的二手商品交易平台，曾在美国应用下载榜单中排在第三名",
+    "homepageUrl": "https://www.mercari.com/",
+    "openGuideUrl": "https://www.amz123.com/mercari/guide"
+  },
+  {
+    "id": "poshmark",
+    "name": "Poshmark",
+    "region": "na",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/610139f192c56.png/icon52",
+    "description": "二手交易平台，为女性、男性、儿童、宠物、家庭等提供全新或二手的商品",
+    "homepageUrl": "https://poshmark.com/",
+    "openGuideUrl": "https://www.amz123.com/poshmark/guide"
+  },
+  {
+    "id": "emag",
+    "name": "eMAG",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7f384463.png/icon52",
+    "description": "东南欧排名第一的本土跨境电商平台，月活1.2亿，900万活跃用户",
+    "homepageUrl": "https://www.amz123.com/form/ajka4Z?from=ad ",
+    "openGuideUrl": "https://www.amz123.com/emag/guide"
+  },
+  {
+    "id": "allegro",
+    "name": "Allegro",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7f4745f8.png/icon52",
+    "description": "创建于波兰，是中东欧最大的电商平台，已有上万名中国商家入驻Allegro",
+    "homepageUrl": "https://allegro.pl/",
+    "openGuideUrl": "https://www.amz123.com/allegro/guide"
+  },
+  {
+    "id": "cdiscount",
+    "name": "Cdiscount",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202602/1770263830045124_1747722736879733_%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250520143144.webp",
+    "description": "法国最大的本地电商平台，经营的品类类目达21种",
+    "homepageUrl": "https://www.cdiscount.com/",
+    "openGuideUrl": "https://www.amz123.com/cdiscount/guide"
+  },
+  {
+    "id": "shein",
+    "name": "SHEIN",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202404/1713247126575296_1676869573597_SHEIN%281%29.png",
+    "description": "跨境B2C快时尚电商平台，业务范围包括服装、家居产品、童装、女装等",
+    "homepageUrl": "https://us.shein.com/",
+    "openGuideUrl": "https://www.amz123.com/shein/guide"
+  },
+  {
+    "id": "kaufland",
+    "name": "Kaufland",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/202310/1698397831904311_kaufland.jpg",
+    "description": "德国Schwarz集团旗下低成本零售连锁商，是欧洲第5大食品零售商",
+    "homepageUrl": "https://www.kaufland.de/",
+    "openGuideUrl": "https://www.amz123.com/kaufland/guide"
+  },
+  {
+    "id": "法国乐天",
+    "name": "法国乐天",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/image_cloud/202302/1677046347372_Rakuten.png",
+    "description": "法国目前影响力排行第三的网购平台，主营文化类别、数码3C，家用品、时尚等",
+    "homepageUrl": "https://fr.shopping.rakuten.com/",
+    "openGuideUrl": "https://www.amz123.com/rakutenfr/guide"
+  },
+  {
+    "id": "ozon",
+    "name": "Ozon",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/202310/1698393198596103_52D977F8-E419-498E-93DB-8334CF00740F.png",
+    "description": "俄罗斯本土的B2C电商平台，多品类电商平台",
+    "homepageUrl": "https://seller.ozon.ru/ch?utm_source=exiao&amp;utm_medium=gmanager ",
+    "openGuideUrl": "https://www.amz123.com/ozonglobal/guide"
+  },
+  {
+    "id": "wildberries",
+    "name": "Wildberries",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202510/1760942794332480_200x200_Logo.webp",
+    "description": "俄语国家最大的电商平台，开拓俄语市场的最佳选择！",
+    "homepageUrl": "https://seller.wildberries.cn/",
+    "openGuideUrl": "https://www.amz123.com/wildberries/guide"
+  },
+  {
+    "id": "darty",
+    "name": "Darty",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7f361635.png/icon52",
+    "description": "法国电子电器平台，主营手机、电视、多媒体、音响、家用电器等等",
+    "homepageUrl": "https://www.darty.com/",
+    "openGuideUrl": "https://www.amz123.com/darty/guide"
+  },
+  {
+    "id": "worten",
+    "name": "Worten",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7f341b23.png/icon52",
+    "description": "葡萄牙著名的专业售卖电子产品的电商平台,热销品主要有手机，3C消费类等",
+    "homepageUrl": "https://www.worten.pt/",
+    "openGuideUrl": "https://www.amz123.com/worten/guide"
+  },
+  {
+    "id": "bol",
+    "name": "Bol",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7f2f0e48.png/icon52",
+    "description": "荷兰最大的电商网站，也是比利时、卢森堡最大的电商平台及在线市场",
+    "homepageUrl": "https://www.bol.com/",
+    "openGuideUrl": "https://www.amz123.com/bolcom/guide"
+  },
+  {
+    "id": "eprice",
+    "name": "ePRICE",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7f3a68b1.png/icon52",
+    "description": "意大利领先的电商平台，主要提供电子科技类产品、家用电器、等用品",
+    "homepageUrl": "https://www.eprice.it/",
+    "openGuideUrl": "https://www.amz123.com/eprice/guide"
+  },
+  {
+    "id": "fruugo",
+    "name": "Fruugo",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/610153f566db5.png/icon52",
+    "description": "英国最大的支持全球销售的本土电商平台，遍布 46 个国家和地区",
+    "homepageUrl": "https://www.fruugo.us",
+    "openGuideUrl": "https://www.amz123.com/fruugo/guide"
+  },
+  {
+    "id": "manomano",
+    "name": "ManoMano",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/202310/1698250682294939_ManoMano.png",
+    "description": "欧洲领先DIY、家居装饰和园艺产品在线交易平台",
+    "homepageUrl": "https://www.manomano.fr/",
+    "openGuideUrl": "https://www.amz123.com/manomano/guide"
+  },
+  {
+    "id": "zalando",
+    "name": "Zalando",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/610143e7e794a.png/icon52",
+    "description": "德国在线零售商，主营儿童服装，鞋子，配件，美容产品，运动用品等",
+    "homepageUrl": "https://en.zalando.de/?_rfl=de",
+    "openGuideUrl": "https://www.amz123.com/zalando/guide"
+  },
+  {
+    "id": "onbuy",
+    "name": "OnBuy",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/6101559629162.png/icon52",
+    "description": "英国电商平台，是一个中间平台，没有自营模式，涵盖多个行业",
+    "homepageUrl": "https://www.onbuy.com/",
+    "openGuideUrl": "https://www.amz123.com/onbuy/guide"
+  },
+  {
+    "id": "miravia",
+    "name": "Miravia",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/image_cloud/202306/1687673920473_miravia.png",
+    "description": "阿里巴巴旗下，西班牙本土市场的品质和时尚综合型电商平台",
+    "homepageUrl": "https://www.miravia.es/",
+    "openGuideUrl": "https://www.amz123.com/miravia/guide"
+  },
+  {
+    "id": "voghion",
+    "name": "Voghion",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/image_cloud/202307/1690268917832_001Voghion.png",
+    "description": "主要面对欧美市场，产品与服务覆盖欧洲多个国家和地区",
+    "homepageUrl": "https://www.wjx.cn/vm/OtAIYvs.aspx",
+    "openGuideUrl": "https://www.amz123.com/voghion/guide"
+  },
+  {
+    "id": "joom",
+    "name": "Joom",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7ee96412.png/icon52",
+    "description": "移动端购物平台，目标市场针对欧洲以及俄罗斯等独联体国家",
+    "homepageUrl": "https://www.joom.com/",
+    "openGuideUrl": "https://www.amz123.com/joom/guide"
+  },
+  {
+    "id": "fnac",
+    "name": "FNAC",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7f44d9ab.png/icon52",
+    "description": "法国最有名气的零售商之一，是欧洲增长最快的平台",
+    "homepageUrl": "https://www.fnac.com/",
+    "openGuideUrl": "https://www.amz123.com/fnactickets/guide"
+  },
+  {
+    "id": "vinted",
+    "name": "Vinted",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/image_cloud/202309/1695982534625_vinted.png",
+    "description": "欧洲知名二手电商平台，平台为用户提供二手商品的买卖或赠与服务",
+    "homepageUrl": "https://www.vinted.com/",
+    "openGuideUrl": "https://www.amz123.com/vinted/guide"
+  },
+  {
+    "id": "rue-du-commerce",
+    "name": "Rue du Commerce",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202409/1725845724269552_%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20240909093514.jpg",
+    "description": "法国知名高科技电商平台，专注于电子产品、家用电器、家居等品类的销售",
+    "homepageUrl": "https://www.rueducommerce.fr/",
+    "openGuideUrl": "https://www.amz123.com/rueducommerce/guide"
+  },
+  {
+    "id": "yandex-market",
+    "name": "Yandex Market",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202502/1740620325827568_%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20250227093832.jpg",
+    "description": "平台拥有超过18000家商业合作伙伴，是俄罗斯最大的跨界电商平台之一",
+    "homepageUrl": "https://market.yandex.ru/",
+    "openGuideUrl": "https://www.amz123.com/yandexmarket/guide"
+  },
+  {
+    "id": "pccomponentes",
+    "name": "PcComponentes",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202505/1747118375973066_PcComponentes.png",
+    "description": "西班牙最大的计算机商店，计算机、电子产品拥有最优惠的价格、质量和服务",
+    "homepageUrl": "https://www.pccomponentes.com/",
+    "openGuideUrl": "https://www.amz123.com/pccomponentes/guide"
+  },
+  {
+    "id": "cdon",
+    "name": "CDON",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202505/1747120043464281_CDON.png",
+    "description": "北欧主要电商平台之一，服务瑞典、丹麦等国，拥有超 200 万买家。 销售电子产品、家居用品等多品类，禁售二手、动物等产品",
+    "homepageUrl": "https://cdon.se/",
+    "openGuideUrl": "https://www.amz123.com/cdon/guide"
+  },
+  {
+    "id": "phh-group",
+    "name": "PHH GROUP",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202505/1747206650379221_PHH.png",
+    "description": "波罗的海地区流量TOP1的电商平台，立陶宛、拉脱维亚、爱沙尼亚排名第一。 提供官方对接买家、海外仓、Pigu配送、本地语言翻译等服务",
+    "homepageUrl": "https://phhgroup.eu/",
+    "openGuideUrl": "https://www.amz123.com/phhgroup/guide"
+  },
+  {
+    "id": "fyndiq",
+    "name": "Fyndiq",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/image_cloud/202307/1690184878552_%E5%BE%AE%E4%BF%A1%E6%88%AA%E5%9B%BE_20230724154748.png",
+    "description": "折扣促销电商平台，以销售划算优质的零售产品为主。商品种类丰富",
+    "homepageUrl": "https://fyndiq.se/",
+    "openGuideUrl": "https://www.amz123.com/fyndiq/guide"
+  },
+  {
+    "id": "亚马逊欧洲站",
+    "name": "亚马逊欧洲站",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202403/1711417194425507_1682645116800_%E4%BA%9A%E9%A9%AC%E9%80%8A%282%29.jpeg",
+    "description": "平台用户超过3亿，月访问量超过5亿",
+    "homepageUrl": "https://www.amazon.co.uk/",
+    "openGuideUrl": "https://www.amz123.com/amazon/guide"
+  },
+  {
+    "id": "hainago",
+    "name": "Hainago",
+    "region": "eu",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202608/1787017238423415_logo1.webp",
+    "description": "俄罗斯跨境B2B批发电商平台",
+    "homepageUrl": "https://hainago.ru/",
+    "openGuideUrl": "https://www.amz123.com/hainago/guide"
+  },
+  {
+    "id": "coupang",
+    "name": "Coupang",
+    "region": "jp-kr",
+    "logoUrl": "https://img.amz123.com/image_cloud/202302/1675929596355_coupang.png",
+    "description": "韩国Top级电商网站，也是韩国人气最高的团购网站之一",
+    "homepageUrl": "https://www.coupang.com/",
+    "openGuideUrl": "https://www.amz123.com/coupang/guide"
+  },
+  {
+    "id": "亚马逊日本站",
+    "name": "亚马逊日本站",
+    "region": "jp-kr",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202403/1711417194425507_1682645116800_%E4%BA%9A%E9%A9%AC%E9%80%8A%282%29.jpeg",
+    "description": "日本TOP1电商购物网站，市场份额较大",
+    "homepageUrl": "https://www.amazon.co.jp/",
+    "openGuideUrl": "https://www.amz123.com/amazon/guide"
+  },
+  {
+    "id": "tiktok-日本",
+    "name": "TikTok 日本",
+    "region": "jp-kr",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202509/1757321242636122_1681278556452_tiktoklogo.webp",
+    "description": "日本站拥有购物视频、直播、橱窗、商城等功能，能够为用户提供丰富的购物体验",
+    "homepageUrl": "https://www.tiktok.com/",
+    "openGuideUrl": "https://www.amz123.com/tiktokjp/guide"
+  },
+  {
+    "id": "日本乐天",
+    "name": "日本乐天",
+    "region": "jp-kr",
+    "logoUrl": "https://img.amz123.com/image_cloud/202302/1675929417154_letian.png",
+    "description": "日本数一数二的电商平台，全球最大的电商平台之一",
+    "homepageUrl": "https://www.rakuten.co.jp/",
+    "openGuideUrl": "https://www.amz123.com/rakutenjapan/guide"
+  },
+  {
+    "id": "temu",
+    "name": "TEMU",
+    "region": "jp-kr",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202504/1744598716287237_temu-logo6000x6000px.png",
+    "description": "全品类全球跨境电商平台",
+    "homepageUrl": "https://www.temu.com",
+    "openGuideUrl": "https://www.amz123.com/temujp/guide"
+  },
+  {
+    "id": "日本雅虎购物",
+    "name": "日本雅虎购物",
+    "region": "jp-kr",
+    "logoUrl": "https://img.amz123.com/image_cloud/202302/1675929340992_yahu.png",
+    "description": "日本国内使用人数最多的拍卖网站，网站内有多达5,000万件以上的商品可供选择",
+    "homepageUrl": "http://shopping.yahoo.co.jp/",
+    "openGuideUrl": "https://www.amz123.com/shoppingyahoo/guide"
+  },
+  {
+    "id": "gmarket",
+    "name": "Gmarket",
+    "region": "jp-kr",
+    "logoUrl": "https://img.amz123.com/image_cloud/202302/1675929760015_Gmarket.png",
+    "description": "韩国排名第一的在线购物网站，主要销售书籍、MP3、化妆品、电脑、家电、衣服等",
+    "homepageUrl": "https://www.gmarket.co.kr/",
+    "openGuideUrl": "https://www.amz123.com/gmarket/guide"
+  },
+  {
+    "id": "日本趣天",
+    "name": "日本趣天",
+    "region": "jp-kr",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202605/1778032826738165_%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20260427163852_62_1181.webp",
+    "description": "日本趣天是面向日本市场的网上商城，由eBay Japan联合公司运营",
+    "homepageUrl": "https://www.qoo10.jp/gmkt.inc/",
+    "openGuideUrl": "https://www.amz123.com/qoo10jp/guide"
+  },
+  {
+    "id": "auction",
+    "name": "Auction",
+    "region": "jp-kr",
+    "logoUrl": "https://img.amz123.com/image_cloud/202302/1675929654558_auction.png",
+    "description": "韩国在线电商拍卖网站，目前已是韩国综合型主流电商平台之一",
+    "homepageUrl": "https://www.auction.co.kr/",
+    "openGuideUrl": "https://www.amz123.com/auction/guide"
+  },
+  {
+    "id": "mercari日本煤炉",
+    "name": "Mercari日本煤炉",
+    "region": "jp-kr",
+    "logoUrl": "https://img.amz123.com/image_cloud/202302/1675929183928_%E6%97%A5%E6%9C%AC%E7%85%A4%E7%82%89.png",
+    "description": "日文名为“メルカリ”，目前已经发展为日本知名二手商品交易平台",
+    "homepageUrl": "https://www.mercari.com/jp/",
+    "openGuideUrl": "https://www.amz123.com/mercari/guide"
+  },
+  {
+    "id": "wowma",
+    "name": "Wowma",
+    "region": "jp-kr",
+    "logoUrl": "https://img.amz123.com/image_cloud/202302/1675929246561_wowma.png",
+    "description": "日本的电商百货商店，也是比较受当地年轻人关注的一个电商平台之一",
+    "homepageUrl": "https://wowma.jp/",
+    "openGuideUrl": "https://www.amz123.com/wowma/guide"
+  },
+  {
+    "id": "11street",
+    "name": "11Street",
+    "region": "jp-kr",
+    "logoUrl": "https://img.amz123.com/image_cloud/202302/1675929539128_11s.png",
+    "description": "韩国SK旗下知名在线购物网站，也是韩国主流电商平台之一",
+    "homepageUrl": "https://www.11st.co.kr/",
+    "openGuideUrl": "https://www.amz123.com/11st/guide"
+  },
+  {
+    "id": "lazada",
+    "name": "Lazada",
+    "region": "sea",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202411/1732257952655170_Logo.jpg",
+    "description": "阿里巴巴东南亚旗舰电商平台",
+    "homepageUrl": "https://www.lazada.cn/",
+    "openGuideUrl": "https://www.amz123.com/lazada/guide"
+  },
+  {
+    "id": "shopee",
+    "name": "Shopee",
+    "region": "sea",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/6100f2cd5477e.png/icon52",
+    "description": "东南亚最大的电商平台之一，覆盖新加坡、马来西亚、菲律宾、中国台湾、印度尼西亚、泰国等",
+    "homepageUrl": "https://shopee.sg/",
+    "openGuideUrl": "https://www.amz123.com/shopee/guide"
+  },
+  {
+    "id": "tokopedia",
+    "name": "Tokopedia",
+    "region": "sea",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7f2ce348.png/icon52",
+    "description": "印度尼西亚最大的电商平台，也是流量最高的C2C购物网站",
+    "homepageUrl": "https://www.tokopedia.com/",
+    "openGuideUrl": "https://www.amz123.com/tokopedia/guide"
+  },
+  {
+    "id": "tiki",
+    "name": "Tiki",
+    "region": "sea",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7f287360.png/icon52",
+    "description": "综合类B2C电商网站，也是东南亚第六大电商平台",
+    "homepageUrl": "https://tiki.vn/",
+    "openGuideUrl": "https://www.amz123.com/tiki/guide"
+  },
+  {
+    "id": "l192",
+    "name": "L192",
+    "region": "sea",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/610038d8a4984.png/icon52",
+    "description": "柬埔寨本地最大的在线时尚生活购物平台，为柬埔寨及东南亚周边国家提供多品类的优质商品",
+    "homepageUrl": "https://www.l192.com/",
+    "openGuideUrl": "https://www.amz123.com/cifnews/guide"
+  },
+  {
+    "id": "thisshop",
+    "name": "Thisshop",
+    "region": "sea",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/61013fd9dcdaa.jpeg/icon52",
+    "description": "泰国首家主打消费金融一体的B2C电商平台",
+    "homepageUrl": "https://www.thisshop.com/",
+    "openGuideUrl": "https://www.amz123.com/thisshop/guide"
+  },
+  {
+    "id": "美客多",
+    "name": "美客多",
+    "region": "latam",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202509/1757055493344475_LOGO200x200.webp",
+    "description": "拉美领先的电商与金融科技平台，致力于帮助中国品牌开拓拉美市场",
+    "homepageUrl": "https://mercadolibre.cn/",
+    "openGuideUrl": "https://www.amz123.com/mercadolibre/guide"
+  },
+  {
+    "id": "tiktok-拉美",
+    "name": "TikTok 拉美",
+    "region": "latam",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202509/1757321242636122_1681278556452_tiktoklogo.webp",
+    "description": "巴西和墨西哥作为拉美最大经济体，电商渗透率高，年轻用户占比大，为TikTok Shop提供了广阔空间",
+    "homepageUrl": "https://www.tiktok.com/",
+    "openGuideUrl": "https://www.amz123.com/tiktoklm/guide"
+  },
+  {
+    "id": "falabella",
+    "name": "Falabella",
+    "region": "latam",
+    "logoUrl": "https://img.amz123.com/upload/202310/1698486688389653_falabella.png",
+    "description": "拉美地区领先的电商平台，是时尚和电子产品方面的领头羊",
+    "homepageUrl": "https://www.falabella.com",
+    "openGuideUrl": "https://www.amz123.com/falabella/guide"
+  },
+  {
+    "id": "cross-commerce-store-ccs-跨贸商店",
+    "name": "Cross Commerce Store (CCS) 跨贸商店",
+    "region": "latam",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202403/1711089301165475_%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20240322143344.png",
+    "description": "CCS 赋能中国卖家出海拉美千亿蓝海市场",
+    "homepageUrl": "https://crosscommercestore.com/zh/?utm_source=amz123&amp;utm_medium=homepage",
+    "openGuideUrl": "https://www.amz123.com/ccs/guide"
+  },
+  {
+    "id": "americanas",
+    "name": "Americanas",
+    "region": "latam",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7ef35471.png/icon52",
+    "description": "拉丁美洲电子商务行业的领导者，同时也是实体零售店",
+    "homepageUrl": "https://www.americanas.com.br/",
+    "openGuideUrl": "https://www.amz123.com/americanas/guide"
+  },
+  {
+    "id": "shopee巴西站",
+    "name": "Shopee巴西站",
+    "region": "latam",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/6100f2cd5477e.png/icon52",
+    "description": "主营3C品类、美妆美容、家居、服装、户外运动等",
+    "homepageUrl": "https://shopee.com.br/",
+    "openGuideUrl": "https://www.amz123.com/shopee/guide"
+  },
+  {
+    "id": "亚马逊巴西站",
+    "name": "亚马逊巴西站",
+    "region": "latam",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1682645116800_%E4%BA%9A%E9%A9%AC%E9%80%8A%20(2).jpg",
+    "description": "主营书籍、电子产品、家具、宠物店、电脑等商品",
+    "homepageUrl": "https://www.amazon.com.br/",
+    "openGuideUrl": "https://www.amz123.com/amazon/guide"
+  },
+  {
+    "id": "nocnoc",
+    "name": "NocNoc",
+    "region": "latam",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202505/1747206305671191_NocNoc.png",
+    "description": "半代运营的跨境电商平台，可以将产品发布到15+拉美电商平台进行销售",
+    "homepageUrl": "https://nocnocstore.com/",
+    "openGuideUrl": "https://www.amz123.com/nocnoc/guide"
+  },
+  {
+    "id": "joompro",
+    "name": "JoomPro",
+    "region": "latam",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202503/1742544325477473_%E5%BE%AE%E4%BF%A1%E6%88%AA%E5%9B%BE_20250321160350.png",
+    "description": "专注于拉美市场的创新型 B2B 跨境电商平台，为中国卖家提供可靠高效的一站式出海解决方案，助力企业快速扩展和发掘拉美市场B2B新机会",
+    "homepageUrl": "https://joompro.cn/",
+    "openGuideUrl": "https://www.amz123.com/joompro/guide"
+  },
+  {
+    "id": "trademe",
+    "name": "TradeMe",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202412/1733188742640868_R-C.png",
+    "description": "新西兰最大的电商平台，热销品类有3C电子、家具、玩具、服装、汽车、摩托车、船、配件",
+    "homepageUrl": "https://www.trademe.co.nz/browse",
+    "openGuideUrl": "https://www.amz123.com/trademe/guide"
+  },
+  {
+    "id": "亚马逊澳洲站",
+    "name": "亚马逊澳洲站",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1682645116800_%E4%BA%9A%E9%A9%AC%E9%80%8A%20(2).jpg",
+    "description": "亚马逊面向澳大利亚消费者推出的平台，当地排名第二的电商网站",
+    "homepageUrl": "https://www.amazon.com.au/",
+    "openGuideUrl": "https://www.amz123.com/amazon/guide"
+  },
+  {
+    "id": "ebay",
+    "name": "eBay",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/61011ad7b812a.jpeg/icon52",
+    "description": "澳大利亚最受欢迎的网站之一，可让全球民众在网上买卖物品",
+    "homepageUrl": "https://www.ebay.com.au/",
+    "openGuideUrl": "https://www.amz123.com/ebay/guide"
+  },
+  {
+    "id": "kmartconz",
+    "name": "Kmart.co.nz",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1682581718973_Kmart1.png",
+    "description": "新西兰的低价连锁超市，提供广泛的产品与服务，包括日常杂货、家居用品、服装、电器等",
+    "homepageUrl": "https://www.kmart.co.nz/",
+    "openGuideUrl": "https://www.amz123.com/kmart/guide"
+  },
+  {
+    "id": "kmartcomau",
+    "name": "Kmart.com.au",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1682581718973_Kmart1.png",
+    "description": "澳大利亚最大的超市连锁之一，提供广泛的产品与服务",
+    "homepageUrl": "https://www.kmart.com.au/",
+    "openGuideUrl": "https://www.amz123.com/kmart/guide"
+  },
+  {
+    "id": "big-w",
+    "name": "BIG W",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1682645429140_BIG%20W.png",
+    "description": "澳洲的一个零售百货店，涉及玩具、食品、服装、电子产品类等",
+    "homepageUrl": "https://www.bigw.com.au/",
+    "openGuideUrl": "https://www.amz123.com/bigw/guide"
+  },
+  {
+    "id": "target",
+    "name": "Target",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1682645649914_Target.png",
+    "description": "美国第二大零售百货集团，也是全球最大的折扣零售商之一",
+    "homepageUrl": "https://www.target.com.au/",
+    "openGuideUrl": "https://www.amz123.com/target/guide"
+  },
+  {
+    "id": "mydeal",
+    "name": "MyDeal",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1682645976993_MyDeal.png",
+    "description": "集家居、时尚及电子产品等为一体的在线零售市场",
+    "homepageUrl": "https://portal.mydeal.com.au/",
+    "openGuideUrl": "https://www.amz123.com/mydeal/guide"
+  },
+  {
+    "id": "harvey-norman",
+    "name": "Harvey Norman",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/upload/202310/1698303441878601_HN.jpg",
+    "description": "主要经营家居用品、电子产品、计算机及办公设备、小型家电、家具以及床上用品等多元化产品线",
+    "homepageUrl": "https://www.harveynorman.com.au/",
+    "openGuideUrl": "https://www.amz123.com/harveynorman/guide"
+  },
+  {
+    "id": "the-good-guys",
+    "name": "The  good  guys",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/upload/202310/1698304379739012_thegoodguys.png",
+    "description": "连锁家用电器零售商，主要销售相机和冰箱等电子产品",
+    "homepageUrl": "https://www.thegoodguys.com.au/",
+    "openGuideUrl": "https://www.amz123.com/thegoodguys/guide"
+  },
+  {
+    "id": "myer",
+    "name": "Myer",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/upload/202310/1698375001639107_myer.png",
+    "description": "澳大利亚最具代表性和历史底蕴的百货公司之一",
+    "homepageUrl": "https://www.myer.com.au/",
+    "openGuideUrl": "https://www.amz123.com/myer/guide"
+  },
+  {
+    "id": "kogan",
+    "name": "Kogan",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202412/1733189096767608_kogan-logo.png",
+    "description": "折扣数码购物网站，提供消费电子产品、家用电器、家居用品、玩具等",
+    "homepageUrl": "https://www.kogan.com/au/",
+    "openGuideUrl": "https://www.amz123.com/kogan/guide"
+  },
+  {
+    "id": "supercheap-auto",
+    "name": "Supercheap Auto",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/upload/202310/1698376915451907_Supercheapauto.png",
+    "description": "澳大利亚汽车零配件和工具零售商，提供各种汽车零配件、工具和设备等",
+    "homepageUrl": "https://www.supercheapauto.com.au/",
+    "openGuideUrl": "https://www.amz123.com/supercheapauto/guide"
+  },
+  {
+    "id": "temple-amp-webster",
+    "name": "Temple &amp; Webster",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202412/1733189228823423_246x0w.webp",
+    "description": "美国的生活方式品牌，专注于提供现代家具和家居装饰品",
+    "homepageUrl": "https://www.templeandwebster.com.au/",
+    "openGuideUrl": "https://www.amz123.com/templeandwebster/guide"
+  },
+  {
+    "id": "jb-hi-fi",
+    "name": "JB HI-FI",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/upload/202310/1698377654224456_Jbhifi.png",
+    "description": "澳大利亚知名的家用电器零售商，主要销售手机、电脑、咖啡机等多种电子产品",
+    "homepageUrl": "https://www.jbhifi.com.au/",
+    "openGuideUrl": "https://www.amz123.com/jbhifi/guide"
+  },
+  {
+    "id": "gumtree",
+    "name": "Gumtree",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202412/1733189342158579_%E5%BE%AE%E4%BF%A1%E6%88%AA%E5%9B%BE_20241203092817.png",
+    "description": "英国最大的分类信息网站，同时覆盖了多个国家如波兰、美国、澳大利亚等",
+    "homepageUrl": "https://www.gumtree.com.au/",
+    "openGuideUrl": "https://www.amz123.com/gumtree/guide"
+  },
+  {
+    "id": "the-warehouse",
+    "name": "The Warehouse",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/upload/202310/1698745728995443_Thewarehouse.png",
+    "description": "新西兰大型仓储式超市，提供园艺工具、玩具、厨房用品等商品",
+    "homepageUrl": "https://www.thewarehouse.co.nz/",
+    "openGuideUrl": "https://www.amz123.com/thewarehouse/guide"
+  },
+  {
+    "id": "umart",
+    "name": "UMART",
+    "region": "au",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202511/1763975894571867_200x200.webp",
+    "description": "UMART 是澳大利亚一家领先的电脑硬件、电子产品及周边设备的零售商。它以其极具竞争力的价格和高效的“线上订购，线下提货”商业模式而闻名，在澳洲消费者中享有很高的声誉。",
+    "homepageUrl": "https://www.umart.com.au/",
+    "openGuideUrl": "https://www.amz123.com/umart/guide"
+  },
+  {
+    "id": "noon",
+    "name": "Noon",
+    "region": "me",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7ee47e21.png/icon52",
+    "description": "中东最大的电商平台之一，产品类别包括美容、时尚、电子产品等",
+    "homepageUrl": "https://www.noon.com/uae-en/",
+    "openGuideUrl": "https://www.amz123.com/noon/guide"
+  },
+  {
+    "id": "fordeal",
+    "name": "Fordeal",
+    "region": "me",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210125/600e715e4d775.png/icon52",
+    "description": "中国面向海外C端消费者的电商一站式购物平台",
+    "homepageUrl": "https://www.fordeal.com/en-AE/",
+    "openGuideUrl": "https://www.amz123.com/fordeal/guide"
+  },
+  {
+    "id": "亚马逊沙特站",
+    "name": "亚马逊沙特站",
+    "region": "me",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202403/1711417194425507_1682645116800_%E4%BA%9A%E9%A9%AC%E9%80%8A%282%29.jpeg",
+    "description": "当地最受欢迎的购物网站，目前为止共有34个类别",
+    "homepageUrl": "https://www.amazon.sa/",
+    "openGuideUrl": "https://www.amz123.com/amazon/guide"
+  },
+  {
+    "id": "亚马逊阿联酋站",
+    "name": "亚马逊阿联酋站",
+    "region": "me",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202403/1711417194425507_1682645116800_%E4%BA%9A%E9%A9%AC%E9%80%8A%282%29.jpeg",
+    "description": "中东最大且最成熟的电商市场之一，市场潜力巨大",
+    "homepageUrl": "https://www.amazon.ae/",
+    "openGuideUrl": "https://www.amz123.com/amazon/guide"
+  },
+  {
+    "id": "trendyol",
+    "name": "Trendyol",
+    "region": "me",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/6100f76f9b93f.png/icon52",
+    "description": "土耳其最大的电商平台，主要销售女士产品、男士产品、儿童产品等",
+    "homepageUrl": "https://www.trendyol.com/",
+    "openGuideUrl": "https://www.amz123.com/trendyol/guide"
+  },
+  {
+    "id": "hepsiburada",
+    "name": "Hepsiburada",
+    "region": "me",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/6100f7c7e05b2.png/icon52",
+    "description": "土耳其的著名电商平台，平台拥有近30个产品类别",
+    "homepageUrl": "https://www.hepsiburada.com/",
+    "openGuideUrl": "https://www.amz123.com/hepsiburada/guide"
+  },
+  {
+    "id": "gittigidiyor",
+    "name": "GittiGidiyor",
+    "region": "me",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/6100f830ade4b.png/icon52",
+    "description": "土耳其最早的一家电商公司，目前是土耳其第三大在线平台",
+    "homepageUrl": "https://www.gittigidiyor.com/",
+    "openGuideUrl": "https://www.amz123.com/gittigidiyor/guide"
+  },
+  {
+    "id": "n11",
+    "name": "N11",
+    "region": "me",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/61011397279de.png/icon52",
+    "description": "有韩资背景(与韩国SK集团合作成立)的土耳其新兴电商平台",
+    "homepageUrl": "https://www.n11.com/",
+    "openGuideUrl": "https://www.amz123.com/n11/guide"
+  },
+  {
+    "id": "亚马逊土耳其站",
+    "name": "亚马逊土耳其站",
+    "region": "me",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202403/1711417194425507_1682645116800_%E4%BA%9A%E9%A9%AC%E9%80%8A%282%29.jpeg",
+    "description": "2018年9月20日开通，属于新兴市场，有极大的增长空间",
+    "homepageUrl": "https://www.amazon.com.tr/",
+    "openGuideUrl": "https://www.amz123.com/amazon/guide"
+  },
+  {
+    "id": "jumia",
+    "name": "Jumia",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/upload/202310/1698487980418998_jumia.png",
+    "description": "全球大型交易所上市的非洲科技创业公司，拥有多个线上垂直运营平台",
+    "homepageUrl": "https://www.jumia.com.ng/",
+    "openGuideUrl": "https://www.amz123.com/jumia/guide"
+  },
+  {
+    "id": "kikuu",
+    "name": "KiKUU",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7f675ebb.png/icon52",
+    "description": "非洲领先的跨境电商平台，整合线上支付渠道，自建物流派送体系",
+    "homepageUrl": "https://www.kikuu.com/",
+    "openGuideUrl": "https://www.amz123.com/kikuu/guide"
+  },
+  {
+    "id": "kilimall",
+    "name": "KiliMall",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7f0222b3.png/icon52",
+    "description": "肯尼亚领先的在线购物网站，拥有非洲本土的品牌营销、仓储物流、售后客服体系",
+    "homepageUrl": "https://www.kilimall.ng/",
+    "openGuideUrl": "https://www.amz123.com/kilimall/guide"
+  },
+  {
+    "id": "tospino-b2b",
+    "name": "Tospino B2B",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210125/600e75c69a043.png/icon52",
+    "description": "面向非洲市场的领先本地化电商平台，致力于帮助国内中小企业拓展海外市场",
+    "homepageUrl": "https://www.tospinobusiness.com.gh/",
+    "openGuideUrl": "https://www.amz123.com/tospino/guide"
+  },
+  {
+    "id": "tospinomall",
+    "name": "TospinoMall",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8ec9b92868.png/icon52",
+    "description": "面向非洲市场的领先本地化电商平台，致力于帮助国内中小企业拓展海外市场",
+    "homepageUrl": "https://www.tospino.com.gh/",
+    "openGuideUrl": "https://www.amz123.com/tospino/guide"
+  },
+  {
+    "id": "takealot",
+    "name": "Takealot",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1682576657189_Takealot.png",
+    "description": "南非领先的在线零售商，有自营和第三方两种业务模式",
+    "homepageUrl": "https://www.takealot.com",
+    "openGuideUrl": "https://www.amz123.com/takealot/guide"
+  },
+  {
+    "id": "亚马逊埃及站",
+    "name": "亚马逊埃及站",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202403/1711417194425507_1682645116800_%E4%BA%9A%E9%A9%AC%E9%80%8A%282%29.jpeg",
+    "description": "亚马逊全球第20个站点，目前亚马逊在埃及拥有广泛的履行网络",
+    "homepageUrl": "https://www.amazon.eg/",
+    "openGuideUrl": "https://www.amz123.com/amazon/guide"
+  },
+  {
+    "id": "尼日利亚",
+    "name": "尼日利亚",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1681205151585_%E5%B0%BC%E6%97%A5%E5%88%A9%E4%BA%9A.png",
+    "description": "Jumia平台尼日利亚站点，网购用户绝对数量方面位居非洲第一",
+    "homepageUrl": "https://www.jumia.com.ng?from=kd",
+    "openGuideUrl": ""
+  },
+  {
+    "id": "肯尼亚",
+    "name": "肯尼亚",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1681205459562_%E8%82%AF%E5%B0%BC%E4%BA%9A1.png",
+    "description": "Jumia平台肯尼亚站点，目前在售商品，包括服饰、电子、快消、家居、美容等多个类别",
+    "homepageUrl": "https://www.jumia.co.ke?from=kd",
+    "openGuideUrl": ""
+  },
+  {
+    "id": "摩洛哥",
+    "name": "摩洛哥",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1681205533751_%E6%91%A9%E6%B4%9B%E5%93%A5.png",
+    "description": "Jumia平台摩洛哥站点，市场份额处于行业头部地位，已具备领先优势",
+    "homepageUrl": "https://www.jumia.ma?from=kd",
+    "openGuideUrl": ""
+  },
+  {
+    "id": "埃及",
+    "name": "埃及",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1681204933323_%E5%9F%83%E5%8F%8A.png",
+    "description": "Jumia平台埃及站点，埃及排名第一的电商销售平台",
+    "homepageUrl": "https://www.jumia.com.eg?from=kd",
+    "openGuideUrl": ""
+  },
+  {
+    "id": "突尼斯",
+    "name": "突尼斯",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1682577976138_%E7%AA%81%E5%B0%BC%E6%96%AF.png",
+    "description": "Jumia平台突尼斯站点，最受非洲用户喜爱和信赖的购物平台",
+    "homepageUrl": "https://www.jumia.com.tn?from=kd",
+    "openGuideUrl": ""
+  },
+  {
+    "id": "科特迪瓦",
+    "name": "科特迪瓦",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1682578568769_%E7%A7%91%E7%89%B9%E8%BF%AA%E7%93%A6.png",
+    "description": "Jumia平台科特迪瓦站点，完整的物流体系及安全的支付平台",
+    "homepageUrl": "https://www.jumia.ci?from=kd",
+    "openGuideUrl": ""
+  },
+  {
+    "id": "加纳",
+    "name": "加纳",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1682580042091_%E5%8A%A0%E7%BA%B3.png",
+    "description": "Jumia平台加纳站点，为消费者提供创新、优惠的商品及便捷的线上购物体验",
+    "homepageUrl": "https://www.jumia.com.gh?from=kd",
+    "openGuideUrl": ""
+  },
+  {
+    "id": "乌干达",
+    "name": "乌干达",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1682580315965_%E4%B9%8C%E5%B9%B2%E8%BE%BE.png",
+    "description": "Jumia平台乌干达站点，提供来自众多卖家的商品，包括服装、智能手机、电子产品、家居用品和美容产品等",
+    "homepageUrl": "https://www.jumia.ug?from=kd",
+    "openGuideUrl": ""
+  },
+  {
+    "id": "塞内加尔",
+    "name": "塞内加尔",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1682580495975_%E5%A1%9E%E5%86%85%E5%8A%A0%E5%B0%94.png",
+    "description": "Jumia平台塞内加尔站点，为卖家解决找物流难、清关难问题",
+    "homepageUrl": "https://www.jumia.sn?from=kd",
+    "openGuideUrl": ""
+  },
+  {
+    "id": "阿尔及利亚",
+    "name": "阿尔及利亚",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1682580900861_%E9%98%BF%E5%B0%94%E5%8F%8A%E5%88%A9%E4%BA%9A.png",
+    "description": "Jumia平台阿尔及利亚站点，世界第三家拥有自己末端物流派送的电商企业",
+    "homepageUrl": "https://www.jumia.dz?from=kd",
+    "openGuideUrl": ""
+  },
+  {
+    "id": "南非",
+    "name": "南非",
+    "region": "africa",
+    "logoUrl": "https://img.amz123.com/image_cloud/202304/1682581090533_%E5%8D%97%E9%9D%9E.png",
+    "description": "Jumia平台南非站点，为消费者提供众多便利服务，如餐厅外卖和日常数字服务，包括话费充值、水电费支付和交通售票等",
+    "homepageUrl": "https://www.zando.co.za?from=kd",
+    "openGuideUrl": ""
+  },
+  {
+    "id": "daraz",
+    "name": "Daraz",
+    "region": "sa",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7eded88e.png/icon52",
+    "description": "巴基斯坦最受欢迎的在线购物网站，市场覆盖巴基斯坦、孟加拉、斯里兰卡等",
+    "homepageUrl": "https://www.daraz.pk/",
+    "openGuideUrl": "https://www.amz123.com/daraz/guide"
+  },
+  {
+    "id": "亚马逊印度站",
+    "name": "亚马逊印度站",
+    "region": "sa",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202403/1711417194425507_1682645116800_%E4%BA%9A%E9%A9%AC%E9%80%8A%282%29.jpeg",
+    "description": "常年位居印度电商网站流量前列，为客户提供数百万种全新、翻新及二手商品",
+    "homepageUrl": "https://www.amazon.in/",
+    "openGuideUrl": "https://www.amz123.com/amazon/guide"
+  },
+  {
+    "id": "flipkart",
+    "name": "Flipkart",
+    "region": "sa",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7ee1d120.jpeg/icon52",
+    "description": "印度本土知名电商公司，主营书籍、消费电子、服饰、时尚等",
+    "homepageUrl": "https://www.flipkart.com/",
+    "openGuideUrl": "https://www.amz123.com/flipkart/guide"
+  },
+  {
+    "id": "myntra",
+    "name": "Myntra",
+    "region": "sa",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7eda082c.png/icon52",
+    "description": "专注于线上的印度电商公司，目前已在时尚电商领域的成为市场领导者",
+    "homepageUrl": "https://www.myntra.com/",
+    "openGuideUrl": "https://www.amz123.com/myntra/guide"
+  },
+  {
+    "id": "meesho",
+    "name": "Meesho",
+    "region": "sa",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20210728/6100dea5ac1c9.png/icon52",
+    "description": "印度的社交电商平台，注重本土化运营",
+    "homepageUrl": "https://meesho.com/",
+    "openGuideUrl": "https://www.amz123.com/meesho/guide"
+  },
+  {
+    "id": "snapdeal",
+    "name": "Snapdeal",
+    "region": "sa",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7edc978a.png/icon52",
+    "description": "印度领先的纯价值电子商务平台，是印度四大在线生活方式购物目的地之一",
+    "homepageUrl": "https://www.snapdeal.com/",
+    "openGuideUrl": "https://www.amz123.com/snapdeal/guide"
+  },
+  {
+    "id": "kaspi",
+    "name": "Kaspi",
+    "region": "cas",
+    "logoUrl": "https://img.amz123.com/upload/image_cloud/202401/1706669351033937_kaspi-logo-85f669b34bf6b0f645cd91ada77b14f90a883f76a5bd453d94a141959e75926c.png",
+    "description": "哈萨克斯坦最大的电子商务平台，主营电子产品、服装、家居用品等",
+    "homepageUrl": "https://obyavleniya.kaspi.kz/",
+    "openGuideUrl": "https://www.amz123.com/kaspi/guide"
+  },
+  {
+    "id": "阿里巴巴国际",
+    "name": "阿里巴巴国际",
+    "region": "b2b",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7ed0e4ef.png/icon52",
+    "description": "向海外买家展示、推广供应商的企业和产品，是出口企业拓展国际贸易的首选网络平台之一",
+    "homepageUrl": "http://supplier.alibaba.com?&amp;joinSource=gw_amz123_qita",
+    "openGuideUrl": "https://www.amz123.com/alibaba/guide"
+  },
+  {
+    "id": "敦煌网",
+    "name": "敦煌网",
+    "region": "b2b",
+    "logoUrl": "https://img.amz123.com/upload/index_icon/20201203/5fc8f7f6c1e73.png/icon52",
+    "description": "美国领先的全球中小零售商一站式贸易和服务平台",
+    "homepageUrl": "https://www.dhgate.com/",
+    "openGuideUrl": "https://www.amz123.com/dhw/guide"
+  },
+  {
+    "id": "亚马逊企业购",
+    "name": "亚马逊企业购",
+    "region": "b2b",
+    "logoUrl": "https://img.amz123.com/image_cloud/202211/1668043986919_AB%20CN%20logo-Primary%20two%20color.png",
+    "description": "新型一站式跨境电商 DTB模式站点，相当于亚马逊平台中的B2B业务",
+    "homepageUrl": "https://ma.globalsellingcommunity.cn/page/landing-page/index?pf_uid=23802_1984&amp;id=11055&amp;channel=27829",
+    "openGuideUrl": "https://www.amz123.com/amazonbusiness/guide"
+  }
+]

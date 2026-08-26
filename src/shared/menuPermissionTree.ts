@@ -14,6 +14,9 @@ export interface MenuPermNode {
 }
 
 export const MENU_PERMISSION_TREE: MenuPermNode[] = [
+  // 阶段：左侧栏重排新增的三个占位入口（尚不执行业务代码）
+  { code: 'menu.cb-news', label: 'CB资讯', cards: [] },
+  { code: 'menu.ie-browser', label: 'IE浏览', cards: [] },
   {
     code: 'menu.crossborder', label: 'AI跨境', cards: [
       { code: 'menu.crossborder.login', label: '平台登录' },
@@ -23,6 +26,7 @@ export const MENU_PERMISSION_TREE: MenuPermNode[] = [
     ]
   },
   { code: 'menu.advisor', label: 'AI参谋', cards: [{ code: 'menu.advisor.online', label: '在线参谋' }] },
+  { code: 'menu.warehouse', label: 'AI仓库', cards: [] },
   {
     code: 'menu.collect', label: 'AI采集', cards: [
       { code: 'menu.collect.gigacloud', label: '大健云仓' },
@@ -38,7 +42,6 @@ export const MENU_PERMISSION_TREE: MenuPermNode[] = [
     ]
   },
   { code: 'menu.video', label: 'AI视频', cards: [] },
-  { code: 'menu.tasks', label: 'AI任务', cards: [] },
   { code: 'menu.employee', label: 'AI员工', cards: [] },
   {
     code: 'menu.planet', label: 'AI星球', cards: [
@@ -52,7 +55,9 @@ export const MENU_PERMISSION_TREE: MenuPermNode[] = [
       { code: 'menu.hq.support', label: 'AI客服' },
       { code: 'menu.hq.feishu', label: 'AI飞书' },
       { code: 'menu.hq.vpn', label: '翻墙管理' },
-      { code: 'menu.hq.admin', label: '系统管理' }
+      { code: 'menu.hq.crossborder', label: '跨境导航' },
+      { code: 'menu.hq.admin', label: '系统管理' },
+      { code: 'menu.tasks', label: 'AI任务' }
     ]
   }
 ]

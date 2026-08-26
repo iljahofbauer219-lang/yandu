@@ -3,7 +3,7 @@
  * 服务端唯一权威目录，客户端通过 GET /api/ai/models 获取，不再本地维护。
  */
 
-export type AiProviderId = 'bailian' | 'volc' | 'openai'
+export type AiProviderId = 'bailian' | 'volc' | 'openai' | 'linduo'
 
 export interface AiImageModelProfile {
   id: string
@@ -58,10 +58,36 @@ export const OPENAI_IMAGE_MODELS: Record<string, ImageModelMeta> = {
   }
 }
 
+/** 零度API（api000.com）生图模型：与主进程 LinduoImageService 保持一致。模型 id 以 api000.com /v1/models 探测返回为准。 */
+export const LINDUO_IMAGE_MODELS: Record<string, ImageModelMeta> = {
+  'gpt-image-1': {
+    name: 'GPT-Image-1',
+    description: 'OpenAI gpt-image-1（经零度API 代理），纯文生图，文字渲染与细节表现俱佳',
+    maxReferenceImages: 0,
+    strengths: '文字渲染·细节·创意构图',
+    costLabel: '按量计费'
+  },
+  'gemini-2.5-flash-image-preview': {
+    name: 'Gemini 2.5 Flash Image',
+    description: 'Google Gemini 2.5 Flash 多模态生图（经零度API 代理），支持参照图',
+    maxReferenceImages: 4,
+    strengths: '多模态·速度快·参照图',
+    costLabel: '按量计费'
+  },
+  'imagen-4.0': {
+    name: 'Imagen 4.0',
+    description: 'Google Imagen 4.0（经零度API 代理），高质量商品图与品牌色控制',
+    maxReferenceImages: 0,
+    strengths: '高质量·品牌色·主图',
+    costLabel: '按量计费'
+  }
+}
+
 const IMAGE_MODEL_TABLE: Array<{ provider: AiProviderId; models: Record<string, ImageModelMeta> }> = [
   { provider: 'bailian', models: BAILIAN_IMAGE_MODELS },
   { provider: 'volc', models: VOLC_IMAGE_MODELS },
-  { provider: 'openai', models: OPENAI_IMAGE_MODELS }
+  { provider: 'openai', models: OPENAI_IMAGE_MODELS },
+  { provider: 'linduo', models: LINDUO_IMAGE_MODELS }
 ]
 
 export function findImageModel(modelId: string): AiImageModelProfile | null {

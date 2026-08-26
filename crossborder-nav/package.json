@@ -1,0 +1,29 @@
+{
+  "name": "crossborder-nav",
+  "version": "1.0.0",
+  "description": "砚都跨境 · IP 网址导航（amz123.com/kd 1:1 复刻 + 独立部署）",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 8789 --host 0.0.0.0",
+    "serve": "http-server dist -p 8789 -a 0.0.0.0 -c-1",
+    "fetch:data": "node scripts/fetch-amz123.mjs",
+    "fetch:logos": "node scripts/download-logos.mjs",
+    "build:data": "node scripts/build-data.mjs"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "http-server": "^14.1.1",
+    "typescript": "~5.7.2",
+    "vite": "^5.4.11"
+  }
+}

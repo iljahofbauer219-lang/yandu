@@ -7,10 +7,16 @@
 - [EbayImageComplianceVisionService.ts](file://src/main/services/EbayImageComplianceVisionService.ts)
 - [EbayImageGroundingService.ts](file://src/main/services/EbayImageGroundingService.ts)
 - [EbayVideoService.ts](file://src/main/services/EbayVideoService.ts)
-- [EbayVisualCompliancePanel.tsx](file://src/renderer/EbayVisualCompliancePanel.tsx)
 - [EbayVideoStudio.tsx](file://src/renderer/EbayVideoStudio.tsx)
 - [contracts.ts](file://src/shared/contracts.ts)
 </cite>
+
+## 更新摘要
+**变更内容**
+- 简化了研究查询逻辑，优化了图像生成的内容集成流程
+- 移除了通用高级AI功能，专注于eBay市场工具的视觉处理能力
+- 增强了百炼图像服务的多模型支持和异步任务处理
+- 优化了视频生成流水线，提升了eBay商品视频制作效率
 
 ## 目录
 1. [简介](#简介)
@@ -25,7 +31,7 @@
 10. [附录](#附录)
 
 ## 简介
-本模块聚焦于AI视觉能力，围绕“百炼图像服务”和“视频处理服务”构建，提供图像识别、内容审核、视觉标注与合规检查、以及视频生成与编辑等能力。文档面向开发者与产品使用者，既覆盖API调用方式、参数配置、响应格式与错误处理，也给出典型应用场景（如图像识别、视频编辑、内容审核）的集成思路与最佳实践，并解释与第三方AI服务的集成方式和性能优化策略。
+本模块聚焦于AI视觉能力，围绕"百炼图像服务"和"视频处理服务"构建，提供图像识别、内容审核、视觉标注与合规检查、以及视频生成与编辑等能力。**已更新**：简化了研究查询逻辑，增强了图像生成的内容集成，专注于eBay市场工具的视觉处理能力。文档面向开发者与产品使用者，既覆盖API调用方式、参数配置、响应格式与错误处理，也给出典型应用场景（如图像识别、视频编辑、内容审核）的集成思路与最佳实践，并解释与第三方AI服务的集成方式和性能优化策略。
 
 ## 项目结构
 - 服务层（main/services）：封装对第三方AI能力的调用与业务编排，包括图像、视频、合规与标注等。
@@ -35,7 +41,6 @@
 ```mermaid
 graph TB
 subgraph "渲染层"
-UI_Visual["视觉合规面板<br/>EbayVisualCompliancePanel.tsx"]
 UI_Studio["视频工作室<br/>EbayVideoStudio.tsx"]
 end
 subgraph "主进程服务"
@@ -48,8 +53,6 @@ end
 subgraph "共享契约"
 C_Contracts["契约定义<br/>contracts.ts"]
 end
-UI_Visual --> S_Compliance
-UI_Visual --> S_Image
 UI_Studio --> S_Video
 UI_Studio --> S_EbayVideo
 S_Compliance --> S_Image
@@ -62,42 +65,24 @@ S_Grounding --> C_Contracts
 S_EbayVideo --> C_Contracts
 ```
 
-图表来源
+**图表来源**
 - [BailianImageService.ts](file://src/main/services/BailianImageService.ts)
 - [ArkVideoService.ts](file://src/main/services/ArkVideoService.ts)
 - [EbayImageComplianceVisionService.ts](file://src/main/services/EbayImageComplianceVisionService.ts)
 - [EbayImageGroundingService.ts](file://src/main/services/EbayImageGroundingService.ts)
 - [EbayVideoService.ts](file://src/main/services/EbayVideoService.ts)
-- [EbayVisualCompliancePanel.tsx](file://src/renderer/EbayVisualCompliancePanel.tsx)
-- [EbayVideoStudio.tsx](file://src/renderer/EbayVideoStudio.tsx)
-- [contracts.ts](file://src/shared/contracts.ts)
-
-章节来源
-- [BailianImageService.ts](file://src/main/services/BailianImageService.ts)
-- [ArkVideoService.ts](file://src/main/services/ArkVideoService.ts)
-- [EbayImageComplianceVisionService.ts](file://src/main/services/EbayImageComplianceVisionService.ts)
-- [EbayImageGroundingService.ts](file://src/main/services/EbayImageGroundingService.ts)
-- [EbayVideoService.ts](file://src/main/services/EbayVideoService.ts)
-- [EbayVisualCompliancePanel.tsx](file://src/renderer/EbayVisualCompliancePanel.tsx)
 - [EbayVideoStudio.tsx](file://src/renderer/EbayVideoStudio.tsx)
 - [contracts.ts](file://src/shared/contracts.ts)
 
 ## 核心组件
-- 百炼图像服务：统一封装图像识别、检测、描述、增强等能力，对外暴露一致的请求/响应模型与错误语义。
-- Ark视频服务：封装视频生成、转码、剪辑、合成等能力，支持异步任务与进度回调。
+- 百炼图像服务：统一封装图像识别、检测、描述、增强等能力，对外暴露一致的请求/响应模型与错误语义。**已更新**：支持更多AI模型，优化了异步任务处理和图片提取逻辑。
+- Ark视频服务：封装视频生成、转码、剪辑、合成等能力，支持异步任务与进度回调。**已更新**：增强了eBay商品视频制作流水线。
 - eBay图像合规视觉服务：基于图像识别结果进行合规判定与规则校验，输出审核意见与整改建议。
-- eBay图像定位服务：在图像中定位关键区域或元素，返回边界框与置信度，支撑后续编辑与审核。
-- eBay视频服务：面向电商场景的视频制作流水线，整合素材、模板、文案与AI生成能力。
-
-章节来源
-- [BailianImageService.ts](file://src/main/services/BailianImageService.ts)
-- [ArkVideoService.ts](file://src/main/services/ArkVideoService.ts)
-- [EbayImageComplianceVisionService.ts](file://src/main/services/EbayImageComplianceVisionService.ts)
-- [EbayImageGroundingService.ts](file://src/main/services/EbayImageGroundingService.ts)
-- [EbayVideoService.ts](file://src/main/services/EbayVideoService.ts)
+- eBay图像定位服务：在图像中定位关键区域或元素，返回边界框与置信度，支撑后续编辑与审核。**已更新**：简化了研究查询逻辑，专注于eBay商品分析。
+- eBay视频服务：面向电商场景的视频制作流水线，整合素材、模板、文案与AI生成能力。**已更新**：专注于eBay市场工具的视频生成。
 
 ## 架构总览
-整体采用“渲染层 -> 主进程服务 -> 第三方AI服务”的分层架构。渲染层负责用户交互与状态管理；主进程服务负责协议适配、鉴权、重试、缓存与错误归一化；第三方AI服务提供具体的视觉与视频能力。共享契约保证数据结构的一致性。
+整体采用"渲染层 -> 主进程服务 -> 第三方AI服务"的分层架构。渲染层负责用户交互与状态管理；主进程服务负责协议适配、鉴权、重试、缓存与错误归一化；第三方AI服务提供具体的视觉与视频能力。共享契约保证数据结构的一致性。
 
 ```mermaid
 sequenceDiagram
@@ -120,16 +105,16 @@ Ark-->>Main : 进度回调/最终结果
 Main-->>UI : 更新进度/展示成品
 ```
 
-图表来源
+**图表来源**
 - [BailianImageService.ts](file://src/main/services/BailianImageService.ts)
 - [ArkVideoService.ts](file://src/main/services/ArkVideoService.ts)
-- [EbayVisualCompliancePanel.tsx](file://src/renderer/EbayVisualCompliancePanel.tsx)
 - [EbayVideoStudio.tsx](file://src/renderer/EbayVideoStudio.tsx)
 
 ## 详细组件分析
 
 ### 百炼图像服务（BailianImageService）
 - 职责：统一封装图像识别、检测、描述、增强等能力，屏蔽第三方差异，提供稳定接口。
+- **已更新**：支持多种AI模型（万相2.7 Pro、千问Image 2.0 Pro、Z-Image Turbo等），优化了异步任务处理和图片提取逻辑。
 - 关键能力：
   - 图像识别：输入图像与可选提示词，返回标签、置信度、属性等。
   - 图像检测：返回目标边界框、类别与置信度。
@@ -143,32 +128,15 @@ Main-->>UI : 更新进度/展示成品
   - 请求去重与结果缓存（按图像指纹）。
   - 批量请求合并与并发限流。
   - 图片预处理（压缩、缩放）减少传输与推理开销。
-- 使用示例路径：
-  - 图像识别：[BailianImageService.ts](file://src/main/services/BailianImageService.ts)
-  - 图像检测：[BailianImageService.ts](file://src/main/services/BailianImageService.ts)
-  - 图像描述：[BailianImageService.ts](file://src/main/services/BailianImageService.ts)
-  - 图像增强：[BailianImageService.ts](file://src/main/services/BailianImageService.ts)
+  - **新增**：智能模型选择和多端点适配（同步/异步）。
 
-```mermaid
-classDiagram
-class BailianImageService {
-+识别图像(图像源, 提示词, 选项) 识别结果
-+检测目标(图像源, 类别列表, 选项) 检测结果
-+生成描述(图像源, 语言, 选项) 描述结果
-+增强图像(图像源, 增强项, 选项) 增强结果
--缓存查询(图像指纹) 结果|空
--重试策略(错误, 次数) 是否重试
-}
-```
-
-图表来源
-- [BailianImageService.ts](file://src/main/services/BailianImageService.ts)
-
-章节来源
-- [BailianImageService.ts](file://src/main/services/BailianImageService.ts)
+**章节来源**
+- [BailianImageService.ts:3-11](file://src/main/services/BailianImageService.ts#L3-L11)
+- [BailianImageService.ts:96-219](file://src/main/services/BailianImageService.ts#L96-L219)
 
 ### Ark视频服务（ArkVideoService）
 - 职责：封装视频生成、转码、剪辑、合成等能力，支持异步任务与进度回调。
+- **已更新**：增强了eBay商品视频制作流水线，优化了任务验证和能力检测机制。
 - 关键能力：
   - 视频生成：根据脚本、素材、模板生成短视频。
   - 视频编辑：裁剪、拼接、字幕、转场、滤镜。
@@ -182,42 +150,11 @@ class BailianImageService {
   - 分片上传与断点续传。
   - 并行转码与GPU加速（若可用）。
   - 任务队列与优先级调度。
-- 使用示例路径：
-  - 视频生成：[ArkVideoService.ts](file://src/main/services/ArkVideoService.ts)
-  - 视频编辑：[ArkVideoService.ts](file://src/main/services/ArkVideoService.ts)
-  - 转码导出：[ArkVideoService.ts](file://src/main/services/ArkVideoService.ts)
+  - **新增**：真实调用验证机制，确保模型可用性。
 
-```mermaid
-sequenceDiagram
-participant UI as "渲染层UI"
-participant Main as "主进程服务"
-participant Ark as "Ark视频服务"
-participant Third as "第三方视频API"
-UI->>Main : 提交视频生成任务
-Main->>Ark : 创建任务(素材, 脚本, 模板)
-Ark->>Third : 调用生成API
-Third-->>Ark : 返回任务ID
-Ark-->>Main : 任务已接受
-Main-->>UI : 显示任务ID与初始进度
-loop 进度轮询/事件
-UI->>Main : 查询进度
-Main->>Ark : 获取任务状态
-Ark->>Third : 拉取最新状态
-Third-->>Ark : 进度/中间产物
-Ark-->>Main : 标准化进度
-Main-->>UI : 更新进度条/预览
-end
-Ark-->>Main : 任务完成(成品URL)
-Main-->>UI : 展示成品与下载链接
-```
-
-图表来源
-- [ArkVideoService.ts](file://src/main/services/ArkVideoService.ts)
-- [EbayVideoStudio.tsx](file://src/renderer/EbayVideoStudio.tsx)
-
-章节来源
-- [ArkVideoService.ts](file://src/main/services/ArkVideoService.ts)
-- [EbayVideoStudio.tsx](file://src/renderer/EbayVideoStudio.tsx)
+**章节来源**
+- [ArkVideoService.ts:230-310](file://src/main/services/ArkVideoService.ts#L230-L310)
+- [ArkVideoService.ts:486-590](file://src/main/services/ArkVideoService.ts#L486-L590)
 
 ### eBay图像合规视觉服务（EbayImageComplianceVisionService）
 - 职责：基于图像识别结果执行合规规则校验，输出审核意见与整改建议。
@@ -229,53 +166,30 @@ Main-->>UI : 展示成品与下载链接
   - 输入：图像源、识别结果、规则集、阈值配置。
   - 输出：合规状态、风险分数、问题清单与建议。
   - 错误处理：规则加载失败、模型不可用、输入不合法等。
-- 使用示例路径：
-  - 合规检测：[EbayImageComplianceVisionService.ts](file://src/main/services/EbayImageComplianceVisionService.ts)
-  - 风险评分：[EbayImageComplianceVisionService.ts](file://src/main/services/EbayImageComplianceVisionService.ts)
-  - 建议生成：[EbayImageComplianceVisionService.ts](file://src/main/services/EbayImageComplianceVisionService.ts)
 
-```mermaid
-flowchart TD
-Start(["开始"]) --> LoadRules["加载合规规则集"]
-LoadRules --> InputValid{"输入有效?"}
-InputValid --> |否| ReturnError["返回输入错误"]
-InputValid --> |是| RunDetection["运行视觉检测"]
-RunDetection --> ScoreRisk["计算风险评分"]
-ScoreRisk --> CheckThreshold{"超过阈值?"}
-CheckThreshold --> |是| GenerateAdvice["生成整改建议"]
-CheckThreshold --> |否| PassCheck["通过合规检查"]
-GenerateAdvice --> OutputResult["输出结果与建议"]
-PassCheck --> OutputResult
-OutputResult --> End(["结束"])
-ReturnError --> End
-```
-
-图表来源
-- [EbayImageComplianceVisionService.ts](file://src/main/services/EbayImageComplianceVisionService.ts)
-
-章节来源
-- [EbayImageComplianceVisionService.ts](file://src/main/services/EbayImageComplianceVisionService.ts)
+**章节来源**
+- [EbayImageComplianceVisionService.ts:133-317](file://src/main/services/EbayImageComplianceVisionService.ts#L133-L317)
 
 ### eBay图像定位服务（EbayImageGroundingService）
 - 职责：在图像中定位关键区域或元素，返回边界框与置信度，支撑后续编辑与审核。
+- **已更新**：简化了研究查询逻辑，专注于eBay商品分析，移除了通用高级AI功能。
 - 关键能力：
   - 目标定位：文本、Logo、商品主体等。
   - 区域裁剪：基于定位结果自动裁剪与构图优化。
   - 可视化标注：叠加边界框与标签用于调试与展示。
+  - **新增**：阶段式图片优化框架，支持HERO、PRODUCT、PAIN_POINT、SCENE等用途。
 - API调用方式：
   - 输入：图像源、目标类别、精度要求。
   - 输出：定位结果（边界框、类别、置信度）、可视化标注图。
   - 错误处理：模型不可用、图像过大、类别不支持等。
-- 使用示例路径：
-  - 目标定位：[EbayImageGroundingService.ts](file://src/main/services/EbayImageGroundingService.ts)
-  - 区域裁剪：[EbayImageGroundingService.ts](file://src/main/services/EbayImageGroundingService.ts)
-  - 可视化标注：[EbayImageGroundingService.ts](file://src/main/services/EbayImageGroundingService.ts)
 
-章节来源
-- [EbayImageGroundingService.ts](file://src/main/services/EbayImageGroundingService.ts)
+**章节来源**
+- [EbayImageGroundingService.ts:192-329](file://src/main/services/EbayImageGroundingService.ts#L192-L329)
+- [EbayImageGroundingService.ts:557-735](file://src/main/services/EbayImageGroundingService.ts#L557-L735)
 
 ### eBay视频服务（EbayVideoService）
 - 职责：面向电商场景的视频制作流水线，整合素材、模板、文案与AI生成能力。
+- **已更新**：专注于eBay市场工具的视频生成，简化了处理流程。
 - 关键能力：
   - 模板匹配：根据商品信息与风格选择合适模板。
   - 素材编排：自动拼接、转场、字幕与背景音乐。
@@ -284,27 +198,19 @@ ReturnError --> End
   - 输入：商品信息、模板ID、素材清单、文案参数。
   - 输出：视频成品URL、元数据、版本历史。
   - 错误处理：模板缺失、素材不兼容、生成失败等。
-- 使用示例路径：
-  - 模板匹配：[EbayVideoService.ts](file://src/main/services/EbayVideoService.ts)
-  - 素材编排：[EbayVideoService.ts](file://src/main/services/EbayVideoService.ts)
-  - 文案生成：[EbayVideoService.ts](file://src/main/services/EbayVideoService.ts)
 
-章节来源
-- [EbayVideoService.ts](file://src/main/services/EbayVideoService.ts)
+**章节来源**
+- [EbayVideoService.ts:44-84](file://src/main/services/EbayVideoService.ts#L44-L84)
 
-### 渲染层集成（EbayVisualCompliancePanel.tsx / EbayVideoStudio.tsx）
-- 视觉合规面板：
-  - 功能：上传图像、触发识别与合规检测、展示结果与建议。
-  - 交互：实时反馈、错误提示、重试与导出报告。
-  - 集成点：调用合规视觉服务与百炼图像服务。
+### 渲染层集成（EbayVideoStudio.tsx）
 - 视频工作室：
   - 功能：选择模板、上传素材、生成与编辑视频、预览与下载。
   - 交互：进度条、步骤导航、错误恢复。
   - 集成点：调用Ark视频服务与eBay视频服务。
+  - **已更新**：增强了模型能力检测和验证机制，提供更友好的用户体验。
 
-章节来源
-- [EbayVisualCompliancePanel.tsx](file://src/renderer/EbayVisualCompliancePanel.tsx)
-- [EbayVideoStudio.tsx](file://src/renderer/EbayVideoStudio.tsx)
+**章节来源**
+- [EbayVideoStudio.tsx:53-200](file://src/renderer/EbayVideoStudio.tsx#L53-L200)
 
 ## 依赖关系分析
 - 组件耦合：
@@ -318,25 +224,13 @@ ReturnError --> End
 
 ```mermaid
 graph LR
-UI_Panel["视觉合规面板"] --> Compliance["合规视觉服务"]
-UI_Panel --> Image["百炼图像服务"]
 UI_Studio["视频工作室"] --> Video["eBay视频服务"]
 Video --> Ark["Ark视频服务"]
-Compliance --> Image
+Compliance["合规视觉服务"] --> Image["百炼图像服务"]
 Grounding["图像定位服务"] --> Image
 ```
 
-图表来源
-- [EbayVisualCompliancePanel.tsx](file://src/renderer/EbayVisualCompliancePanel.tsx)
-- [EbayVideoStudio.tsx](file://src/renderer/EbayVideoStudio.tsx)
-- [EbayImageComplianceVisionService.ts](file://src/main/services/EbayImageComplianceVisionService.ts)
-- [EbayImageGroundingService.ts](file://src/main/services/EbayImageGroundingService.ts)
-- [EbayVideoService.ts](file://src/main/services/EbayVideoService.ts)
-- [ArkVideoService.ts](file://src/main/services/ArkVideoService.ts)
-- [BailianImageService.ts](file://src/main/services/BailianImageService.ts)
-
-章节来源
-- [EbayVisualCompliancePanel.tsx](file://src/renderer/EbayVisualCompliancePanel.tsx)
+**图表来源**
 - [EbayVideoStudio.tsx](file://src/renderer/EbayVideoStudio.tsx)
 - [EbayImageComplianceVisionService.ts](file://src/main/services/EbayImageComplianceVisionService.ts)
 - [EbayImageGroundingService.ts](file://src/main/services/EbayImageGroundingService.ts)
@@ -349,10 +243,12 @@ Grounding["图像定位服务"] --> Image
   - 预压缩与缩放，减少带宽与推理时间。
   - 结果缓存与去重，提升重复请求命中率。
   - 并发控制与队列管理，避免过载。
+  - **新增**：智能模型选择和异步任务处理，提升响应速度。
 - 视频服务：
   - 分片上传与断点续传，提高稳定性。
   - 并行转码与GPU加速，缩短生成时间。
   - 任务优先级与资源隔离，保障关键任务。
+  - **新增**：真实调用验证机制，避免无效任务提交。
 - 通用优化：
   - 错误快速失败与重试退避。
   - 监控与指标采集，定位瓶颈。
@@ -373,15 +269,8 @@ Grounding["图像定位服务"] --> Image
   - 切换上游服务或路由到备用通道。
   - 记录错误上下文，便于后续分析。
 
-章节来源
-- [BailianImageService.ts](file://src/main/services/BailianImageService.ts)
-- [ArkVideoService.ts](file://src/main/services/ArkVideoService.ts)
-- [EbayImageComplianceVisionService.ts](file://src/main/services/EbayImageComplianceVisionService.ts)
-- [EbayImageGroundingService.ts](file://src/main/services/EbayImageGroundingService.ts)
-- [EbayVideoService.ts](file://src/main/services/EbayVideoService.ts)
-
 ## 结论
-本模块以统一的图像与视频服务能力为核心，结合电商场景的合规与制作需求，构建了可扩展、高性能的AI视觉服务。通过分层架构与共享契约，实现了清晰的职责划分与稳定的集成方式。建议在后续迭代中持续完善监控、降级与自动化测试，以提升系统可靠性与用户体验。
+本模块以统一的图像与视频服务能力为核心，结合电商场景的合规与制作需求，构建了可扩展、高性能的AI视觉服务。**已更新**：通过简化研究查询逻辑和增强内容集成，专注于eBay市场工具的视觉处理能力，移除了通用高级AI功能以提升专注度和性能。通过分层架构与共享契约，实现了清晰的职责划分与稳定的集成方式。建议在后续迭代中持续完善监控、降级与自动化测试，以提升系统可靠性与用户体验。
 
 ## 附录
 - 典型应用场景参考路径：

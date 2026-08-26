@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "砚都跨境采集助手",
-  "version": "0.2.0",
-  "description": "大健云仓商品采集 + 1688 商品一键 AI 选品分析（RAGFlow 选品分析师）。",
+  "version": "0.3.0",
+  "description": "大健云仓商品采集 + 1688 商品一键 AI 选品分析（MaxKB 选品分析师）。",
   "permissions": ["storage", "activeTab", "tabs"],
   "host_permissions": [
     "https://gigab2b.com/*",
@@ -10,6 +10,7 @@
     "https://detail.1688.com/*",
     "https://m.1688.com/*",
     "https://*.1688.com/*",
+    "http://114.55.149.192:8080/*",
     "http://114.55.149.192:8090/*",
     "http://127.0.0.1:17321/*"
   ],

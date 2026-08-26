@@ -9,6 +9,54 @@ export type CollectionProtectionMode = 'CAUTIOUS' | 'STANDARD' | 'FAST'
 export type GigaSellerIndexFilter = 'ANY' | 'NEW' | 'GE90' | 'GE80' | 'GE70' | 'GE60' | 'LT60'
 export type GigaReturnRateFilter = 'ANY' | 'LOW' | 'MEDIUM' | 'HIGH'
 
+// ─── 零度API 价格抓取 ──────────────────────────────────────────────────
+export type LinduoBillingType = 'TOKEN' | 'IMAGE' | 'VIDEO' | 'REQUEST'
+export type LinduoVendor = 'openai' | 'google' | 'anthropic' | 'vidu'
+
+export interface LinduoModelPricing {
+  modelId: string
+  vendor: LinduoVendor
+  /** 美元 / 1M tokens */
+  inputPrice: number | null
+  /** 美元 / 1M tokens */
+  outputPrice: number | null
+  /** 美元 / 1M tokens（仅部分模型有缓存读） */
+  cachePrice: number | null
+  currency: 'USD'
+  billingType: LinduoBillingType
+  /** 图片/视频按张/按秒计费时存储 */
+  pricePerUnit: number | null
+  /** 1M tokens / 张 / 秒 */
+  unitLabel: string | null
+  fetchedAt: string
+  /** true = 上次抓取失败，保留的是旧数据 */
+  stale: boolean
+}
+
+export interface LinduoPricingListResponse {
+  items: LinduoModelPricing[]
+  refreshedAt: string | null
+  /** 抓取状态 */
+  allStale: boolean
+}
+
+export interface LinduoLoginStatus {
+  loggedIn: boolean
+  username: string | null
+  expiresAt: string | null
+  lastUsedAt: string | null
+  /** 距下次自动重登的剩余时间（秒），< 86400 表示即将过期 */
+  expiresInSeconds: number | null
+}
+
+export interface LinduoPricingRefreshResult {
+  ok: boolean
+  count: number
+  refreshedAt: string
+  durationMs: number
+  error?: string
+}
+
 export interface MarketplacePlatformProfile {
   code: MarketplacePlatformCode
   name: string
@@ -1295,7 +1343,7 @@ export interface ImageModelProfile {
   /** 单次生成可携带的参照图上限，来自 BailianImageService 模型元数据 */
   maxReferenceImages?: number
   /** 服务商标识；缺省视为百炼（bailian） */
-  provider?: 'bailian' | 'volc' | 'openai'
+  provider?: 'bailian' | 'volc' | 'openai' | 'linduo'
   /** 功能强项描述，如 "商品一致性·细节还原·全场景适用" */
   strengths?: string
   /** 单张成本标签，如 "¥0.22/张" */

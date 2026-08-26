@@ -17,6 +17,7 @@ import { storeRoutes } from './modules/stores/routes.js'
 import { authPlugin } from './plugins/auth.js'
 import { codexHarnessRoutes } from './modules/codex-harness/routes.js'
 import { dashboardRoutes } from './modules/dashboard/routes.js'
+import { linduoPricingRoutes } from './modules/linduo/pricing-routes.js'
 
 export async function buildApp() {
   const app = Fastify({
@@ -64,6 +65,8 @@ export async function buildApp() {
   await app.register(mediaRoutes, { prefix: '/api/media' })
   await app.register(aiRoutes, { prefix: '/api/ai' })
   await app.register(codexHarnessRoutes, { prefix: '/api/codex-harness' })
+  // 零度API 价格抓取路由（DB 持久化 + 用户名密码自动登录）
+  await app.register(linduoPricingRoutes, { prefix: '/api/linduo' })
   // 公共下载路由（local 驱动，HMAC 签名即授权；OSS 驱动下返回 404）
   await app.register(mediaPublicRoutes)
 

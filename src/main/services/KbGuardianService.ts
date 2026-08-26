@@ -2,15 +2,15 @@
  * 知识库守卫：技能注册表 + 定时调度 + 哈希差异增量更新。
  * - 持久化 userData/kb-guardian-skills.json（skills / 每技能文件哈希表 / 运行日志）
  * - 调度：每分钟 tick；daily=每天≥09:00 且当日未跑；weekly=每周一同规则；启动 60s 后补跑错过周期
- * - 串行队列：同一时刻仅一个技能运行，避免 RAGFlow 解析队列堆积
+ * - 串行队列：同一时刻仅一个技能运行，避免 MaxKB 解析队列堆积
  * - 差异：sha256 未变跳过；新增上传；变化先删旧文档再上传（覆盖更新，避免旧 chunk 残留）
- * - 写入全部复用 RagflowKnowledgeService（uploadDocs/parseDocs/deleteDocs/listDocs）
+ * - 写入全部复用 MaxkbKnowledgeService（uploadDocs/parseDocs/deleteDocs/listDocs）
  */
 import { app, dialog } from 'electron'
 import { createHash } from 'node:crypto'
 import { promises as fsp } from 'node:fs'
 import path from 'node:path'
-import type { RagflowKnowledgeService } from './RagflowKnowledgeService'
+import type { MaxkbKnowledgeService } from './MaxkbKnowledgeService'
 import type { GuardianCategorySpec, GuardianRetryRequest, GuardianRetryResult, GuardianRunEvent, GuardianRunLog, GuardianRunOptions, GuardianRunTrigger, GuardianSkill, GuardianSkillInput, GuardianState, GuardianSyncMode } from '../../shared/kbGuardian'
 
 const TICK_MS = 60_000
@@ -48,7 +48,7 @@ export class KbGuardianService {
   private timer: NodeJS.Timeout | null = null
 
   constructor(
-    private kb: RagflowKnowledgeService,
+    private kb: MaxkbKnowledgeService,
     private emit: (event: GuardianRunEvent) => void,
     // I.2 阶段新增：可选的文件名→分类映射器（预置技能启动同步时注入）
     private categoryResolver?: GuardianCategoryResolver
@@ -223,7 +223,7 @@ export class KbGuardianService {
     return { queued: true }
   }
 
-  // 串行队列：链式排队，避免并发写入 RAGFlow
+  // 串行队列：链式排队，避免并发写入 MaxKB
   private enqueueRun(skillId: string, trigger: GuardianRunTrigger, options?: GuardianRunOptions): void {
     this.queue = this.queue
       .then(() => this.runSkill(skillId, trigger, options))
@@ -242,7 +242,7 @@ export class KbGuardianService {
     let updated = 0
     let skipped = 0
     let orphansRemoved = 0
-    // I.7 阶段新增：软同步失败时自动回退到硬同步的次数（docId 失效/老版本 RAGFlow）
+    // I.7 阶段新增：软同步失败时自动回退到硬同步的次数（docId 失效/老版本 MaxKB）
     let fallbackToHard = 0
     const failures: Array<{ name: string; reason: string }> = []
 
@@ -397,12 +397,12 @@ export class KbGuardianService {
       let softSyncHandled = false  // 软同步成功且不需要回退时为 true（避免软+硬都走时重复 ++updated）
       // I.5 阶段新增：软/硬两路同步
       if (entry && effectiveSyncMode === 'soft') {
-        // soft：保留旧 docId，调用 RAGFlow update_doc 替换文件 + 重解析
+        // soft：保留旧 docId，调用 MaxKB 替换文件 + 重解析
         try {
           docId = await this.updateAndParse(skill.targetKbId, entry.docId, absPath)
           softSyncHandled = true
         } catch (softError) {
-          // I.7 阶段新增：软同步失败时自动回退到硬同步（docId 失效/老版本 RAGFlow）
+          // I.7 阶段新增：软同步失败时自动回退到硬同步（docId 失效/老版本 MaxKB）
           // - 受 options?.softFallbackHard !== false 控制（缺省 true）
           // - 硬回退独立 try/catch，软+硬双错才计入 failure
           if (options?.softFallbackHard !== false) {
@@ -565,7 +565,7 @@ export class KbGuardianService {
     return ids[0]
   }
 
-  // I.5 阶段新增：软同步专用路径（保留 docId，调用 RAGFlow update_doc 替换文件 + 重解析）
+  // I.5 阶段新增：软同步专用路径（保留 docId，调用 MaxKB 替换文件 + 重解析）
   private async updateAndParse(kbId: string, docId: string, absPath: string): Promise<string> {
     await this.kb.updateDoc(kbId, docId, absPath)
     await this.kb.parseDocs(kbId, [docId])

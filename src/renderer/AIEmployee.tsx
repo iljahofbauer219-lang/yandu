@@ -2,6 +2,10 @@ import { Component, FormEvent, type ReactNode, useCallback, useEffect, useRef, u
 import AIMessageContent from './AIMessageContent'
 import AiEmployeeModelPicker from './AiEmployeeModelPicker'
 import ListingWorkbench from './ListingWorkbench'
+import WorkbenchSkillConfig from './WorkbenchSkillConfig'
+import ProductLibraryDrawer from './ProductLibraryDrawer'
+import ExecutionPanel from './ExecutionPanel'
+import { addProductItem, type ProductLibraryItem } from '../shared/productLibrary'
 import type { AiEmployeeAttachment, AiEmployeeChatModelProfile } from '../shared/aiEmployee'
 import { SELECTION_ANALYSIS_REQUEST, applyAmazonFinancialPreset, applyCnyPurchasePriceUsd, applyPlatformToRequest, assessExtractionEvidence, buildAmazonFinancialPreset, buildProductBasicsBlock, buildProductIdentityLock, buildSelectionInfoText, extractSupplyFacts, normalizeSelectionReport, reportPlatform, sanitizeSelectionReportEvidence, selectionGenerationGate, userEditedProfitFieldMeta, validateSelectionReportEvidence, validateSelectionReportIdentity, validateSelectionReportPlatform, type ExtractedProductInfo, type ProfitFieldKey } from '../shared/selectionExtract'
 import { buildAmazonEntryDecisionFactBlock, buildAmazonFullCostProfitFactBlock, buildAmazonQuickMarketProfitFactBlock, buildAmazonSearchIntent, buildComparableMarketFactBlock, buildCompetitorListingSummary, buildCompetitorReviewInsights, classifyAmazonSamples, estimateFbaFulfillmentFee, evaluateAmazonEntryDecision, meetsAmazonResearchSampleBaseline, normalizeAmazonKeywordPlan, sanitizeAmazonMarketClaims, validateAmazonEntryDecisionClaim, validateAmazonMarketClaims, type AmazonCostRange, type AmazonEntryDecisionInput, type AmazonFullCostInput, type AmazonListingEvidence, type AmazonMarketSample, type AmazonReviewEvidence, type AmazonSampleAudit, type AmazonQuickMarketProfitInput } from '../shared/amazonScraper'
@@ -107,7 +111,7 @@ const MAX_HISTORY = 50
 const ATTACHMENT_LIMITS: Record<'image' | 'doc', number> = { image: 4, doc: 3 }
 // 选品调研员的报告交付法则：主模型失败或质量门禁失败时，必须并行调用可用修正模型；
 // 再失败则交付系统事实驱动的预备报告，而不能只停留在错误提示。
-const REPORT_REPAIR_MODEL_IDS = ['deepseek-chat', 'qwen-plus', 'ragflow-agent'] as const
+const REPORT_REPAIR_MODEL_IDS = ['deepseek-chat', 'qwen-plus'] as const
 
 /** OmkarCloud 为主证据；同 ASIN 的页面样本只能补空字段，不能覆盖 API 已返回的实际值。 */
 function mergeAmazonSamples(apiSamples: AmazonMarketSample[], browserSamples: AmazonMarketSample[], query: string): AmazonMarketSample[] {
@@ -381,6 +385,11 @@ export default function AIEmployee({ initialTab, position = '选品调研员', o
   const [platform, setPlatform] = useState('')
   const [notice, setNotice] = useState('')
   const [marketAudit, setMarketAudit] = useState<MarketAuditView | null>(null)
+  // P1-B 阶段:商品库抽屉状态
+  const [showProductDrawer, setShowProductDrawer] = useState(false)
+  // P2 阶段:执行步骤面板的请求 id + 重置信号
+  const [execRequestId, setExecRequestId] = useState<string>('')
+  const [execResetSignal, setExecResetSignal] = useState(0)
 
   // ─── 附件与大模型选择 ────────────────────────────────
   const [attachments, setAttachments] = useState<AiEmployeeAttachment[]>([])
@@ -397,7 +406,7 @@ export default function AIEmployee({ initialTab, position = '选品调研员', o
   // I.4 阶段新增：报告样例库 KB 引用开关（按岗位持久化到 localStorage）
   // 默认：选品调研员 / Listing精造师 ON；其余岗位 OFF。
   // 开关 ON 后主进程 chat() 会在 user content 末尾注入 SAMPLE_LIBRARY_KB_REFERENCE_PROMPT，
-  // 提示 RAGFlow 智能体主动检索「选品分析师」KB 中已入库的 4 样例 + 决策门禁 + 可追溯约束。
+  // 提示 MaxKB 智能体主动检索「选品分析师」KB 中已入库的 4 样例 + 决策门禁 + 可追溯约束。
   const SAMPLE_LIB_DEFAULT_BY_POSITION: Record<string, boolean> = {
     选品调研员: true,
     'Listing精造师': true,
@@ -442,6 +451,22 @@ export default function AIEmployee({ initialTab, position = '选品调研员', o
   useEffect(() => {
     historyIdRef.current = historyId
   }, [historyId])
+
+  // P0 阶段:Hub 主页跳转过来时可携带 prefillQuery,通过 sessionStorage 暂存
+  // 消费规则：进入时填入 draft,保持 home tab,并清空暂存(避免下次刷新时重复填充)
+  useEffect(() => {
+    try {
+      const pending = sessionStorage.getItem('aiEmployee.hubPrefill')
+      if (pending && pending.trim()) {
+        setDraft(pending.trim())
+        // 始终切到首页,让用户确认后再发送(避免误触发)
+        setActiveTab('home')
+      }
+      if (pending) sessionStorage.removeItem('aiEmployee.hubPrefill')
+    } catch { /* ignore quota / private mode */ }
+    // 仅在 mount 时消费一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 兼容此前已经保存的“完整 Markdown 报告已输出至 /tmp/...”回复：
   // 恢复正文后重新保存历史条目，因此当前页面和「工作档案」同步可见完整报告。
@@ -746,6 +771,41 @@ export default function AIEmployee({ initialTab, position = '选品调研员', o
     try { localStorage.setItem(`${CHAT_MODEL_KEY}:${position}`, id) } catch { /* ignore quota errors */ }
   }
 
+  // P1-B 阶段:从商品库抽屉选中商品后预填 draft
+  const handleSelectProduct = (item: ProductLibraryItem) => {
+    const prefix = item.source === '1688' ? '1688' : item.source === 'local' ? '本地' : '草稿'
+    const note = item.url ? `\n\n(来源：${prefix} · ${item.url})` : ''
+    setDraft(`请基于已选商品「${item.title}」分析跨境市场机会。${note}`)
+    setShowProductDrawer(false)
+    setActiveTab('home')
+  }
+
+  // P1-B 阶段:从 1688 提取后写入商品库(供后续复用)
+  const extractAndSaveToLibrary = async () => {
+    setShowProductDrawer(false)
+    await extract()
+    // extract 成功后 extracted 已被 setExtracted 设置,此时尝试写入
+    // 由于 extract 是异步且状态不可即时读取,这里用 historyId 关联的存储再次读取
+    setTimeout(() => {
+      try {
+        const stored = JSON.parse(localStorage.getItem(EXTRACTION_STORAGE_KEY) || '{}') as Record<string, StoredExtractionState>
+        const state = stored[historyId || DRAFT_EXTRACTION_ID]
+        if (!state?.info) return
+        const info = state.info
+        addProductItem({
+          source: '1688',
+          title: info.title || info.url || '未命名 1688 商品',
+          url: info.url,
+          thumbnail: Array.isArray(info.images) && info.images[0] ? info.images[0] : undefined,
+          price: info.price,
+          summary: [info.seller, info.moq ? `MOQ ${info.moq}` : ''].filter(Boolean).join(' · '),
+          payload: info
+        })
+        setNotice('已提取并加入商品库。')
+      } catch { /* ignore write errors */ }
+    }, 800)
+  }
+
   const extract = async () => {
     setExtracting(true)
     setNotice('')
@@ -910,6 +970,10 @@ export default function AIEmployee({ initialTab, position = '选品调研员', o
   const send = async () => {
     const requirement = draft.trim()
     if (!requirement || sending) return
+    // P2 阶段:为本次请求生成 requestId,让 ExecutionPanel 隔离多轮任务
+    const newRequestId = `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+    setExecRequestId(newRequestId)
+    setExecResetSignal(s => s + 1)
     const gateMessage = selectionGenerationGate(extracted, extractedConfirmed)
     if (gateMessage) {
       setNotice(gateMessage)
@@ -1183,7 +1247,7 @@ ${selectionReportPayloadFactBlock(reportPayload)}` : ''}`
       try {
         let enrichment = null
         const enrichmentModelIds = [...new Set([modelId, ...REPORT_REPAIR_MODEL_IDS])]
-          .filter(id => id === modelId || id === 'ragflow-agent' || models.some(model => model.id === id && model.available))
+          .filter(id => id === modelId || models.some(model => model.id === id && model.available))
         const requestEnrichment = async (enrichmentModelId: string) => {
           try {
             setNotice(`正在由 ${enrichmentModelId} 生成受控分析补充…`)
@@ -1192,7 +1256,7 @@ ${selectionReportPayloadFactBlock(reportPayload)}` : ''}`
               history: [],
               modelId: enrichmentModelId,
               attachments: [],
-              // I.4 阶段新增：报告增强同样让 RAGFlow 智能体可参考 4 样例 + 门禁
+              // I.4 阶段新增：报告增强同样让 MaxKB 智能体可参考 4 样例 + 门禁
               useSampleLibrary
             })
             return parseSelectionReportEnrichment(result.content, enrichmentModelId, reportPayload.listingEvidence?.map(item => item.asin) || [])
@@ -1249,10 +1313,10 @@ ${selectionReportPayloadFactBlock(reportPayload)}` : ''}`
       let candidateContent = result.content
       let qualityIssues = validateReport(candidateContent)
       let repairError = ''
-      // 报告交付法则：当前模型失败后，同时请求 DeepSeek Chat、通义和 RAGFlow 中可用者。
+      // 报告交付法则：当前模型失败后，同时请求 DeepSeek Chat、通义中可用者。
       // 修正模型只能重写基于当前事实的报告，不能继承旧助手报告或用记忆补全未知字段。
       for (let repairAttempt = 1; qualityIssues.length && repairAttempt <= 2; repairAttempt += 1) {
-        const repairModelIds = [...new Set([modelId, ...REPORT_REPAIR_MODEL_IDS])].filter(id => id === modelId || id === 'ragflow-agent' || models.some(model => model.id === id && model.available))
+        const repairModelIds = [...new Set([modelId, ...REPORT_REPAIR_MODEL_IDS])].filter(id => id === modelId || models.some(model => model.id === id && model.available))
         setNotice(`报告第 ${repairAttempt} 次校验未通过，正在并行调用 ${repairModelIds.join('、')} 自动修正…`)
         const repairQuery = [
           '【报告自动质量修正】',
@@ -1596,7 +1660,7 @@ ${selectionReportPayloadFactBlock(reportPayload)}` : ''}`
             <label
               className={`ai-employee-sample-lib-toggle${useSampleLibrary ? ' on' : ''}`}
               title={useSampleLibrary
-                ? '已启用：本次问询将提示 RAGFlow 智能体参考「选品分析师」知识库中的 4 样例 + 决策门禁 + 可追溯约束'
+                ? '已启用：本次问询将提示 MaxKB 智能体参考「选品分析师」知识库中的 4 样例 + 决策门禁 + 可追溯约束'
                 : '未启用：本次问询不会主动参考报告样例库'}
             >
               <input
@@ -1634,15 +1698,34 @@ ${selectionReportPayloadFactBlock(reportPayload)}` : ''}`
           <i className="badge-icon" style={{ background: positionAgent?.color || '#10b981' }}>{positionAgent?.icon || '精'}</i>
           <b>{position}</b>
         </button>
-        <button type="button" className={`ai-employee-tab${activeTab === 'process' ? ' active' : ''}`} onClick={() => setActiveTab('process')}>工作处理</button>
+        <button type="button" className={`ai-employee-tab${activeTab === 'process' ? ' active' : ''}`} onClick={() => setActiveTab('process')}>对话</button>
         {showWorkbenchTab && (
-          <button type="button" className={`ai-employee-tab${activeTab === 'workbench' ? ' active' : ''}`} onClick={() => setActiveTab('workbench')}>Listing工作台</button>
+          <button type="button" className={`ai-employee-tab${activeTab === 'workbench' ? ' active' : ''}`} onClick={() => setActiveTab('workbench')}>报告</button>
         )}
-        <button type="button" className={`ai-employee-tab${activeTab === 'archive' ? ' active' : ''}`} onClick={() => setActiveTab('archive')}>工作档案</button>
+        <button type="button" className={`ai-employee-tab${activeTab === 'archive' ? ' active' : ''}`} onClick={() => setActiveTab('archive')}>历史</button>
         {showBrowserTab && (
-          <button type="button" className={`ai-employee-tab${activeTab === 'browser' ? ' active' : ''}`} onClick={() => setActiveTab('browser')}>浏览器</button>
+          <button type="button" className={`ai-employee-tab${activeTab === 'browser' ? ' active' : ''}`} onClick={() => setActiveTab('browser')}>商品</button>
         )}
+        <span className="ai-employee-tab-bar-spacer" />
+        <button
+          type="button"
+          className="ai-employee-tab ai-employee-tab-icon"
+          onClick={() => setShowProductDrawer(true)}
+          aria-label="打开商品库"
+          title="商品库"
+        >
+          📦 商品库
+        </button>
       </div>
+
+      {/* P1-B 阶段:商品库抽屉(1688 提取 + 本地上传 + 三来源选择) */}
+      <ProductLibraryDrawer
+        open={showProductDrawer}
+        onClose={() => setShowProductDrawer(false)}
+        onSelectProduct={handleSelectProduct}
+        onPickFiles={() => { setShowProductDrawer(false); void pickFiles() }}
+        onExtract1688={extractAndSaveToLibrary}
+      />
 
       {/* 内容区 */}
       <div className="ai-employee-stage">
@@ -1659,6 +1742,8 @@ ${selectionReportPayloadFactBlock(reportPayload)}` : ''}`
                     ))}
                   </div>
                 </div>
+                {/* P1-A 阶段:工作台内嵌员工技能配置(默认折叠) */}
+                <WorkbenchSkillConfig position={position} />
               </div>
               {renderComposer()}
             </div>
@@ -1705,7 +1790,7 @@ ${selectionReportPayloadFactBlock(reportPayload)}` : ''}`
                     </div>
                   </div>
                 ))}
-                {sending && <div className="ai-employee-message assistant"><i>AI</i><div className="ai-employee-bubble typing"><span /><span /><span /></div></div>}
+                {sending && <ExecutionPanel enabled key={execRequestId} requestId={execRequestId} resetSignal={execResetSignal} />}
                 <div ref={messagesEndRef} />
               </div>
             )}

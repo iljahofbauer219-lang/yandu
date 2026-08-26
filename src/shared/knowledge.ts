@@ -38,7 +38,7 @@ export interface KbDocView {
   progress: number
   createDate: string
   updateDate: string
-  /** 所属分类名（RAGFlow meta_fields.category，存叶子名；同库内分类名全局唯一），空串 = 未分类 */
+  /** 所属分类名（MaxKB doc.meta.category，存叶子名；同库内分类名全局唯一），空串 = 未分类 */
   category?: string
 }
 

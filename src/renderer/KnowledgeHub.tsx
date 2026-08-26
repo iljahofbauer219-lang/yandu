@@ -36,14 +36,14 @@ function formatDate(value: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', { hour12: false })
 }
 
-function ragflowConsoleUrl(): string {
+function maxkbConsoleUrl(): string {
   try {
     const base = new URL(getServerBaseUrl())
-    base.port = '8090'
+    base.port = '8080'
     base.pathname = '/'
     return base.toString()
   } catch {
-    return 'http://114.55.149.192:8090/'
+    return 'http://114.55.149.192:8080/'
   }
 }
 
@@ -112,7 +112,7 @@ export default function KnowledgeHub({ onOpenEmployee }: { onOpenEmployee?: () =
         </div>
         <div className="kb-hub-actions">
           <input className="kb-hub-search" value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索知识库…" />
-          <button type="button" className="kb-btn ghost" onClick={() => void window.desktop.system.openExternal(ragflowConsoleUrl())}>RAGFlow 控制台</button>
+          <button type="button" className="kb-btn ghost" onClick={() => void window.desktop.system.openExternal(maxkbConsoleUrl())}>MaxKB 控制台</button>
           <button type="button" className="kb-btn primary" onClick={() => setCreateOpen(true)}>＋ 创建自定义知识库</button>
         </div>
       </header>

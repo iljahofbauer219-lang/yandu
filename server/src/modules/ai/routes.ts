@@ -26,6 +26,7 @@ import {
   createVideoTask,
   generateImage,
   getVideoTask,
+  linduoAvailableModelIds,
   translateTexts,
   understandCommand
 } from './providers.js'
@@ -106,11 +107,13 @@ export async function aiRoutes(app: FastifyInstance) {
   app.addHook('preHandler', app.authenticate)
 
   app.get('/models', async request => {
-    const [bailianIds, quota] = await Promise.all([
+    const [bailianIds, linduoIds, quota] = await Promise.all([
       bailianAvailableModelIds(),
+      linduoAvailableModelIds(),
       quotaStatusOf(prisma, request.currentUser.orgId, request.currentUser.id)
     ])
     const bailianModels = imageModelsOf('bailian')
+    const linduoModels = imageModelsOf('linduo')
     const providers = [
       config.bailianApiKey
         ? bailianIds
@@ -127,7 +130,17 @@ export async function aiRoutes(app: FastifyInstance) {
         : { provider: 'volc', connected: false, message: '未配置火山方舟 ARK_API_KEY', models: [] },
       config.openaiImageApiKey
         ? { provider: 'openai', connected: true, message: 'OpenAI 生图已配置', models: imageModelsOf('openai') }
-        : { provider: 'openai', connected: false, message: '未配置 OPENAI_IMAGE_API_KEY', models: [] }
+        : { provider: 'openai', connected: false, message: '未配置 OPENAI_IMAGE_API_KEY', models: [] },
+      config.linduoApiKey
+        ? linduoIds
+          ? {
+              provider: 'linduo',
+              connected: true,
+              message: `零度API 已连接 · ${linduoModels.filter(m => linduoIds.has(m.id)).length} 个生图模型在线`,
+              models: linduoModels.filter(m => linduoIds.has(m.id))
+            }
+          : { provider: 'linduo', connected: false, message: '零度API 模型列表探测失败，请检查 Key 与网络', models: linduoModels }
+        : { provider: 'linduo', connected: false, message: '未配置零度API LINDUO_API_KEY', models: [] }
     ]
     return {
       providers,

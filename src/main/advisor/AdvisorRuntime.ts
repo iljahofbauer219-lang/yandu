@@ -1,5 +1,6 @@
 import { app, dialog, ipcMain, shell } from "electron";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import {
   AppServerClient,
@@ -17,11 +18,16 @@ import type {
 import {
   analyzeSession,
   cloneAttachmentSession,
+  extractDocumentText,
+  isImagePath,
   listAttachments,
   readAttachmentPreview,
   removeAttachment,
   removeAttachmentSession,
+  saveIncomingDocuments,
   saveIncomingImages,
+  type AttachmentRecord,
+  type IncomingDocument,
   type IncomingImage
 } from "./AttachmentService";
 import { ensureProxyRunning, stopManagedProxy } from "./ProxyManager";
@@ -1064,6 +1070,7 @@ async function runCodexTurn(sender: Electron.WebContents, request: ChatRequest) 
       attachments,
       request.message
     );
+    const documentContext = await buildDocumentContext(attachments);
     if (visionResults.length > 0) {
       const succeeded = visionResults.filter((result) => result.success).length;
       const failed = visionResults.length - succeeded;
@@ -1075,6 +1082,18 @@ async function runCodexTurn(sender: Electron.WebContents, request: ChatRequest) 
             : `已分析 ${succeeded} 张图片`,
         detail: JSON.stringify(visionResults, null, 2),
         state: failed > 0 ? "partial" : "completed"
+      });
+    }
+    if (documentContext.blocks.length > 0) {
+      emitActivity(context, {
+        kind: documentContext.partial ? "warning" : "status",
+        title: documentContext.partial
+          ? `已抽取 ${documentContext.blocks.length} 份文档（部分超长被截断）`
+          : `已抽取 ${documentContext.blocks.length} 份文档`,
+        detail: documentContext.blocks
+          .map((block) => `${block.fileName} · ${block.chars} 字`)
+          .join("\n"),
+        state: "completed"
       });
     }
 
@@ -1123,6 +1142,20 @@ async function runCodexTurn(sender: Electron.WebContents, request: ChatRequest) 
         kind: "application"
       };
     }
+    if (documentContext.blocks.length > 0) {
+      additionalContext["deepseek-codex-document-attachments"] = {
+        value: JSON.stringify({
+          instruction:
+            "The user attached one or more documents. Their extracted plain text is appended at the end of the user message under a fenced 📎 block. Treat that text as direct, authoritative document content. When the user asks a question about the document, quote and cite the corresponding part. If a file failed to extract, the block will say so explicitly and you should ask the user to summarize the missing part instead of guessing.",
+          files: documentContext.blocks.map((block) => ({
+            fileName: block.fileName,
+            chars: block.chars,
+            truncated: block.truncated
+          }))
+        }),
+        kind: "application"
+      };
+    }
     if (multimodalResults.length > 0) {
       const succeeded = multimodalResults.filter((result) => result.success).length;
       emitActivity(context, {
@@ -1148,7 +1181,11 @@ async function runCodexTurn(sender: Electron.WebContents, request: ChatRequest) 
       });
     }
 
-    const textInput = { type: "text", text: request.message, text_elements: [] };
+    const textInput = {
+      type: "text",
+      text: appendDocumentContextToMessage(request.message, documentContext),
+      text_elements: []
+    };
     // The configured DeepSeek V4 models are text-only. Raw pixels have already
     // been sent to the independent vision sidecar above; the main turn receives
     // its description plus the deterministic local analysis.
@@ -1299,6 +1336,14 @@ app.whenReady().then(() => {
     return result.filePath;
   });
   ipcMain.handle("advisor:project:default", () => app.getAppPath());
+  // 孤儿对话专用 scratch 路径：临时目录下、永远存在、不可能等于任何已注册项目，
+  // 侧边栏 groupTasksByProject 找不到匹配 group → 任务归入「最近对话」。
+  ipcMain.handle("advisor:project:orphan-scratch", async () => {
+    const scratch = path.join(os.tmpdir(), "yandu-orphan-scratch");
+    // 兑底创建(codex 需要以该路径为 cwd)
+    await fs.mkdir(scratch, { recursive: true });
+    return scratch;
+  });
   ipcMain.handle("advisor:project:select", async () => {
     const result = await dialog.showOpenDialog({
       title: "选择或新建项目文件夹",
@@ -1312,6 +1357,35 @@ app.whenReady().then(() => {
     if (!stat.isDirectory()) throw new Error("项目目录不存在。");
     shell.showItemInFolder(projectPath);
     return true;
+  });
+  // AI 输出文件下载：弹原生保存对话框把临时目录下的文件复制到用户指定位置
+  // 越权保护：只允许 os.tmpdir() 之下的路径(AI 输出 / 附件临时目录)
+  ipcMain.handle("advisor:download-output-file", async (_event, request: { filePath: string } | string) => {
+    const filePath = typeof request === "string" ? request : request?.filePath;
+    if (!filePath) return { ok: false, error: "文件路径为空" };
+    const tmpRoot = os.tmpdir();
+    const resolved = path.resolve(filePath);
+    if (!resolved.startsWith(tmpRoot + path.sep)) {
+      return { ok: false, error: "只能下载系统临时目录下的文件" };
+    }
+    try {
+      await fs.access(resolved);
+    } catch {
+      return { ok: false, error: "文件不存在或已被清理(可能重启过)" };
+    }
+    const stat = await fs.stat(resolved);
+    if (!stat.isFile()) return { ok: false, error: "目标不是文件" };
+    const fileName = path.basename(resolved);
+    const ext = path.extname(fileName).replace(/^\./, "") || "*";
+    const selected = await dialog.showSaveDialog({
+      title: "下载 AI 输出文件",
+      defaultPath: fileName,
+      filters: [{ name: "原文件", extensions: [ext] }]
+    });
+    if (selected.canceled || !selected.filePath) return { canceled: true };
+    await fs.copyFile(resolved, selected.filePath);
+    const saved = await fs.stat(selected.filePath);
+    return { ok: true, filePath: selected.filePath, byteSize: saved.size, fileName };
   });
 
   ipcMain.handle("advisor:images:select", async (_event, sessionId: string) => {
@@ -1373,6 +1447,85 @@ app.whenReady().then(() => {
     (_event, payload: { sessionId: string; id: string }) =>
       removeAttachment(payload.sessionId, payload.id)
   );
+
+  ipcMain.handle("advisor:documents:select", async (_event, sessionId: string) => {
+    const result = await dialog.showOpenDialog({
+      title: "选择文档",
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        {
+          name: "文档",
+          extensions: ["pdf", "docx", "doc", "rtf", "txt", "md"]
+        }
+      ]
+    });
+    if (result.canceled) return [];
+    const documents: IncomingDocument[] = await Promise.all(
+      result.filePaths.map(async (filePath) => ({
+        name: path.basename(filePath),
+        mimeType: "application/octet-stream",
+        bytes: await fs.readFile(filePath)
+      }))
+    );
+    return saveIncomingDocuments(sessionId, documents);
+  });
+
+  ipcMain.handle(
+    "advisor:documents:save",
+    (
+      _event,
+      payload: { sessionId: string; documents: IncomingDocument[] }
+    ) => saveIncomingDocuments(payload.sessionId, payload.documents)
+  );
+
+  ipcMain.handle(
+    "advisor:documents:list",
+    (_event, sessionId: string) => listAttachments(sessionId)
+  );
+
+  ipcMain.handle(
+    "advisor:documents:remove",
+    (_event, payload: { sessionId: string; id: string }) =>
+      removeAttachment(payload.sessionId, payload.id)
+  );
+
+  // 统一附件选择入口：对话框一次性支持图片 + 文档多选混选，
+  // 内部按扩展名分桶走 saveIncomingImages / saveIncomingDocuments。
+  // 与 advisor:images:select / advisor:documents:select 共存，不破坏旧调用方。
+  ipcMain.handle("advisor:attachments:select", async (_event, sessionId: string) => {
+    const result = await dialog.showOpenDialog({
+      title: "上传附件",
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        {
+          name: "图片与文档",
+          extensions: [
+            "png", "jpg", "jpeg", "webp", "gif", "heic", "tif", "tiff", "bmp",
+            "pdf", "docx", "doc", "rtf", "txt", "md"
+          ]
+        }
+      ]
+    });
+    if (result.canceled || result.filePaths.length === 0) return [];
+    const images: IncomingImage[] = [];
+    const documents: IncomingDocument[] = [];
+    for (const filePath of result.filePaths) {
+      const name = path.basename(filePath);
+      const bytes = await fs.readFile(filePath);
+      if (isImagePath(filePath)) {
+        images.push({ name, mimeType: mimeTypeForPath(filePath), bytes });
+      } else {
+        documents.push({ name, mimeType: "application/octet-stream", bytes });
+      }
+    }
+    const imageRecords = images.length
+      ? await saveIncomingImages(sessionId, images)
+      : [];
+    const docRecords = documents.length
+      ? await saveIncomingDocuments(sessionId, documents)
+      : [];
+    return [...imageRecords, ...docRecords];
+  });
 
   ipcMain.handle("advisor:connection:status", async () => {
     // 未配置 JWT 时直接返回 signed-out 状态,避免后面启动 app-server 时附带误导错误。
@@ -1578,4 +1731,99 @@ function mimeTypeForPath(filePath: string) {
     ".bmp": "image/bmp"
   };
   return types[extension] ?? "application/octet-stream";
+}
+
+/**
+ * 文档上下文：抽取附件里的文档为纯文本。
+ * 每份文档独立抽取，每份超过 32K 字符的截断为前 32K；总预算 32K 字符避免拼到 message 后超长。
+ */
+type DocumentContextBlock = {
+  fileName: string;
+  chars: number;
+  text: string;
+  truncated: boolean;
+  failed: boolean;
+};
+
+type DocumentContext = {
+  blocks: DocumentContextBlock[];
+  partial: boolean;
+};
+
+const DOCUMENT_PER_FILE_CHAR_LIMIT = 32_000;
+const DOCUMENT_TOTAL_CHAR_BUDGET = 32_000;
+
+async function buildDocumentContext(
+  attachments: AttachmentRecord[]
+): Promise<DocumentContext> {
+  const blocks: DocumentContextBlock[] = [];
+  let remaining = DOCUMENT_TOTAL_CHAR_BUDGET;
+  let partial = false;
+  for (const attachment of attachments) {
+    if ((attachment.kind ?? "image") !== "document") continue;
+    if (attachment.available === false) {
+      blocks.push({
+        fileName: attachment.fileName,
+        chars: 0,
+        text: "",
+        truncated: false,
+        failed: true
+      });
+      partial = true;
+      continue;
+    }
+    const extension = path.extname(attachment.fileName).toLowerCase();
+    let text = "";
+    try {
+      const bytes = await fs.readFile(attachment.filePath);
+      text = await extractDocumentText(bytes, extension, attachment.fileName);
+    } catch (error) {
+      console.warn(
+        `[advisor] failed to read document ${attachment.fileName}:`,
+        error
+      );
+      text = "";
+    }
+    const truncated = text.length > DOCUMENT_PER_FILE_CHAR_LIMIT;
+    if (truncated) {
+      text = text.slice(0, DOCUMENT_PER_FILE_CHAR_LIMIT);
+    }
+    const sliceBudget = Math.max(0, Math.min(remaining, text.length));
+    const sliceText = text.slice(0, sliceBudget);
+    remaining = Math.max(0, remaining - sliceText.length);
+    if (truncated || sliceText.length < text.length) partial = true;
+    blocks.push({
+      fileName: attachment.fileName,
+      chars: sliceText.length,
+      text: sliceText,
+      truncated,
+      failed: sliceText.length === 0
+    });
+    if (remaining === 0) break;
+  }
+  return { blocks, partial };
+}
+
+function appendDocumentContextToMessage(
+  message: string,
+  documentContext: DocumentContext
+): string {
+  if (documentContext.blocks.length === 0) return message;
+  const parts: string[] = [message.trimEnd(), "", "📎 附件文档摘录："];
+  for (const block of documentContext.blocks) {
+    if (block.failed) {
+      parts.push(
+        `- ${block.fileName}：未能提取文本，请描述要点。`
+      );
+      continue;
+    }
+    const truncatedTag = block.truncated ? "（已截断）" : "";
+    parts.push(
+      `【${block.fileName}】${truncatedTag} 共 ${block.chars} 字：`
+    );
+    parts.push("```");
+    parts.push(block.text);
+    parts.push("```");
+  }
+  return parts.join("\n");
 }

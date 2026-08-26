@@ -1,0 +1,33 @@
+name: general
+display_name: General Knowledge and Interview Distillation
+mcp: null
+agent_prompt_file: agent_prompt.md
+categories:
+  professional_growth:
+    - discipline
+    - resilience
+    - preparation
+    - career
+    - 职业成长
+    - 纪律
+    - 复盘
+  decision_framework:
+    - principle
+    - decision
+    - framework
+    - method
+    - 原则
+    - 决策
+    - 方法论
+  interview_knowledge:
+    - interview
+    - conversation
+    - experience
+    - advice
+    - 访谈
+    - 经验
+    - 建议
+query_pool:
+  - professional growth interview
+  - decision making principles interview
+  - expert experience and lessons

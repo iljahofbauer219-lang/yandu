@@ -1,0 +1,55 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - strong [ref=e5]: 砚都跨境
+    - generic [ref=e6]:
+      - button "刷新" [ref=e7] [cursor=pointer]
+      - button "主题" [ref=e11] [cursor=pointer]
+      - button "设置" [ref=e15] [cursor=pointer]
+      - button "退出" [ref=e19] [cursor=pointer]
+  - complementary [ref=e23]:
+    - generic [ref=e24]:
+      - generic [ref=e25]: 砚
+      - strong [ref=e27]: 砚都跨境
+    - navigation [ref=e28]:
+      - button "AI跨境" [ref=e29] [cursor=pointer]
+      - button "AI参谋" [ref=e35] [cursor=pointer]
+      - button "AI采集" [ref=e41] [cursor=pointer]
+      - button "AI美工" [ref=e48] [cursor=pointer]
+      - button "AI视频" [ref=e56] [cursor=pointer]
+      - button "AI任务" [ref=e62] [cursor=pointer]
+      - button "AI员工" [ref=e69] [cursor=pointer]
+      - button "AI星球" [ref=e75] [cursor=pointer]
+      - button "AI总部" [ref=e81] [cursor=pointer]
+  - main [ref=e88]:
+    - generic [ref=e89]:
+      - generic [ref=e90]:
+        - heading "AI员工" [level=2] [ref=e91]
+        - paragraph [ref=e92]: 跨境电商全角色AI员工入口
+      - generic [ref=e93]:
+        - generic [ref=e94]:
+          - generic [ref=e98]: 在线参谋长
+          - emphasis [ref=e99]: 即将上线
+        - generic [ref=e100] [cursor=pointer]:
+          - generic [ref=e106]: 产品分析师
+          - emphasis [ref=e107]: 进入
+        - generic [ref=e108] [cursor=pointer]:
+          - generic [ref=e114]: Listing精造师
+          - emphasis [ref=e115]: 进入
+        - generic [ref=e116]:
+          - generic [ref=e124]: 图片设计师
+          - emphasis [ref=e125]: 即将上线
+        - generic [ref=e126]:
+          - generic [ref=e131]: 视频创作师
+          - emphasis [ref=e132]: 即将上线
+        - generic [ref=e133]:
+          - generic [ref=e140]: 物流精算师
+          - emphasis [ref=e141]: 即将上线
+        - generic [ref=e142]:
+          - generic [ref=e147]: 跨境会计师
+          - emphasis [ref=e148]: 即将上线
+        - generic [ref=e149]:
+          - generic [ref=e154]: 金牌客服官
+          - emphasis [ref=e155]: 即将上线
+        - generic [ref=e156] [cursor=pointer]:
+          - generic [ref=e161]: 知识库守卫
+          - emphasis [ref=e162]: 进入

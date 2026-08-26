@@ -1,12 +1,12 @@
 /**
- * 报告样例库 → RAGFlow 知识库入库计划（I 阶段新增）。
+ * 报告样例库 → MaxKB 知识库入库计划（I 阶段新增，阶段 5 切到 MaxKB）。
  *
  * 目的：把 4 真实样例 + 决策门禁汇总 + 决策可追溯硬约束以 KB 文档形式归档到
- *   「选品分析师」RAGFlow 知识库（agentKey='sourcing'），让所有 AI 员工
+ *   「选品分析师」MaxKB 知识库（agentKey='sourcing'），让所有 AI 员工
  *   在跨任务中都能参考这 4 个标准答案与硬约束。
  *
  * 设计原则：
- *   - 纯函数：buildSampleLibraryKbIngestPlan() 不依赖 RAGFlow / Electron
+ *   - 纯函数：buildSampleLibraryKbIngestPlan() 不依赖 MaxKB / Electron
  *   - 幂等：上传时按文件名去重，重复运行只解析新文档
  *   - 多级分类：报告样例库 / A、报告样例库 / B、报告样例库 / 决策门禁、报告样例库 / 可追溯约束
  *   - 文件来源单一：artifacts/online-advisor-parity/ 6 份 markdown
@@ -17,11 +17,11 @@ import { join, resolve } from 'node:path'
 import { existsSync, statSync } from 'node:fs'
 import type { KbAgentKey } from './knowledge'
 
-// ── 1. 入库目标（与 RagflowKnowledgeService KB_AGENTS 保持一致）────────
+// ── 1. 入库目标（与 MaxkbKnowledgeService KB_AGENTS 保持一致）────────
 
 export const SAMPLE_LIBRARY_KB_TARGET = {
   agentKey: 'sourcing' as KbAgentKey,
-  /** RAGFlow 数据集名（RAGFlow 内显示） */
+  /** MaxKB 知识库名（MaxKB 内显示） */
   kbName: '选品分析师知识库',
   /** 数据集描述 */
   description: '1688 商品机会评估 · 亚马逊选品分析。内置 4 真实样例（A/B/C/D）+ 决策门禁 + 决策可追溯硬约束。',
@@ -42,7 +42,7 @@ export type SampleLibraryKbLeafCategory =
 // ── 3. 入库文档元信息（纯数据，运行时检测 size）─────────────────────
 
 export interface SampleLibraryKbDoc {
-  /** 文档名（RAGFlow 内显示，等于文件 basename） */
+  /** 文档名（MaxKB 知识库内显示，等于文件 basename） */
   name: string
   /** 物理文件绝对路径（artifacts/online-advisor-parity/） */
   filePath: string
@@ -155,7 +155,7 @@ export function summarizeSampleLibraryKbIngestPlan(plan: SampleLibraryKbDoc[] = 
 
 /** 入库结果（Ingestor 返回值类型） */
 export interface SampleLibraryKbIngestResult {
-  /** 知识库 ID（RAGFlow dataset_id） */
+  /** 知识库 ID（MaxKB dataset_id） */
   kbId: string
   /** 入库计划 */
   plan: SampleLibraryKbDoc[]
@@ -188,13 +188,12 @@ export function getSampleLibraryKbSyncSnapshot(): {
 // ── 7. KB 引用提示词（I.4 阶段新增：主进程 chat 入口注入）────────────────
 //
 // 设计要点：
-//   - 加在 user content 末尾而非 messages 头部，避免影响 RAGFlow 智能体
-//     内部检索策略
-//   - 不依赖 system role：ragflowChat 仅保留 user/assistant，system 会被吞
-//   - 提示 RAGFlow 智能体主动检索「选品分析师」KB 中已入库的 4 样例 + 决策门禁 + 可追溯约束
+//   - 加在 user content 末尾而非 messages 头部，避免影响 MaxKB 智能体内部检索策略
+//   - 不依赖 system role：聊天接口仅保留 user/assistant，system 会被吞
+//   - 提示 MaxKB 智能体主动检索「选品分析师」KB 中已入库的 4 样例 + 决策门禁 + 可追溯约束
 //   - 期望行为：智能体命中样例后在报告中明示「参考样例 X：xxx」以便用户追溯
 export const SAMPLE_LIBRARY_KB_REFERENCE_PROMPT = [
-  '[系统提示] 本次会话已启用「报告样例库」参考。请在生成报告时优先参考 RAGFlow 知识库「选品分析师」中已入库的 4 份历史报告样例与决策门禁、可追溯约束：',
+  '[系统提示] 本次会话已启用「报告样例库」参考。请在生成报告时优先参考 MaxKB 知识库「选品分析师」中已入库的 4 份历史报告样例与决策门禁、可追溯约束：',
   '- 报告样例库/A、B、C、D（4 份历史报告样例）',
   '- 报告样例库/决策门禁（入场决策的判定标准）',
   '- 报告样例库/可追溯约束（数据来源与可追溯性硬约束）',

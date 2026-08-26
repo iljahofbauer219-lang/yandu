@@ -7,6 +7,9 @@
 - [src/renderer/main.tsx](file://src/renderer/main.tsx)
 - [src/renderer/App.tsx](file://src/renderer/App.tsx)
 - [src/renderer/styles.css](file://src/renderer/styles.css)
+- [src/renderer/ui-readability.css](file://src/renderer/ui-readability.css)
+- [src/renderer/theme-dark.css](file://src/renderer/theme-dark.css)
+- [src/renderer/login.css](file://src/renderer/login.css)
 - [src/renderer/compliance-gate.css](file://src/renderer/compliance-gate.css)
 - [src/renderer/compliance-phase3.css](file://src/renderer/compliance-phase3.css)
 - [src/renderer/compliance-stage8.css](file://src/renderer/compliance-stage8.css)
@@ -17,16 +20,16 @@
 - [src/renderer/ebay-local-listing-validation.css](file://src/renderer/ebay-local-listing-validation.css)
 - [src/renderer/ebay-video-studio.css](file://src/renderer/ebay-video-studio.css)
 - [src/renderer/image-studio.css](file://src/renderer/image-studio.css)
-- [src/renderer/ui-readability.css](file://src/renderer/ui-readability.css)
 - [browser-extension/content-script.css](file://browser-extension/content-script.css)
 - [browser-extension/popup.css](file://browser-extension/popup.css)
 </cite>
 
 ## 更新摘要
 **所做更改**   
-- 更新了图像工作室样式部分，反映image-studio.css的重大UI/UX改进（109行新增，181行删除）
-- 增强了图像工作室界面的架构说明和最佳实践指导
-- 更新了相关依赖分析和性能考虑内容
+- 更新了全局样式清理部分，反映CSS架构优化工作（移除未使用的.brand和.brand-mark类规则）
+- 增强了主题系统与品牌样式的管理说明
+- 更新了样式维护最佳实践内容
+- 强化了登录页面专用样式的设计规范
 
 ## 目录
 1. [简介](#简介)
@@ -55,6 +58,8 @@ R_main["main.tsx"]
 R_app["App.tsx"]
 R_styles["styles.css"]
 R_readability["ui-readability.css"]
+R_theme["theme-dark.css"]
+R_login["login.css"]
 R_compliance_gate["compliance-gate.css"]
 R_compliance_phase3["compliance-phase3.css"]
 R_compliance_stage8["compliance-stage8.css"]
@@ -73,6 +78,8 @@ end
 R_main --> R_app
 R_main --> R_styles
 R_app --> R_readability
+R_app --> R_theme
+R_app --> R_login
 R_app --> R_compliance_gate
 R_app --> R_compliance_phase3
 R_app --> R_compliance_stage8
@@ -91,6 +98,9 @@ B_popup -.-> R_styles
 - [src/renderer/main.tsx](file://src/renderer/main.tsx)
 - [src/renderer/App.tsx](file://src/renderer/App.tsx)
 - [src/renderer/styles.css](file://src/renderer/styles.css)
+- [src/renderer/ui-readability.css](file://src/renderer/ui-readability.css)
+- [src/renderer/theme-dark.css](file://src/renderer/theme-dark.css)
+- [src/renderer/login.css](file://src/renderer/login.css)
 - [browser-extension/content-script.css](file://browser-extension/content-script.css)
 - [browser-extension/popup.css](file://browser-extension/popup.css)
 
@@ -104,6 +114,8 @@ B_popup -.-> R_styles
 基于仓库中的样式文件，可将UI组件库划分为以下核心样式域：
 - 全局基础样式与主题变量：styles.css
 - 可读性与无障碍增强：ui-readability.css
+- 深色主题支持：theme-dark.css
+- 认证与登录界面：login.css
 - 合规审查相关样式：compliance-gate.css、compliance-phase3.css、compliance-stage8.css、compliance-v2-review.css
 - eBay业务模块样式：ebay-acceptance-readable.css、ebay-collection.css、ebay-local-listing-pricing.css、ebay-local-listing-validation.css、ebay-video-studio.css
 - 图像工作室样式：image-studio.css
@@ -114,6 +126,8 @@ B_popup -.-> R_styles
 章节来源
 - [src/renderer/styles.css](file://src/renderer/styles.css)
 - [src/renderer/ui-readability.css](file://src/renderer/ui-readability.css)
+- [src/renderer/theme-dark.css](file://src/renderer/theme-dark.css)
+- [src/renderer/login.css](file://src/renderer/login.css)
 - [src/renderer/compliance-gate.css](file://src/renderer/compliance-gate.css)
 - [src/renderer/compliance-phase3.css](file://src/renderer/compliance-phase3.css)
 - [src/renderer/compliance-stage8.css](file://src/renderer/compliance-stage8.css)
@@ -141,11 +155,13 @@ flowchart TD
 A["入口 main.tsx"] --> B["应用 App.tsx"]
 B --> C["全局样式 styles.css"]
 B --> D["可读性 ui-readability.css"]
-B --> E["合规样式 compliance-*.css"]
-B --> F["eBay样式 ebay-*.css"]
-B --> G["图像工作室 image-studio.css"]
-H["浏览器插件 content-script.css"] -.-> C
-I["浏览器插件 popup.css"] -.-> C
+B --> E["深色主题 theme-dark.css"]
+B --> F["认证样式 login.css"]
+B --> G["合规样式 compliance-*.css"]
+B --> H["eBay样式 ebay-*.css"]
+B --> I["图像工作室 image-studio.css"]
+J["浏览器插件 content-script.css"] -.-> C
+K["浏览器插件 popup.css"] -.-> C
 ```
 
 图表来源
@@ -153,6 +169,8 @@ I["浏览器插件 popup.css"] -.-> C
 - [src/renderer/App.tsx](file://src/renderer/App.tsx)
 - [src/renderer/styles.css](file://src/renderer/styles.css)
 - [src/renderer/ui-readability.css](file://src/renderer/ui-readability.css)
+- [src/renderer/theme-dark.css](file://src/renderer/theme-dark.css)
+- [src/renderer/login.css](file://src/renderer/login.css)
 - [src/renderer/compliance-gate.css](file://src/renderer/compliance-gate.css)
 - [src/renderer/ebay-collection.css](file://src/renderer/ebay-collection.css)
 - [browser-extension/content-script.css](file://browser-extension/content-script.css)
@@ -162,6 +180,7 @@ I["浏览器插件 popup.css"] -.-> C
 
 ### 全局样式与主题系统
 - 目标：统一视觉语言，集中管理颜色、字体、间距、阴影、圆角等设计令牌。
+- **最新更新**：最近进行了CSS架构优化，移除了未使用的`.brand`和`.brand-mark`类规则，保持了代码库的整洁性和可维护性。
 - 建议实现：
   - 使用CSS自定义属性定义主题变量（如颜色、字号、行高、间距、断点）。
   - 提供明/暗主题切换能力，通过根节点类名或数据属性切换变量值。
@@ -170,6 +189,7 @@ I["浏览器插件 popup.css"] -.-> C
   - 变量命名遵循语义化（如 --color-primary、--spacing-md、--font-size-base）。
   - 避免在组件内硬编码具体数值，优先引用变量。
   - 对关键断点进行集中管理，便于响应式调整。
+  - 定期清理未使用的CSS规则，保持代码库精简。
 
 章节来源
 - [src/renderer/styles.css](file://src/renderer/styles.css)
@@ -187,6 +207,38 @@ I["浏览器插件 popup.css"] -.-> C
 
 章节来源
 - [src/renderer/ui-readability.css](file://src/renderer/ui-readability.css)
+
+### 深色主题系统
+- 目标：提供完整的深色主题支持，确保在不同光照环境下的一致用户体验。
+- **特色实现**：采用[data-theme="dark"]选择器前缀，确保主题切换不影响默认浅色主题。
+- 建议实现：
+  - 使用CSS变量进行主题切换，避免重复样式定义。
+  - 针对特定组件提供精细的主题覆盖。
+  - 提供低配设备降级开关，关闭磨砂与发光效果。
+- 最佳实践：
+  - 所有深色主题规则必须限定在[data-theme="dark"]前缀内。
+  - 保持与浅色主题的视觉层次一致性。
+  - 注意图片背景处理，确保商品图在深色模式下仍清晰可见。
+
+章节来源
+- [src/renderer/theme-dark.css](file://src/renderer/theme-dark.css)
+
+### 认证与登录界面样式
+- 目标：为登录、注册和强制改密页面提供独立的样式系统，避免污染主界面样式。
+- **特色实现**：使用`auth-`前缀的所有类名，确保样式隔离。
+- 涉及文件：login.css
+- 建议实现：
+  - 使用独立的品牌标识样式（`.auth-brand`），包含品牌标志和文字信息。
+  - 提供统一的表单样式和交互反馈。
+  - 支持服务器地址选择和密码可见性切换。
+  - 集成版本信息和更新状态显示。
+- 最佳实践：
+  - 所有认证相关样式使用`auth-`前缀，避免命名冲突。
+  - 保持与主应用品牌风格的一致性。
+  - 提供完整的错误处理和用户反馈机制。
+
+章节来源
+- [src/renderer/login.css](file://src/renderer/login.css)
 
 ### 合规审查样式域
 - 目标：为合规检查流程提供一致的界面与状态展示。
@@ -270,12 +322,16 @@ participant M as "main.tsx"
 participant A as "App.tsx"
 participant S as "styles.css"
 participant U as "ui-readability.css"
+participant T as "theme-dark.css"
+participant L as "login.css"
 participant C as "compliance-*.css"
 participant E as "ebay-*.css"
 participant I as "image-studio.css"
 M->>A : 初始化应用
 A->>S : 加载全局样式
 A->>U : 加载可读性增强
+A->>T : 加载深色主题
+A->>L : 加载认证样式
 A->>C : 加载合规样式
 A->>E : 加载eBay业务样式
 A->>I : 加载图像工作室样式
@@ -286,6 +342,8 @@ A->>I : 加载图像工作室样式
 - [src/renderer/App.tsx](file://src/renderer/App.tsx)
 - [src/renderer/styles.css](file://src/renderer/styles.css)
 - [src/renderer/ui-readability.css](file://src/renderer/ui-readability.css)
+- [src/renderer/theme-dark.css](file://src/renderer/theme-dark.css)
+- [src/renderer/login.css](file://src/renderer/login.css)
 - [src/renderer/compliance-gate.css](file://src/renderer/compliance-gate.css)
 - [src/renderer/ebay-collection.css](file://src/renderer/ebay-collection.css)
 - [src/renderer/image-studio.css](file://src/renderer/image-studio.css)
@@ -301,6 +359,7 @@ A->>I : 加载图像工作室样式
 - 媒体查询与断点：集中管理断点，减少重复代码。
 - 插件样式隔离：内容脚本样式尽量局部作用域，避免全局污染。
 - **图像工作室性能优化**：针对图像编辑场景的特殊优化，包括Canvas绘制优化、内存管理和渲染性能调优。
+- **CSS清理优化**：定期清理未使用的CSS规则，减少样式表体积，提升加载性能。
 
 [本节为通用指导，不直接分析具体文件]
 
@@ -311,15 +370,19 @@ A->>I : 加载图像工作室样式
 - 可读性问题：核对对比度、字体大小与行高是否符合无障碍标准。
 - 响应式异常：检查媒体查询断点与容器宽度限制。
 - **图像工作室相关问题**：检查Canvas性能、内存泄漏和图像加载问题。
+- **认证样式问题**：检查auth-前缀样式是否正确应用，避免与全局样式冲突。
+- **主题兼容性问题**：验证深色主题下各组件的视觉效果和可访问性。
 
 章节来源
 - [src/renderer/styles.css](file://src/renderer/styles.css)
 - [src/renderer/ui-readability.css](file://src/renderer/ui-readability.css)
+- [src/renderer/theme-dark.css](file://src/renderer/theme-dark.css)
+- [src/renderer/login.css](file://src/renderer/login.css)
 - [browser-extension/content-script.css](file://browser-extension/content-script.css)
 - [browser-extension/popup.css](file://browser-extension/popup.css)
 
 ## 结论
-本样式系统以分层与分域为核心，结合主题变量与模块化加载，实现了可扩展、易维护的UI组件库基础。通过可读性与无障碍增强、响应式设计与插件样式隔离，保障了多端与多环境的用户体验。图像工作室样式的重大更新进一步提升了图像处理功能的用户体验和性能表现。建议在后续迭代中持续完善组件库文档与测试策略，进一步提升开发效率与质量。
+本样式系统以分层与分域为核心，结合主题变量与模块化加载，实现了可扩展、易维护的UI组件库基础。通过可读性与无障碍增强、响应式设计与插件样式隔离，保障了多端与多环境的用户体验。最近的CSS架构优化工作进一步提升了代码质量和可维护性，移除了未使用的样式规则，保持了代码库的精简和高效。图像工作室样式的重大更新和深色主题的完善实施，显著改善了用户的视觉体验和操作效率。建议在后续迭代中持续完善组件库文档与测试策略，进一步提升开发效率与质量。
 
 [本节为总结性内容，不直接分析具体文件]
 
@@ -330,6 +393,7 @@ A->>I : 加载图像工作室样式
 - 命名规范：语义化前缀（如 --color-、--space-、--radius-）。
 - 主题切换：通过根节点类名或数据属性切换变量值。
 - 版本管理：在构建产物中保留变量映射，便于调试与回溯。
+- **清理策略**：定期审计和清理未使用的CSS规则和类名，保持代码库整洁。
 
 [本节为通用指导，不直接分析具体文件]
 
@@ -357,10 +421,11 @@ A->>I : 加载图像工作室样式
 [本节为通用指导，不直接分析具体文件]
 
 ### 命名约定与最佳实践
-- 类名前缀：按模块或组件划分前缀，避免冲突。
+- 类名前缀：按模块或组件划分前缀，避免冲突（如 auth-、ebay-、compliance-）。
 - BEM方法：块-元素-修饰符，提升可读性。
 - 语义化：类名反映用途而非样式细节。
 - 注释规范：关键样式添加说明，便于协作与维护。
+- **样式隔离**：使用模块化的命名空间，避免全局样式污染。
 
 [本节为通用指导，不直接分析具体文件]
 
@@ -375,6 +440,7 @@ A->>I : 加载图像工作室样式
 - 单元与快照：对组件样式输出进行快照测试。
 - 视觉回归：使用截图对比工具检测样式变更。
 - 无障碍测试：自动化扫描与人工复核结合。
+- **主题测试**：验证浅色和深色主题下的视觉效果一致性。
 
 [本节为通用指导，不直接分析具体文件]
 
@@ -383,5 +449,6 @@ A->>I : 加载图像工作室样式
 - 表单：统一输入框、下拉、校验提示与错误状态。
 - 列表与表格：支持排序、筛选、分页与空态展示。
 - 弹窗与抽屉：统一遮罩、关闭方式与键盘交互。
+- **认证组件**：提供统一的登录、注册和账户管理界面样式。
 
 [本节为通用指导，不直接分析具体文件]

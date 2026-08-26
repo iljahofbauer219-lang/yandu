@@ -1,0 +1,113 @@
+{
+  "started_at": "2026-08-23T17:09:13.181Z",
+  "checks": [
+    {
+      "name": "list-kb",
+      "status": "pass",
+      "detail": {
+        "total_returned": 2,
+        "matched_in_env": 2,
+        "expected": 2,
+        "sample": [
+          {
+            "id": "01a00117-e215-7e90-b6ed-e782da8ddbb1",
+            "name": "__verify_rename__",
+            "document_count": 4
+          },
+          {
+            "id": "01a000fb-15ce-7d12-b850-8fc588c31ec1",
+            "name": "MaxKB试点知识库",
+            "document_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "list-docs-kb1",
+      "status": "pass",
+      "detail": {
+        "kb_id": "01a00117-e215-7e90-b6ed-e782da8ddbb1",
+        "total": 4,
+        "sample": [
+          {
+            "id": "01a00117-e217-7990-a818-5c92b7afb74b",
+            "name": "选品分析方法论.md",
+            "status": "nnn2",
+            "paragraph_count": 1
+          },
+          {
+            "id": "01a00117-e216-79d0-a3e4-fb85bd02eac0",
+            "name": "选品分析师-验收标准.md",
+            "status": "nnn2",
+            "paragraph_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "put-doc-meta-category-roundtrip",
+      "status": "pass",
+      "detail": {
+        "doc_id": "01a00117-e217-7990-a818-5c92b7afb74b",
+        "before_category": "选品方法论·v1.3",
+        "put_response_code": 200,
+        "after_category": "__verify_1787504953293__",
+        "expected": "__verify_1787504953293__",
+        "rolled_back": true
+      }
+    },
+    {
+      "name": "kb-crud-blocked",
+      "status": "pass",
+      "detail": {
+        "post": 500,
+        "patch": 500,
+        "expected": "POST/PATCH non-200 (v2.10.5-lts 不支持 API 创建/部分更新 KB)",
+        "note": "PUT 用于 desc/folder 更新是允许的（不算失败）"
+      }
+    },
+    {
+      "name": "chat-Amazon-Skills",
+      "status": "pass",
+      "detail": {
+        "http": 200,
+        "elapsed_ms": 850,
+        "content_preview": "Ready — what can I help you with?"
+      }
+    },
+    {
+      "name": "chat-选品分析师",
+      "status": "pass",
+      "detail": {
+        "http": 200,
+        "elapsed_ms": 7025,
+        "content_preview": "**`ping`** is a built-in network diagnostic command used to "
+      }
+    },
+    {
+      "name": "chat-Listing 精造师",
+      "status": "pass",
+      "detail": {
+        "http": 200,
+        "elapsed_ms": 33398,
+        "content_preview": "已就位。作为 **Listing 精造师**，我将严格基于您提供的《跨境AI选品分析师·标准分析报告 v1.3》结构，将"
+      }
+    },
+    {
+      "name": "chat-知识库守卫",
+      "status": "pass",
+      "detail": {
+        "http": 200,
+        "elapsed_ms": 23250,
+        "content_preview": "🟢 **KB 状态**：`生产就绪（v1.3）`｜健康度：88/100｜架构评级：优秀  \n🔍 **核心诊断**：\n"
+      }
+    }
+  ],
+  "finished_at": "2026-08-23T17:10:18.308Z",
+  "summary": {
+    "total": 8,
+    "pass": 8,
+    "fail": 0,
+    "skip": 0
+  }
+}
