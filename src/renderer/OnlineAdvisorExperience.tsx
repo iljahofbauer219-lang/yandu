@@ -25,6 +25,12 @@ import type {
   AdvisorVisionAnalysis as VisionAnalysis
 } from "../shared/advisor";
 import AIMessageContent from "./AIMessageContent";
+import { LinduoModelPickerModal } from "./LinduoModelPickerModal";
+import {
+  fetchLinduoChatModels,
+  fetchLinduoPreferredModel,
+  setLinduoPreferredModel
+} from "./serverApi";
 
 type ModelId = string;
 
@@ -129,11 +135,14 @@ const promptSuggestions: Array<{ id: string; title: string; body: string }> = [
   }
 ];
 
-const modelOptions: Array<{ id: ModelId; name: string; hint: string }> = [
-  { id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash", hint: "更快" },
-  { id: "deepseek/deepseek-v4-pro", name: "DeepSeek V4 Pro", hint: "更强" },
-  { id: "chat-latest", name: "OpenAI ChatGPT Latest", hint: "ChatGPT" }
-];
+type ModelOption = {
+  id: ModelId;
+  name: string;
+  hint: string;
+  isLinduo: boolean;
+  linduoDbId?: string;
+};
+
 const permissionOptions: Array<{
   id: PermissionMode;
   name: string;
@@ -159,7 +168,35 @@ const permissionOptions: Array<{
 export default function OnlineAdvisorExperience() {
   const [workspacePath, setWorkspacePath] = useState("");
   const draftRef = useRef<HTMLTextAreaElement>(null);
-  const [model, setModel] = useState<ModelId>(() => readPreferredModel());
+  const [model, setModel] = useState<ModelId>("deepseek/deepseek-v4-flash");
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([
+    { id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash", hint: "更快", isLinduo: false },
+    { id: "deepseek/deepseek-v4-pro", name: "DeepSeek V4 Pro", hint: "更强", isLinduo: false },
+    { id: "chat-latest", name: "OpenAI ChatGPT Latest", hint: "ChatGPT", isLinduo: false }
+  ]);
+  const [linduoPickerOpen, setLinduoPickerOpen] = useState(false);
+  useEffect(() => {
+    void loadInitialModel().then(setModel);
+  }, []);
+  useEffect(() => {
+    void fetchLinduoChatModels()
+      .then((linduo) => {
+        const linduoOptions: ModelOption[] = linduo.map((m) => ({
+          id: `linduo:${m.modelId}` as ModelId,
+          name: `${m.displayName} (经零度API)`,
+          hint: m.contextLabel || m.vendor,
+          isLinduo: true,
+          linduoDbId: m.id
+        }));
+        setModelOptions((prev) => [
+          ...prev.filter((o) => !o.isLinduo),
+          ...linduoOptions
+        ]);
+      })
+      .catch(() => {
+        /* Linduo 未配置时忽略,保持 Codex 默认 */
+      });
+  }, []);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [permissionMode, setPermissionMode] = useState<PermissionMode>(() =>
     readPreferredPermission()
@@ -799,10 +836,27 @@ export default function OnlineAdvisorExperience() {
   }
 
   function selectPreferredModel(selected: ModelId) {
+    const opt = modelOptions.find((o) => o.id === selected);
+    if (opt?.isLinduo && opt.linduoDbId) {
+      void setLinduoPreferredModel(opt.linduoDbId)
+        .then(() => {
+          setModel(selected);
+          setModelMenuOpen(false);
+        })
+        .catch((err) =>
+          console.error("设置 Linduo 选用失败：", err)
+        );
+      return;
+    }
     setModel(selected);
     window.localStorage.setItem(preferredModelStorageKey, selected);
     setModelMenuOpen(false);
   }
+
+  const loadPreferredModel = async () => {
+    const m = await loadInitialModel();
+    setModel(m);
+  };
 
   function selectPreferredPermission(selected: PermissionMode) {
     if (
@@ -850,6 +904,11 @@ export default function OnlineAdvisorExperience() {
     event.preventDefault();
     const message = draft.trim();
     if (!message || !workspacePath) return;
+    const isLinduoModel = model.startsWith("linduo:");
+    if (isLinduoModel && attachments.length > 0) {
+      setImageError("Linduo 模型暂不支持附件，请移除附件或切换 Codex 模型");
+      return;
+    }
     if (isBusy && activeRequestId) {
       try {
         await window.desktop.advisor.steerChat(activeRequestId, message);
@@ -1759,7 +1818,7 @@ export default function OnlineAdvisorExperience() {
           <footer className="sidebar-footer">
             <button
               className="personalization-button"
-              onClick={openPersonalization}
+              onClick={() => setLinduoPickerOpen(true)}
               disabled={isBusy}
             >
               <span className="personalization-avatar" aria-hidden="true">
@@ -2493,9 +2552,17 @@ export default function OnlineAdvisorExperience() {
                   type="button"
                   className="image-button"
                   onClick={() => void chooseAttachments()}
-                  disabled={isBusy}
-                  data-tip="上传本地图片或文档（png/jpg/webp/pdf/docx/txt/md）"
-                  title="上传本地图片或文档（png/jpg/webp/pdf/docx/txt/md）"
+                  disabled={isBusy || model.startsWith("linduo:")}
+                  data-tip={
+                    model.startsWith("linduo:")
+                      ? "Linduo 模型暂不支持视觉，Vision 功能将在 M4 启用"
+                      : "上传本地图片或文档（png/jpg/webp/pdf/docx/txt/md）"
+                  }
+                  title={
+                    model.startsWith("linduo:")
+                      ? "Linduo 模型暂不支持视觉，Vision 功能将在 M4 启用"
+                      : "上传本地图片或文档（png/jpg/webp/pdf/docx/txt/md）"
+                  }
                 >
                   <span aria-hidden="true">📎</span>
                   上传
@@ -3029,6 +3096,14 @@ export default function OnlineAdvisorExperience() {
           </section>
         </div>
       )}
+      {linduoPickerOpen && (
+        <LinduoModelPickerModal
+          onClose={() => setLinduoPickerOpen(false)}
+          onPicked={() => {
+            void loadPreferredModel();
+          }}
+        />
+      )}
     </main>
   );
 }
@@ -3453,6 +3528,25 @@ function readPreferredModel(): ModelId {
   return saved === "deepseek/deepseek-v4-pro"
     ? saved
     : "deepseek/deepseek-v4-flash";
+}
+
+async function loadInitialModel(): Promise<ModelId> {
+  // 1. 后端 Linduo preferred
+  try {
+    const { modelId } = await fetchLinduoPreferredModel();
+    if (modelId) {
+      const list = await fetchLinduoChatModels();
+      const match = list.find((m) => m.id === modelId);
+      if (match) return `linduo:${match.modelId}` as ModelId;
+    }
+  } catch {
+    /* 未登录或 Linduo 未配置 */
+  }
+  // 2. fallback 到 localStorage Codex
+  const saved = window.localStorage.getItem(preferredModelStorageKey);
+  if (saved === "deepseek/deepseek-v4-pro") return saved;
+  if (saved === "chat-latest") return saved;
+  return "deepseek/deepseek-v4-flash";
 }
 
 function readPreferredPermission(): PermissionMode {
