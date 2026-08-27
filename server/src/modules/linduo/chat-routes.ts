@@ -8,7 +8,7 @@
  *                   LINDUO_RATE_LIMITED / LINDUO_UPSTREAM_ERROR
  *
  * 鉴权:
- * - 当前用户必须对 modelId 有 grant（UserLinduoGrant），否则 403 LINDUO_MODEL_NOT_GRANTED
+ * - 当前用户须在 Linduo 模型白名单内(R-2 公式),否则 403 LINDUO_MODEL_NOT_GRANTED
  * - 模型必须 enabled，否则 403 LINDUO_MODEL_DISABLED
  * - 不强制要求 isOwner —— 普通成员经管理员授权的模型也能用
  *
@@ -23,6 +23,7 @@ import { z } from 'zod'
 import { prisma } from '../../lib/prisma.js'
 import { LinduoChatService } from './chat-service.js'
 import type { LinduoChatEvent } from './chat-service.js'
+import { userCanUseModel } from './tier-resolver.js'
 
 const chatSchema = z.object({
   modelId: z.string().min(1),
@@ -77,11 +78,8 @@ export async function linduoChatRoutes(app: FastifyInstance) {
       return reply
     }
 
-    // 2) 校验 grant：当前用户对该 LinduoChatModel.id 有授权
-    const grant = await prisma.userLinduoGrant.findUnique({
-      where: { userId_modelId: { userId, modelId: model.id } }
-    })
-    if (!grant) {
+    // 2) 校验白名单：R-2 完整公式 (tier.grants ∪ GRANT exceptions) − REVOKE exceptions
+    if (!(await userCanUseModel(userId, model.id))) {
       reply.raw.writeHead(200, sseHeaders())
       writeSseEvent(reply.raw, { type: 'error', message: 'LINDUO_MODEL_NOT_GRANTED' })
       reply.raw.end()

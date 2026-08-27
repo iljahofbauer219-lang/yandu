@@ -4,7 +4,7 @@ import type { ComplianceBatchRecheckResult, EbayImageInspectionReport } from '..
 import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
 import type { EbayLocalListingRequirements, EbayLocalRevisionPreparationResult } from '../shared/contracts'
 import type { EbayTitleDecision, EbayTitleDecisionInput } from '../shared/contracts'
-import type { ImagePackageTextExtractionRequest, ImagePackageTextExtractionResult, LinduoChatModelView, UserLinduoGrantView } from '../shared/contracts'
+import type { ImagePackageTextExtractionRequest, ImagePackageTextExtractionResult, LinduoChatModelView, LinduoMemberTierView, LinduoModelTierView, UserLinduoExceptionView } from '../shared/contracts'
 import type { AdvisorApprovalDecision, AdvisorChatEvent, AdvisorChatRequest, AdvisorIncomingDocument, AdvisorIncomingImage, AdvisorPersonalizationSettings, AdvisorRemoteSession } from '../shared/advisor'
 import type { AiEmployeeAskRequest, AiEmployeeChatModelProfile, AiEmployeePickResult } from '../shared/aiEmployee'
 import type { ExtractedProductInfo } from '../shared/selectionExtract'
@@ -91,12 +91,24 @@ contextBridge.exposeInMainWorld('desktop', {
       ipcRenderer.invoke('linduo-chat-models:list-all', accessToken),
     setChatModelEnabled: (accessToken: string, id: string, enabled: boolean): Promise<LinduoChatModelView> =>
       ipcRenderer.invoke('linduo-chat-models:set-enabled', accessToken, id, enabled),
-    listGrants: (accessToken: string): Promise<Array<UserLinduoGrantView & { userName: string }>> =>
-      ipcRenderer.invoke('linduo-grants:list', accessToken),
-    setGrant: (accessToken: string, userId: string, modelId: string): Promise<{ userId: string; modelId: string; grantedBy: string; grantedAt: string }> =>
-      ipcRenderer.invoke('linduo-grants:set', accessToken, userId, modelId),
-    revokeGrant: (accessToken: string, userId: string, modelId: string): Promise<{ ok: true }> =>
-      ipcRenderer.invoke('linduo-grants:revoke', accessToken, userId, modelId),
+    listExceptions: (accessToken: string): Promise<Array<UserLinduoExceptionView & { userName: string }>> =>
+      ipcRenderer.invoke('linduo-exceptions:list', accessToken),
+    setException: (accessToken: string, userId: string, modelId: string, kind: 'GRANT' | 'REVOKE'): Promise<{ userId: string; modelId: string; kind: 'GRANT' | 'REVOKE'; grantedBy: string; grantedAt: string }> =>
+      ipcRenderer.invoke('linduo-exceptions:set', accessToken, userId, modelId, kind),
+    revokeException: (accessToken: string, userId: string, modelId: string): Promise<{ ok: true }> =>
+      ipcRenderer.invoke('linduo-exceptions:revoke', accessToken, userId, modelId),
+    listTiers: (accessToken: string): Promise<LinduoModelTierView[]> =>
+      ipcRenderer.invoke('linduo-tiers:list', accessToken),
+    getTierModels: (accessToken: string, tierId: string): Promise<{ tier: LinduoModelTierView; models: LinduoChatModelView[] }> =>
+      ipcRenderer.invoke('linduo-tiers:get-models', accessToken, tierId),
+    setTierModels: (accessToken: string, tierId: string, modelIds: string[]): Promise<LinduoModelTierView> =>
+      ipcRenderer.invoke('linduo-tiers:set-models', accessToken, tierId, modelIds),
+    getMemberTierAndExceptions: (accessToken: string, memberId: string): Promise<LinduoMemberTierView> =>
+      ipcRenderer.invoke('linduo-members:get-tier-and-exceptions', accessToken, memberId),
+    setMemberTier: (accessToken: string, memberId: string, tierId: string | null): Promise<LinduoMemberTierView> =>
+      ipcRenderer.invoke('linduo-members:set-tier', accessToken, memberId, tierId),
+    getMyTierAndExceptions: (accessToken: string): Promise<LinduoMemberTierView> =>
+      ipcRenderer.invoke('linduo-me:get-tier-and-exceptions', accessToken),
     getPreferredModel: (accessToken: string): Promise<{ modelId: string | null }> =>
       ipcRenderer.invoke('linduo-preferred:get', accessToken),
     setPreferredModel: (accessToken: string, modelId: string | null): Promise<{ modelId: string | null }> =>

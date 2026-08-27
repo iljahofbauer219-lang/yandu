@@ -6,7 +6,7 @@
 import type { AuthTokens, UserProfile } from '../shared/serverHttp'
 import { ApiError, apiFetch, clearSession, getTokens, saveProfile, saveTokens } from '../shared/serverHttp'
 import type { DashboardSummary } from '../shared/dashboard'
-import type { LinduoChatModelView, UserLinduoGrantView } from '../shared/contracts'
+import type { LinduoChatModelView, LinduoMemberTierView, LinduoModelTierView, UserLinduoExceptionView } from '../shared/contracts'
 
 export {
   ApiError,
@@ -171,16 +171,48 @@ export async function setLinduoChatModelEnabled(id: string, enabled: boolean): P
   })
 }
 
-export async function fetchLinduoGrants(): Promise<Array<UserLinduoGrantView & { userName: string }>> {
-  return apiFetch<Array<UserLinduoGrantView & { userName: string }>>('/api/linduo/grants', { method: 'GET' })
+export async function fetchLinduoExceptions(): Promise<Array<UserLinduoExceptionView & { userName: string }>> {
+  return apiFetch<Array<UserLinduoExceptionView & { userName: string }>>('/api/linduo/exceptions', { method: 'GET' })
 }
 
-export async function setLinduoGrant(userId: string, modelId: string): Promise<void> {
-  await apiFetch('/api/linduo/grants', { method: 'POST', body: { userId, modelId } })
+export async function setLinduoException(userId: string, modelId: string, kind: 'GRANT' | 'REVOKE'): Promise<void> {
+  await apiFetch('/api/linduo/exceptions', { method: 'POST', body: { userId, modelId, kind } })
 }
 
-export async function revokeLinduoGrant(userId: string, modelId: string): Promise<void> {
-  await apiFetch('/api/linduo/grants', { method: 'DELETE', body: { userId, modelId } })
+export async function revokeLinduoException(userId: string, modelId: string): Promise<void> {
+  await apiFetch('/api/linduo/exceptions', { method: 'DELETE', body: { userId, modelId } })
+}
+
+// ---- Linduo Tier 端点 (R-2) ----
+
+export async function fetchLinduoTiers(): Promise<LinduoModelTierView[]> {
+  return apiFetch<LinduoModelTierView[]>('/api/linduo/tiers', { method: 'GET' })
+}
+
+export async function fetchLinduoTierModels(tierId: string): Promise<{ tier: LinduoModelTierView; models: LinduoChatModelView[] }> {
+  return apiFetch<{ tier: LinduoModelTierView; models: LinduoChatModelView[] }>(`/api/linduo/tiers/${encodeURIComponent(tierId)}/models`, { method: 'GET' })
+}
+
+export async function setLinduoTierModels(tierId: string, modelIds: string[]): Promise<LinduoModelTierView> {
+  return apiFetch<LinduoModelTierView>(`/api/linduo/tiers/${encodeURIComponent(tierId)}/models`, {
+    method: 'PUT',
+    body: { modelIds }
+  })
+}
+
+export async function fetchLinduoMemberTier(memberId: string): Promise<LinduoMemberTierView> {
+  return apiFetch<LinduoMemberTierView>(`/api/linduo/members/${encodeURIComponent(memberId)}/tier-and-exceptions`, { method: 'GET' })
+}
+
+export async function setLinduoMemberTier(memberId: string, tierId: string | null): Promise<LinduoMemberTierView> {
+  return apiFetch<LinduoMemberTierView>(`/api/linduo/members/${encodeURIComponent(memberId)}/tier`, {
+    method: 'PUT',
+    body: { tierId }
+  })
+}
+
+export async function fetchLinduoMyTierAndExceptions(): Promise<LinduoMemberTierView> {
+  return apiFetch<LinduoMemberTierView>('/api/linduo/me/tier-and-exceptions', { method: 'GET' })
 }
 
 export async function fetchLinduoPreferredModel(): Promise<{ modelId: string | null }> {

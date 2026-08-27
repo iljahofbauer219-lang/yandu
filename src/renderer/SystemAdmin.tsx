@@ -5,8 +5,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { MemberView, RoleView } from './serverApi'
-import { ApiError, approveMember, changePassword, createMember, deleteMember, fetchAllLinduoChatModels, fetchLinduoGrants, fetchMembers, fetchPendingMembers, fetchRoles, rejectMember, resetMemberPassword, revokeLinduoGrant, setLinduoGrant, updateMember, updateMemberPermissions } from './serverApi'
-import type { LinduoChatModelView } from '../shared/contracts'
+import { ApiError, approveMember, changePassword, createMember, deleteMember, fetchLinduoTiers, fetchMembers, fetchPendingMembers, fetchRoles, rejectMember, resetMemberPassword, setLinduoMemberTier, updateMember, updateMemberPermissions } from './serverApi'
+import type { LinduoChatModelView, LinduoModelTierView } from '../shared/contracts'
+import { LinduoExceptionModal } from './LinduoExceptionModal'
+import { fetchAllLinduoChatModels, fetchLinduoMemberTier } from './serverApi'
 import { useSession } from './SessionGate'
 import { Button, EmptyState, LoadingState, Notice, StatusBadge } from './ui/primitives'
 import { MENU_PERMISSION_TREE, menuCheckState, summarizeMenuPermissions, toggleMenu, toggleMenuCard } from '../shared/menuPermissionTree'
@@ -96,9 +98,16 @@ function MemberRow(props: {
   member: MemberView
   roles: RoleView[]
   onChanged: () => void
-  onAssignLinduo?: (member: MemberView) => void
+  /** 全部 tier 列表(主帐号在 useEffect 里拉,传进来给各成员行共享) */
+  linduoTiers: LinduoModelTierView[]
+  /** 该成员当前 tier;null=未分配 */
+  currentMemberTier: LinduoModelTierView | null
+  /** 设置该成员 tier(null=清除) */
+  onChangeMemberTier: (tierId: string | null) => Promise<void>
+  /** 点「Linduo 例外」按钮 → 弹 LinduoExceptionModal */
+  onOpenLinduoException: () => void
 }) {
-  const { member, roles, onChanged, onAssignLinduo } = props
+  const { member, roles, onChanged, linduoTiers, currentMemberTier, onChangeMemberTier, onOpenLinduoException } = props
   const [editing, setEditing] = useState(false)
   const [changingPwd, setChangingPwd] = useState(false)
   const [name, setName] = useState(member.name)
@@ -180,6 +189,22 @@ function MemberRow(props: {
     } catch (err) { setMessage(errorText(err, '修改失败')) } finally { setBusy(false) }
   }
 
+  // Linduo tier 变更:受控 select,await 父级 onChangeMemberTier
+  const [tierSaving, setTierSaving] = useState(false)
+  const handleTierChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value
+    const nextTierId = value === '' ? null : value
+    if (tierSaving) return
+    setTierSaving(true); setMessage('')
+    try {
+      await onChangeMemberTier(nextTierId)
+    } catch (err) {
+      setMessage(errorText(err, '更新 Linduo 等级失败'))
+    } finally {
+      setTierSaving(false)
+    }
+  }
+
   return <tr className={`sysadmin-member-row${member.status === 'DISABLED' ? ' disabled' : ''}`}>
     <td>
       <b>{member.name}</b>
@@ -198,14 +223,31 @@ function MemberRow(props: {
           <button disabled={busy} onClick={() => { setChangingPwd(false); setMessage('') }}>取消</button>
         </> : <>
           <button onClick={() => { setChangingPwd(true); setOldPassword(''); setNewPassword(''); setMessage('') }}>修改密码</button>
-          <span className="member-action-note">全部已开放</span>
+          <label className="linduo-tier-select" title="主帐号默认全开组，不可修改">
+            <span className="linduo-tier-label">Linduo 等级</span>
+            <select value={currentMemberTier?.id ?? ''} disabled>
+              {linduoTiers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </label>
+          <span className="member-action-note">全开组(主帐号)</span>
         </>
       ) : editing ? <>
         <button disabled={busy} onClick={() => void saveEdit()}>保存</button>
         <button disabled={busy} onClick={() => setEditing(false)}>取消</button>
       </> : <>
         <button onClick={startEdit}>编辑</button>
-        <button disabled={busy} onClick={() => onAssignLinduo?.(member)}>Linduo 选用</button>
+        <label className="linduo-tier-select" title="选「无」后该成员只能依赖例外 (GRANT/REVOKE)">
+          <span className="linduo-tier-label">Linduo 等级</span>
+          <select
+            value={currentMemberTier?.id ?? ''}
+            onChange={e => void handleTierChange(e)}
+            disabled={tierSaving || busy}
+          >
+            <option value="">无(仅依赖例外)</option>
+            {linduoTiers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </label>
+        <button disabled={busy || tierSaving} onClick={onOpenLinduoException}>Linduo 例外</button>
         {member.status === 'ACTIVE'
           ? <button className="danger" disabled={busy} onClick={() => void toggleStatus()}>禁用</button>
           : <button disabled={busy} onClick={() => void toggleStatus()}>启用</button>}
@@ -244,12 +286,19 @@ export default function SystemAdmin() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  // Linduo 模型分配 Modal（M1）
-  const [linduoAssignTarget, setLinduoAssignTarget] = useState<MemberView | null>(null)
-  const [linduoAllModels, setLinduoAllModels] = useState<LinduoChatModelView[]>([])
-  const [linduoUserGrants, setLinduoUserGrants] = useState<Set<string>>(new Set())
-  const [linduoLoading, setLinduoLoading] = useState(false)
-  const [linduoMsg, setLinduoMsg] = useState('')
+  // Linduo Tier 列表（成员行共享）
+  const [linduoTiers, setLinduoTiers] = useState<LinduoModelTierView[]>([])
+  // 各成员当前 tier: memberId → tier | null（null=未分配）
+  const [memberTiers, setMemberTiers] = useState<Record<string, LinduoModelTierView | null>>({})
+  // Linduo 例外 modal 状态
+  const [linduoExceptionTarget, setLinduoExceptionTarget] = useState<{
+    member: MemberView
+    view: import('../shared/contracts').LinduoMemberTierView
+  } | null>(null)
+  const [linduoExceptionLoading, setLinduoExceptionLoading] = useState(false)
+  const [linduoExceptionMsg, setLinduoExceptionMsg] = useState('')
+  // 全 enabled 模型列表，LinduoExceptionModal 双栏要用（为避免全员重拉，load 一次在主组件缓存）
+  const [allLinduoModels, setAllLinduoModels] = useState<LinduoChatModelView[]>([])
 
   // 新增成员表单
   const [showCreate, setShowCreate] = useState(false)
@@ -263,8 +312,27 @@ export default function SystemAdmin() {
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const [m, r, p] = await Promise.all([fetchMembers(), fetchRoles(), fetchPendingMembers()])
-      setMembers(m.filter(u => u.status !== 'PENDING' && u.status !== 'REJECTED')); setRoles(r); setPendingMembers(p)
+      const [m, r, p, tiers, all] = await Promise.all([
+        fetchMembers(),
+        fetchRoles(),
+        fetchPendingMembers(),
+        fetchLinduoTiers(),
+        fetchAllLinduoChatModels()
+      ])
+      const activeMembers = m.filter(u => u.status !== 'PENDING' && u.status !== 'REJECTED')
+      setMembers(activeMembers); setRoles(r); setPendingMembers(p)
+      setLinduoTiers(tiers)
+      setAllLinduoModels(all.filter(am => am.enabled))
+      // 每个成员的当前 tier 拉一次（不阻塞成员列表渲染，并行起请求）
+      const tierResults = await Promise.all(activeMembers.map(async (mem) => {
+        try {
+          const view = await fetchLinduoMemberTier(mem.id)
+          return [mem.id, view.tier] as const
+        } catch {
+          return [mem.id, null] as const
+        }
+      }))
+      setMemberTiers(Object.fromEntries(tierResults))
     } catch (err) { setError(errorText(err, '加载失败')) } finally { setLoading(false) }
   }, [])
 
@@ -283,45 +351,39 @@ export default function SystemAdmin() {
     } catch (err) { setCreateMsg(errorText(err, '创建失败')) } finally { setCreating(false) }
   }
 
-  const openLinduoAssign = async (member: MemberView) => {
-    setLinduoAssignTarget(member)
-    setLinduoAllModels([])
-    setLinduoUserGrants(new Set())
-    setLinduoMsg('')
-    setLinduoLoading(true)
+  const openLinduoException = async (member: MemberView) => {
+    setLinduoExceptionMsg('')
+    setLinduoExceptionLoading(true)
     try {
-      // grant 的 modelId 语义 = LinduoChatModel.id（DB cuid，见 UserLinduoGrant 外键），故勾选态用 model.id 对齐
-      const [all, grants] = await Promise.all([fetchAllLinduoChatModels(), fetchLinduoGrants()])
-      setLinduoAllModels(all.filter(m => m.enabled))
-      setLinduoUserGrants(new Set(grants.filter(g => g.userId === member.id).map(g => g.modelId)))
+      const [view, models] = await Promise.all([
+        fetchLinduoMemberTier(member.id),
+        allLinduoModels.length > 0
+          ? Promise.resolve(allLinduoModels)
+          : fetchAllLinduoChatModels().then(list => {
+              const enabled = list.filter(m => m.enabled)
+              setAllLinduoModels(enabled)
+              return enabled
+            })
+      ])
+      setLinduoExceptionTarget({ member, view })
+      // 顺手缓存 tier
+      setMemberTiers(prev => ({ ...prev, [member.id]: view.tier }))
     } catch (err) {
-      setLinduoMsg(errorText(err, '加载 Linduo 模型失败'))
+      setLinduoExceptionMsg(errorText(err, '加载 Linduo 例外失败'))
     } finally {
-      setLinduoLoading(false)
+      setLinduoExceptionLoading(false)
     }
   }
-
-  const toggleLinduoGrant = async (modelId: string, checked: boolean) => {
-    const target = linduoAssignTarget
-    if (!target) return
-    setLinduoMsg('')
+  
+  const handleChangeMemberTier = async (member: MemberView, tierId: string | null) => {
     try {
-      if (checked) {
-        await setLinduoGrant(target.id, modelId)
-      } else {
-        await revokeLinduoGrant(target.id, modelId)
-      }
-      // 请求成功后才更新 Set；失败时 checkbox 因受控自动回弹
-      setLinduoUserGrants(prev => {
-        const next = new Set(prev)
-        if (checked) next.add(modelId); else next.delete(modelId)
-        return next
-      })
+      const view = await setLinduoMemberTier(member.id, tierId)
+      setMemberTiers(prev => ({ ...prev, [member.id]: view.tier }))
     } catch (err) {
-      setLinduoMsg(errorText(err, '分配失败'))
+      throw err
     }
   }
-
+  
   const assignableRoles = roles.filter(r => r.key !== 'OWNER')
 
   return <div className="sysadmin-page">
@@ -363,7 +425,18 @@ export default function SystemAdmin() {
       {loading ? <LoadingState className="sysadmin-loading" label="正在加载成员…" /> : members.length === 0 ? <EmptyState title="暂无成员" description="新增成员后，可在这里分配使用权限。" /> : <table className="sysadmin-table sysadmin-members-table">
         <thead><tr><th>姓名</th><th>手机号</th><th>角色</th><th>使用权限</th><th>状态</th><th>最近登录</th><th>操作</th></tr></thead>
         <tbody>
-          {members.map(member => <MemberRow key={member.id} member={member} roles={roles} onChanged={() => void load()} onAssignLinduo={m => void openLinduoAssign(m)} />)}
+          {members.map(member => (
+            <MemberRow
+              key={member.id}
+              member={member}
+              roles={roles}
+              onChanged={() => void load()}
+              linduoTiers={linduoTiers}
+              currentMemberTier={memberTiers[member.id] ?? null}
+              onChangeMemberTier={tierId => handleChangeMemberTier(member, tierId)}
+              onOpenLinduoException={() => void openLinduoException(member)}
+            />
+          ))}
         </tbody>
       </table>}
     </>}
@@ -391,38 +464,24 @@ export default function SystemAdmin() {
       </dl>
     </div>}
 
-    {linduoAssignTarget && (
-      <div className="linduo-assign-backdrop" role="dialog" aria-modal="true" onClick={e => { if (e.target === e.currentTarget) setLinduoAssignTarget(null) }}>
-        <div className="linduo-assign-card">
-          <header>
-            <h2>为 {linduoAssignTarget.name} 分配 Linduo 聊天模型</h2>
-            <button type="button" className="linduo-assign-close" onClick={() => setLinduoAssignTarget(null)} aria-label="关闭">✕</button>
-          </header>
-          <div className="linduo-assign-body">
-            {linduoMsg && <Notice className="sysadmin-msg" tone="danger" role="alert">{linduoMsg}</Notice>}
-            {linduoLoading && <LoadingState label="正在加载模型列表…" />}
-            {!linduoLoading && linduoAllModels.length === 0 && (
-              <div className="linduo-assign-empty">暂无可用 Linduo 模型（enabled 列表为空）。</div>
-            )}
-            {!linduoLoading && linduoAllModels.map(model => {
-              const checked = linduoUserGrants.has(model.id)
-              return (
-                <label key={model.id} className="linduo-assign-row">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={e => void toggleLinduoGrant(model.id, e.target.checked)}
-                  />
-                  <span>
-                    <strong>{model.displayName}</strong>
-                    <small>{model.vendor} · {model.contextLabel || '—'}</small>
-                  </span>
-                </label>
-              )
-            })}
-          </div>
+    {linduoExceptionTarget && (
+      <LinduoExceptionModal
+        onClose={() => setLinduoExceptionTarget(null)}
+        onSaved={() => void load()}
+        member={linduoExceptionTarget.view}
+        allModels={allLinduoModels}
+        targetUserId={linduoExceptionTarget.member.id}
+      />
+    )}
+    {linduoExceptionLoading && (
+      <div className="linduo-picker-backdrop" role="status">
+        <div className="linduo-picker-card">
+          <div className="linduo-picker-body">正在加载 Linduo 例外…</div>
         </div>
       </div>
+    )}
+    {linduoExceptionMsg && !linduoExceptionTarget && (
+      <Notice className="sysadmin-msg" tone="danger" role="alert">{linduoExceptionMsg}</Notice>
     )}
   </div>
 }

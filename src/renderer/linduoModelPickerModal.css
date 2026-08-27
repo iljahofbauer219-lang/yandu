@@ -57,35 +57,6 @@
   font-size: 13px;
 }
 
-.linduo-picker-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.linduo-picker-row {
-  width: 100%;
-  display: grid;
-  grid-template-columns: auto auto 1fr;
-  grid-template-rows: auto auto;
-  align-items: center;
-  gap: 4px 10px;
-  padding: 10px 12px;
-  background: var(--bg-soft, #f8fafc);
-  border: 1px solid var(--border-soft, #e5e7eb);
-  border-radius: 8px;
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.12s, border-color 0.12s;
-}
-.linduo-picker-row:hover:not(:disabled) {
-  background: var(--bg-hover, #f1f5f9);
-  border-color: var(--accent, #16a59a);
-}
-.linduo-picker-row:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .linduo-picker-name { font-weight: 600; font-size: 14px; }
 .linduo-picker-ctx {
@@ -113,8 +84,271 @@
   margin-top: 4px;
 }
 
-.linduo-picker-clear {
-  border-style: dashed;
-  margin-top: 8px;
+
+/* ==================== LinduoAssignmentModal (M1/R-2) ==================== */
+
+.linduo-assignment-card {
+  width: 880px;
+  max-width: 96vw;
+  max-height: 86vh;
 }
-.linduo-picker-clear .linduo-picker-name { color: var(--text-secondary); font-weight: 500; }
+.linduo-assignment-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.linduo-picker-info {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.linduo-assignment-tiers {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.linduo-assignment-tier {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 14px;
+  background: var(--bg-soft, #f8fafc);
+  border: 1px solid var(--border-soft, #e5e7eb);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s;
+}
+.linduo-assignment-tier:hover { background: var(--bg-hover, #f1f5f9); }
+.linduo-assignment-tier.active {
+  border-color: var(--accent, #16a59a);
+  background: #ecfeff;
+}
+.linduo-assignment-tier-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary, #0f172a);
+}
+.linduo-assignment-tier-meta {
+  font-size: 11px;
+  color: var(--text-secondary, #64748b);
+}
+.linduo-assignment-tier-desc {
+  margin: 0;
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+}
+
+.linduo-assignment-readonly {
+  border: 1px dashed var(--border-soft, #e5e7eb);
+  background: var(--bg-soft, #f8fafc);
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+.linduo-assignment-readonly p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-secondary, #64748b);
+}
+.linduo-assignment-readonly-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.linduo-assignment-readonly-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid var(--border-soft, #e5e7eb);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.linduo-assignment-transfer {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  min-height: 320px;
+}
+.linduo-assignment-col {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-soft, #e5e7eb);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+.linduo-assignment-col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-soft, #f8fafc);
+  border-bottom: 1px solid var(--border-soft, #e5e7eb);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #475569);
+}
+.linduo-assignment-move-all {
+  border: none;
+  background: transparent;
+  color: var(--accent, #0d9488);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.linduo-assignment-move-all:disabled {
+  color: var(--text-secondary, #94a3b8);
+  cursor: not-allowed;
+}
+.linduo-assignment-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  flex: 1;
+  overflow-y: auto;
+  max-height: 360px;
+}
+.linduo-assignment-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.linduo-assignment-item:hover { background: var(--bg-soft, #f1f5f9); }
+.linduo-assignment-item.picked {
+  background: #ecfeff;
+  border: 1px solid var(--accent, #16a59a);
+}
+.linduo-assignment-item input[type='checkbox'] {
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.linduo-assignment-empty {
+  text-align: center;
+  color: var(--text-secondary, #94a3b8);
+  padding: 24px 12px;
+  font-size: 13px;
+}
+
+.linduo-assignment-arrows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+.linduo-assignment-arrows button {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--border-soft, #e5e7eb);
+  background: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  color: var(--accent, #0d9488);
+}
+.linduo-assignment-arrows button:hover:not(:disabled) {
+  background: var(--bg-hover, #f1f5f9);
+  border-color: var(--accent, #16a59a);
+}
+.linduo-assignment-arrows button:disabled {
+  color: var(--text-secondary, #94a3b8);
+  cursor: not-allowed;
+}
+
+.linduo-assignment-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-soft, #e5e7eb);
+}
+.linduo-assignment-foot button {
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border-soft, #e5e7eb);
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+.linduo-assignment-foot button.primary {
+  background: var(--accent, #16a59a);
+  color: #fff;
+  border-color: var(--accent, #16a59a);
+}
+.linduo-assignment-foot button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ==================== LinduoPreferenceModal (M1/R-2) ==================== */
+
+.linduo-preference-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.linduo-preference-row {
+  border: 1px solid var(--border-soft, #e5e7eb);
+  border-radius: 8px;
+  background: #fff;
+  transition: background 0.12s, border-color 0.12s;
+}
+.linduo-preference-row:hover { background: var(--bg-soft, #f8fafc); }
+.linduo-preference-row.dashed { border-style: dashed; margin-top: 8px; }
+.linduo-preference-row.active {
+  border-color: var(--accent, #16a59a);
+  background: #ecfeff;
+}
+.linduo-preference-row label {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.linduo-preference-row input[type='radio'] { cursor: pointer; }
+
+/* ==================== LinduoExceptionModal (M1/R-2) ==================== */
+
+.linduo-exception-kind {
+  margin-left: auto;
+  border: 1px solid var(--border-soft, #e5e7eb);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #fff;
+}
+.linduo-exception-kind.kind-grant {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+.linduo-exception-kind.kind-revoke {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}

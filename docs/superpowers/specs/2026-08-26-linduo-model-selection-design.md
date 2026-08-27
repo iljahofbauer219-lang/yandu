@@ -1,10 +1,10 @@
-# Linduo 聊天模型选用与全员路由 设计文档
+# Linduo 聊天模型选用(按等级 + 用户例外)设计文档
 
-> **For agentic workers:** 这是 M0 (数据 + 权限) + M1 (纯聊天 + UI 选用) 的设计 spec。M2/M3/M4 见文末「后续里程碑」,不在本次实施范围。
+> **For agentic workers:** 这是 M1 (R-2 修正版) 的设计 spec。R-2 修正的关键变化:grant 粒度从 `userId` 改为 `LinduoModelTier`(预置 basic/advanced/full)+ `UserLinduoException`(用户特例覆盖);设置端入口从"系统管理 → 成员行 ⚙ 按钮"改为"sidebar 齿轮 → 弹 LinduoAssignmentModal(左右双栏穿梭)";使用端从"黄框点开"改为"右下角下拉直接接 Linduo 模型"。M2/M3/M4 不在本次实施范围。
 
-**Goal:** 让组织内的用户(由系统管理员按人授权)从「零度API 聚合」模型里选用真实可用的聊天模型,选用结果跟登录用户绑,跨设备同步;选完真能通过 `api000.com/v1/chat/completions` 跑通对话。
+**Goal:** 让组织内用户从「零度API 聚合」模型里选用真实可用的聊天模型,选用按 Linduo 模型等级(基础/进阶/全开)+ 用户特例两层授权;UI 上:sidebar 齿轮 → 弹穿梭 modal 管理分配,OnlineAdvisor 右下角下拉切换模型;选完真能通过 `api000.com/v1/chat/completions` 跑通对话。
 
-**Architecture:** 数据库存 3 张新表(LinduoChatModel 白名单 + UserLinduoGrant 用户授权 + User.preferredLinduoModelId 选用),启动时跟 LinduoModelMallPage 的 `LINDUO_MODELS` 静态目录对账自动同步 27 个 CHAT 模型;主进程新增 `LinduoChatService` 走 OpenAI 协议 SSE 流式,`AdvisorRuntime` 改 `modelProfiles` 合并 Codex + Linduo,新增 `executeLinduoTurn` 分支绕开 Codex app-server;渲染层加 `LinduoModelPickerModal` 弹窗,「设置」齿轮改触发弹窗,黄框下拉合并显示用户有权选的 Linduo 模型。
+**Architecture:** 数据库存 4 张新表(LinduoChatModel 白名单 + LinduoModelTier 预置等级 + LinduoTierGrant 等级→模型 + UserLinduoException 用户特例),加 `User.linduoTierId` 字段;启动时跟 `LINDUO_MODELS` 静态目录对账同步 25 个 CHAT 模型,seed 3 个预置 tier(basic/advanced/full),按用户 `linduoTierId` 计算可用模型;主进程 `LinduoChatService` 走 OpenAI SSE,`AdvisorRuntime` 合并 Codex + Linduo;渲染层 `LinduoAssignmentModal`(齿轮弹)+ `OnlineAdvisorExperience` 右下角下拉接 Linduo。
 
 **Tech Stack:** Prisma + Fastify + Electron IPC + Vite/React + OpenAI Chat Completions API (零度API 代理)。
 
@@ -14,348 +14,312 @@
 
 | 关键点 | 现状 |
 |---|---|
-| Online Advisor 黄框模型 | `DeepSeek V4 Flash` / `DeepSeek V4 Pro` / `OpenAI ChatGPT Latest` 硬编码 3 个(OnlineAdvisorExperience.tsx:132-136) |
-| 存储位置 | localStorage `deepseek-codex.preferred-model` — 每渲染进程独立,跨用户/重启不共享 |
-| 主进程路由 | `AdvisorRuntime.ts:195-200` `modelProfiles` 数组,`providerId` 是 `deepseek_proxy` / `openai_api`,统一走 Codex app-server stdio RPC |
-| 零度API 接入范围 | 只有生图(`LinduoImageService.ts` 149 行),**没有聊天补全桥**;Linduo 37 模型里只 3 个生图接通 |
-| 零度API 模型目录 | `LinduoModelMallPage.tsx:52-94` 静态常量 `LINDUO_MODELS`,37 个分 4 厂(OpenAI 14 / Google 10 / Anthropic 10 / Vidu 3) |
-| 权限体系 | `Role` + `RolePermission` + `UserRole`,`loadProfile` 拉权限码集合回 `UserProfile.permissions` |
-| 零度API Key 管理 | `LlmApiKeysPage.tsx` 零度API 卡片 + `LinduoLoginService` 走 Fastify `/api/linduo/*` |
+| Online Advisor 右下角下拉 | `permissionOptions`(请求批准/完全访问)+ `modelOptions`(硬编码 Codex 3 模型,OnlineAdvisorExperience.tsx L155-178) |
+| 存储位置 | localStorage `deepseek-codex.preferred-model` + `deepseek-codex.preferred-permission` — 每渲染进程独立 |
+| 主进程路由 | `AdvisorRuntime.ts` `modelProfiles` 数组,`providerId` 是 `deepseek_proxy` / `openai_api`,统一走 Codex app-server stdio RPC;M1 已加 `reloadLinduoChatModels` 合并 Linduo |
+| 零度API 接入范围 | M1 已加聊天桥(`LinduoChatService` 走 `api000.com/v1/chat/completions` SSE) |
+| 零度API 模型目录 | `src/shared/linduoCatalog.ts` 共享,37 个,CHAT 过滤后 25 个(实测 25,不是 spec 原写的 27) |
+| 权限体系 | `Role` + `RolePermission` + `UserRole` 多对多,4 个预置 role(OWNER/OPERATOR/PUBLISHER/VIEWER) |
+| RBAC 模块权限 | `module.ebay` / `module.compliance` / `module.legacy` / `module.admin` — 决定侧边栏栏目显隐 |
+| M1 旧设计 | `UserLinduoGrant(userId+modelId)` 按用户粒度;`ensureOwnerLinduoGrants` 给 OWNER 全开 — **R-2 替换为 tier + exception 模型** |
 
 ## 2. 决定清单(本次实施不可变)
 
 | # | 决定 | 说明 |
 |---|---|---|
-| 1 | 真实路由 Linduo | 选完真能用 |
-| 2 | 跟登录用户绑 | `users.preferred_linduo_model_id` 字段;移除 localStorage 持久化 |
-| 3 | 弹窗 | 点「设置」齿轮 → 弹 `LinduoModelPickerModal`;不同模型使用能力和价格不一样,管理员按人分配 |
-| 4 | 保留黄框下拉 | 下拉做「快速切换 + 显示当前选用」,齿轮做「全量浏览 + 选用持久化」 |
-| 5 | 白名单机制 | `linduo_chat_models` 表,初始 27 个 CHAT 能力 enabled;**启动时跟静态 `LINDUO_MODELS` 自动同步**;消失的 modelId 软关(`enabled=false`)保留 grants 历史 |
-| 6 | 4 阶段拆分 | M1(纯聊天)→ M2(只读工具)→ M3(完整工具+approval)→ M4(vision) |
-| 7 | OWNER 自动 grant | 启动时把 `enabled=true` 的所有 LinduoChatModel 自动 grant 给 OWNER 角色用户;非 OWNER 初始空 |
-| 8 | M1 工具/vision 兜底 | Linduo 模型在 M1 范围**不接 tool / vision**,但要有兜底:UI 隐藏附件按钮 + 选 Linduo 模型时禁用工具相关 UI;LinduoChatService **强制不传 `tools` 字段** |
+| 1 | **真实路由 Linduo** | 选完真能用 |
+| 2 | **跟登录用户绑** | `users.linduo_tier_id` 选 tier + `users.preferred_linduo_model_id` 选 model;移除 localStorage 持久化 |
+| 3 | **设置端入口 = sidebar 齿轮** | 点齿轮 → 弹 `LinduoAssignmentModal`(左右双栏穿梭),不再先绕到 system-admin |
+| 4 | **使用端入口 = OnlineAdvisor 右下角下拉** | 替换原"完全访问权限 / DeepSeek V4 Flash 更快"那个下拉,显示当前用户可用的 Linduo 模型 |
+| 5 | **粒度 = tier 集合 + user 例外** | 每个用户挂在 1 个 LinduoModelTier(基础/进阶/全开)上,tier 关联 N 个 model;用户可在 tier 之上额外加/减 model(UserLinduoException) |
+| 6 | **LinduoModelTier 预置 3 个** | `basic`(基础组,默认空) / `advanced`(进阶组,默认 13 个 GPT/Claude 中等) / `full`(全开组,默认 25 个全部);`isSystem=true`,启动时 seed |
+| 7 | **OWNER 默认 tier = full** | 用户表的 `linduoTierId` 默认指向 `full`;OWNER 自动拥有全部 25 个;非 OWNER 由 admin 在 modal 里改 tier |
+| 8 | **白名单机制** | `linduo_chat_models` 表 25 个 CHAT enabled;启动时跟静态 `LINDUO_MODELS` 自动同步;消失的 modelId 软关(`enabled=false`)保留 grants 历史 |
+| 9 | **4 阶段拆分** | M1(纯聊天)→ M2(只读工具)→ M3(完整工具+approval)→ M4(vision) |
+| 10 | **M1 工具/vision 兜底** | Linduo 模型在 M1 不接 tool / vision;UI 隐藏附件按钮;LinduoChatService 强制不传 `tools` |
 
-## 3. 数据层 (M0)
+## 3. 数据层
 
 ### 3.1 新增表
 
 ```prisma
 model LinduoChatModel {
-  id           String   @id @default(cuid())
-  modelId      String   @unique @map("model_id")        // e.g. "gpt-4o"
-  vendor       String                                    // "openai" / "google" / "anthropic"
-  displayName  String   @map("display_name")             // "GPT-4o"
+  id           String            @id @default(cuid())
+  modelId      String            @unique @map("model_id")
+  vendor       String
+  displayName  String            @map("display_name")
   description  String?
-  contextLabel String?  @map("context_label")            // "128K" / "1M"
-  /// JSON 数组,如 ["CHAT","VISION"]
-  capabilities String   @default("[]")
-  /// 推理深度,跟 Codex 字段对齐: low/medium/high/max
-  effort       String   @default("medium")
-  enabled      Boolean  @default(true)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-  grants       UserLinduoGrant[]
+  contextLabel String?           @map("context_label")
+  capabilities String            @default("[]")
+  effort       String            @default("medium")
+  enabled      Boolean           @default(true)
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+  tierGrants   LinduoTierGrant[]
+  exceptions   UserLinduoException[]
 
+  @@index([vendor])
   @@map("linduo_chat_models")
 }
 
-model UserLinduoGrant {
-  userId    String   @map("user_id")
-  modelId   String   @map("model_id")
-  grantedBy String?  @map("granted_by")
-  grantedAt DateTime @default(now()) @map("granted_at")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+model LinduoModelTier {
+  id          String              @id @default(cuid())
+  orgId       String              @map("org_id")
+  key         String              // 'basic' / 'advanced' / 'full'
+  name        String              // '基础组' / '进阶组' / '全开组'
+  description String?
+  displayOrder Int                @default(0) @map("display_order")
+  isSystem    Boolean             @default(false) @map("is_system")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+  org         Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  grants      LinduoTierGrant[]
+  users       User[]
+
+  @@unique([orgId, key])
+  @@index([orgId])
+  @@map("linduo_model_tiers")
+}
+
+model LinduoTierGrant {
+  tierId   String          @map("tier_id")
+  modelId  String          @map("model_id")
+  grantedBy String?        @map("granted_by")
+  grantedAt DateTime       @default(now()) @map("granted_at")
+  tier     LinduoModelTier @relation(fields: [tierId], references: [id], onDelete: Cascade)
+  model    LinduoChatModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@id([tierId, modelId])
+  @@index([modelId])
+  @@map("linduo_tier_grants")
+}
+
+model UserLinduoException {
+  userId    String          @map("user_id")
+  modelId   String          @map("model_id")
+  /// 'GRANT' = 在 tier 之上额外开;'REVOKE' = 在 tier 之上关
+  kind      String          @default("GRANT")
+  grantedBy String?         @map("granted_by")
+  grantedAt DateTime        @default(now()) @map("granted_at")
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   model     LinduoChatModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
 
   @@id([userId, modelId])
-  @@map("user_linduo_grants")
+  @@index([modelId])
+  @@map("user_linduo_exceptions")
 }
 ```
 
-### 3.2 User 表新增字段
+### 3.2 User 表字段调整
 
 ```prisma
 model User {
-  // ... existing 字段保持不动
-  preferredLinduoModelId String?          @map("preferred_linduo_model_id")
-  linduoGrants           UserLinduoGrant[]
+  // ... 现有字段保留
+  // preferredLinduoModelId 已存在,保留
+  // linduoGrants 字段从 UserLinduoGrant 改名为 UserLinduoException
+  preferredLinduoModelId String?              @map("preferred_linduo_model_id")
+  linduoTierId           String?              @map("linduo_tier_id")
+  linduoTier             LinduoModelTier?     @relation(fields: [linduoTierId], references: [id], onDelete: SetNull)
+  linduoExceptions       UserLinduoException[]
   // ...
 }
 ```
 
-### 3.3 迁移策略
+**Migration 策略**:
+- M1 旧 `UserLinduoGrant` 表改名为 `user_linduo_exceptions`,字段 `kind` 默认 `'GRANT'`
+- M1 旧的 `UserLinduoGrant` 数据全部迁移到新 `UserLinduoException`(`kind='GRANT'`)
+- 新增 `LinduoModelTier` 表 + 3 个预置 seed(basic/advanced/full)
+- 新增 `LinduoTierGrant` 表
+- 给 `User.linduoTierId` 加外键
+- 旧 `ensureOwnerLinduoGrants` 函数删除(OWNER 由 `tier='full'` 隐式表达)
 
-- 一次性 `prisma migrate dev --name add_linduo_chat_models`
-- 迁移**只创建表 + 字段**,不灌数据
-- **首次启动**(Electron main 启动钩子)调用 `syncLinduoChatModels()` 同步 27 条
-- 同步后再调 `ensureOwnerGrants()` 给所有 `isOwner=true` 用户开全部 enabled 模型的 grant
+## 4. 启动同步 + Seed
 
-## 4. 启动同步机制
+### 4.1 `syncLinduoChatModels()`(M1 已实现,保留)
 
-### 4.1 触发位置
+- 静态新增 modelId → INSERT enabled=true
+- 字段变化 → UPDATE(不动 enabled)
+- 缺失 → 软关 enabled=false(保留 grants 历史)
 
-`src/main/main.ts` 在 `linduoLoginService` 初始化之后调:
+### 4.2 `seedDefaultLinduoTiers()`(新增)
 
-```typescript
-import { syncLinduoChatModels } from './services/linduoChatModelSync'
-import { ensureOwnerLinduoGrants } from './services/linduoChatModelSync'
+启动时调用,种子 3 个预置 tier(per org):
 
-void syncLinduoChatModels().then(() => ensureOwnerLinduoGrants()).catch(console.error)
+| key | name | 默认 grants | description |
+|---|---|---|---|
+| `basic` | 基础组 | (空,admin 后续配) | 仅可使用本组织下放的基础模型 |
+| `advanced` | 进阶组 | 默认 grant 13 个(GPT-4o / GPT-4o-mini / GPT-4-Turbo / GPT-3.5-Turbo / Claude 3.5 Sonnet / Claude 3.5 Haiku / Gemini 2.5 Flash / Gemini 1.5 Pro / Gemini 1.5 Flash 等) | 中阶模型,适合日常运营 |
+| `full` | 全开组 | 默认 grant 所有 enabled 模型(25 个) | 全模型开放,适合 OWNER / 高权限岗 |
+
+**幂等**:upsert by `(orgId, key)`,多次跑安全。
+
+### 4.3 `assignDefaultTierToNewUser(userId)`(新增)
+
+新注册用户(在 `members/routes.ts` 的 POST 流程)自动分配 `advanced` tier。
+
+### 4.4 `getAvailableModelsForUser(userId)`(新增,核心)
+
+计算公式:
+```
+1. const tier = await prisma.user.findUnique({ where: { id }, select: { linduoTierId: true } })
+2. const tierModels = tier.linduoTierId
+     ? await prisma.linduoTierGrant.findMany({ where: { tierId: tier.linduoTierId }, select: { modelId: true } })
+     : []
+3. const exceptions = await prisma.userLinduoException.findMany({ where: { userId }, select: { modelId: true, kind: true } })
+4. const granted = new Set(tierModels.map(t => t.modelId))
+5. for (const ex of exceptions) {
+     if (ex.kind === 'GRANT') granted.add(ex.modelId)
+     else if (ex.kind === 'REVOKE') granted.delete(ex.modelId)
+   }
+6. return await prisma.linduoChatModel.findMany({
+     where: { id: { in: [...granted] }, enabled: true }
+   })
 ```
 
-### 4.2 `syncLinduoChatModels()` 算法
-
-**入参**:从 `LinduoModelMallPage.tsx` 把 `LINDUO_MODELS` 抽到共享文件 `src/shared/linduoCatalog.ts`,导出 + `getLinduoChatModels(): LinduoModelEntry[]`(过滤 `capabilities.includes('CHAT')`)
-
-**算法**:
-1. `const target = getLinduoChatModels()` — 静态目录的 27 个
-2. `const existing = await prisma.linduoChatModel.findMany()` — DB 当前
-3. 对每个 target:
-   - 不在 existing → `INSERT enabled=true`
-   - 在但 displayName/description/contextLabel/capabilities/effort/vendor 不同 → `UPDATE`
-4. 对每个 existing:
-   - 不在 target → `UPDATE enabled=false`(软关,保留 grants 历史)
-5. 不删 grants(软关也不删)
-
-**失败处理**:catch 写 console.error,**不抛**(启动失败影响 Electron 启动就坑了)
-
-### 4.3 `ensureOwnerLinduoGrants()` 算法
-
-1. `const owners = await prisma.user.findMany({ where: { isOwner: true } })`
-2. `const enabled = await prisma.linduoChatModel.findMany({ where: { enabled: true } })`
-3. 对每个 (owner, model) 组合:`await prisma.userLinduoGrant.upsert({ where: { userId_modelId: {...} }, create: {...}, update: {} })`
-
-**幂等**:`upsert` 多次跑也安全。
-
-## 5. 后端 API (M0 全部实现)
-
-新文件 `server/src/modules/linduo/chat-models-routes.ts`:
+## 5. 后端 API(R-2 全部新增/替换)
 
 | 路径 | 方法 | 权限 | 作用 | 返回 |
 |---|---|---|---|---|
-| `/api/linduo/chat-models` | GET | 登录 | 当前用户**按 grant 过滤后**的 enabled Linduo 模型 | `LinduoChatModelView[]` |
-| `/api/linduo/chat-models/all` | GET | `member.manage` | 全部 LinduoChatModel(含 disabled) | `LinduoChatModelView[]` |
+| `/api/linduo/chat-models` | GET | 登录 | 当前用户可用 Linduo 模型(走 `getAvailableModelsForUser`) | `LinduoChatModelView[]` |
+| `/api/linduo/chat-models/all` | GET | `member.manage` | 全部 LinduoChatModel(给 modal 用) | `LinduoChatModelView[]` |
 | `/api/linduo/chat-models/:id/enabled` | PATCH | `member.manage` | 切换 enabled | `LinduoChatModelView` |
-| `/api/linduo/grants` | GET | `member.manage` | 所有 grant 矩阵 | `UserLinduoGrantView[]` |
-| `/api/linduo/grants` | POST | `member.manage` | body: `{ userId, modelId }` | `UserLinduoGrantView` |
-| `/api/linduo/grants` | DELETE | `member.manage` | body: `{ userId, modelId }` | `void` |
+| `/api/linduo/tiers` | GET | `member.manage` | 列出所有 tier | `LinduoModelTierView[]` |
+| `/api/linduo/tiers/:id/grants` | GET | `member.manage` | 该 tier 已分配的 model | `LinduoChatModelView[]` |
+| `/api/linduo/tiers/:id/grants` | PUT | `member.manage` | body: `{ modelIds: string[] }` 增量设置 | `LinduoChatModelView[]` |
+| `/api/linduo/users/:id/tier` | PUT | `member.manage` | body: `{ tierId: string \| null }` 设用户 tier | `{ userId, tierId }` |
+| `/api/linduo/users/:id/exceptions` | GET | `member.manage` | 该 user 例外 | `LinduoExceptionView[]` |
+| `/api/linduo/users/:id/exceptions` | PUT | `member.manage` | body: `{ exceptions: Array<{ modelId, kind }> }` | `LinduoExceptionView[]` |
 | `/api/linduo/preferred-model` | GET | 登录 | 当前用户的 preferred_linduo_model_id | `{ modelId: string \| null }` |
-| `/api/linduo/preferred-model` | PUT | 登录 | body: `{ modelId: string \| null }`(null = 清空) | `{ modelId: string \| null }` |
+| `/api/linduo/preferred-model` | PUT | 登录 | body: `{ modelId: string \| null }` | `{ modelId: string \| null }` |
 
 **校验**:
-- `POST /grants` 时,确认 `modelId` 在 `linduo_chat_models` 表存在
-- `PUT /preferred-model` 时,确认当前用户对该 modelId 有 grant(否则 403 `LINDUO_MODEL_NOT_GRANTED`)
-- `PUT /preferred-model` 时,如果 `modelId` 是 null,清空 `User.preferredLinduoModelId`
-- `DELETE /grants` 时,如果该 grant 是用户当前 `preferredLinduoModelId`,**自动清空 preferred**(防止悬挂)
+- `PUT /tiers/:id/grants` 时,确认 `modelIds` 全部在 `linduo_chat_models` 表存在
+- `PUT /users/:id/tier` 时,如果 `tierId` 是 null,清空(用户零授权)
+- `PUT /preferred-model` 时,确认当前用户对该 modelId 可用(走 `getAvailableModelsForUser` 校验),否则 403 `LINDUO_MODEL_NOT_GRANTED`
+- `PUT /preferred-model` 时,如果 `modelId` 是 null,清空
 
-## 6. 主进程层 (M1 范围)
+**M1 旧 API 弃用**:
+- `/api/linduo/grants` (user 粒度)→ 用 `/api/linduo/tiers/:id/grants` + `/api/linduo/users/:id/exceptions` 替代
+- `linduo:set-grant` / `linduo:revoke-grant` IPC → 删
+- `linduo:list-grants` IPC → 删
 
-### 6.1 新文件 `src/main/services/LinduoChatService.ts`
+## 6. 主进程层
 
-```typescript
-class LinduoChatService {
-  /**
-   * 流式 chat completion,纯文本,不带 tools,不带 vision。
-   * 假定零度API 走 OpenAI Chat Completions 协议。
-   * 端点: https://api000.com/v1/chat/completions
-   */
-  async *streamChat(request: {
-    modelId: string
-    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
-    signal?: AbortSignal
-  }): AsyncGenerator<{ type: 'delta'; text: string } | { type: 'done'; usage: { promptTokens: number; completionTokens: number; totalTokens: number } } | { type: 'error'; message: string }>
-}
-```
+### 6.1 `LinduoChatService`(M1 已实现,保留)
 
-**实现细节**:
-- `Authorization: Bearer ${LINDUO_API_KEY}`
-- `stream: true`
-- **不传 `tools` 字段**(M1 兜底)
-- **不传 vision**(M1 兜底:即使 message.content 含图片也忽略,只发文本)
-- SSE 解析:每行 `data: {...}`,`[DONE]` 表示结束
-- `delta.choices[0].delta.content` 累加成 text
-- 错误:`401` → 抛 `LINDUO_KEY_INVALID`;`404` → 抛 `LINDUO_MODEL_NOT_FOUND`(同步调 `setChatModelEnabled(id, false)` 软关)
-- 超时:`AbortSignal.timeout(120_000)`
-- 主进程单例:启动时检查 `LINDUO_API_KEY`,无 key 抛 `LINDUO_KEY_MISSING`
+SSE 走 `api000.com/v1/chat/completions`,纯文本,无 tools/vision(M1 兜底)。
 
-### 6.2 改 `src/main/advisor/AdvisorRuntime.ts`
+### 6.2 `AdvisorRuntime`(M1 已实现,保留)
 
-**`modelProfiles` 改为动态合并**:
+- `reloadLinduoChatModels()` 启动时加载 enabled Linduo 模型,合并到 `modelProfiles`
+- `executeLinduoTurn()` 走 Linduo 路径
+- `executeTurn()` 按 `profile.providerId === "linduo_proxy"` 分支
 
-```typescript
-// 启动时从 DB 加载
-let modelProfiles: ModelProfile[] = [
-  { id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash", providerId: "deepseek_proxy", ... },
-  { id: "deepseek/deepseek-v4-pro", name: "DeepSeek V4 Pro", providerId: "deepseek_proxy", ... },
-  { id: "chat-latest", name: "OpenAI ChatGPT Latest", providerId: "openai_api", ... }
-]
+### 6.3 IPC 桥(R-2 调整)
 
-// 新函数(由 main.ts 启动后调)
-async function reloadLinduoModels() {
-  const rows = await prisma.linduoChatModel.findMany({ where: { enabled: true } })
-  const linduoProfiles: ModelProfile[] = rows.map(r => ({
-    id: `linduo:${r.modelId}`,            // 命名空间隔离
-    name: r.displayName,
-    providerId: "linduo_proxy",
-    supportsTools: false,                  // M1 兜底
-    supportsVision: false,                 // M1 兜底
-    effort: r.effort as ModelProfile['effort']
-  }))
-  modelProfiles = [
-    ...staticProfiles,
-    ...linduoProfiles
-  ]
-  allowedModels = new Map(modelProfiles.map(m => [m.id, m]))
-}
-```
+**保留**:
+- `linduo:list-chat-models` — 改内部实现为 `getAvailableModelsForUser`
+- `linduo:list-all-chat-models`
+- `linduo:set-chat-model-enabled`
+- `linduo:get-preferred-model`
+- `linduo:set-preferred-model`
 
-**新增 `executeLinduoTurn()`**:
+**新增**:
+- `linduo:list-tiers` → `GET /api/linduo/tiers`
+- `linduo:get-tier-grants` → `GET /api/linduo/tiers/:id/grants`
+- `linduo:set-tier-grants` → `PUT /api/linduo/tiers/:id/grants`
+- `linduo:set-user-tier` → `PUT /api/linduo/users/:id/tier`
+- `linduo:get-user-exceptions` → `GET /api/linduo/users/:id/exceptions`
+- `linduo:set-user-exceptions` → `PUT /api/linduo/users/:id/exceptions`
 
-```typescript
-async function executeLinduoTurn(request: ChatRequest, profile: ModelProfile, events: { push: (e: ChatEvent) => void }) {
-  // 1. 检查 LINDUO_API_KEY
-  // 2. 检查 model 仍 enabled(M1:启动时拉一次,运行中变更不感知,等下次重启)
-  // 3. 构造 messages(只取 text,M1 忽略 attachments 里的图片)
-  // 4. for await (const chunk of linduoChatService.streamChat({ modelId, messages, signal })):
-  //    - delta → events.push({ type: 'linduo_delta', requestId, text })
-  //    - done → events.push({ type: 'linduo_done', requestId, usage })
-  //    - error → events.push({ type: 'linduo_error', requestId, message })
-  // 5. 结束:完成 stored turn,写 usage
-}
-```
+**删除**:
+- `linduo:list-grants`
+- `linduo:set-grant`
+- `linduo:revoke-grant`
 
-**`executeTurn()` 分支**:
+## 7. 渲染层 UI
 
-```typescript
-if (profile.providerId === "linduo_proxy") {
-  await executeLinduoTurn(request, profile, { push: events.push })
-} else {
-  // 现有 Codex app-server 路径,不动
-}
-```
+### 7.1 `LinduoAssignmentModal`(新)
 
-**ChatEvent 扩展**(在 `src/shared/advisor.ts`):
-
-```typescript
-type ChatEvent =
-  | { type: 'codex_*'; ... }   // 现有
-  | { type: 'linduo_delta'; requestId: string; text: string }
-  | { type: 'linduo_done'; requestId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number } }
-  | { type: 'linduo_error'; requestId: string; message: string }
-```
-
-**保留分支切换自动 fork**:`existingTask.codexThreadId` 切换 provider 时按现有 lines 876-882 逻辑 fork。Linduo 模型的 turn 完成后**不**写 `codexThreadId`(因为没 thread),只在 `SessionStore` 落本地 turn。
-
-### 6.3 IPC 桥(在 `src/main/main.ts` + `src/preload/index.ts`)
-
-新增 8 个 IPC:
-
-| IPC | 入参 | 出参 |
-|---|---|---|
-| `linduo:list-chat-models` | (none) | `LinduoChatModelView[]`(按 grant 过滤) |
-| `linduo:list-all-chat-models` | (none) | `LinduoChatModelView[]`(含 disabled,需 admin) |
-| `linduo:set-chat-model-enabled` | `{ id, enabled }` | `LinduoChatModelView` |
-| `linduo:list-grants` | (none) | `UserLinduoGrantView[]` |
-| `linduo:set-grant` | `{ userId, modelId }` | `UserLinduoGrantView` |
-| `linduo:revoke-grant` | `{ userId, modelId }` | `void` |
-| `linduo:get-preferred-model` | (none) | `{ modelId: string \| null }` |
-| `linduo:set-preferred-model` | `{ modelId: string \| null }` | `{ modelId: string \| null }` |
-
-**全部走 `callWithToken`**(已有 `getTokens` 拿 accessToken)。
-
-## 7. 渲染层 UI (M1 范围)
-
-### 7.1 新文件 `src/renderer/LinduoModelPickerModal.tsx`
-
-**触发**:`OnlineAdvisorExperience.tsx:1769` 「设置」齿轮 onClick 改 `openPersonalization` → `openLinduoModelPicker`
+**触发**:`App.tsx:1343` 「设置」齿轮 `onClick` 改 `setPage('system-admin')` → `setState({ openLinduoAssignment: true })`
 
 **布局**:
-- 模态遮罩(复用现有 `.settings-backdrop` 样式)
-- 卡片:左上 ✕ 关闭、标题「大模型选用 · 零度API 聚合」,副标题「按你的权限显示可选模型,选择会同步到所有设备」
-- 主体:列表
-  - 每行:左 `displayName` + `contextLabel` tag;中 `description` 灰字;右 vendor 色块;选中态打 ✓
-  - 点击行 → `linduo:set-preferred-model` → 关弹窗 → 触发 OnlineAdvisorExperience 重读 preferred
-- 空状态:「当前账号未分配任何 Linduo 聊天模型,请联系管理员在系统管理页分配」
-- 加载态:spinner(走 `linduo:list-chat-models`)
-- **样式**:复用 `.settings-backdrop` + 新增 `.linduo-picker-list / .linduo-picker-row`(~50 行 CSS)
+```
+┌──────────────────────────────────────────────────────────┐
+│  大模型选用 · 零度API 聚合              [✕ 关闭]          │
+├──────────────────────────────────────────────────────────┤
+│  目标:  [● 基础组  ○ 进阶组  ○ 全开组]                   │
+│         描述: 适合日常运营                                │
+│                                                          │
+│  ┌─可选─────────┐  [→] [←]  ┌─已分配──────┐              │
+│  │ GPT-4o       │            │ GPT-4o mini │              │
+│  │ Claude 3.5   │            │ Gemini 2.5  │              │
+│  │ ...          │            │ ...         │              │
+│  └──────────────┘            └─────────────┘              │
+│                                                          │
+│                            [取消]  [保存]                 │
+└──────────────────────────────────────────────────────────┘
+```
 
-### 7.2 改 `OnlineAdvisorExperience.tsx`
+**字段**:
+- 顶部 radio:3 个 tier(basic/advanced/full),点击切换 → 双栏刷新
+- 左栏:全部 `enabled=true` 的 LinduoChatModel(按 vendor 分组)
+- 右栏:当前 tier 已分配的 model
+- 中间 ←/→ 按钮:把选中项在左右栏移动(双向)
+- 「全部已开放」标识:如果选中的是 `full` tier,左栏隐藏,只显示右栏(灰色"全部 25 个已开放")
+- 保存:PUT `/api/linduo/tiers/:id/grants`,成功后 toast「已保存」
 
-**「设置」齿轮**:
-- 改 `onClick={openPersonalization}` → `onClick={openLinduoModelPicker}`
-- 移除 `openPersonalization` 调用,或保留作为快捷入口(「设置」齿轮改触发 Linduo 选用;个性化通过 composer 顶栏其他入口)— 决策:**本次只改齿轮绑定,personalization 入口仍可从其他 UI 进入**(留后续清理)
+**权限**:OWNER / 有 `member.manage` 权限才看到入口(齿轮对普通用户隐藏,普通用户用「设置」齿轮旁的「我的偏好」入口)
 
-**黄框下拉**(`composer-model-picker`):
-- 启动时 `void window.desktop.linduo.listChatModels()`,得到当前用户可用的 Linduo 模型
-- 合并到 `modelOptions`:
-  ```typescript
-  const [modelOptions, setModelOptions] = useState<Array<{id: ModelId, name: string, hint: string, isLinduo: boolean}>>([])
-  useEffect(() => {
-    const codexOptions = [
-      { id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash", hint: "更快", isLinduo: false },
-      { id: "deepseek/deepseek-v4-pro", name: "DeepSeek V4 Pro", hint: "更强", isLinduo: false },
-      { id: "chat-latest", name: "OpenAI ChatGPT Latest", hint: "ChatGPT", isLinduo: false }
-    ]
-    void window.desktop.linduo.listChatModels().then(linduo => {
-      const linduoOptions = linduo.map(m => ({
-        id: `linduo:${m.modelId}`,
-        name: `${m.displayName} (经零度API)`,
-        hint: m.contextLabel || m.vendor,
-        isLinduo: true
-      }))
-      setModelOptions([...codexOptions, ...linduoOptions])
-    })
-  }, [])
-  ```
-- `readPreferredModel` 改为:启动时 `await window.desktop.linduo.getPreferredModel()`,得到 `linduo:gpt-4o` 之类;fallback 到 `deepseek/deepseek-v4-flash`
-- `selectPreferredModel` 改为:按 `option.isLinduo` 分流 — 是 Linduo → `linduo:set-preferred-model`;是 Codex → 写 localStorage(保留旧逻辑,因为 Codex 选用不在 M1 范围动)
+### 7.2 普通用户「我的偏好」入口(R-2 新增)
 
-**附件按钮兜底**:
-- 当前 `model` 是 Linduo 模型 → 附件按钮(`.composer-upload`)显示但 `disabled`,hover 提示「Linduo 模型暂不支持视觉,Vision 功能将在 M4 启用」
-- `send` 时:`isLinduoModel && attachments.length > 0` → 阻止发送,提示「Linduo 模型暂不支持附件,请移除附件或切换 Codex 模型」
+- sidebar 齿轮下加 ⓘ 「我的偏好」按钮(任何登录用户可点)
+- 弹简化版 modal:
+  - 标题「我的 Linduo 模型偏好」
+  - 副标题「当前等级:{tier.name}」,「由等级分配 + 我的特例」
+  - 列表:展示当前用户 `getAvailableModelsForUser(userId)` 的结果(只读)
+  - 底部「修改我的特例」按钮 → 弹 `LinduoExceptionModal`(只改自己的特例)
 
-### 7.3 系统管理页(成员行 Linduo 选用分配)
+### 7.3 `LinduoExceptionModal`(新)
 
-**改 `src/renderer/SystemAdminPage.tsx`**(找具体行号,基于现有成员表格):
+**触发**:「我的偏好」modal 内「修改我的特例」按钮;SystemAdmin 成员行「Linduo 例外」按钮(admin 帮员工改)
 
-- 成员表格新增列「Linduo 选用」
-- 每行末尾新增 ⚙ 按钮
-- 点 ⚙ → 弹「分配 Linduo 模型」Modal:
-  - 标题「为 {name} 分配 Linduo 聊天模型」
-  - 复选框列表:`linduo:list-all-chat-models` 返回的 enabled 模型
-  - 默认勾上当前已有 grant
-  - 保存:遍历 diff,`linduo:set-grant` 增量 + `linduo:revoke-grant` 删除
-- Modal 关闭后:成员行「Linduo 选用」列显示「已分配 N 个模型」
+**布局**:
+- 顶部:「{userName} 的 Linduo 特例」
+- 副标题:「基础等级:{tier.name};这里可以额外开/关模型(优先级高于等级)」
+- 双栏穿梭,左:全 enabled 模型;右:当前例外
+- 每行:✓(GRANT)/✕(REVOKE)图标
+- 保存:PUT `/api/linduo/users/:id/exceptions`
 
-**OWNER 隐藏** ⚙ 按钮(OWNER 自动全 grant,不需要手动分配);但显示「全部已开放」灰字。
+### 7.4 改 `OnlineAdvisorExperience.tsx`
+
+**右下角下拉**(L155-178):
+- **原 `permissionOptions`(请求批准/完全访问)+ `modelOptions`(Codex 3 模型)→ 替换为统一的「当前模型」下拉**
+- 数据源:`linduo:list-chat-models` 返回的可用 Linduo 模型
+- 顶部加一个"Codex 模型"分组(2 个:DeepSeek V4 Flash / DeepSeek V4 Pro),保留旧 Codex 路径兜底
+- 默认选项:用户的 `preferredLinduoModelId`,fallback 到 `tier` 第一个 model
+- 下拉选项形态:`{ displayName } · { contextLabel } · { vendor }` + 灰字「(经零度API)」
+
+**composer 入口**:
+- 「设置」齿轮(左下角)→ 弹 LinduoAssignmentModal(admin)/ LinduoPreferenceModal(普通用户)
+- 移除旧的"完全访问权限"位置(被右下角下拉吸收)
+
+**保留**:附件按钮兜底(Linduo 模型禁用附件 + LinduoChatService 不传 tools,M1 规则不变)
+
+### 7.5 改 `SystemAdmin.tsx`
+
+**成员行**:
+- 删「Linduo 选用」按钮(逐人勾,已废)
+- 新增「Linduo 等级」下拉(下拉 3 个 tier + "无"),修改后 PUT `/api/linduo/users/:id/tier`
+- 新增「Linduo 例外」按钮 → 弹 `LinduoExceptionModal`
+- OWNER 成员行:「Linduo 等级」下拉禁用 + 灰字「全开组(主帐号)」
+
+**角色管理**:
+- 不动(RBAC 跟 Linduo 等级是不同维度,本次不耦合)
 
 ## 8. 共享类型
 
-### 8.1 `src/shared/linduoCatalog.ts`(新)
-
-把 `LinduoModelMallPage.tsx` 的 `LINDUO_MODELS` 抽出来,主进程 + 渲染层共用:
-
-```typescript
-export interface LinduoModelEntry {
-  id: string
-  name: string
-  vendor: 'openai' | 'google' | 'anthropic' | 'vidu'
-  capabilities: Array<'IMAGE' | 'VIDEO' | 'CHAT' | 'VISION' | 'EMBEDDING' | 'AUDIO'>
-  description: string
-  contextLabel?: string
-  wiredToImageStudio?: boolean
-}
-
-export const LINDUO_MODELS: LinduoModelEntry[] = [/* 37 个,从 LinduoModelMallPage 搬过来 */]
-
-export function getLinduoChatModels(): LinduoModelEntry[] {
-  return LINDUO_MODELS.filter(m => m.capabilities.includes('CHAT'))
-}
-```
-
-**`LinduoModelMallPage.tsx`** 改为 import 共享目录,不再自己声明。
-
-### 8.2 `src/shared/contracts.ts` 新增类型
+### 8.1 `src/shared/contracts.ts` 新增
 
 ```typescript
 export interface LinduoChatModelView {
@@ -365,16 +329,24 @@ export interface LinduoChatModelView {
   displayName: string
   description: string | null
   contextLabel: string | null
-  capabilities: string[]  // 解析后的数组
+  capabilities: string[]
   effort: string
   enabled: boolean
 }
 
-export interface UserLinduoGrantView {
+export interface LinduoModelTierView {
+  id: string
+  key: 'basic' | 'advanced' | 'full' | string
+  name: string
+  description: string | null
+  displayOrder: number
+  isSystem: boolean
+}
+
+export interface LinduoExceptionView {
   userId: string
   modelId: string
-  displayName: string
-  vendor: string
+  kind: 'GRANT' | 'REVOKE'
   grantedBy: string | null
   grantedAt: string
 }
@@ -383,91 +355,98 @@ export interface UserLinduoGrantView {
 ## 9. 数据流(选用 → 真用)
 
 ```
-[User] 点「设置」齿轮
-  → LinduoModelPickerModal 打开
-  → GET /api/linduo/chat-models (按 grant 过滤)
-  → [User] 点选 GPT-4o
-  → PUT /api/linduo/preferred-model { modelId: "gpt-4o" }
-  → 弹窗关闭
-  → [Composer] 重读 preferred
-  → 黄框显示 "GPT-4o (经零度API)"
+[Admin] 点 sidebar 齿轮「设置」
+  → LinduoAssignmentModal 打开
+  → 顶部 radio 默认勾选「全开组」(OWNER)
+  → 选「进阶组」 → 左栏 25 个 / 右栏 13 个默认
+  → 点 ← 把 GPT-4o 从左移到右
+  → 点「保存」 → PUT /api/linduo/tiers/:advancedId/grants { modelIds: [...14] }
+  → 后端 upsert LinduoTierGrant 表
+  → toast「已保存」
 
-[User] 发消息
+[普通员工] 登录 → OnlineAdvisor 右下角下拉
+  → linduo:list-chat-models → getAvailableModelsForUser
+  → 返回进阶组 14 个 + 自己的例外
+  → 选 GPT-4o → 落 preferredLinduoModelId
+
+[员工] 发消息
   → OnlineAdvisorExperience.sendMessage()
-  → { model: "linduo:gpt-4o", message, workspacePath, permissionMode }
-  → ipcMain 'advisor:send-message' (已有)
-  → AdvisorRuntime.executeTurn()
-  → profile.providerId === "linduo_proxy" → executeLinduoTurn()
-  → LinduoChatService.streamChat({ modelId: "gpt-4o", messages: [{role:'user', content: ...}] })
-  → POST https://api000.com/v1/chat/completions
-    Headers: Authorization: Bearer ${LINDUO_API_KEY}
-    Body: { model: "gpt-4o", messages, stream: true }   // 无 tools
-  → SSE 流
-  → for await (chunk) events.push({ type: 'linduo_delta', text })
-  → [Renderer] OnlineAdvisorExperience.onChatEvent 收到 delta
-  → message.assistant 累加 text
-  → 流结束 → events.push({ type: 'linduo_done', usage })
-  → [Renderer] message 标记 done
-  → SessionStore.finishStoredTurn() 落本地
+  → { model: "linduo:gpt-4o", message, ... }
+  → AdvisorRuntime.executeTurn() → executeLinduoTurn()
+  → LinduoChatService.streamChat({ modelId: "gpt-4o", messages })
+  → POST api000.com/v1/chat/completions
+  → SSE 流 → OnlineAdvisorExperience 渲染
 ```
 
-## 10. 验收标准 (M1)
+## 10. 验收标准(M1 R-2)
 
-1. ✅ `pnpm prisma migrate dev --name add_linduo_chat_models` 应用成功
-2. ✅ Electron 启动后,`linduo_chat_models` 表有 27 条 CHAT 模型,全 `enabled=true`
-3. ✅ 改 `LINDUO_MODELS` 加 1 个测试模型(临时)→ 重启 → DB 同步出 28 条
-4. ✅ 从 `LINDUO_MODELS` 删 1 个 → 重启 → DB 那条 `enabled=false`,grant 保留
-5. ✅ OWNER 登录 → `GET /api/linduo/chat-models` 返回 27 条
-6. ✅ 非 OWNER 登录 → `GET /api/linduo/chat-models` 返回空
-7. ✅ OWNER 选 GPT-4o → 弹窗关 → 黄框显示「GPT-4o (经零度API)」→ 发消息 → 主进程日志显示 `executeLinduoTurn` → 真请求 api000.com
-8. ✅ 流式输出在 UI 上增量显示(像 Codex 那样逐字/逐句)
-9. ✅ 切 Codex ↔ Linduo → SessionStore 自动 fork 新分支
-10. ✅ OWNER 系统管理 → 选非 OWNER → 分配 GPT-4o → 该用户刷新 → 弹窗有 GPT-4o
-11. ✅ Linduo 模型 + 附件 → 阻止发送 + 提示「不支持」
-12. ✅ Linduo 模型 + 无附件 → 正常发
-13. ✅ `pnpm typecheck` + `pnpm build` + `pnpm tsc -p tsconfig.main.json` 全绿
-14. ✅ 改 localStorage 旧 `deepseek-codex.preferred-model` 为 `linduo:gpt-4o` → 启动 → 黄框显示 Linduo 模型(向后兼容旧用户偏好,M1 边界 case)
+1. ✅ `prisma migrate dev` 应用成功(包含重命名 UserLinduoGrant → user_linduo_exceptions + 新增 tier 表)
+2. ✅ 启动后 `linduo_model_tiers` 表有 3 条(basic/advanced/full,isSystem=true)
+3. ✅ 启动后 `linduo_tier_grants` 表 full tier 有 25 条(全部 CHAT);advanced 默认 13 条;basic 0 条
+4. ✅ 现有用户的 `linduo_tier_id` 默认指向 `full`(OWNER) 或 `advanced`(非 OWNER)
+5. ✅ OWNER 登录 → `GET /api/linduo/chat-models` 返回 25 条
+6. ✅ 非 OWNER 登录 → `GET /api/linduo/chat-models` 返回 advanced 的 13 条
+7. ✅ Admin 改 advanced tier → 加 1 个 model → 保存 → 普通员工刷新 → 下拉多 1 个
+8. ✅ 普通员工点「我的偏好」→ 修改特例 GRANT 1 个 → 自己下拉立刻多 1 个
+9. ✅ Admin 给员工 REVOKE 1 个(tier 有但特例关)→ 员工下拉立刻少 1 个
+10. ✅ OWNER 点 sidebar 齿轮 → 弹 LinduoAssignmentModal → 全开组只显示右栏 + 灰字「全部 25 个已开放」
+11. ✅ 非 OWNER 点 sidebar 齿轮 → 弹 LinduoPreferenceModal(简化版,只读 + 修改特例)
+12. ✅ OnlineAdvisor 右下角下拉显示「GPT-4o (经零度API) · 128K · openai」格式;切换真请求 api000.com
+13. ✅ Linduo 模型 + 附件 → 阻止发送 + 提示「不支持」
+14. ✅ `pnpm typecheck` + `pnpm build` + `pnpm tsc -p tsconfig.main.json` 全绿
+15. ✅ `tsc -p server/tsconfig.json --noEmit` 全绿
 
 ## 11. 后续里程碑(本次不实施)
 
-| 阶段 | 范围 | 实施文件 |
-|---|---|---|
-| **M2** | 工具只读 | `LinduoChatService` 加 `tools` 参数;白名单 `read_file` / `list_dir` / `grep_content`;Tool execution loop |
-| **M3** | 完整工具 + Approval | 工具扩展 `run_command` / `write_file` / `edit_file`;新增 `linduo:approval-request` IPC |
-| **M4** | Vision | 多模态模型支持 `image_url`;附件按钮 Linduo 启用;`describeAttachments` 跳过 Linduo 路径 |
+| 阶段 | 范围 |
+|---|---|
+| **M2** | 工具只读(LinduoChatService 加 `tools`;白名单 `read_file` / `list_dir`) |
+| **M3** | 完整工具 + Approval(加 `run_command` / `write_file` / `edit_file`) |
+| **M4** | Vision(多模态模型支持 `image_url`) |
 
 ## 12. 风险与回退
 
 | 风险 | 应对 |
 |---|---|
-| api000.com 协议不是 OpenAI 兼容 | M1 跑通后第一时间实测;不兼容则降级 B1(纯文本 prompt,不开 SSE) |
-| 启动同步 27 条慢(冷启动) | 一次性 `INSERT ... ON CONFLICT DO UPDATE`,实测应 <500ms |
-| 用户启用 Linduo 模型但 API Key 失效 | LinduoChatService 抛 `LINDUO_KEY_INVALID` → UI 弹横幅「请检查 LINDUO_API_KEY」,走现有 settings 入口 |
-| 切换 provider 时 fork 失败(同 provider) | 保留 `autoForkedReason` 日志,出错兜底:不 fork,直接新 turn |
-| 旧用户偏好 localStorage → 后端迁移(M1 不完整迁移) | M1 接受用户首次手动重选;真正迁移在 M5 写迁移工具 |
-| Codex 模型与 Linduo 模型同名冲突 | 用命名空间 `linduo:<modelId>` 隔离,allowedModels key 唯一 |
+| 旧 `UserLinduoGrant` 数据迁移出错 | migration 加 `kind='GRANT'` 默认值;老数据全转为 GRANT 例外 |
+| OWNER 改 tier 不是 full → 失去全开 | UI 在 OWNER 行禁用 tier 下拉;后端 /tier 接口校验 OWNER 必须保持 full |
+| tier 删了但 User.linduoTierId 引用 | `onDelete: SetNull` + `getAvailableModelsForUser` 兜底空 |
+| 25 个全开组启动时 25 条 INSERT 慢 | 一次性 `createMany`,实测应 <300ms |
+| api000.com 协议不兼容 | M1 已实测通过,继续用;不兼容则降级 B1 |
 
-## 13. 文件清单(M1)
+## 13. 文件清单(R-2)
 
 | 类别 | 文件 | 状态 |
 |---|---|---|
-| Schema | `server/prisma/schema.prisma` | 改 |
-| Migration | `server/prisma/migrations/2026XXXXXX_add_linduo_chat_models/` | 新建 |
-| 共享 | `src/shared/linduoCatalog.ts` | 新建 |
-| 共享 | `src/shared/contracts.ts` | 改 |
-| 共享 | `src/shared/advisor.ts` | 改(ChatEvent 扩展) |
-| 后端路由 | `server/src/modules/linduo/chat-models-routes.ts` | 新建 |
-| 后端注册 | `server/src/app.ts` | 改(register 路由) |
-| 同步工具 | `src/main/services/linduoChatModelSync.ts` | 新建 |
-| Linduo Chat | `src/main/services/LinduoChatService.ts` | 新建 |
-| Advisor 路由 | `src/main/advisor/AdvisorRuntime.ts` | 改 |
-| IPC 注册 | `src/main/main.ts` | 改 |
-| Preload | `src/preload/index.ts` | 改 |
-| 类型 + API | `src/renderer/serverApi.ts` | 改 |
-| 渲染层弹窗 | `src/renderer/LinduoModelPickerModal.tsx` | 新建 |
-| 渲染层主 | `src/renderer/OnlineAdvisorExperience.tsx` | 改 |
-| 系统管理 | `src/renderer/SystemAdminPage.tsx` | 改 |
-| 渲染层模型页 | `src/renderer/LinduoModelMallPage.tsx` | 改(import 共享) |
-| CSS | `src/renderer/online-advisor-experience.css` + `styles.css` | 改 |
+| Schema | `server/prisma/schema.prisma` | 改(UserLinduoGrant → UserLinduoException + LinduoModelTier + LinduoTierGrant + User.linduoTierId) |
+| Migration | `server/prisma/migrations/2026XXXXXX_linduo_model_tiers/` | 新建 |
+| 共享 | `src/shared/contracts.ts` | 改(加 tier / exception 类型) |
+| 后端服务 | `server/src/modules/linduo/chat-models-sync.ts` | 改(加 seedDefaultLinduoTiers + assignDefaultTierToNewUser + getAvailableModelsForUser) |
+| 后端路由 | `server/src/modules/linduo/chat-models-routes.ts` | 改(替换 user 粒度 grants 为 tier + exception) |
+| 后端启动 | `server/src/index.ts` | 改(启动时调 seedDefaultLinduoTiers + 回填历史用户的 linduoTierId) |
+| 主进程 IPC | `src/main/main.ts` + `src/preload/index.ts` | 改(替换 grants IPC) |
+| Preload | `src/preload/index.ts` | 改(加 6 个新 IPC) |
+| 类型 + API | `src/renderer/serverApi.ts` | 改(加新 API wrapper) |
+| 渲染层 modal | `src/renderer/LinduoAssignmentModal.tsx` | 新建(齿轮弹,双栏穿梭) |
+| 渲染层 modal | `src/renderer/LinduoPreferenceModal.tsx` | 新建(普通用户,只读 + 特例) |
+| 渲染层 modal | `src/renderer/LinduoExceptionModal.tsx` | 新建(特例双栏穿梭) |
+| 渲染层主 | `src/renderer/OnlineAdvisorExperience.tsx` | 改(右下角下拉接 Linduo) |
+| 渲染层 sidebar | `src/renderer/App.tsx` | 改(齿轮触发 modal) |
+| 系统管理 | `src/renderer/SystemAdmin.tsx` | 改(成员行加 tier 下拉 + 例外按钮,删旧 Linduo 选用按钮) |
+| CSS | `src/renderer/linduoModal.css` + `online-advisor-experience.css` | 改 |
 
-**合计**:~1100 行新增,~400 行改,15 个文件。
+**合计**:~700 行新增,~500 行改,16 个文件。
+
+---
+
+## 14. 与 M1 原 spec 的差异表(供 review 对照)
+
+| M1 原方案 | R-2 方案 | 原因 |
+|---|---|---|
+| `UserLinduoGrant(userId+modelId)` 逐人 grant | `LinduoModelTier` + `LinduoTierGrant` + `UserLinduoException` | 用户原话"按不同同事等级" |
+| OWNER 自动全开(启动时 ensureOwnerLinduoGrants) | OWNER 默认 `tier='full'`(seed 时挂) | 与 RBAC role 概念解耦 |
+| 齿轮 → system-admin → 成员行 ⚙ 按钮 | 齿轮 → LinduoAssignmentModal(顶层穿梭) | 用户原话"点齿轮选大模型" |
+| 分配 UI 是 checkbox 列表 | 分配 UI 是左右双栏穿梭 | 用户原话"左边选大模型,右边大模型来应用" |
+| 使用端在黄框小图标里 | 使用端在右下角下拉 | 用户原话"右边大模型来应用"指右下角 |
+| SystemAdmin 成员行"Linduo 选用"按钮(逐人勾) | SystemAdmin 成员行"Linduo 等级"下拉 + "例外"按钮 | tier 化后不需要逐人勾 |
+| 初始 27 个 CHAT 模型 | 实际 25 个 CHAT 模型(spec 修正) | 零度API 实际可调通 25 个 |

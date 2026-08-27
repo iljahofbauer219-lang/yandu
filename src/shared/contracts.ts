@@ -2284,14 +2284,56 @@ export interface LinduoChatModelView {
   enabled: boolean
 }
 
-/** 用户 Linduo 模型授权视图（API 响应） */
-export interface UserLinduoGrantView {
+/** 用户 Linduo 模型例外视图（API 响应）—— R-2 重构:从 UserLinduoGrant 改为 UserLinduoException
+ * - kind: GRANT(在 tier 之上额外开) / REVOKE(在 tier 之上关)
+ * - grantedBy/grantedAt 由 admin 操作时记录,系统 seed(OWNER 默认等) 时为 null
+ */
+export interface UserLinduoExceptionView {
   userId: string
   modelId: string
   displayName: string
   vendor: string
+  kind: 'GRANT' | 'REVOKE'
   grantedBy: string | null
   grantedAt: string
+}
+
+/** Linduo 模型等级视图（API 响应）—— R-2:同 org 内 key 唯一,系统预置 basic/advanced/full */
+export interface LinduoModelTierView {
+  id: string
+  key: 'basic' | 'advanced' | 'full'
+  name: string
+  description: string | null
+  displayOrder: number
+  isSystem: boolean
+  /** 该 tier 下 LinduoTierGrant 行数（默认开几个模型） */
+  grantCount: number
+  /** 可选：tier 下的模型详情列表（admin 穿梭框使用） */
+  grants?: LinduoChatModelView[]
+}
+
+/** 成员 Linduo 等级 + 例外 汇总视图（SystemAdmin 成员行的 modal 用） */
+export interface LinduoMemberTierView {
+  memberId: string
+  memberName: string
+  memberEmail: string
+  isOwner: boolean
+  /** 当前分配的 tier,无则为 null（需 admin 手动设） */
+  tier: LinduoModelTierView | null
+  /** 例外:GRANT(额外开) / REVOKE(额外关) */
+  exceptions: Array<{
+    modelId: string
+    modelDisplayName: string
+    vendor: string
+    kind: 'GRANT' | 'REVOKE'
+    grantedBy: string | null
+    grantedAt: string
+  }>
+}
+
+/** 设置成员 Linduo tier 请求体（null = 清除，使用户仅依赖例外） */
+export interface LinduoMemberTierAssignment {
+  tierId: string | null
 }
 
 // ─── M1 主进程 ↔ server Linduo 路由契约 ──────────────────────────────────────

@@ -2047,7 +2047,7 @@ ipcMain.handle('linduo-pricing:refresh', async (_event, accessToken: unknown, cr
       : undefined
   )
 })
-// ---------- 零度API 聊天模型选用 + 授权 IPC 桥 (M1，详见 LinduoChatModelService) ----------
+// ---------- 零度API 聊天模型选用 + 例外 + Tier IPC 桥 (M1/R-2，详见 LinduoChatModelService) ----------
 ipcMain.handle('linduo-chat-models:list', async (_event, accessToken: unknown) => {
   return linduoChatModelService.listChatModels(typeof accessToken === 'string' ? accessToken : null)
 })
@@ -2059,18 +2059,43 @@ ipcMain.handle('linduo-chat-models:set-enabled', async (_event, accessToken: unk
   if (typeof enabled !== 'boolean') throw new Error('enabled 必须为 boolean')
   return linduoChatModelService.setChatModelEnabled(typeof accessToken === 'string' ? accessToken : null, id, enabled)
 })
-ipcMain.handle('linduo-grants:list', async (_event, accessToken: unknown) => {
-  return linduoChatModelService.listGrants(typeof accessToken === 'string' ? accessToken : null)
+ipcMain.handle('linduo-exceptions:list', async (_event, accessToken: unknown) => {
+  return linduoChatModelService.listExceptions(typeof accessToken === 'string' ? accessToken : null)
 })
-ipcMain.handle('linduo-grants:set', async (_event, accessToken: unknown, userId: unknown, modelId: unknown) => {
+ipcMain.handle('linduo-exceptions:set', async (_event, accessToken: unknown, userId: unknown, modelId: unknown, kind: unknown) => {
   if (typeof userId !== 'string') throw new Error('userId 无效')
   if (typeof modelId !== 'string') throw new Error('modelId 无效')
-  return linduoChatModelService.setGrant(typeof accessToken === 'string' ? accessToken : null, userId, modelId)
+  if (kind !== 'GRANT' && kind !== 'REVOKE') throw new Error('kind 必须为 GRANT 或 REVOKE')
+  return linduoChatModelService.setException(typeof accessToken === 'string' ? accessToken : null, userId, modelId, kind)
 })
-ipcMain.handle('linduo-grants:revoke', async (_event, accessToken: unknown, userId: unknown, modelId: unknown) => {
+ipcMain.handle('linduo-exceptions:revoke', async (_event, accessToken: unknown, userId: unknown, modelId: unknown) => {
   if (typeof userId !== 'string') throw new Error('userId 无效')
   if (typeof modelId !== 'string') throw new Error('modelId 无效')
-  return linduoChatModelService.revokeGrant(typeof accessToken === 'string' ? accessToken : null, userId, modelId)
+  return linduoChatModelService.revokeException(typeof accessToken === 'string' ? accessToken : null, userId, modelId)
+})
+ipcMain.handle('linduo-tiers:list', async (_event, accessToken: unknown) => {
+  return linduoChatModelService.listTiers(typeof accessToken === 'string' ? accessToken : null)
+})
+ipcMain.handle('linduo-tiers:get-models', async (_event, accessToken: unknown, tierId: unknown) => {
+  if (typeof tierId !== 'string') throw new Error('tierId 无效')
+  return linduoChatModelService.getTierModels(typeof accessToken === 'string' ? accessToken : null, tierId)
+})
+ipcMain.handle('linduo-tiers:set-models', async (_event, accessToken: unknown, tierId: unknown, modelIds: unknown) => {
+  if (typeof tierId !== 'string') throw new Error('tierId 无效')
+  if (!Array.isArray(modelIds) || !modelIds.every(m => typeof m === 'string')) throw new Error('modelIds 必须为 string[]')
+  return linduoChatModelService.setTierModels(typeof accessToken === 'string' ? accessToken : null, tierId, modelIds as string[])
+})
+ipcMain.handle('linduo-members:get-tier-and-exceptions', async (_event, accessToken: unknown, memberId: unknown) => {
+  if (typeof memberId !== 'string') throw new Error('memberId 无效')
+  return linduoChatModelService.getMemberTierAndExceptions(typeof accessToken === 'string' ? accessToken : null, memberId)
+})
+ipcMain.handle('linduo-members:set-tier', async (_event, accessToken: unknown, memberId: unknown, tierId: unknown) => {
+  if (typeof memberId !== 'string') throw new Error('memberId 无效')
+  if (tierId !== null && typeof tierId !== 'string') throw new Error('tierId 必须为 string 或 null')
+  return linduoChatModelService.setMemberTier(typeof accessToken === 'string' ? accessToken : null, memberId, tierId as string | null)
+})
+ipcMain.handle('linduo-me:get-tier-and-exceptions', async (_event, accessToken: unknown) => {
+  return linduoChatModelService.getMyTierAndExceptions(typeof accessToken === 'string' ? accessToken : null)
 })
 ipcMain.handle('linduo-preferred:get', async (_event, accessToken: unknown) => {
   return linduoChatModelService.getPreferredModel(typeof accessToken === 'string' ? accessToken : null)

@@ -2859,13 +2859,20 @@ a.message-sources-link:hover .message-sources-link-title {
   box-shadow: 0 16px 40px rgba(38, 45, 39, 0.18);
 }
 
-.model-menu > span {
+.model-menu > span,
+.model-menu .model-menu-group-label {
   display: block;
-  padding: 3px 7px 7px;
+  padding: 6px 7px 4px;
   color: #81877f;
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 750;
   letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-top: 1px solid #e7ebe4;
+}
+.model-menu > span:first-child,
+.model-menu .model-menu-group-label:first-of-type {
+  border-top: none;
 }
 
 .model-menu button {
@@ -2900,6 +2907,12 @@ a.message-sources-link:hover .message-sources-link-title {
 .model-menu small {
   color: #7d857d;
   font-size: 8px;
+}
+
+.model-menu small.linduo-hint {
+  color: #94a3b8;
+  font-style: italic;
+  font-size: 7px;
 }
 
 .model-menu-check {

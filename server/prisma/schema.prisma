@@ -20,6 +20,7 @@ model Organization {
   createdAt   DateTime     @default(now()) @map("created_at")
   users       User[]
   roles       Role[]
+  tiers       LinduoModelTier[]
   stores      EbayStore[]
   auditLogs   AuditLog[]
   aiUsageLogs AiUsageLog[]
@@ -113,8 +114,10 @@ model User {
   aiUsageLogs        AiUsageLog[]
   aiQuotas           AiQuota[]
 
-  preferredLinduoModelId String?           @map("preferred_linduo_model_id")
-  linduoGrants           UserLinduoGrant[]
+  preferredLinduoModelId String?              @map("preferred_linduo_model_id")
+  linduoTierId           String?              @map("linduo_tier_id")
+  linduoTier             LinduoModelTier?     @relation(fields: [linduoTierId], references: [id], onDelete: SetNull)
+  linduoExceptions       UserLinduoException[]
 
   @@index([orgId])
   @@map("users")
@@ -346,15 +349,52 @@ model LinduoChatModel {
   enabled      Boolean           @default(true)
   createdAt    DateTime          @default(now()) @map("created_at")
   updatedAt    DateTime          @updatedAt @map("updated_at")
-  grants       UserLinduoGrant[]
+  tierGrants   LinduoTierGrant[]
+  exceptions   UserLinduoException[]
 
   @@index([vendor])
   @@map("linduo_chat_models")
 }
 
-model UserLinduoGrant {
+model LinduoModelTier {
+  id           String           @id @default(cuid())
+  orgId        String           @map("org_id")
+  /// 'basic' / 'advanced' / 'full' (系统预置,启动时 seed)
+  key          String
+  /// '基础组' / '进阶组' / '全开组'
+  name         String
+  description  String?
+  displayOrder Int              @default(0) @map("display_order")
+  isSystem     Boolean          @default(false) @map("is_system")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+  org          Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  grants       LinduoTierGrant[]
+  users        User[]
+
+  @@unique([orgId, key])
+  @@index([orgId])
+  @@map("linduo_model_tiers")
+}
+
+model LinduoTierGrant {
+  tierId    String          @map("tier_id")
+  modelId   String          @map("model_id")
+  grantedBy String?         @map("granted_by")
+  grantedAt DateTime        @default(now()) @map("granted_at")
+  tier      LinduoModelTier @relation(fields: [tierId], references: [id], onDelete: Cascade)
+  model     LinduoChatModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@id([tierId, modelId])
+  @@index([modelId])
+  @@map("linduo_tier_grants")
+}
+
+model UserLinduoException {
   userId    String          @map("user_id")
   modelId   String          @map("model_id")
+  /// 'GRANT' = 在 tier 之上额外开;'REVOKE' = 在 tier 之上关
+  kind      String          @default("GRANT")
   grantedBy String?         @map("granted_by")
   grantedAt DateTime        @default(now()) @map("granted_at")
   user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -362,7 +402,7 @@ model UserLinduoGrant {
 
   @@id([userId, modelId])
   @@index([modelId])
-  @@map("user_linduo_grants")
+  @@map("user_linduo_exceptions")
 }
 
 // ===================== 选品 / 采集域（自 SQLite 平移，时间列保持 ISO8601 字符串） =====================

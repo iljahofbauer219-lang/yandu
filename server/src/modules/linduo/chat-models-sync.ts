@@ -89,10 +89,14 @@ export async function syncLinduoChatModels(): Promise<LinduoChatModelSyncResult>
 }
 
 /**
- * 启动时给所有 isOwner=true 的用户自动 grant 所有 enabled LinduoChatModel。
- * 幂等：upsert 多次跑也安全（UserLinduoGrant 复合主键 userId_modelId）。
+ * 启动时给所有 isOwner=true 的用户自动加 kind=GRANT 的 UserLinduoException,
+ * 覆盖所有 enabled LinduoChatModel(R-2 兼容旧 ensureOwnerLinduoGrants 行为)。
+ * 幂等：upsert 多次跑也安全(UserLinduoException 复合主键 userId_modelId)。
+ *
+ * 注意：Task 2 引入 LinduoModelTier 'full' 后,OWNER 默认走 tier='full' 自动包含全部 enabled 模型,
+ * 此函数可保留作为历史 fallback(seed 已建过 tier 时 no-op),也可在 Task 3 中改为幂等不重复写。
  */
-export async function ensureOwnerLinduoGrants(): Promise<number> {
+export async function ensureOwnerLinduoExceptions(): Promise<number> {
   const owners = await prisma.user.findMany({
     where: { isOwner: true },
     select: { id: true }
@@ -104,10 +108,10 @@ export async function ensureOwnerLinduoGrants(): Promise<number> {
   let count = 0
   for (const owner of owners) {
     for (const model of enabled) {
-      await prisma.userLinduoGrant.upsert({
+      await prisma.userLinduoException.upsert({
         where: { userId_modelId: { userId: owner.id, modelId: model.id } },
-        create: { userId: owner.id, modelId: model.id },
-        update: {}
+        create: { userId: owner.id, modelId: model.id, kind: 'GRANT' },
+        update: { kind: 'GRANT' }
       })
       count += 1
     }

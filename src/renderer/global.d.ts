@@ -8,7 +8,7 @@ import type { AdvisorDesktopApi } from '../shared/advisor'
 import type { AiEmployeeAskRequest, AiEmployeeChatModelProfile, AiEmployeePickResult } from '../shared/aiEmployee'
 import type { KbAgentKey, KbDocsView, KbListView, KbView } from '../shared/knowledge'
 import type { GuardianRunEvent, GuardianRunLog, GuardianSkill, GuardianSkillInput, GuardianState } from '../shared/kbGuardian'
-import type { ImagePackageTextExtractionRequest, ImagePackageTextExtractionResult, LinduoChatModelView, LinduoLoginStatus, LinduoModelPricing, UserLinduoGrantView } from '../shared/contracts'
+import type { ImagePackageTextExtractionRequest, ImagePackageTextExtractionResult, LinduoChatModelView, LinduoLoginStatus, LinduoMemberTierView, LinduoModelPricing, LinduoModelTierView, UserLinduoExceptionView } from '../shared/contracts'
 import type { AmazonDataSourceSearchResult, AmazonListingEvidence, AmazonMarketSample, AmazonReviewEvidence, AmazonSearchIntent } from '../shared/amazonScraper'
 
 declare module '*.css'
@@ -72,9 +72,15 @@ declare global {
         listChatModels(accessToken: string): Promise<LinduoChatModelView[]>
         listAllChatModels(accessToken: string): Promise<LinduoChatModelView[]>
         setChatModelEnabled(accessToken: string, id: string, enabled: boolean): Promise<LinduoChatModelView>
-        listGrants(accessToken: string): Promise<Array<UserLinduoGrantView & { userName: string }>>
-        setGrant(accessToken: string, userId: string, modelId: string): Promise<{ userId: string; modelId: string; grantedBy: string; grantedAt: string }>
-        revokeGrant(accessToken: string, userId: string, modelId: string): Promise<{ ok: true }>
+        listExceptions(accessToken: string): Promise<Array<UserLinduoExceptionView & { userName: string }>>
+        setException(accessToken: string, userId: string, modelId: string, kind: 'GRANT' | 'REVOKE'): Promise<{ userId: string; modelId: string; kind: 'GRANT' | 'REVOKE'; grantedBy: string; grantedAt: string }>
+        revokeException(accessToken: string, userId: string, modelId: string): Promise<{ ok: true }>
+        listTiers(accessToken: string): Promise<LinduoModelTierView[]>
+        getTierModels(accessToken: string, tierId: string): Promise<{ tier: LinduoModelTierView; models: LinduoChatModelView[] }>
+        setTierModels(accessToken: string, tierId: string, modelIds: string[]): Promise<LinduoModelTierView>
+        getMemberTierAndExceptions(accessToken: string, memberId: string): Promise<LinduoMemberTierView>
+        setMemberTier(accessToken: string, memberId: string, tierId: string | null): Promise<LinduoMemberTierView>
+        getMyTierAndExceptions(accessToken: string): Promise<LinduoMemberTierView>
         getPreferredModel(accessToken: string): Promise<{ modelId: string | null }>
         setPreferredModel(accessToken: string, modelId: string | null): Promise<{ modelId: string | null }>
       }

@@ -25,7 +25,7 @@ import type {
   AdvisorVisionAnalysis as VisionAnalysis
 } from "../shared/advisor";
 import AIMessageContent from "./AIMessageContent";
-import { LinduoModelPickerModal } from "./LinduoModelPickerModal";
+import { LinduoPreferenceModal } from "./LinduoPreferenceModal";
 import {
   fetchLinduoChatModels,
   fetchLinduoPreferredModel,
@@ -174,28 +174,34 @@ export default function OnlineAdvisorExperience() {
     { id: "deepseek/deepseek-v4-pro", name: "DeepSeek V4 Pro", hint: "更强", isLinduo: false },
     { id: "chat-latest", name: "OpenAI ChatGPT Latest", hint: "ChatGPT", isLinduo: false }
   ]);
-  const [linduoPickerOpen, setLinduoPickerOpen] = useState(false);
+  // R-2:「个性化」按钮 → 弹 LinduoPreferenceModal(我的 Linduo 模型偏好)
+  const [linduoPreferenceOpen, setLinduoPreferenceOpen] = useState(false)
   useEffect(() => {
     void loadInitialModel().then(setModel);
   }, []);
   useEffect(() => {
     void fetchLinduoChatModels()
       .then((linduo) => {
-        const linduoOptions: ModelOption[] = linduo.map((m) => ({
-          id: `linduo:${m.modelId}` as ModelId,
-          name: `${m.displayName} (经零度API)`,
-          hint: m.contextLabel || m.vendor,
-          isLinduo: true,
-          linduoDbId: m.id
-        }));
+        // R-2:下拉项显示格式「{ displayName } · { contextLabel } · { vendor }」+ 灰字「(经零度API)」
+        // contextLabel/vendor 用 hint 字段;isLinduo 标记分组用
+        const linduoOptions: ModelOption[] = linduo.map((m) => {
+          const meta = [m.contextLabel, m.vendor].filter(Boolean).join(' · ')
+          return {
+            id: `linduo:${m.modelId}` as ModelId,
+            name: m.displayName,
+            hint: `${meta}${meta ? ' · ' : ''}(经零度API)`,
+            isLinduo: true,
+            linduoDbId: m.id
+          }
+        })
         setModelOptions((prev) => [
           ...prev.filter((o) => !o.isLinduo),
           ...linduoOptions
-        ]);
+        ])
       })
       .catch(() => {
         /* Linduo 未配置时忽略,保持 Codex 默认 */
-      });
+      })
   }, []);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [permissionMode, setPermissionMode] = useState<PermissionMode>(() =>
@@ -1829,7 +1835,7 @@ export default function OnlineAdvisorExperience() {
           <footer className="sidebar-footer">
             <button
               className="personalization-button"
-              onClick={() => setLinduoPickerOpen(true)}
+              onClick={() => setLinduoPreferenceOpen(true)}
               disabled={isBusy}
             >
               <span className="personalization-avatar" aria-hidden="true">
@@ -2657,8 +2663,9 @@ export default function OnlineAdvisorExperience() {
                       role="menu"
                       aria-label="选择推理模型"
                     >
-                      <span>推理模型</span>
-                      {modelOptions.map((option) => (
+                      {/* R-2:分组 — Codex 模型(顶部,兜底) + Linduo 模型(底部,零度API) */}
+                      <div className="model-menu-group-label">Codex 模型</div>
+                      {modelOptions.filter((o) => !o.isLinduo).map((option) => (
                         <button
                           type="button"
                           role="menuitemradio"
@@ -2675,6 +2682,27 @@ export default function OnlineAdvisorExperience() {
                           <span>
                             <strong>{option.name}</strong>
                             <small>{option.hint}</small>
+                          </span>
+                        </button>
+                      ))}
+                      <div className="model-menu-group-label">Linduo 模型(经零度API)</div>
+                      {modelOptions.filter((o) => o.isLinduo).map((option) => (
+                        <button
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={model === option.id}
+                          key={option.id}
+                          onClick={() => selectPreferredModel(option.id)}
+                        >
+                          <span
+                            className="model-menu-check"
+                            aria-hidden="true"
+                          >
+                            {model === option.id ? "✓" : ""}
+                          </span>
+                          <span>
+                            <strong>{option.name}</strong>
+                            <small className="linduo-hint">{option.hint}</small>
                           </span>
                         </button>
                       ))}
@@ -3107,11 +3135,12 @@ export default function OnlineAdvisorExperience() {
           </section>
         </div>
       )}
-      {linduoPickerOpen && (
-        <LinduoModelPickerModal
-          onClose={() => setLinduoPickerOpen(false)}
-          onPicked={() => {
-            void loadPreferredModel();
+      {linduoPreferenceOpen && (
+        <LinduoPreferenceModal
+          onClose={() => setLinduoPreferenceOpen(false)}
+          onChanged={() => {
+            // 重新拉下拉 + 默认模型
+            void loadPreferredModel()
           }}
         />
       )}

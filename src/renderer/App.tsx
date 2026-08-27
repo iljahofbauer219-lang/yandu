@@ -3,6 +3,8 @@ import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useSession } from './SessionGate'
 import { hasPermission, getServerBaseUrl } from './serverApi'
+import { LinduoAssignmentModal } from './LinduoAssignmentModal'
+import { LinduoPreferenceModal } from './LinduoPreferenceModal'
 import { MENU_PERMISSION_TREE, hasMenuAccess } from '../shared/menuPermissionTree'
 import type { BrowserState, BrowserTab, BrowserTranslationMode, CandidateCollectionRecord, CandidateCollectionRun, CandidateArea, CollectionMethod, CollectionProtectionMode, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, ComparisonCostSettings, ComparisonDecision, ComparisonRecordView, ComplianceAlertStatus, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementStatus, ComplianceKnowledgeWorkspace, ComplianceProductProfileDraft, ComplianceReviewStatus, ComplianceRiskLevel, ComplianceRule, ComplianceRuleDraft, ComplianceTaskStatus, EbayAcceptanceBatch, EbayCategoryWorkspace, EbayCollectedProduct, EbayConfigurationStatus, EbayContentOptimizationResult, EbayContentTranslationResult, EbayDirectoryProductSyncCheckpoint, EbayDirectoryProductSyncProgress, EbayDirectoryProductSyncResult, EbayImageCandidateReview, EbayImageGenerationPurpose, EbayImageInspectionReport, EbayImageVisualInspectionReport, EbayListing, EbayLocalProduct, EbayLocalProductUpdateInput, EbayLoginResult, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayProductSyncRun, EbayPublishTask, EbayStore, EbayTitleOptimizationResult, GigaReturnRateFilter, GigaSellerIndexFilter, ImageModelProfile, ImageReferenceRole, ImportedProductImage, ImportedProductSource, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishStatus, MarketplaceSelectionProduct, NetworkStrategy, Platform, RealShiftProfile, RealShiftResult, SelectionCatalogItem, SelectionDecision, SelectionTask, SelectionTaskDraft, SupplyActivationResult, SupplyPlatformCode, SupplyWarehouseProduct, TaskProgress, WorkflowCounts } from '../shared/contracts'
 import { evaluateEbayCompliance } from '../shared/ebayComplianceKnowledge'
@@ -657,6 +659,8 @@ export function App() {
   const [systemDark,setSystemDark]=useState(()=>window.matchMedia('(prefers-color-scheme: dark)').matches)
   useEffect(()=>{const query=window.matchMedia('(prefers-color-scheme: dark)');const onChange=(event:MediaQueryListEvent)=>setSystemDark(event.matches);query.addEventListener('change',onChange);return()=>query.removeEventListener('change',onChange)},[])
   const [themeMenuOpen,setThemeMenuOpen]=useState(false)
+  // R-2：齿轮点开的 Linduo 选用 modal（admin → assignment, 普通用户 → preference）
+  const [linduoModal, setLinduoModal] = useState<'assignment' | 'preference' | null>(null)
   const effectiveDark=appTheme==='dark'||(appTheme==='system'&&systemDark)
   useEffect(()=>{if(effectiveDark){document.documentElement.dataset.theme='dark'}else{delete document.documentElement.dataset.theme};try{localStorage.setItem('app-theme:v1',appTheme)}catch{}},[effectiveDark,appTheme])
   const themeMenuOptions=[
@@ -1340,7 +1344,11 @@ export function App() {
             </div>
           </>}
         </div>
-        <button type="button" title="设置" onClick={()=>setPage('system-admin')}>
+        <button type="button" title="设置" onClick={() => {
+          // R-2:齿轮点 Linduo 选用 — admin(member.manage)→ 分配穿梭;普通用户 → 个人偏好
+          if (hasPermission(profile, 'member.manage')) setLinduoModal('assignment')
+          else setLinduoModal('preference')
+        }}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>设置
         </button>
         <button type="button" title="退出登录" onClick={()=>void signOut()}>
@@ -1527,6 +1535,12 @@ export function App() {
       {page === 'amazon-data-source' && <AmazonDataSourcePage onBack={()=>setPage('llm-keys')} />}
       {page==='llm-keys'&&<LlmApiKeysPage onBack={()=>setPage('ai-hq')} onOpenAmazonDataSource={()=>setPage('amazon-data-source')}/>}
       {page==='linduo-mall'&&<LinduoModelMallPage onBack={()=>setPage('ai-hq')} onOpenLlmKeys={()=>setPage('llm-keys')} />}
+      {linduoModal === 'assignment' && (
+        <LinduoAssignmentModal onClose={() => setLinduoModal(null)} />
+      )}
+      {linduoModal === 'preference' && (
+        <LinduoPreferenceModal onClose={() => setLinduoModal(null)} />
+      )}
     </main>
   </div>
 }
