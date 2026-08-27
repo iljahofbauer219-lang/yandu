@@ -450,3 +450,10 @@ export interface LinduoExceptionView {
 | 使用端在黄框小图标里 | 使用端在右下角下拉 | 用户原话"右边大模型来应用"指右下角 |
 | SystemAdmin 成员行"Linduo 选用"按钮(逐人勾) | SystemAdmin 成员行"Linduo 等级"下拉 + "例外"按钮 | tier 化后不需要逐人勾 |
 | 初始 27 个 CHAT 模型 | 实际 25 个 CHAT 模型(spec 修正) | 零度API 实际可调通 25 个 |
+| §4.2 advanced 默认 13：GPT-4o/4-Turbo/3.5/Claude 3.5/Gemini 1.5 等 | 按 2026-08 新 catalog 重新选型 13：gpt-4o、gpt-4o-mini、gpt-5、gpt-5-mini、gpt-5.4-mini、gpt-5.6-luna、gemini-2.5-flash、gemini-2.5-flash-lite、gemini-3.1-flash、gemini-3.1-flash-lite、claude-haiku-4-5、claude-sonnet-4、claude-sonnet-4-5 | catalog 升级至 37 模型，旧名单大多下架(仅余 3 个) |
+| §4.2/§10 full 组 25 条 | 实际 31 条(新 catalog 全部启用 CHAT 模型) | 同上，模型数随 catalog 变化，代码以"全部 enabled"为准 |
+| §4.3 新注册用户自动分 advanced | 接线在 members 审核通过 + admin 创建成员两处；注册走待审核流程时不分配 | 注册改为审核制后，"新用户"在审核通过时才生效 |
+| §4.2 仅启动时 seed | 启动 seed + 首次注册 bootstrap 后 `ensureOrgDefaultTiers` 双路径 | 覆盖"注册即建组"与"存量组织兜底"两种时序 |
+| §10 #10 "sidebar 齿轮" | 实际为顶栏工具条「设置」齿轮按钮(App.tsx) | 现有 sidebar 无齿轮位，统一用顶栏设置入口 |
+| §13 seed 逻辑在 chat-models-sync.ts | 实际独立 `tier-seed.ts`(seed/回填) + `tier-resolver.ts`(公式解析) | 职责拆分，chat-models-sync.ts 只留模型同步 + OWNER 例外 fallback |
+| — | 交付修复 a052978：全开组首次创建时漏灌 grants(仅 tier 已存在时补缺) | 2026-08-27 中央部署实测发现并修复，新 org 首启全开组曾为 0 授权 |
