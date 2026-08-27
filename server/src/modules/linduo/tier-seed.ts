@@ -79,8 +79,9 @@ export async function ensureOrgDefaultTiers(orgId: string): Promise<{ tiersCreat
   if (firstSeed) {
     const backfilled = await backfillNonOwnersToAdvanced(orgId)
     if (backfilled > 0) {
+      // 系统行为无真实用户，userId 传 null（audit_logs.user_id 可空，'system' 会触发外键约束）
       await writeAudit(prisma, {
-        orgId, userId: 'system', action: 'linduo.tier.seed',
+        orgId, userId: null, action: 'linduo.tier.seed',
         targetType: 'user', targetId: orgId,
         detail: { kind: 'tier-backfill', count: backfilled }
       })
@@ -128,7 +129,7 @@ async function syncFullGrants(tierId: string, orgId: string): Promise<number> {
   if (missing.length === 0) return 0
 
   await prisma.linduoTierGrant.createMany({
-    data: missing.map(m => ({ orgId, tierId, modelId: m.id }))
+    data: missing.map(m => ({ tierId, modelId: m.id }))
   })
   return missing.length
 }
@@ -141,7 +142,7 @@ async function seedAdvancedGrants(tierId: string, orgId: string): Promise<number
   })
   if (models.length === 0) return 0
   await prisma.linduoTierGrant.createMany({
-    data: models.map(m => ({ orgId, tierId, modelId: m.id }))
+    data: models.map(m => ({ tierId, modelId: m.id }))
   })
   return models.length
 }

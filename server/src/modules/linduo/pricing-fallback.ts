@@ -3,7 +3,7 @@ import type { LinduoModelPricing, LinduoVendor } from './types.js'
 /**
  * 零度API 37 个模型的已知价目（兜底常量）。
  *
- * 数据来源：api000.com/pricing 页面（用户提供初始基线，价格变动时由抓取脚本覆盖）。
+ * 数据来源：api000.com/pricing 页面（用户提供 2026-08-26 截图，价格变动时由抓取脚本覆盖）。
  * 所有价格统一以 **美元 / 1M tokens** 为单位；图片/视频模型标注为按张/按秒。
  *
  * 用途：
@@ -24,56 +24,51 @@ interface FallbackEntry {
 
 const FALLBACK: FallbackEntry[] = [
   // ── OpenAI 14 ──────────────────────────────────────────
-  { modelId: 'gpt-4o',                  vendor: 'openai', inputPrice: 2.5,    outputPrice: 10,    cachePrice: 1.25 },
-  { modelId: 'gpt-4o-mini',             vendor: 'openai', inputPrice: 0.15,   outputPrice: 0.6,   cachePrice: 0.075 },
-  { modelId: 'gpt-4-turbo',             vendor: 'openai', inputPrice: 10,     outputPrice: 30 },
-  { modelId: 'gpt-3.5-turbo',           vendor: 'openai', inputPrice: 0.5,    outputPrice: 1.5 },
-  { modelId: 'o1',                      vendor: 'openai', inputPrice: 15,     outputPrice: 60,    cachePrice: 7.5 },
-  { modelId: 'o1-mini',                 vendor: 'openai', inputPrice: 3,      outputPrice: 12,    cachePrice: 1.5 },
-  { modelId: 'o3-mini',                 vendor: 'openai', inputPrice: 1.1,    outputPrice: 4.4,   cachePrice: 0.55 },
-  { modelId: 'gpt-4.1',                 vendor: 'openai', inputPrice: 2,      outputPrice: 8,     cachePrice: 0.5 },
-  { modelId: 'gpt-4.1-mini',            vendor: 'openai', inputPrice: 0.4,    outputPrice: 1.6,   cachePrice: 0.1 },
-  // 生图模型按张计费
-  { modelId: 'gpt-image-1',             vendor: 'openai', inputPrice: null, outputPrice: null, billingType: 'IMAGE', pricePerUnit: 0.04,  unitLabel: '1K' },
-  { modelId: 'gpt-image-2',             vendor: 'openai', inputPrice: null, outputPrice: null, billingType: 'IMAGE', pricePerUnit: 0.015, unitLabel: '1K 张' },
-  { modelId: 'gpt-image-2-all',         vendor: 'openai', inputPrice: 3,      outputPrice: 18 },
-  { modelId: 'dall-e-3',                vendor: 'openai', inputPrice: null, outputPrice: null, billingType: 'IMAGE', pricePerUnit: 0.04,  unitLabel: '1024x1024' },
-  { modelId: 'whisper-1',               vendor: 'openai', inputPrice: null, outputPrice: null, billingType: 'REQUEST', pricePerUnit: 0.006, unitLabel: '分钟' },
-  { modelId: 'tts-1',                   vendor: 'openai', inputPrice: null, outputPrice: null, billingType: 'REQUEST', pricePerUnit: 0.015, unitLabel: '千字符' },
-  { modelId: 'text-embedding-3-large',  vendor: 'openai', inputPrice: 0.13,  outputPrice: null },
-  // 5.4–5.6 系列（2026 新品）
-  { modelId: 'gpt-5.4',              vendor: 'openai', inputPrice: 0.3125,  outputPrice: 1.875,  cachePrice: 0.03125 },
-  { modelId: 'gpt-5.4-mini',         vendor: 'openai', inputPrice: 0.09375, outputPrice: 0.5625, cachePrice: 0.009375 },
-  { modelId: 'gpt-5.5',              vendor: 'openai', inputPrice: 0.625,   outputPrice: 4.1667, cachePrice: 0.0625 },
-  { modelId: 'gpt-5.6-luna',         vendor: 'openai', inputPrice: 0.05,    outputPrice: 0.3,    cachePrice: 0.005 },
-  { modelId: 'gpt-5.6-sol',          vendor: 'openai', inputPrice: 0.625,   outputPrice: 3.75,   cachePrice: 0.05 },
-  { modelId: 'gpt-5.6-terra',        vendor: 'openai', inputPrice: 0.3,     outputPrice: 1.8,    cachePrice: 0.03 },
+  { modelId: 'gpt-4o',             vendor: 'openai', inputPrice: 2.5,     outputPrice: 10,    cachePrice: 1.25 },
+  { modelId: 'gpt-4o-2024-05-13',  vendor: 'openai', inputPrice: 2.5,     outputPrice: 7.5,   cachePrice: 0.25 },
+  { modelId: 'gpt-4o-mini',        vendor: 'openai', inputPrice: 0.15,    outputPrice: 0.6,   cachePrice: 0.075 },
+  { modelId: 'gpt-5',              vendor: 'openai', inputPrice: 0.15625, outputPrice: 1.25,  cachePrice: 0.015625 },
+  { modelId: 'gpt-5-mini',         vendor: 'openai', inputPrice: 0.05,    outputPrice: 0.4,   cachePrice: 0.005 },
+  { modelId: 'gpt-5.3-codex',      vendor: 'openai', inputPrice: 0.21875, outputPrice: 1.75,  cachePrice: 0.02 },
+  { modelId: 'gpt-5.4',            vendor: 'openai', inputPrice: 0.3125,  outputPrice: 1.875, cachePrice: 0.03125 },
+  { modelId: 'gpt-5.4-mini',       vendor: 'openai', inputPrice: 0.09375, outputPrice: 0.5625,cachePrice: 0.009375 },
+  { modelId: 'gpt-5.5',            vendor: 'openai', inputPrice: 0.625,   outputPrice: 4.1667,cachePrice: 0.0625 },
+  { modelId: 'gpt-5.6-luna',       vendor: 'openai', inputPrice: 0.05,    outputPrice: 0.3,   cachePrice: 0.005 },
+  { modelId: 'gpt-5.6-sol',        vendor: 'openai', inputPrice: 0.625,   outputPrice: 3.75,  cachePrice: 0.05 },
+  { modelId: 'gpt-5.6-terra',      vendor: 'openai', inputPrice: 0.3,     outputPrice: 1.8,   cachePrice: 0.03 },
+  // 生图：1K 像素 $0.015/张、2K $0.025、4K $0.03
+  { modelId: 'gpt-image-2',        vendor: 'openai', inputPrice: null, outputPrice: null, billingType: 'IMAGE', pricePerUnit: 0.015, unitLabel: '1K 张' },
+  { modelId: 'gpt-image-2-all',    vendor: 'openai', inputPrice: 3,      outputPrice: 18 },
+
   // ── Google 10 ──────────────────────────────────────────
-  { modelId: 'gemini-2.5-pro',                 vendor: 'google', inputPrice: 1.25,   outputPrice: 10 },
-  { modelId: 'gemini-2.5-flash',               vendor: 'google', inputPrice: 0.075,  outputPrice: 0.3 },
-  { modelId: 'gemini-2.5-flash-image-preview', vendor: 'google', inputPrice: null,  outputPrice: null, billingType: 'IMAGE', pricePerUnit: 0.03, unitLabel: '张' },
-  { modelId: 'imagen-4.0',                     vendor: 'google', inputPrice: null,  outputPrice: null, billingType: 'IMAGE', pricePerUnit: 0.04, unitLabel: '张' },
-  { modelId: 'gemini-2.0-pro',                 vendor: 'google', inputPrice: 1.25,   outputPrice: 10 },
-  { modelId: 'gemini-2.0-flash',               vendor: 'google', inputPrice: 0.1,    outputPrice: 0.4 },
-  { modelId: 'gemini-1.5-pro',                 vendor: 'google', inputPrice: 1.25,   outputPrice: 5 },
-  { modelId: 'gemini-1.5-flash',               vendor: 'google', inputPrice: 0.075,  outputPrice: 0.3 },
-  { modelId: 'text-embedding-004',             vendor: 'google', inputPrice: 0.025,  outputPrice: null },
-  { modelId: 'gemini-embedding-exp',           vendor: 'google', inputPrice: 0.025,  outputPrice: null },
+  { modelId: 'gemini-2.5-flash',          vendor: 'google', inputPrice: 0.15,  outputPrice: 1.25 },
+  { modelId: 'gemini-2.5-flash-lite',     vendor: 'google', inputPrice: 0.05,  outputPrice: 0.2 },
+  { modelId: 'gemini-2.5-pro',            vendor: 'google', inputPrice: 0.625, outputPrice: 5 },
+  { modelId: 'gemini-3-flash-preview',    vendor: 'google', inputPrice: 0.25,  outputPrice: 1.5,   cachePrice: 0.025 },
+  { modelId: 'gemini-3-pro-preview',      vendor: 'google', inputPrice: 1,     outputPrice: 6,     cachePrice: 0.1 },
+  { modelId: 'gemini-3.1-flash',          vendor: 'google', inputPrice: 0.45,  outputPrice: 2.7 },
+  { modelId: 'gemini-3.1-flash-lite',     vendor: 'google', inputPrice: 0.45,  outputPrice: 2.7 },
+  { modelId: 'gemini-3.1-pro-preview',    vendor: 'google', inputPrice: 1,     outputPrice: 6,     cachePrice: 0.1 },
+  // 生图：1K 像素 $0.02/张、2K $0.03、4K $0.04
+  { modelId: 'nano-banana-2',             vendor: 'google', inputPrice: null, outputPrice: null, billingType: 'IMAGE', pricePerUnit: 0.02, unitLabel: '1K 张' },
+  { modelId: 'nano-banana-pro',           vendor: 'google', inputPrice: null, outputPrice: null, billingType: 'IMAGE', pricePerUnit: 0.03, unitLabel: '1K 张' },
+
   // ── Anthropic 10 ───────────────────────────────────────
-  { modelId: 'claude-opus-4-5-20251101',  vendor: 'anthropic', inputPrice: 15,   outputPrice: 75,  cachePrice: 1.5 },
-  { modelId: 'claude-sonnet-4-5-20251101',vendor: 'anthropic', inputPrice: 3,    outputPrice: 15,  cachePrice: 0.3 },
-  { modelId: 'claude-haiku-4-5-20251101', vendor: 'anthropic', inputPrice: 0.8,  outputPrice: 4,   cachePrice: 0.08 },
-  { modelId: 'claude-opus-4-1-20250805',  vendor: 'anthropic', inputPrice: 15,   outputPrice: 75,  cachePrice: 1.5 },
-  { modelId: 'claude-sonnet-4-20250514',  vendor: 'anthropic', inputPrice: 3,    outputPrice: 15,  cachePrice: 0.3 },
-  { modelId: 'claude-3-7-sonnet',         vendor: 'anthropic', inputPrice: 3,    outputPrice: 15,  cachePrice: 0.3 },
-  { modelId: 'claude-3-5-sonnet',         vendor: 'anthropic', inputPrice: 3,    outputPrice: 15,  cachePrice: 0.3 },
-  { modelId: 'claude-3-5-haiku',          vendor: 'anthropic', inputPrice: 0.8,  outputPrice: 4,   cachePrice: 0.08 },
-  { modelId: 'claude-3-opus',             vendor: 'anthropic', inputPrice: 15,   outputPrice: 75 },
-  { modelId: 'claude-3-haiku',            vendor: 'anthropic', inputPrice: 0.25, outputPrice: 1.25 },
+  { modelId: 'claude-fable-5',         vendor: 'anthropic', inputPrice: 1.875, outputPrice: 9.375, cachePrice: 0.1875 },
+  { modelId: 'claude-haiku-4-5',       vendor: 'anthropic', inputPrice: 0.125, outputPrice: 0.625, cachePrice: 0.0125 },
+  { modelId: 'claude-opus-4-5',        vendor: 'anthropic', inputPrice: 0.625, outputPrice: 3.125, cachePrice: 0.0625 },
+  { modelId: 'claude-opus-4-6',        vendor: 'anthropic', inputPrice: 0.625, outputPrice: 3.125, cachePrice: 0.0625 },
+  { modelId: 'claude-opus-4-7',        vendor: 'anthropic', inputPrice: 0.625, outputPrice: 3.125, cachePrice: 0.0625 },
+  { modelId: 'claude-opus-4-8',        vendor: 'anthropic', inputPrice: 0.625, outputPrice: 3.125, cachePrice: 0.0625 },
+  { modelId: 'claude-opus-5',          vendor: 'anthropic', inputPrice: 0.75,  outputPrice: 3.75,  cachePrice: 0.075 },
+  { modelId: 'claude-sonnet-4',        vendor: 'anthropic', inputPrice: 0.375, outputPrice: 1.875, cachePrice: 0.0375 },
+  { modelId: 'claude-sonnet-4-5',      vendor: 'anthropic', inputPrice: 0.375, outputPrice: 1.875, cachePrice: 0.0375 },
+  { modelId: 'claude-sonnet-5',        vendor: 'anthropic', inputPrice: 0.375, outputPrice: 1.875, cachePrice: 0.0375 },
+
   // ── Vidu 3（视频按秒计费） ──────────────────────────────
-  { modelId: 'vidu-q1',          vendor: 'vidu', inputPrice: null, outputPrice: null, billingType: 'VIDEO', pricePerUnit: 0.4,  unitLabel: '秒' },
-  { modelId: 'vidu-2.0',         vendor: 'vidu', inputPrice: null, outputPrice: null, billingType: 'VIDEO', pricePerUnit: 0.2,  unitLabel: '秒' },
-  { modelId: 'vidu-1.5',         vendor: 'vidu', inputPrice: null, outputPrice: null, billingType: 'VIDEO', pricePerUnit: 0.1,  unitLabel: '秒' }
+  { modelId: 'viduq3',         vendor: 'vidu', inputPrice: null, outputPrice: null, billingType: 'VIDEO', pricePerUnit: 0.05,  unitLabel: '秒' },
+  { modelId: 'viduq3-pro',     vendor: 'vidu', inputPrice: null, outputPrice: null, billingType: 'VIDEO', pricePerUnit: 0.08,  unitLabel: '秒' },
+  { modelId: 'viduq3-turbo',   vendor: 'vidu', inputPrice: null, outputPrice: null, billingType: 'VIDEO', pricePerUnit: 0.045, unitLabel: '秒' }
 ]
 
 /** 把兜底常量格式化为完整的 LinduoModelPricing（用统一 fetchedAt） */
