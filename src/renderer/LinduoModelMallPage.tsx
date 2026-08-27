@@ -17,7 +17,7 @@ import {
  * 模型目录与元数据抽离到 src/shared/linduoCatalog.ts，主进程 + 渲染层共用。
  *
  * 设计要点：
- * - 模型元数据内置（37 个模型 id + 名称 + 能力），无需调用 /v1/models；接入 Key 状态通过 llm-keys:list 读取。
+ * - 模型元数据内置（37 个模型 id + 名称 + 能力 + 选型口诀），无需调用 /v1/models；接入 Key 状态通过 llm-keys:list 读取。
  * - 左侧筛选：供应商（OpenAI / Google / Anthropic / Vidu）与能力（生图 / 视频 / 对话 / 多模态）。
  * - 顶部搜索按 id / 名称 / 描述模糊匹配。
  * - 价格行：每张卡片底部展示输入/输出/缓存价（USD/1M tokens），图片/视频模型用 pricePerUnit + unitLabel。
@@ -253,6 +253,11 @@ function LinduoModelCard({ model, linduoConfigured, pricing, pricingAllStale }: 
       <h3 className="linduo-mall-card-name">{model.name}</h3>
       <code className="linduo-mall-card-id">{model.id}</code>
       <p className="linduo-mall-card-desc">{model.description}</p>
+      {(() => {
+        const rating = model.briefRating
+        const isWarn = /^(✗|⚠)/.test(rating) || rating.includes('慎用') || rating.includes('不推荐') || rating.includes('慎用生产')
+        return <div className={`linduo-mall-card-rating ${isWarn ? 'linduo-mall-card-rating-warn' : ''}`} title="选型口诀">{rating}</div>
+      })()}
       <div className="linduo-mall-card-tags">
         {model.capabilities.map(cap => {
           const meta = CAPABILITY_META[cap]

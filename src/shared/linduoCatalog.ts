@@ -1,6 +1,13 @@
 // 零度API 37 个模型目录（按 OpenAI 14 / Google 10 / Anthropic 10 / Vidu 3 编排）。
 // 主进程 + 渲染层共用，作为 LinduoChatModel 白名单的「真值源」。
 // 启动时 src/main/services/linduoChatModelSync.ts 会把 capabilities 包含 CHAT 的同步到 DB。
+// 数据依据：api000.com/pricing 页面（2026-08-26 截图；恢复自 stash@{0} 的 M1 选品成果）。
+//
+// ⚠️ 双源对账约束（scripts/check-linduo-catalog-consistency.mjs，pnpm lint:catalog）：
+// 1. 本文件与 server/src/modules/linduo/linduoCatalog.ts 的 id 集合必须完全一致；
+// 2. server/.../pricing-fallback.ts 的每个 modelId 必须在本目录中存在；
+// 3. src/main/advisor/MultimodalVision.ts 引用的 gpt-* id 必须在本目录中存在；
+// 4. 头注「N 个模型目录 / OpenAI M」必须等于实际长度，否则守卫报错。
 
 export type LinduoCapability = 'IMAGE' | 'VIDEO' | 'CHAT' | 'VISION' | 'EMBEDDING' | 'AUDIO'
 
@@ -12,53 +19,55 @@ export interface LinduoModelEntry {
   vendor: LinduoVendor
   capabilities: LinduoCapability[]
   description: string
+  /** 选型口诀：1 句话告诉用户"这个模型在哪个场景下用 / 不要用"（紫色 chip 渲染） */
+  briefRating: string
   contextLabel?: string
   wiredToImageStudio?: boolean
 }
 
 export const LINDUO_MODELS: LinduoModelEntry[] = [
   // OpenAI 14
-  { id: 'gpt-4o',                  name: 'GPT-4o',                  vendor: 'openai',    capabilities: ['CHAT', 'VISION'],        description: 'OpenAI 多模态旗舰，对话与视觉理解均突出',         contextLabel: '128K' },
-  { id: 'gpt-4o-mini',             name: 'GPT-4o mini',             vendor: 'openai',    capabilities: ['CHAT', 'VISION'],        description: '轻量多模态，成本低、速度快',                       contextLabel: '128K' },
-  { id: 'gpt-4-turbo',             name: 'GPT-4 Turbo',             vendor: 'openai',    capabilities: ['CHAT'],                  description: '高上下文对话模型，复杂指令表现稳定',               contextLabel: '128K' },
-  { id: 'gpt-3.5-turbo',           name: 'GPT-3.5 Turbo',           vendor: 'openai',    capabilities: ['CHAT'],                  description: '经典对话模型，性价比首选',                         contextLabel: '16K' },
-  { id: 'o1',                      name: 'o1',                       vendor: 'openai',    capabilities: ['CHAT'],                  description: 'OpenAI 推理模型，链式思考能力强',                   contextLabel: '200K' },
-  { id: 'o1-mini',                 name: 'o1 mini',                  vendor: 'openai',    capabilities: ['CHAT'],                  description: '轻量推理模型，速度更快',                           contextLabel: '128K' },
-  { id: 'o3-mini',                 name: 'o3 mini',                  vendor: 'openai',    capabilities: ['CHAT'],                  description: '高性价比推理模型，复杂任务表现优',                 contextLabel: '200K' },
-  { id: 'gpt-4.1',                 name: 'GPT-4.1',                  vendor: 'openai',    capabilities: ['CHAT', 'VISION'],        description: 'GPT-4 系列升级，编码与指令遵循更强',               contextLabel: '1M' },
-  { id: 'gpt-4.1-mini',            name: 'GPT-4.1 mini',             vendor: 'openai',    capabilities: ['CHAT', 'VISION'],        description: '轻量 GPT-4.1，速度与成本平衡',                     contextLabel: '1M' },
-  { id: 'gpt-image-1',             name: 'GPT-Image-1',              vendor: 'openai',    capabilities: ['IMAGE'],                 description: 'OpenAI 图像生成模型，文字渲染与细节突出',          wiredToImageStudio: true },
-  { id: 'dall-e-3',                name: 'DALL·E 3',                 vendor: 'openai',    capabilities: ['IMAGE'],                 description: 'OpenAI 文生图模型，创意构图表现强',                 wiredToImageStudio: true },
-  { id: 'whisper-1',               name: 'Whisper',                  vendor: 'openai',    capabilities: ['AUDIO'],                 description: '语音转文字模型，多语种支持',                       contextLabel: '25MB' },
-  { id: 'tts-1',                   name: 'TTS-1',                    vendor: 'openai',    capabilities: ['AUDIO'],                 description: 'OpenAI 文字转语音模型，6 种音色',                   contextLabel: '4096' },
-  { id: 'text-embedding-3-large',  name: 'Embedding 3 Large',        vendor: 'openai',    capabilities: ['EMBEDDING'],             description: 'OpenAI 向量嵌入大模型，3072 维',                    contextLabel: '8K' },
+  { id: 'gpt-4o',             name: 'GPT-4o',             vendor: 'openai', capabilities: ['CHAT', 'VISION'], description: 'OpenAI 多模态旗舰，文本与视觉对话',         briefRating: '视觉对话主力，多模态首选',     contextLabel: '1M' },
+  { id: 'gpt-4o-2024-05-13',  name: 'GPT-4o (2024-05)',   vendor: 'openai', capabilities: ['CHAT', 'VISION'], description: 'GPT-4o 2024-05 快照版本，输出更便宜',       briefRating: '旧快照，输出更便宜',           contextLabel: '1M' },
+  { id: 'gpt-4o-mini',        name: 'GPT-4o mini',        vendor: 'openai', capabilities: ['CHAT', 'VISION'], description: '轻量多模态，成本低、速度快',                 briefRating: '大量打标/分类首选',             contextLabel: '1M' },
+  { id: 'gpt-5',              name: 'GPT-5',              vendor: 'openai', capabilities: ['CHAT', 'VISION'], description: 'GPT-5 主力对话模型，推理与视觉综合强',         briefRating: '复杂推理综合强，综合首选',     contextLabel: '1M' },
+  { id: 'gpt-5-mini',         name: 'GPT-5 mini',         vendor: 'openai', capabilities: ['CHAT'],           description: '轻量 GPT-5，速度更快、成本极低',             briefRating: '速度与价格平衡',               contextLabel: '1M' },
+  { id: 'gpt-5.3-codex',      name: 'GPT-5.3 Codex',      vendor: 'openai', capabilities: ['CHAT'],           description: 'GPT-5.3 Codex 编码专用版',                  briefRating: '代码生成与重构专用',           contextLabel: '1M' },
+  { id: 'gpt-5.4',            name: 'GPT-5.4',            vendor: 'openai', capabilities: ['CHAT', 'VISION'], description: 'GPT-5.4 进阶版，复杂任务与多模态',         briefRating: '新版综合（待评估）',           contextLabel: '1M' },
+  { id: 'gpt-5.4-mini',       name: 'GPT-5.4 mini',       vendor: 'openai', capabilities: ['CHAT'],           description: '轻量 GPT-5.4，速度与成本平衡',               briefRating: '新版轻量，速度优先',           contextLabel: '1M' },
+  { id: 'gpt-5.5',            name: 'GPT-5.5',            vendor: 'openai', capabilities: ['CHAT', 'VISION'], description: 'GPT-5.5 多模态升级，推理与视觉更稳',         briefRating: '大参数量，长文本与深度推理',   contextLabel: '1M' },
+  { id: 'gpt-5.6-luna',       name: 'GPT-5.6 Luna',       vendor: 'openai', capabilities: ['CHAT'],           description: 'GPT-5.6 入门款，价格最便宜',                 briefRating: '新版极轻量，最便宜',           contextLabel: '1M' },
+  { id: 'gpt-5.6-sol',        name: 'GPT-5.6 Sol',        vendor: 'openai', capabilities: ['CHAT', 'VISION'], description: 'GPT-5.6 旗舰款，复杂任务首选',               briefRating: '新版旗舰，复杂任务',           contextLabel: '1M' },
+  { id: 'gpt-5.6-terra',      name: 'GPT-5.6 Terra',      vendor: 'openai', capabilities: ['CHAT', 'VISION'], description: 'GPT-5.6 均衡款，性能与价格平衡',             briefRating: '新版均衡款',                   contextLabel: '1M' },
+  { id: 'gpt-image-2',        name: 'GPT-Image-2',        vendor: 'openai', capabilities: ['IMAGE'],          description: 'OpenAI 图像生成 v2，文字渲染与细节更稳',    briefRating: '商品主图生图，标准款',         wiredToImageStudio: true },
+  { id: 'gpt-image-2-all',    name: 'GPT-Image-2 All',    vendor: 'openai', capabilities: ['CHAT', 'VISION', 'IMAGE'], description: 'GPT-Image-2 全模态版，多模态对话 + 图像生成', briefRating: '改图与多模态对话',         wiredToImageStudio: true },
   // Google 10
-  { id: 'gemini-2.5-pro',                 name: 'Gemini 2.5 Pro',                 vendor: 'google',    capabilities: ['CHAT', 'VISION'],        description: 'Google 旗舰多模态模型，推理与代码表现强',         contextLabel: '1M' },
-  { id: 'gemini-2.5-flash',               name: 'Gemini 2.5 Flash',               vendor: 'google',    capabilities: ['CHAT', 'VISION'],        description: '轻量多模态，速度与成本平衡',                       contextLabel: '1M' },
-  { id: 'gemini-2.5-flash-image-preview', name: 'Gemini 2.5 Flash Image',         vendor: 'google',    capabilities: ['IMAGE'],                 description: 'Google 多模态生图，支持参照图',                     wiredToImageStudio: true },
-  { id: 'imagen-4.0',                     name: 'Imagen 4.0',                     vendor: 'google',    capabilities: ['IMAGE'],                 description: 'Google 旗舰生图模型，品牌色与主图表现优',         wiredToImageStudio: true },
-  { id: 'gemini-2.0-pro',                 name: 'Gemini 2.0 Pro',                 vendor: 'google',    capabilities: ['CHAT', 'VISION'],        description: '上一代 Pro 多模态模型',                            contextLabel: '2M' },
-  { id: 'gemini-2.0-flash',               name: 'Gemini 2.0 Flash',               vendor: 'google',    capabilities: ['CHAT', 'VISION'],        description: '上一代 Flash 模型，结构化输出稳定',                 contextLabel: '1M' },
-  { id: 'gemini-1.5-pro',                 name: 'Gemini 1.5 Pro',                 vendor: 'google',    capabilities: ['CHAT', 'VISION'],        description: '经典 Gemini Pro 长上下文模型',                      contextLabel: '2M' },
-  { id: 'gemini-1.5-flash',               name: 'Gemini 1.5 Flash',               vendor: 'google',    capabilities: ['CHAT', 'VISION'],        description: '轻量 Gemini，延迟更低',                             contextLabel: '1M' },
-  { id: 'text-embedding-004',             name: 'Embedding 004',                  vendor: 'google',    capabilities: ['EMBEDDING'],             description: 'Google 文本嵌入模型，768 维',                       contextLabel: '2K' },
-  { id: 'gemini-embedding-exp',           name: 'Gemini Embedding (实验)',        vendor: 'google',    capabilities: ['EMBEDDING'],             description: 'Gemini 系列嵌入实验版',                             contextLabel: '8K' },
+  { id: 'gemini-2.5-flash',        name: 'Gemini 2.5 Flash',     vendor: 'google', capabilities: ['CHAT', 'VISION'], description: 'Google 轻量多模态，速度与成本平衡',         briefRating: '多模态轻量，性价比高',         contextLabel: '1M' },
+  { id: 'gemini-2.5-flash-lite',   name: 'Gemini 2.5 Flash-Lite',vendor: 'google', capabilities: ['CHAT', 'VISION'], description: '低价体验 Lite 版，超低成本',                briefRating: '极轻量，海量分类',             contextLabel: '1M' },
+  { id: 'gemini-2.5-pro',          name: 'Gemini 2.5 Pro',       vendor: 'google', capabilities: ['CHAT', 'VISION'], description: 'Google 旗舰多模态，推理与代码表现强',       briefRating: '旧版主力，稳定可用',           contextLabel: '1M' },
+  { id: 'gemini-3-flash-preview',  name: 'Gemini 3 Flash',       vendor: 'google', capabilities: ['CHAT', 'VISION'], description: 'Gemini 3 Flash 预览版',                     briefRating: '新版轻量（preview 慎用）',     contextLabel: '1M' },
+  { id: 'gemini-3-pro-preview',    name: 'Gemini 3 Pro',         vendor: 'google', capabilities: ['CHAT', 'VISION'], description: 'Gemini 3 Pro 预览版',                       briefRating: '新版主力（preview 慎用）',     contextLabel: '1M' },
+  { id: 'gemini-3.1-flash',        name: 'Gemini 3.1 Flash',     vendor: 'google', capabilities: ['CHAT', 'VISION'], description: 'Gemini 3.1 Flash 正式版',                   briefRating: '新版轻量正式',                 contextLabel: '1M' },
+  { id: 'gemini-3.1-flash-lite',   name: 'Gemini 3.1 Flash-Lite',vendor: 'google', capabilities: ['CHAT', 'VISION'], description: 'Gemini 3.1 轻量 Lite 版',                   briefRating: '极轻量新版',                   contextLabel: '1M' },
+  { id: 'gemini-3.1-pro-preview',  name: 'Gemini 3.1 Pro',       vendor: 'google', capabilities: ['CHAT', 'VISION'], description: 'Gemini 3.1 Pro 预览版',                     briefRating: '新主力预览（慎用）',           contextLabel: '1M' },
+  { id: 'nano-banana-2',           name: 'Nano Banana 2',        vendor: 'google', capabilities: ['IMAGE'],          description: 'Google Nano Banana 2 图像生成',            briefRating: 'Google 生图标准款',             wiredToImageStudio: true },
+  { id: 'nano-banana-pro',         name: 'Nano Banana Pro',      vendor: 'google', capabilities: ['IMAGE'],          description: 'Google Nano Banana Pro 旗舰生图',          briefRating: 'Google 生图高质量',             wiredToImageStudio: true },
   // Anthropic 10
-  { id: 'claude-opus-4-5-20251101',  name: 'Claude Opus 4.5',          vendor: 'anthropic', capabilities: ['CHAT', 'VISION'],        description: 'Anthropic 顶级模型，复杂任务首选',                   contextLabel: '200K' },
-  { id: 'claude-sonnet-4-5-20251101',name: 'Claude Sonnet 4.5',        vendor: 'anthropic', capabilities: ['CHAT', 'VISION'],        description: '平衡性能与成本的 Anthropic 主力模型',               contextLabel: '200K' },
-  { id: 'claude-haiku-4-5-20251101', name: 'Claude Haiku 4.5',         vendor: 'anthropic', capabilities: ['CHAT'],                  description: '轻量 Claude，速度与成本最优',                       contextLabel: '200K' },
-  { id: 'claude-opus-4-1-20250805',  name: 'Claude Opus 4.1',          vendor: 'anthropic', capabilities: ['CHAT', 'VISION'],        description: '前代 Opus，适合高精度长文档分析',                   contextLabel: '200K' },
-  { id: 'claude-sonnet-4-20250514',  name: 'Claude Sonnet 4',          vendor: 'anthropic', capabilities: ['CHAT', 'VISION'],        description: '前代 Sonnet，工具调用稳定',                         contextLabel: '200K' },
-  { id: 'claude-3-7-sonnet',         name: 'Claude 3.7 Sonnet',        vendor: 'anthropic', capabilities: ['CHAT', 'VISION'],        description: '混合推理模式，可控思考深度',                       contextLabel: '200K' },
-  { id: 'claude-3-5-sonnet',         name: 'Claude 3.5 Sonnet',        vendor: 'anthropic', capabilities: ['CHAT', 'VISION'],        description: '前代主力 Sonnet，编程与写作表现优',                 contextLabel: '200K' },
-  { id: 'claude-3-5-haiku',          name: 'Claude 3.5 Haiku',         vendor: 'anthropic', capabilities: ['CHAT'],                  description: '轻量 Claude，适合日常对话',                         contextLabel: '200K' },
-  { id: 'claude-3-opus',             name: 'Claude 3 Opus',            vendor: 'anthropic', capabilities: ['CHAT', 'VISION'],        description: '经典 Opus，长文档与复杂推理',                       contextLabel: '200K' },
-  { id: 'claude-3-haiku',            name: 'Claude 3 Haiku',           vendor: 'anthropic', capabilities: ['CHAT'],                  description: '前代轻量模型，低延迟低成本',                       contextLabel: '200K' },
+  { id: 'claude-fable-5',    name: 'Claude Fable 5',     vendor: 'anthropic', capabilities: ['CHAT', 'VISION'], description: 'Anthropic 实验系列 Fable，顶级价格',         briefRating: '✗ 溢价，不推荐业务用',         contextLabel: '1M' },
+  { id: 'claude-haiku-4-5',  name: 'Claude Haiku 4.5',   vendor: 'anthropic', capabilities: ['CHAT'],           description: '轻量 Claude，速度与成本最优',               briefRating: '大量分类/打标/关键词首选',     contextLabel: '1M' },
+  { id: 'claude-opus-4-5',   name: 'Claude Opus 4.5',    vendor: 'anthropic', capabilities: ['CHAT', 'VISION'], description: 'Opus 4.5，复杂任务首选',                     briefRating: '高质量（已被 4-8 超越）',       contextLabel: '1M' },
+  { id: 'claude-opus-4-6',   name: 'Claude Opus 4.6',    vendor: 'anthropic', capabilities: ['CHAT', 'VISION'], description: 'Opus 4.6，能力微调版',                       briefRating: '微调版（已被 4-8 超越）',       contextLabel: '1M' },
+  { id: 'claude-opus-4-7',   name: 'Claude Opus 4.7',    vendor: 'anthropic', capabilities: ['CHAT', 'VISION'], description: 'Opus 4.7，能力微调版',                       briefRating: '微调版（已被 4-8 超越）',       contextLabel: '1M' },
+  { id: 'claude-opus-4-8',   name: 'Claude Opus 4.8',    vendor: 'anthropic', capabilities: ['CHAT', 'VISION'], description: 'Opus 4.8 最新微调版，实测状态绿',           briefRating: '选品论证/复杂推理首选',         contextLabel: '1M' },
+  { id: 'claude-opus-5',     name: 'Claude Opus 5',      vendor: 'anthropic', capabilities: ['CHAT', 'VISION'], description: 'Opus 5 最新旗舰，比 4 系列贵 20%',          briefRating: '尝鲜旗舰，慎用生产',           contextLabel: '1M' },
+  { id: 'claude-sonnet-4',   name: 'Claude Sonnet 4',    vendor: 'anthropic', capabilities: ['CHAT', 'VISION'], description: 'Sonnet 4 主力对话，性价比首选',             briefRating: 'Listing 写作/翻译/改写首选',   contextLabel: '1M' },
+  { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5',  vendor: 'anthropic', capabilities: ['CHAT', 'VISION'], description: 'Sonnet 4.5，平衡性能与成本',                 briefRating: '高质量主力，优于 sonnet-4',     contextLabel: '1M' },
+  { id: 'claude-sonnet-5',   name: 'Claude Sonnet 5',    vendor: 'anthropic', capabilities: ['CHAT', 'VISION'], description: 'Sonnet 5 最新版',                           briefRating: '最新主力，谨慎尝试',           contextLabel: '1M' },
   // Vidu 3
-  { id: 'vidu-q1',          name: 'Vidu Q1',           vendor: 'vidu',      capabilities: ['VIDEO'],  description: 'Vidu 旗舰视频生成模型，1080P 5 秒',          contextLabel: '5s/1080P' },
-  { id: 'vidu-2.0',         name: 'Vidu 2.0',          vendor: 'vidu',      capabilities: ['VIDEO'],  description: 'Vidu 主力视频生成模型，主体一致性突出',       contextLabel: '4s/720P' },
-  { id: 'vidu-1.5',         name: 'Vidu 1.5',          vendor: 'vidu',      capabilities: ['VIDEO'],  description: 'Vidu 入门视频生成模型，性价比首选',           contextLabel: '4s/540P' }
-] as LinduoModelEntry[]
+  { id: 'viduq3',            name: 'Vidu Q3',            vendor: 'vidu', capabilities: ['VIDEO'], description: 'Vidu Q3 主力视频生成',                    briefRating: '标准视频生成',         contextLabel: '1080P/秒' },
+  { id: 'viduq3-pro',        name: 'Vidu Q3 Pro',        vendor: 'vidu', capabilities: ['VIDEO'], description: 'Vidu Q3 Pro 高端视频生成',                briefRating: '高质量视频',           contextLabel: '1080P/秒' },
+  { id: 'viduq3-turbo',      name: 'Vidu Q3 Turbo',      vendor: 'vidu', capabilities: ['VIDEO'], description: 'Vidu Q3 Turbo 快速视频生成',              briefRating: '快速视频生成',         contextLabel: '1080P/秒' }
+]
 
 export const VENDORS: LinduoVendor[] = ['openai', 'google', 'anthropic', 'vidu']
 export const CAPABILITIES: LinduoCapability[] = ['IMAGE', 'VIDEO', 'CHAT', 'VISION', 'EMBEDDING', 'AUDIO']
