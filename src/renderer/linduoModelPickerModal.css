@@ -78,10 +78,8 @@
 .linduo-picker-vendor.vendor-anthropic { background: #fef3c7; color: #b45309; }
 .linduo-picker-vendor.vendor-vidu { background: #fce7f3; color: #be185d; }
 .linduo-picker-desc {
-  grid-column: 1 / -1;
   font-size: 12px;
   color: var(--text-secondary, #64748b);
-  margin-top: 4px;
 }
 
 
@@ -297,38 +295,129 @@
 
 /* ==================== LinduoPreferenceModal (M1/R-2) ==================== */
 
+.linduo-pref-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.linduo-pref-search {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border-soft, #e5e7eb);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--bg-primary, #fff);
+  color: var(--text-primary, #0f172a);
+}
+.linduo-pref-search:focus {
+  outline: none;
+  border-color: var(--accent, #16a59a);
+  box-shadow: 0 0 0 2px rgba(10, 186, 181, 0.15);
+}
+.linduo-pref-vendors { display: flex; gap: 6px; flex-wrap: wrap; }
+.linduo-pref-vendor-chip {
+  border: 1px solid var(--border-soft, #e5e7eb);
+  background: var(--bg-primary, #fff);
+  color: var(--text-secondary, #64748b);
+  border-radius: 12px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .linduo-preference-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 420px;
+  gap: 4px;
+  max-height: 46vh;
   overflow-y: auto;
 }
+.linduo-pref-group { list-style: none; }
+.linduo-pref-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 2px 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.linduo-pref-group-head:first-child { margin-top: 0; }
+.linduo-pref-group-head em { font-style: normal; opacity: 0.7; }
+.linduo-pref-group-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .linduo-preference-row {
   border: 1px solid var(--border-soft, #e5e7eb);
   border-radius: 8px;
-  background: #fff;
+  background: var(--bg-primary, #fff);
   transition: background 0.12s, border-color 0.12s;
 }
 .linduo-preference-row:hover { background: var(--bg-soft, #f8fafc); }
-.linduo-preference-row.dashed { border-style: dashed; margin-top: 8px; }
+.linduo-preference-row.dashed { border-style: dashed; margin-top: 10px; }
 .linduo-preference-row.active {
   border-color: var(--accent, #16a59a);
   background: #ecfeff;
 }
 .linduo-preference-row label {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  grid-template-rows: auto auto;
-  align-items: center;
-  gap: 4px 10px;
-  padding: 10px 12px;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 12px;
   cursor: pointer;
 }
-.linduo-preference-row input[type='radio'] { cursor: pointer; }
+.linduo-preference-row input[type='radio'] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.linduo-pref-radio {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  flex-shrink: 0;
+  margin-top: 2px;
+  transition: border-color 0.12s;
+}
+.linduo-preference-row:hover .linduo-pref-radio { border-color: #94a3b8; }
+.linduo-preference-row.active .linduo-pref-radio {
+  border-color: var(--accent, #16a59a);
+  background: radial-gradient(circle at center, var(--accent, #16a59a) 0 4px, transparent 4.5px);
+}
+.linduo-pref-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.linduo-pref-line1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.linduo-pref-default {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent, #0d9488);
+  background: rgba(13, 148, 136, 0.1);
+  border: 1px solid rgba(13, 148, 136, 0.35);
+  padding: 1px 7px;
+  border-radius: 10px;
+}
 
 /* ==================== LinduoExceptionModal (M1/R-2) ==================== */
 

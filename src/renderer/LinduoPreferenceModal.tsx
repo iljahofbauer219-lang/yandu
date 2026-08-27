@@ -7,6 +7,7 @@ import {
   setLinduoPreferredModel
 } from './serverApi'
 import type { LinduoChatModelView, LinduoMemberTierView } from '../shared/contracts'
+import { VENDOR_META, VENDORS, type LinduoVendor } from '../shared/linduoCatalog'
 import { LinduoExceptionModal } from './LinduoExceptionModal'
 import './linduoModelPickerModal.css'
 
@@ -35,6 +36,8 @@ export function LinduoPreferenceModal({ onClose, onChanged }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [showException, setShowException] = useState(false)
+  const [keyword, setKeyword] = useState('')
+  const [vendorFilter, setVendorFilter] = useState<Set<LinduoVendor>>(new Set())
 
   useEffect(() => {
     let cancelled = false
@@ -71,6 +74,36 @@ export function LinduoPreferenceModal({ onClose, onChanged }: Props) {
     if (!preferred) return '未设置(使用 Codex 默认)'
     return available.find(m => m.id === preferred)?.displayName ?? '未知模型'
   }, [preferred, available])
+
+  // 搜索 + 供应商筛选后的分组列表(模型多,裸列表不便找)
+  const grouped = useMemo(() => {
+    const lower = keyword.trim().toLowerCase()
+    const filtered = available.filter(m => {
+      if (vendorFilter.size > 0 && !vendorFilter.has(m.vendor as LinduoVendor)) return false
+      if (!lower) return true
+      return m.displayName.toLowerCase().includes(lower)
+        || m.modelId.toLowerCase().includes(lower)
+        || (m.description ?? '').toLowerCase().includes(lower)
+    })
+    return VENDORS
+      .filter(v => vendorFilter.size === 0 || vendorFilter.has(v))
+      .map(v => ({
+        vendor: v,
+        label: VENDOR_META[v].label,
+        color: VENDOR_META[v].color,
+        icon: VENDOR_META[v].icon,
+        items: filtered.filter(m => m.vendor === v)
+      }))
+      .filter(g => g.items.length > 0)
+  }, [available, keyword, vendorFilter])
+
+  const toggleVendor = (vendor: LinduoVendor) => {
+    setVendorFilter(previous => {
+      const next = new Set(previous)
+      if (next.has(vendor)) next.delete(vendor); else next.add(vendor)
+      return next
+    })
+  }
 
   async function pickPreferred(modelId: string | null) {
     setSaving(true)
@@ -125,41 +158,90 @@ export function LinduoPreferenceModal({ onClose, onChanged }: Props) {
         )}
 
         {!loading && available.length > 0 && (
-          <ul className="linduo-preference-list" role="radiogroup" aria-label="选择默认模型">
-            {available.map(m => {
-              const active = m.id === preferred
-              return (
-                <li key={m.id} className={`linduo-preference-row${active ? ' active' : ''}`}>
-                  <label>
-                    <input
-                      type="radio"
-                      name="linduo-preferred"
-                      checked={active}
-                      disabled={saving}
-                      onChange={() => pickPreferred(m.id)}
-                    />
-                    <span className="linduo-picker-name">{m.displayName}</span>
-                    {m.contextLabel && <span className="linduo-picker-ctx">{m.contextLabel}</span>}
-                    <span className={`linduo-picker-vendor vendor-${m.vendor}`}>{m.vendor}</span>
-                    {m.description && <span className="linduo-picker-desc">{m.description}</span>}
-                  </label>
+          <>
+            <div className="linduo-pref-toolbar">
+              <input
+                type="search"
+                className="linduo-pref-search"
+                placeholder="搜索模型名称 / id / 描述"
+                value={keyword}
+                onChange={event => setKeyword(event.target.value)}
+              />
+              <div className="linduo-pref-vendors">
+                {VENDORS.map(vendor => {
+                  const meta = VENDOR_META[vendor]
+                  const active = vendorFilter.has(vendor)
+                  return <button
+                    key={vendor}
+                    type="button"
+                    className={`linduo-pref-vendor-chip${active ? ' active' : ''}`}
+                    style={active ? { color: meta.color, borderColor: meta.color, background: `${meta.color}14` } : undefined}
+                    onClick={() => toggleVendor(vendor)}
+                  >
+                    {meta.label}
+                  </button>
+                })}
+              </div>
+            </div>
+            {grouped.length === 0 && <div className="linduo-picker-empty">没有匹配的模型,请调整搜索或筛选</div>}
+            <ul className="linduo-preference-list" role="radiogroup" aria-label="选择默认模型">
+              {grouped.map(group => (
+                <li key={group.vendor} className="linduo-pref-group">
+                  <div className="linduo-pref-group-head" style={{ color: group.color }}>
+                    <span className="linduo-pref-group-icon" aria-hidden="true">{group.icon}</span>
+                    {group.label}
+                    <em>{group.items.length}</em>
+                  </div>
+                  <ul className="linduo-pref-group-list">
+                    {group.items.map(m => {
+                      const active = m.id === preferred
+                      return (
+                        <li key={m.id} className={`linduo-preference-row${active ? ' active' : ''}`}>
+                          <label>
+                            <input
+                              type="radio"
+                              name="linduo-preferred"
+                              checked={active}
+                              disabled={saving}
+                              onChange={() => pickPreferred(m.id)}
+                            />
+                            <span className="linduo-pref-radio" aria-hidden="true" />
+                            <span className="linduo-pref-main">
+                              <span className="linduo-pref-line1">
+                                <span className="linduo-picker-name">{m.displayName}</span>
+                                {m.contextLabel && <span className="linduo-picker-ctx">{m.contextLabel}</span>}
+                                {active && <span className="linduo-pref-default">默认</span>}
+                              </span>
+                              {m.description && <span className="linduo-picker-desc">{m.description}</span>}
+                            </span>
+                          </label>
+                        </li>
+                      )
+                    })}
+                  </ul>
                 </li>
-              )
-            })}
-            <li className={`linduo-preference-row dashed${preferred === null ? ' active' : ''}`}>
-              <label>
-                <input
-                  type="radio"
-                  name="linduo-preferred"
-                  checked={preferred === null}
-                  disabled={saving}
-                  onChange={() => pickPreferred(null)}
-                />
-                <span className="linduo-picker-name">不使用 Linduo 模型</span>
-                <span className="linduo-picker-desc">回退到 Codex 默认</span>
-              </label>
-            </li>
-          </ul>
+              ))}
+              <li className={`linduo-preference-row dashed${preferred === null ? ' active' : ''}`}>
+                <label>
+                  <input
+                    type="radio"
+                    name="linduo-preferred"
+                    checked={preferred === null}
+                    disabled={saving}
+                    onChange={() => pickPreferred(null)}
+                  />
+                  <span className="linduo-pref-radio" aria-hidden="true" />
+                  <span className="linduo-pref-main">
+                    <span className="linduo-pref-line1">
+                      <span className="linduo-picker-name">不使用 Linduo 模型</span>
+                      {preferred === null && <span className="linduo-pref-default">默认</span>}
+                    </span>
+                    <span className="linduo-picker-desc">回退到 Codex 默认</span>
+                  </span>
+                </label>
+              </li>
+            </ul>
+          </>
         )}
       </div>
       <footer className="linduo-assignment-foot">
