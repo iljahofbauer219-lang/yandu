@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   fetchAllLinduoChatModels,
   fetchLinduoChatModels,
@@ -97,6 +98,12 @@ export function LinduoPreferenceModal({ onClose, onChanged }: Props) {
       .filter(g => g.items.length > 0)
   }, [available, keyword, vendorFilter])
 
+  // 筛选 chips 只展示当前账号可用模型里实际存在的供应商,避免点了出现空列表
+  const presentVendors = useMemo(
+    () => VENDORS.filter(v => available.some(m => m.vendor === v)),
+    [available]
+  )
+
   const toggleVendor = (vendor: LinduoVendor) => {
     setVendorFilter(previous => {
       const next = new Set(previous)
@@ -134,7 +141,9 @@ export function LinduoPreferenceModal({ onClose, onChanged }: Props) {
     }
   }
 
-  return <div className="settings-backdrop linduo-picker-backdrop" role="dialog" aria-modal="true">
+  // portal 到 document.body:AI参谋页把体验区渲染进 ShadowRoot,
+  // 全局样式表无法穿透 shadow boundary,弹窗必须挂在 light DOM 才有样式。
+  return createPortal(<div className="settings-backdrop linduo-picker-backdrop" role="dialog" aria-modal="true">
     <div className="linduo-picker-card linduo-assignment-card">
       <header className="linduo-picker-head">
         <div>
@@ -168,7 +177,7 @@ export function LinduoPreferenceModal({ onClose, onChanged }: Props) {
                 onChange={event => setKeyword(event.target.value)}
               />
               <div className="linduo-pref-vendors">
-                {VENDORS.map(vendor => {
+                {presentVendors.map(vendor => {
                   const meta = VENDOR_META[vendor]
                   const active = vendorFilter.has(vendor)
                   return <button
@@ -264,5 +273,5 @@ export function LinduoPreferenceModal({ onClose, onChanged }: Props) {
         targetUserId={targetUserId}
       />
     )}
-  </div>
+  </div>, document.body)
 }
