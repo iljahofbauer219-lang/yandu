@@ -198,7 +198,7 @@ function MemberRow(props: {
           <button disabled={busy} onClick={() => { setChangingPwd(false); setMessage('') }}>取消</button>
         </> : <>
           <button onClick={() => { setChangingPwd(true); setOldPassword(''); setNewPassword(''); setMessage('') }}>修改密码</button>
-          <span className="member-action-note">OWNER 全开</span>
+          <span className="member-action-note">全部已开放</span>
         </>
       ) : editing ? <>
         <button disabled={busy} onClick={() => void saveEdit()}>保存</button>
