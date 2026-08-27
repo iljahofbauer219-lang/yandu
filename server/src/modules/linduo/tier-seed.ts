@@ -26,16 +26,16 @@ const ADVANCED_DEFAULT_MODEL_IDS = [
 // ─── 公开入口 ───
 
 /** 幂等（spec §4.2）：为全部现存组织逐家种子三组。启动时调用。 */
-export async function seedDefaultLinduoTiers(): Promise<{ orgCount: number; tierCount: number; fullGrants: number }> {
+export async function seedDefaultLinduoTiers(): Promise<{ orgCount: number; tierCount: number; grantsSynced: number }> {
   const orgs = await prisma.organization.findMany({ select: { id: true } })
   let tierCount = 0
-  let fullGrants = 0
+  let grantsSynced = 0
   for (const org of orgs) {
     const result = await ensureOrgDefaultTiers(org.id)
     tierCount += result.tiersCreated
-    fullGrants += result.grantsSynced
+    grantsSynced += result.grantsSynced
   }
-  return { orgCount: orgs.length, tierCount, fullGrants }
+  return { orgCount: orgs.length, tierCount, grantsSynced }
 }
 
 /**
@@ -47,7 +47,7 @@ export async function seedDefaultLinduoTiers(): Promise<{ orgCount: number; tier
  * - OWNER 每次强制进全开组（spec §12，幂等）；
  * - 非 OWNER 仅在组织「首次种子」时回填 null → 进阶组（尊重管理员后续改「无组」）。
  *
- * @returns tiersCreated=本次新建的 tier 数，grantsSynced=本次灌入的 grant 数
+ * @returns tiersCreated=本次新建的 tier 数，grantsSynced=本次灌入的 grant 数（进阶+全开合计）
  */
 export async function ensureOrgDefaultTiers(orgId: string): Promise<{ tiersCreated: number; grantsSynced: number }> {
   const existingTierCount = await prisma.linduoModelTier.count({ where: { orgId } })
@@ -64,6 +64,7 @@ export async function ensureOrgDefaultTiers(orgId: string): Promise<{ tiersCreat
         data: { orgId, key: def.key, name: def.name, description: def.description, isSystem: def.isSystem }
       })
       if (def.key === 'advanced') grantsSynced += await seedAdvancedGrants(tier.id, orgId)
+      if (def.key === 'full') grantsSynced += await syncFullGrants(tier.id, orgId)
       tiersCreated++
     } else {
       await prisma.linduoModelTier.update({

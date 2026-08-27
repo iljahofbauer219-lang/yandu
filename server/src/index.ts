@@ -29,7 +29,7 @@ void (async () => {
     app.log.info({ inserted: syncResult.inserted, updated: syncResult.updated, disabled: syncResult.disabled }, 'Linduo 聊天模型同步完成')
 
     const seedResult = await seedDefaultLinduoTiers()
-    app.log.info({ orgCount: seedResult.orgCount, tierCount: seedResult.tierCount, fullGrants: seedResult.fullGrants }, 'Linduo tier 预置完成')
+    app.log.info({ orgCount: seedResult.orgCount, tierCount: seedResult.tierCount, grantsSynced: seedResult.grantsSynced }, 'Linduo tier 预置完成')
 
     const ownerCount = await assignOwnerLinduoTiers()
     app.log.info({ count: ownerCount }, 'OWNER tier 分配完成')
