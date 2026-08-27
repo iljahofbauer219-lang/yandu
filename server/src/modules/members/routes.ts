@@ -5,6 +5,7 @@ import { httpError } from '../../lib/errors.js'
 import { assertPasswordStrength, hashPassword } from '../../lib/password.js'
 import { prisma } from '../../lib/prisma.js'
 import { OWNER_ROLE_KEY, PERMISSION_CODE_SET } from '../rbac/permissions.js'
+import { assignDefaultTierToNewUser } from '../linduo/tier-seed.js'
 
 const createMemberSchema = z.object({
   email: z.string().trim().regex(/^1\d{10}$/, '手机号格式不正确'),
@@ -127,7 +128,14 @@ export async function memberRoutes(app: FastifyInstance) {
       orgId, userId: request.currentUser.id, action: 'member.create', targetType: 'user', targetId: member.id,
       detail: { email: member.email, name: member.name, roleIds: effectiveRoleIds, permissions: body.permissions, storeIds: body.storeIds }, ip: request.ip
     })
-    return serializeMember(member)
+    // 管理员直接创建的子账号默认进「进阶组」（spec §10 验收 #4）。失败不阻断创建。
+    try {
+      await assignDefaultTierToNewUser(member.id, orgId)
+    } catch (error) {
+      request.log.error({ err: error, memberId: member.id }, 'assignDefaultTierToNewUser failed')
+    }
+    const updated = await prisma.user.findUniqueOrThrow({ where: { id: member.id }, include: memberInclude })
+    return serializeMember(updated)
   })
 
   // 编辑成员（姓名/角色/状态）
@@ -306,6 +314,12 @@ export async function memberRoutes(app: FastifyInstance) {
       orgId, userId: request.currentUser.id, action: 'member.approve', targetType: 'user', targetId: member.id,
       detail: { email: member.email, permissions: validPerms }, ip: request.ip
     })
+    // 新成员默认进「进阶组」（spec §10 验收 #4），管理员可随后调整。失败不阻断审核。
+    try {
+      await assignDefaultTierToNewUser(member.id, orgId)
+    } catch (error) {
+      request.log.error({ err: error, memberId: member.id }, 'assignDefaultTierToNewUser failed')
+    }
     const updated = await prisma.user.findUniqueOrThrow({ where: { id: member.id }, include: memberInclude })
     return serializeMember(updated)
   })

@@ -6,6 +6,7 @@ import { httpError } from '../../lib/errors.js'
 import { assertPasswordStrength, hashPassword, verifyPassword } from '../../lib/password.js'
 import { prisma } from '../../lib/prisma.js'
 import { seedOrgReferenceData } from '../../lib/seed.js'
+import { ensureOrgDefaultTiers } from '../linduo/tier-seed.js'
 import { generateRefreshToken, hashToken } from '../../lib/tokens.js'
 import { PRESET_ROLES } from '../rbac/permissions.js'
 
@@ -143,6 +144,12 @@ export async function authRoutes(app: FastifyInstance) {
       await seedOrgReferenceData(owner.orgId)
     } catch (error) {
       request.log.error({ err: error, orgId: owner.orgId }, 'seedOrgReferenceData failed')
+    }
+    // Linduo 三组种子 + 进阶组默认 13 模型 + OWNER 进全开组（spec §4.2/§12）。幂等，失败不阻断注册。
+    try {
+      await ensureOrgDefaultTiers(owner.orgId)
+    } catch (error) {
+      request.log.error({ err: error, orgId: owner.orgId }, 'ensureOrgDefaultTiers failed')
     }
     const tokens = await issueTokens(app, owner.id, owner.orgId, { ip: request.ip, userAgent: request.headers['user-agent'] })
     return reply.status(200).send({ tokens, user: await loadProfile(owner.id) })
