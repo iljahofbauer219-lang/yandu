@@ -16,7 +16,7 @@ tmp-verify-models/
 .tools/**/.venv/
 .tools/python-official-expanded-3119/
 .tools/python-watch-312/
-.tools/watch-skill/vision-ocr
+.tools/watch-skill/
 output/resource2skill-input/
 output/playwright/resource2skill/
 output/playwright/watch-skill/
