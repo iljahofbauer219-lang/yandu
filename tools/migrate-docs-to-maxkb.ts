@@ -14,8 +14,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const REPORT_FILE = path.join(__dirname, 'migrate-docs-to-maxkb-report.json')
 
-const PASSWORD = process.env.MAXKB_ADMIN_PASSWORD || ''
-
 // ─── 1. 加载 .env ───────────────────────────────────────────
 async function loadEnv() {
   const envRaw = await fsp.readFile(path.join(ROOT, '.env.local'), 'utf8')
@@ -58,7 +56,7 @@ async function main() {
   // ─── 3. 登录 admin ─────────────────────────────────────
   const loginRes = await fetch(`${BASE}/admin/api/user/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'admin', password: PASSWORD })
+    body: JSON.stringify({ username: 'admin', password: env.MAXKB_ADMIN_PASSWORD || '' })
   })
   const ADMIN_TOKEN = (await loginRes.json()).data.token
   const H = { Authorization: `Bearer ${ADMIN_TOKEN}` }

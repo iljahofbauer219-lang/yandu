@@ -14,7 +14,6 @@ import { fileURLToPath } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const REPORT_FILE = path.join(__dirname, 'verify-stage2-regression-report.json')
-const PASSWORD = process.env.MAXKB_ADMIN_PASSWORD || ''
 
 async function loadEnv() {
   const envRaw = await fsp.readFile(path.join(ROOT, '.env.local'), 'utf8')
@@ -35,7 +34,7 @@ async function main() {
   const env = await loadEnv()
   const BASE = env.MAXKB_BASE_URL
   const KBS = env.MAXKB_KNOWLEDGE_DATASETS.split(',')
-  const PWD_BUF = Buffer.from(PASSWORD, 'utf8')
+  const PWD_BUF = Buffer.from(env.MAXKB_ADMIN_PASSWORD || '', 'utf8')
   // 关键：把 .env 注入到 process.env，否则 MaxkbKnowledgeService.baseUrl() / datasets() 拿不到配置，
   // graph rebuild 会 catch 静默"未配置 MAXKB_BASE_URL"，最终 build 出 0 docs 索引。
   process.env.MAXKB_BASE_URL = env.MAXKB_BASE_URL

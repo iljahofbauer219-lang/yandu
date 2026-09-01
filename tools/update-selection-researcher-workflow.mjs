@@ -288,7 +288,7 @@ async function main() {
 
   const loginRes = await fetch(`${BASE}/admin/api/user/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'admin', password: process.env.MAXKB_ADMIN_PASSWORD || '' })
+    body: JSON.stringify({ username: 'admin', password: env.MAXKB_ADMIN_PASSWORD || '' })
   })
   const TOKEN = (await loginRes.json())?.data?.token
   if (!TOKEN) { console.error('FAIL: admin 登录失败'); process.exit(1) }
