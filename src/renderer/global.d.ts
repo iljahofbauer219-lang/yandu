@@ -112,8 +112,10 @@ declare global {
         onRunEvent(callback: (event: GuardianRunEvent) => void): () => void
       }
       aiEmployee: {
-        ask(request: AiEmployeeAskRequest): Promise<{ ok: boolean; content: string }>
-        models(): Promise<AiEmployeeChatModelProfile[]>
+        ask(request: AiEmployeeAskRequest & { requestId?: string }): Promise<{ ok: boolean; content: string }>
+        // 三件套护栏：渲染端主动取消进行中的 ask（命中主进程 activeChats 并 abort 上游 fetch）
+        cancelAsk(requestId: string): Promise<boolean>
+        models(position?: string): Promise<AiEmployeeChatModelProfile[]>
         pickAttachments(): Promise<AiEmployeePickResult>
         materializeMarkdownReport(content: string): Promise<{ content: string; materialized: boolean }>
         browserShow(bounds: BrowserBounds): Promise<void>
@@ -390,8 +392,63 @@ declare global {
         openCredentialLogin(accountId: string, platformCode: string): Promise<string>
         fillCredential(accountId: string, submit?: boolean): Promise<{ usernameFilled:boolean; passwordFilled:boolean; submitted:boolean; verificationRequired:boolean; url:string }>
       }
+      articleCrawler: {
+        status(): Promise<ArticleCrawlerStatus>
+        start(): Promise<ArticleCrawlerStatus>
+        stop(): Promise<ArticleCrawlerStatus>
+        getConfig(): Promise<ArticleCrawlerConfig>
+        saveConfig(input: Partial<ArticleCrawlerConfig>): Promise<ArticleCrawlerConfig>
+        pickInstallPath(): Promise<string | null>
+        openInstallDir(): Promise<void>
+        openDataDir(): Promise<void>
+        listArticles(): Promise<ArticleCrawlerSummary[]>
+        extract(url: string): Promise<ArticleCrawlerSummary>
+        importToKnowledge(request: { kbId?: string; filePaths: string[]; category?: string }): Promise<ArticleCrawlerImportResult>
+      }
     }
   }
+}
+
+export type ArticleCrawlerServiceState = 'STOPPED' | 'STARTING' | 'RUNNING' | 'START_FAILED'
+
+export interface ArticleCrawlerConfig {
+  installPath: string
+  webUiUrl: string
+  dataDir: string
+  autoStart: boolean
+}
+
+export interface ArticleCrawlerStatus {
+  state: ArticleCrawlerServiceState
+  config: ArticleCrawlerConfig
+  dockerAvailable: boolean
+  dockerComposeAvailable: boolean
+  installPathValid: boolean
+  dataDirValid: boolean
+  webUiReachable: boolean
+  message: string
+  lastCheckedAt: string
+}
+
+export interface ArticleCrawlerSummary {
+  fileName: string
+  filePath: string
+  platform: string
+  title: string
+  url: string
+  author: string
+  publishTime: string
+  sizeBytes: number
+  charCount: number
+  content: string
+  format: 'markdown' | 'json'
+}
+
+export interface ArticleCrawlerImportResult {
+  kbId: string
+  kbName: string
+  uploaded: Array<{ fileName: string; docId: string }>
+  failed: Array<{ fileName: string; error: string }>
 }
 
 export {}

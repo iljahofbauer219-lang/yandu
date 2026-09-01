@@ -43,7 +43,7 @@ if (!BASE || !DATASETS.length) {
 const loginRes = await fetch(`${BASE}/admin/api/user/login`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ username: 'admin', password: 'zq2525063' })
+  body: JSON.stringify({ username: 'admin', password: process.env.MAXKB_ADMIN_PASSWORD || '' })
 })
 if (!loginRes.ok) {
   console.error(`FAIL: admin 登录 HTTP ${loginRes.status}`)

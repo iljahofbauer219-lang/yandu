@@ -15,6 +15,7 @@ export default function AiEmployeeModelPicker({ models, selectedId, onSelect }: 
   const rootRef = useRef<HTMLDivElement>(null)
   const selected = models.find(item => item.id === selectedId)
   const customized = !!selected && selectedId !== DEFAULT_MODEL_ID
+  const isEmpty = models.length === 0
 
   useEffect(() => {
     if (!open) return
@@ -36,7 +37,7 @@ export default function AiEmployeeModelPicker({ models, selectedId, onSelect }: 
     <div className="ai-employee-model-picker" ref={rootRef}>
       {open && (
         <div className="ai-employee-model-menu" role="menu" aria-label="选择大模型">
-          {models.length === 0 && <span className="ai-employee-model-menu-empty">模型加载中…</span>}
+          {isEmpty && <span className="ai-employee-model-menu-empty">该岗位模型未配置</span>}
           {models.map(model => (
             <button
               key={model.id}
@@ -54,13 +55,15 @@ export default function AiEmployeeModelPicker({ models, selectedId, onSelect }: 
       )}
       <button
         type="button"
-        className={`ai-employee-model-trigger${customized ? ' custom' : ''}`}
+        className={`ai-employee-model-trigger${customized ? ' custom' : ''}${isEmpty ? ' empty' : ''}`}
         aria-haspopup="menu"
         aria-expanded={open}
-        title="选择大模型"
-        onClick={() => setOpen(current => !current)}
+        aria-disabled={isEmpty}
+        disabled={isEmpty}
+        title={isEmpty ? '该岗位模型未配置' : '选择大模型'}
+        onClick={isEmpty ? undefined : () => setOpen(current => !current)}
       >
-        {selected?.name || '选择模型'} ▾
+        {isEmpty ? '模型未配置' : (selected?.name || '选择模型')} ▾
       </button>
     </div>
   )

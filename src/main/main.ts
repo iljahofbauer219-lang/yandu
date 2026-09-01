@@ -33,6 +33,7 @@ import type { KbAgentKey } from './services/MaxkbKnowledgeService'
 import { KbGuardianService } from './services/KbGuardianService'
 import { SampleLibraryKbIngestor } from './services/SampleLibraryKbIngestor'
 import { SampleLibraryKbGuardianLauncher, buildSampleLibraryCategoryResolver } from './services/SampleLibraryKbGuardianLauncher'
+import { ArticleCrawlerService } from './services/ArticleCrawlerService'
 import type { GuardianSkillInput } from '../shared/kbGuardian'
 import type { AmazonDataSourceSearchResult } from '../shared/amazonScraper'
 import { describeOmkarCloudError } from '../shared/omkarCloud'
@@ -267,6 +268,8 @@ const aiEmployeeChatService = new AiEmployeeChatService()
 // - .env.local 的 MAXKB_* 变量由 .vite 注入后即可使用
 // - 阶段 5 完成 RAGFlow 残留全部清洗（llm-keys:list / preset-language 通道已删除）
 const maxkbKnowledgeService = new MaxkbKnowledgeService()
+const articleCrawlerService = new ArticleCrawlerService()
+void articleCrawlerService.load().catch(error => console.warn('[article-crawler] 初始化失败：', (error as Error).message))
 const kbGuardianService = new KbGuardianService(maxkbKnowledgeService, event => shellWebContents?.send('kbGuardian:run-event', event))
 // I.2 阶段新增：注入报告样例库的文件名→分类映射器（按文件名走不同分类）
 kbGuardianService.setCategoryResolver(buildSampleLibraryCategoryResolver())
@@ -1795,9 +1798,12 @@ ipcMain.handle('browser:1688-search-url', (_event, keyword: string) => {
   return create1688SearchUrl(keyword)
 })
 // ---------- AI员工：MaxKB 智能体调用 + 附件/大模型路由（AiEmployeeChatService）+ 内嵌浏览器（与 Chrome 扩展同链路） ----------
-ipcMain.handle('ai-employee:ask', (event, request: AiEmployeeAskRequest) => {
+ipcMain.handle('ai-employee:ask', (event, request: AiEmployeeAskRequest & { requestId?: string }) => {
   // P2 阶段:把内部 ExecutionEvent 透传到渲染端 ExecutionPanel
-  const requestId = `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+  // requestId 由渲染端生成并复用（用于 cancelAsk）。若渲染端未提供则主进程兜底生成。
+  const requestId = (typeof request?.requestId === 'string' && request.requestId.trim())
+    ? request.requestId.trim()
+    : `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
   const sender = event.sender
   return aiEmployeeChatService.chat(request, {
     requestId,
@@ -1808,7 +1814,13 @@ ipcMain.handle('ai-employee:ask', (event, request: AiEmployeeAskRequest) => {
     }
   })
 })
-ipcMain.handle('ai-employee:chat-models', () => aiEmployeeChatService.listModels())
+// 渲染端主动取消进行中的 ask：命中 activeChats 中的 controller 并 abort。
+// 不阻塞 UI；返回值仅表示是否命中（false = 该 requestId 已完成或不存在）。
+ipcMain.handle('ai-employee:cancel-ask', (_event, requestId: string) => {
+  if (typeof requestId !== 'string' || !requestId) return false
+  return aiEmployeeChatService.cancelChat(requestId, 'user-cancel')
+})
+ipcMain.handle('ai-employee:chat-models', (_event, position?: string) => aiEmployeeChatService.listModels(position))
 ipcMain.handle('ai-employee:pick-attachments', () => aiEmployeeChatService.pickAttachments())
 ipcMain.handle('ai-employee:materialize-markdown-report', (_event, content: string) => materializeGeneratedMarkdownReply(content))
 ipcMain.handle('ai-employee:browser:show', (_event, bounds: BrowserBounds) => workspace?.showAiEmployeeBrowser(bounds))
@@ -2204,6 +2216,24 @@ ipcMain.handle('kb:doc-assign', (_event, request: { kbId: string; docIds: string
 ipcMain.handle('kb:parse', (_event, request: { kbId: string; docIds: string[] }) => maxkbKnowledgeService.parseDocs(request.kbId, request.docIds))
 ipcMain.handle('kb:stop-parse', (_event, request: { kbId: string; docIds: string[] }) => maxkbKnowledgeService.stopParse(request.kbId, request.docIds))
 ipcMain.handle('kb:delete-docs', (_event, request: { kbId: string; docIds: string[] }) => maxkbKnowledgeService.deleteDocs(request.kbId, request.docIds))
+// ---------- 文章抓取（NewsCrawler 集成）：Docker 启停 + 抓取记录 + 同步 MaxKB ----------
+ipcMain.handle('article-crawler:status', () => articleCrawlerService.status())
+ipcMain.handle('article-crawler:start', () => articleCrawlerService.start())
+ipcMain.handle('article-crawler:stop', () => articleCrawlerService.stop())
+ipcMain.handle('article-crawler:config:get', () => articleCrawlerService.getConfig())
+ipcMain.handle('article-crawler:config:save', (_event, input: Partial<{ installPath: string; webUiUrl: string; dataDir: string; autoStart: boolean }>) => articleCrawlerService.saveConfig(input || {}))
+ipcMain.handle('article-crawler:pick-install-path', () => articleCrawlerService.pickInstallPath())
+ipcMain.handle('article-crawler:open-install-dir', () => articleCrawlerService.openInstallDir())
+ipcMain.handle('article-crawler:open-data-dir', () => articleCrawlerService.openDataDir())
+ipcMain.handle('article-crawler:list-articles', () => articleCrawlerService.listArticles())
+ipcMain.handle('article-crawler:extract', async (_event, url: string) => {
+  if (typeof url !== 'string' || !/^https?:\/\//.test(url)) throw new Error('请输入 http(s) 链接')
+  return articleCrawlerService.extractByUrl(url)
+})
+ipcMain.handle('article-crawler:import', async (_event, request: { kbId?: string; filePaths: string[]; category?: string }) => {
+  if (!request || !Array.isArray(request.filePaths) || !request.filePaths.length) throw new Error('请选择至少一篇文章')
+  return articleCrawlerService.importToKnowledge({ kbId: request.kbId, filePaths: request.filePaths, category: request.category })
+})
 // ---------- 阶段 2.4：GraphRAG 集成（取代原 GraphRAG）----------
 ipcMain.handle('kb:graph-stats', () => maxkbKnowledgeService.graphStats())
 ipcMain.handle('kb:graph-expand', (_event, request: { query: string; topK?: number; hops?: number }) => maxkbKnowledgeService.graphExpand(request.query, { topK: request.topK, hops: request.hops }))

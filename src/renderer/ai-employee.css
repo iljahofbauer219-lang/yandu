@@ -108,6 +108,12 @@
   padding-bottom: 24px;
 }
 
+/* process 状态有消息时,floating-composer fixed 浮在底部需要约 200px 高度。
+   22px 基础 + 200px 额外 = 224px,保证最后一条消息不被遮挡且可滚动到底。 */
+.ai-employee-stage-process.with-floating-composer {
+  padding-bottom: 224px;
+}
+
 /* 空态：问候语 + 示例 chips */
 .ai-employee-greeting {
   display: flex;
@@ -796,13 +802,21 @@
 .ai-employee-browser-empty button { margin-top: 8px; padding: 10px 24px; font-size: 12px; }
 
 /* ─── 浮动输入栏 ────────────────────────────── */
+/* 修复:之前 floating-composer 是 .ai-employee-page 的 flex child (flex:none),
+   高度可达 800-1000px (extracted 展开时),把 .ai-employee-stage 挤压到几乎 0,
+   导致 stage 内的 messages 列表 (user 消息 + assistant 报告) 被裁切不可见。
+   改为 position: fixed 让它脱离 flow,stage 始终占满剩余高度。
+   宽度仍由 --ai-employee-content-width 控制,配合 transform 居中。 */
 .ai-employee-floating-composer {
-  flex: none;
-  min-height: 0;
-  max-height: calc(100% - 28px);
-  box-sizing: border-box;
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  z-index: 50;
+  transform: translateX(-50%);
   width: min(var(--ai-employee-content-width), calc(100% - 62px));
-  margin: 0 auto 16px;
+  max-height: calc(100% - 32px);
+  box-sizing: border-box;
+  margin: 0;
   background: var(--panel);
   border: 1px solid var(--border-soft);
   border-radius: 18px;
@@ -1350,6 +1364,22 @@
   flex: none;
 }
 
+/* 三件套护栏：发送中按钮变为「取消（Xs）」——危险色 + 轻动效，避免「思考中…」无反馈。 */
+.ai-employee-send-btn.cancel {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  animation: ai-employee-cancel-pulse 1.6s ease-in-out infinite;
+}
+.ai-employee-send-btn.cancel:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+@keyframes ai-employee-cancel-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.18); }
+  50%      { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+}
+
 .ai-employee-quick-actions button[data-tip] {
   position: relative;
 }
@@ -1517,6 +1547,16 @@
 .ai-employee-model-trigger.custom {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+.ai-employee-model-trigger.empty,
+.ai-employee-model-trigger.empty:hover,
+.ai-employee-model-trigger.empty[aria-expanded='true'] {
+  color: var(--text-muted);
+  background: var(--bg-soft);
+  border-color: var(--border-soft);
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .ai-employee-model-menu {
@@ -1706,9 +1746,9 @@
   min-height: 0;
 }
 
-.ai-employee-home-main .ai-employee-floating-composer {
-  width: 100%;
-  margin: 0;
+/* home 状态: stage-process 仅显示问候语 + WorkbenchSkillConfig,无消息流,无需 padding-bottom。 */
+.ai-employee-stage-process:not(.with-floating-composer) {
+  padding-bottom: 24px;
 }
 
 /* ═════════════════════════════════════════════════════════════
@@ -1955,192 +1995,139 @@
 .ai-employee-hub-scenes { padding-top: 14px; }
 .ai-employee-hub-best { padding-bottom: 24px; }
 
-/* ══ AgentAccordion 手风琴 ═══════════════════════════ */
-.agent-accordion {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.agent-accordion-category {
-  border: 1px solid var(--border-soft);
-  border-radius: 12px;
-  background: var(--panel);
-  overflow: hidden;
-  transition: border-color .15s ease, box-shadow .15s ease;
-}
-
-.agent-accordion-category.open {
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--border-soft));
-  box-shadow: 0 2px 10px rgba(15, 23, 42, .04);
-}
-
-.agent-accordion-header {
-  display: flex;
+/* ══ CrossborderAgents 跨境智能体（部门分组卡片） ═══════ */
+.ai-employee-hub-agents {
+  flex: none;
+  max-width: 1180px;
   width: 100%;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 0;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  transition: background .15s ease;
+  margin: 0 auto;
+  padding: 14px 24px 8px;
 }
 
-.agent-accordion-header:hover { background: var(--bg-soft); }
+.crossborder-dept-group + .crossborder-dept-group { margin-top: 18px; }
 
-.agent-accordion-icon {
-  flex: none;
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
-  color: #fff;
-  font-size: 18px;
-  font-style: normal;
-}
-
-.agent-accordion-title {
-  flex: 1;
-  min-width: 0;
-}
-
-.agent-accordion-title b {
-  display: block;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1.2;
-}
-
-.agent-accordion-title small {
-  display: block;
-  margin-top: 2px;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.agent-accordion-chevron {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  color: var(--text-muted);
-  transition: transform .18s ease;
-}
-
-.agent-accordion-chevron.open { transform: rotate(180deg); color: var(--accent); }
-
-.agent-accordion-body {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 10px;
-  padding: 0 14px 14px;
-  border-top: 1px solid var(--border-soft);
-  background: color-mix(in srgb, var(--bg-soft) 60%, var(--panel));
-}
-
-/* 二级员工卡片 */
-.agent-card {
+.crossborder-dept-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 11px 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: 10px;
-  background: var(--panel);
-  text-align: left;
-  cursor: pointer;
-  transition: all .15s ease;
+  gap: 8px;
+  margin: 0 0 10px;
 }
 
-.agent-card:hover:not(.disabled):not(.selected) {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--border-soft));
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 10%, transparent);
+.crossborder-dept-bar {
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
 }
 
-.agent-card.selected {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  box-shadow: 0 0 0 1px var(--accent);
-}
-
-.agent-card.disabled {
-  opacity: .5;
-  cursor: not-allowed;
-}
-
-.agent-card-icon {
-  flex: none;
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
-  color: #fff;
-  font-size: 16px;
-  font-style: normal;
-}
-
-.agent-card-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.agent-card-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 2px;
-}
-
-.agent-card-title b {
+.crossborder-dept-header b {
   font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.agent-card-body small {
-  display: block;
+.crossborder-dept-header small {
   color: var(--text-muted);
   font-size: 11px;
-  line-height: 1.4;
 }
 
-/* readiness 状态徽标 */
-.agent-readiness {
-  display: inline-block;
-  padding: 1px 7px;
+.crossborder-agent-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+/* 卡片横排：左部圆标 + 右部文字（14px 圆角 / 48px 圆标 / 13px 标题 / 11px 副标） */
+.crossborder-agent-card {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--panel);
+  text-align: left;
+  cursor: pointer;
+  transition: all .18s ease;
+}
+
+.crossborder-agent-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-soft));
+  box-shadow: 0 6px 18px rgba(15, 23, 42, .08);
+}
+
+.crossborder-agent-card.coming { cursor: not-allowed; }
+
+.crossborder-agent-card.coming:hover {
+  transform: none;
+  border-color: var(--border-soft);
+  box-shadow: none;
+}
+
+.crossborder-agent-card.coming .crossborder-agent-icon,
+.crossborder-agent-card.coming b,
+.crossborder-agent-card.coming small { opacity: .55; }
+
+.crossborder-agent-icon {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 20px;
+  font-style: normal;
+}
+
+.crossborder-agent-icon > span {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  line-height: 1;
+}
+
+.crossborder-agent-card b {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.crossborder-agent-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.crossborder-agent-card small {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.crossborder-agent-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 8px;
   border-radius: 999px;
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .2px;
-  flex: none;
+  font-weight: 600;
 }
 
-.agent-readiness-live {
-  color: #047857;
-  background: #d1fae5;
-  border: 1px solid #a7e3c0;
+.crossborder-agent-badge.live {
+  color: var(--accent-contrast);
+  background: var(--accent-soft);
 }
 
-.agent-readiness-beta {
-  color: #6d28d9;
-  background: #ede9fe;
-  border: 1px solid #c4b5fd;
-}
-
-.agent-readiness-coming-soon {
-  color: var(--text-muted);
-  background: var(--bg-soft);
-  border: 1px solid var(--border-soft);
+.crossborder-agent-badge.soon {
+  color: #8a8f94;
+  background: #f1f2f4;
 }
 
 /* ══ SceneEntry 场景入口 ═════════════════════════════ */
@@ -3505,6 +3492,9 @@
   }
   .scene-entry-grid {
     grid-template-columns: repeat(3, 1fr);
+  }
+  .crossborder-agent-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
   .best-practice-grid {
     grid-template-columns: 1fr;

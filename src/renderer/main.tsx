@@ -16,6 +16,7 @@ import './ui-readability.css'
 import './theme-dark.css'
 import './ui/migrations.css'
 import './ui/phase4.css'
+import './crawler.css'
 
 class RootRenderBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false }

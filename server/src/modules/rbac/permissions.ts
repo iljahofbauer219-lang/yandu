@@ -37,6 +37,7 @@ export const PERMISSIONS = [
   'menu.hq.feishu',
   'menu.hq.vpn',
   'menu.hq.crossborder',
+  'menu.hq.crawler',
   'menu.hq.admin',
   // 阶段：左侧栏重排新增的三个占位入口（尚不执行业务代码）
   'menu.cb-news',
@@ -86,6 +87,7 @@ export const PERMISSION_LABELS: Record<PermissionCode, string> = {
   'menu.hq.feishu': 'AI总部·AI飞书',
   'menu.hq.vpn': 'AI总部·翻墙管理',
   'menu.hq.crossborder': 'AI总部·跨境导航',
+  'menu.hq.crawler': 'AI总部·文章抓取',
   'menu.hq.admin': 'AI总部·系统管理',
   'menu.cb-news': 'CB资讯',
   'menu.ie-browser': 'IE浏览',

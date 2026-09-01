@@ -23,6 +23,11 @@ const RAGFLOW_LISTING_AGENT_ID = 'a80d0348932d11f1b36bf39ef484774d'
 // MaxKB v2.10.5-lts CE application 路由表（5 个 application）
 // 启用 Maxkb 智体调用 secret_key 直接 Bearer，不再依赖 /chat/api/auth/anonymous
 const MAXKB_AMAZON_SKILLS_APPLICATION_ID = '01a005f0-a471-7403-9d78-8702d5765816'
+// ── 选品调研员Agent（父智能体，高级工作流：六部分 11 表）──
+// 注意：父智能体只接受 access_token 走公共频道 SSE（/chat/api/auth/anonymous → /chat/api/open → /chat/api/chat_message/{chatId}），
+// secret_key 调 /chat/api/{app}/chat/completions 会返回 1002 身份验证失败。
+// 因此桌面端默认走 maxkbPublicChat 协议，子智能体（01a005f0）作为手动切换的备用通道。
+const MAXKB_SELECTION_RESEARCHER_APPLICATION_ID = '01a043e0-d19b-7f20-8420-cfe8dad604a0'
 const MAXKB_SOURCING_APPLICATION_ID = '01a02f8c-66d2-7803-b02b-e67d1cc6e02b'
 const MAXKB_LISTING_APPLICATION_ID = '01a02f8c-917e-7232-b62f-f087f70af6b2'
 const MAXKB_GUARDIAN_APPLICATION_ID = '01a02f8c-9210-7ec1-902b-87e07315ba57'
@@ -182,24 +187,56 @@ function parseInferenceJson(raw: string): { differentiation: string; compliance:
 }
 
 export class AiEmployeeChatService {
+  // ─── 进行中请求跟踪：供 ai-employee:cancel-ask IPC 主动中断上游 fetch ─────────
+  // requestId → AbortController；set on enter, delete on finally.
+  // 上游连接被 abort 后，本方法 Promise 异常退出，渲染端 catching 路径会重置 sending 状态。
+  private readonly activeChats = new Map<string, AbortController>()
+
+  /** 主进程主动中断某次 in-flight chat；返回是否命中并 abort。 */
+  cancelChat(requestId: string, reason: string = 'user-cancel'): boolean {
+    const controller = this.activeChats.get(requestId)
+    if (!controller) return false
+    try { controller.abort(reason) } catch { /* already aborted */ }
+    return true
+  }
+
   // ─── 模型目录（v1 静态注册表） ─────────────────────────────────────────────
-  listModels(): AiEmployeeChatModelProfile[] {
+  // 按岗位白名单过滤：每个工作台只暴露一个对应模型（其余的 9 个去杂隐藏）。
+  // - 选品调研员 → 选品调研员Agent（父智能体，已配置）
+  // - Listing精造师 → Listing 精造师（MaxKB）子智能体（待日后配置父智能体后改）
+  // - 知识库守卫 → 通义千问 3.6 Flash 直连（待日后配置父智能体后改）
+  // - 竞品分析员/产品定价员/类目优选员：ready:false 不在白名单 → 返回 []
+  // 注意：自动回退链（父智能体 → 子智能体 → RAGFlow）仍由 chat() 内部完成，
+  // 不在 UI 暴露（符合「简洁」诉求）。
+  private static readonly POSITION_MODEL_WHITELIST: Record<string, readonly string[]> = {
+    '选品调研员': ['amazon-skills-agent'],
+    'Listing精造师': ['maxkb-listing'],
+    '知识库守卫': ['qwen3.6-flash']
+  }
+
+  listModels(position?: string): AiEmployeeChatModelProfile[] {
     const hasBailian = Boolean(process.env.BAILIAN_API_KEY)
     const hasDeepseek = Boolean(process.env.DEEPSEEK_API_KEY)
+    const hasSelectionResearcher = Boolean(process.env.MAXKB_SELECTION_RESEARCHER_TOKEN)
     const hasMaxkbSourcing = Boolean(process.env.MAXKB_SOURCING_TOKEN)
     const hasMaxkbListing = Boolean(process.env.MAXKB_LISTING_TOKEN)
     const hasMaxkbGuardian = Boolean(process.env.MAXKB_GUARDIAN_TOKEN)
-    return [
-      { id: 'amazon-skills-agent', name: '选品分析师（Amazon-Skills）', hint: '默认智能体 · Amazon 运营 Skills', provider: 'maxkb', supportsVision: false, available: Boolean(process.env.MAXKB_AMAZON_SKILLS_TOKEN) },
-      { id: 'maxkb-sourcing', name: '选品分析师（MaxKB）', hint: '选品评估 · 含跨境运营知识库', provider: 'maxkb', supportsVision: false, available: hasMaxkbSourcing },
+    const all: AiEmployeeChatModelProfile[] = [
+      // 默认走选品调研员Agent（高级父智能体，六部分 11 表），对齐记忆选品调研员命名
+      { id: 'amazon-skills-agent', name: '选品调研员Agent', hint: '默认智能体 · 高级工作流 · 六部分 11 表', provider: 'maxkb', supportsVision: false, available: hasSelectionResearcher },
+      { id: 'maxkb-sourcing', name: '选品调研员（MaxKB）', hint: '选品评估 · 含跨境运营知识库', provider: 'maxkb', supportsVision: false, available: hasMaxkbSourcing },
       { id: 'maxkb-listing', name: 'Listing 精造师（MaxKB）', hint: '多平台 Listing 文案 · 六段长文', provider: 'maxkb', supportsVision: false, available: hasMaxkbListing },
       { id: 'maxkb-guardian', name: '知识库守卫（MaxKB）', hint: 'KB 状态监控 · 补充 · 重平衡', provider: 'maxkb', supportsVision: false, available: hasMaxkbGuardian },
-      { id: 'ragflow-agent', name: '选品分析师（RAGFlow·30天回退）', hint: '30天兼容回退 · 2026-09-23 停服', provider: 'ragflow', supportsVision: false, available: Boolean(process.env.RAGFLOW_FALLBACK_ENABLED === 'true' && process.env.RAGFLOW_API_KEY) },
+      { id: 'ragflow-agent', name: '选品调研员（RAGFlow·30天回退）', hint: '30天兼容回退 · 2026-09-23 停服', provider: 'ragflow', supportsVision: false, available: Boolean(process.env.RAGFLOW_FALLBACK_ENABLED === 'true' && process.env.RAGFLOW_API_KEY) },
       { id: 'listing-agent', name: 'Listing精造师（RAGFlow·30天回退）', hint: '30天兼容回退 · 2026-09-23 停服', provider: 'ragflow', supportsVision: false, available: Boolean(process.env.RAGFLOW_FALLBACK_ENABLED === 'true' && process.env.RAGFLOW_API_KEY) },
       { id: 'qwen3.6-flash', name: '通义千问 3.6 Flash', hint: '直连 · 支持图片理解', provider: 'bailian', supportsVision: true, available: hasBailian },
       { id: 'qwen-plus', name: '通义千问 Plus', hint: '直连 · 长文本', provider: 'bailian', supportsVision: false, available: hasBailian },
       { id: 'deepseek-chat', name: 'DeepSeek Chat', hint: '直连 · 推理强', provider: 'deepseek', supportsVision: false, available: hasDeepseek }
     ]
+    if (!position) return all
+    const whitelist = AiEmployeeChatService.POSITION_MODEL_WHITELIST[position]
+    if (!whitelist || whitelist.length === 0) return []
+    return all.filter(model => whitelist.includes(model.id))
   }
 
   // ─── 附件选择与预处理 ─────────────────────────────────────────────────────
@@ -326,12 +363,19 @@ export class AiEmployeeChatService {
   }
 
   // ─── 对话路由 ──────────────────────────────────────────────────────────────
-  async chat(request: AiEmployeeAskRequest, options?: { onEvent?: ExecutionEventHandler; requestId?: string }): Promise<{ ok: true; content: string }> {
+  async chat(request: AiEmployeeAskRequest, options?: { onEvent?: ExecutionEventHandler; requestId?: string; signal?: AbortSignal }): Promise<{ ok: true; content: string }> {
     const emit = (event: Omit<ExecutionEvent, 'requestId' | 'at'>) => {
       try { options?.onEvent?.({ ...event, requestId: options.requestId || 'unknown', at: Date.now() }) } catch { /* ignore handler errors */ }
     }
     const startedAt = Date.now()
     emit({ type: 'queued', label: '已接收任务' })
+    // 上游中止控制器：渲染端 cancel-ask 调 cancelChat() 时此 controller 被 abort，
+    // 所有子 fetch 都会因 signal abort 报错跳出。主进程 chat() Promise reject 后，
+    // IPC 会把 AbortError 回传渲染端，send() 的 catch 重置 sending 状态。
+    const upstreamController = new AbortController()
+    const onExternalAbort = () => upstreamController.abort()
+    if (options?.signal) options.signal.addEventListener('abort', onExternalAbort)
+    if (options?.requestId) this.activeChats.set(options.requestId, upstreamController)
     const attachments = request.attachments || []
     const docs = attachments.filter(item => item.kind === 'doc')
     const images = attachments.filter(item => item.kind === 'image' && item.dataUrl)
@@ -350,32 +394,44 @@ export class AiEmployeeChatService {
     }
 
     try {
-      // 默认（空 / amazon-skills-agent）路径
+      // 默认（空 / amazon-skills-agent）路径：优先调选品调研员Agent（高级父智能体，六部分 11 表），
+      // 失败回退到 Amazon-Skills 子智能体（01a0050-...），最后回退 RAGFlow 30 天窗。
       if (!modelId || modelId === 'amazon-skills-agent') {
         emit({ type: 'analyzing', label: '解析图片与路由' })
         const descriptionBlocks = await this.describeImages(images)
         const content = withKbReference([request.query, ...docBlocks, ...descriptionBlocks].join('\n\n'))
         try {
-          emit({ type: 'reasoning', label: 'Amazon-Skills 智能体推理' })
-          const result = await this.maxkbChat(request, content, MAXKB_AMAZON_SKILLS_APPLICATION_ID)
+          emit({ type: 'reasoning', label: '选品调研员Agent 推理（高级工作流）' })
+          const result = await this.maxkbPublicChat(request, content, undefined, upstreamController.signal)
           emit({ type: 'finalizing', label: '渲染报告' })
           finish('success')
           return result
         }
-        catch (error) {
-          if (process.env.RAGFLOW_FALLBACK_ENABLED === 'true') {
-            const fallback = await this.ragflowChat(request, content)
-            const result = { ok: true as const, content: `⚠️ Amazon-Skills 暂不可用，已切换 RAGFlow 30天回退分析通道。\n\n${fallback.content}` }
+        catch (parentError) {
+          // 回退1：Amazon-Skills 子智能体（手动备用通道）
+          try {
+            emit({ type: 'reasoning', label: 'Amazon-Skills 备用通道' })
+            const result = await this.maxkbChat(request, content, MAXKB_AMAZON_SKILLS_APPLICATION_ID, CHAT_TIMEOUT_MS, undefined, upstreamController.signal)
+            emit({ type: 'finalizing', label: '渲染报告' })
             finish('success')
             return result
           }
-          throw error
+          catch (subError) {
+            // 回退2：RAGFlow 30天回退（2026-09-23 停服）
+            if (process.env.RAGFLOW_FALLBACK_ENABLED === 'true') {
+              const fallback = await this.ragflowChat(request, content, CHAT_TIMEOUT_MS, upstreamController.signal)
+              const result = { ok: true as const, content: `⚠️ MaxKB 选品调研员暂不可用，已切换 RAGFlow 30天回退分析通道。\n\n${fallback.content}` }
+              finish('success')
+              return result
+            }
+            throw subError instanceof Error ? subError : new Error(parentError instanceof Error ? parentError.message : '选品调研员调用失败')
+          }
         }
       }
 
       // MaxKB 多应用路由（v2.10.5-lts 阶段 1.4 启用）
       const maxkbRoute: Record<string, { appId: string; label: string; timeoutMs: number; tokenEnv: string }> = {
-        'maxkb-sourcing': { appId: MAXKB_SOURCING_APPLICATION_ID, label: '选品分析师（MaxKB）推理', timeoutMs: CHAT_TIMEOUT_MS, tokenEnv: 'MAXKB_SOURCING_TOKEN' },
+        'maxkb-sourcing': { appId: MAXKB_SOURCING_APPLICATION_ID, label: '选品调研员（MaxKB）推理', timeoutMs: CHAT_TIMEOUT_MS, tokenEnv: 'MAXKB_SOURCING_TOKEN' },
         'maxkb-listing': { appId: MAXKB_LISTING_APPLICATION_ID, label: 'Listing 精造师（MaxKB）推理', timeoutMs: LISTING_TIMEOUT_MS, tokenEnv: 'MAXKB_LISTING_TOKEN' },
         'maxkb-guardian': { appId: MAXKB_GUARDIAN_APPLICATION_ID, label: '知识库守卫（MaxKB）推理', timeoutMs: CHAT_TIMEOUT_MS, tokenEnv: 'MAXKB_GUARDIAN_TOKEN' },
         'maxkb-default': { appId: MAXKB_DEFAULT_APPLICATION_ID, label: 'MaxKB 智体推理', timeoutMs: CHAT_TIMEOUT_MS, tokenEnv: 'MAXKB_DEFAULT_TOKEN' }
@@ -386,7 +442,7 @@ export class AiEmployeeChatService {
         const descriptionBlocks = await this.describeImages(images)
         const content = withKbReference([request.query, ...docBlocks, ...descriptionBlocks].join('\n\n'))
         emit({ type: 'reasoning', label: route.label })
-        const result = await this.maxkbChat(request, content, route.appId, route.timeoutMs, route.tokenEnv)
+        const result = await this.maxkbChat(request, content, route.appId, route.timeoutMs, route.tokenEnv, upstreamController.signal)
         emit({ type: 'finalizing', label: '渲染报告' })
         finish('success')
         return result
@@ -398,7 +454,7 @@ export class AiEmployeeChatService {
         const descriptionBlocks = await this.describeImages(images)
         const content = withKbReference([request.query, ...docBlocks, ...descriptionBlocks].join('\n\n'))
         emit({ type: 'reasoning', label: 'RAGFlow 智能体推理（30天回退）' })
-        const result = await this.ragflowChat(request, content)
+        const result = await this.ragflowChat(request, content, CHAT_TIMEOUT_MS, upstreamController.signal)
         finish('success')
         return result
       }
@@ -410,7 +466,7 @@ export class AiEmployeeChatService {
         const descriptionBlocks = await this.describeImages(images)
         const content = withKbReference([request.query, ...docBlocks, ...descriptionBlocks].join('\n\n'))
         emit({ type: 'reasoning', label: 'Listing 精造师推理（30天回退）' })
-        const result = await this.ragflowChat({ ...request, agentId: RAGFLOW_LISTING_AGENT_ID }, content, LISTING_TIMEOUT_MS)
+        const result = await this.ragflowChat({ ...request, agentId: RAGFLOW_LISTING_AGENT_ID }, content, LISTING_TIMEOUT_MS, upstreamController.signal)
         emit({ type: 'finalizing', label: '六段长文后处理' })
         finish('success')
         return result
@@ -423,7 +479,7 @@ export class AiEmployeeChatService {
         const descriptionBlocks = await this.describeImages(images)
         const content = withKbReference([request.query, ...docBlocks, ...descriptionBlocks].join('\n\n'))
         emit({ type: 'reasoning', label: 'RAGFlow 回退推理' })
-        const result = await this.ragflowChat(request, content)
+        const result = await this.ragflowChat(request, content, CHAT_TIMEOUT_MS, upstreamController.signal)
         return { ok: true, content: `⚠️ 所选模型不可用，已切换默认模型。\n\n${result.content}` }
       }
 
@@ -439,7 +495,7 @@ export class AiEmployeeChatService {
         emit({ type: 'analyzing', label: profile.supportsVision ? '路由与上下文拼装' : '视觉转文字' })
         const descriptionBlocks = (!profile.supportsVision && images.length) ? await this.describeImages(images) : []
         emit({ type: 'reasoning', label: `${profile.name} 推理` })
-        const result = await this.directChat(profile, request, docBlocks, images, descriptionBlocks)
+        const result = await this.directChat(profile, request, docBlocks, images, descriptionBlocks, upstreamController.signal)
         finish('success')
         return result
       } catch (directError) {
@@ -455,6 +511,9 @@ export class AiEmployeeChatService {
     } catch (err) {
       finish('error')
       throw err
+    } finally {
+      if (options?.signal) options.signal.removeEventListener('abort', onExternalAbort)
+      if (options?.requestId) this.activeChats.delete(options.requestId)
     }
   }
 
@@ -467,7 +526,8 @@ export class AiEmployeeChatService {
     content: string,
     applicationId: string = MAXKB_AMAZON_SKILLS_APPLICATION_ID,
     timeoutMs: number = CHAT_TIMEOUT_MS,
-    tokenEnv?: string
+    tokenEnv?: string,
+    externalSignal?: AbortSignal
   ): Promise<{ ok: true; content: string }> {
     // 优先：显式 tokenEnv → agent-* secret_key；回退：MAXKB_AMAZON_SKILLS_TOKEN（access_token 兼容模式）
     const envName = tokenEnv || (applicationId === MAXKB_AMAZON_SKILLS_APPLICATION_ID ? 'MAXKB_AMAZON_SKILLS_TOKEN' : '')
@@ -475,6 +535,9 @@ export class AiEmployeeChatService {
     if (!token) throw new Error(`MaxKB 智体访问令牌未配置（${envName || 'MAXKB_AMAZON_SKILLS_TOKEN'}）`)
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
+    // 外部取消信号：与内部超时合并，任一触发都中断 fetch
+    const onExternalAbort = () => controller.abort()
+    if (externalSignal) externalSignal.addEventListener('abort', onExternalAbort)
     try {
       const messages = [...(request.history || []).slice(-10), { role: 'user', content }]
       const response = await fetch(`${maxkbBaseUrl()}/chat/api/${applicationId}/chat/completions`, {
@@ -487,11 +550,95 @@ export class AiEmployeeChatService {
       const reply = body?.choices?.[0]?.message?.content
       if (!response.ok || !reply) throw new Error(body?.message || body?.data?.message || `MaxKB 未返回内容（HTTP ${response.status}）`)
       return { ok: true, content: (await materializeGeneratedMarkdownReply(reply)).content }
-    } finally { clearTimeout(timer) }
+    } finally {
+      clearTimeout(timer)
+      if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort)
+    }
+  }
+
+  // ─── 公共频道 MaxKB 智能体（access_token + SSE 流式） ─────────────────
+  // 选品调研员Agent（01a043e0-...）只接受发布页 access_token 走公共频道协议：
+  //   1. POST /chat/api/auth/anonymous    { access_token } → JWT
+  //   2. GET  /chat/api/open               → chatId
+  //   3. POST /chat/api/chat_message/{chatId} { message, stream: true, form_data, image_list } → SSE
+  // SSE 事件格式：`data: {...}\n\n`；content 累加条件同 tools/verify-public-chat.mjs：
+  //   - ev.event === 'message'，或
+  //   - ev.content !== undefined && ev.chat_id 存在
+  private async maxkbPublicChat(
+    request: AiEmployeeAskRequest,
+    content: string,
+    accessToken: string = String(process.env.MAXKB_SELECTION_RESEARCHER_TOKEN || '').trim(),
+    externalSignal?: AbortSignal
+  ): Promise<{ ok: true; content: string }> {
+    if (!accessToken) throw new Error('MaxKB 选品调研员访问令牌未配置（MAXKB_SELECTION_RESEARCHER_TOKEN）')
+    const baseUrl = maxkbBaseUrl()
+    const controller = new AbortController()
+    // 父智能体六部分 11 表报告实测 90–120s，4 分钟超时足够
+    const timer = setTimeout(() => controller.abort(), CHAT_TIMEOUT_MS)
+    const onExternalAbort = () => controller.abort()
+    if (externalSignal) externalSignal.addEventListener('abort', onExternalAbort)
+    try {
+      // 1. 匿名认证拿 JWT
+      const authResp = await fetch(`${baseUrl}/chat/api/auth/anonymous`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access_token: accessToken }), signal: controller.signal
+      })
+      const authBody = await authResp.json().catch(() => ({}))
+      if (authResp.status !== 200 || authBody.code !== 200 || !authBody.data) {
+        throw new Error(`MaxKB 匿名认证失败：HTTP ${authResp.status} code=${authBody.code} message=${authBody.message || 'unknown'}`)
+      }
+      const jwt = String(authBody.data).trim()
+      if (!jwt) throw new Error('MaxKB 匿名认证返回空 JWT')
+      const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` }
+
+      // 2. 打开会话拿 chatId
+      const openResp = await fetch(`${baseUrl}/chat/api/open`, { method: 'GET', headers: H, signal: controller.signal })
+      const openBody = await openResp.json().catch(() => ({}))
+      if (openResp.status !== 200 || openBody.code !== 200) {
+        throw new Error(`MaxKB 打开会话失败：HTTP ${openResp.status} code=${openBody.code} message=${openBody.message || 'unknown'}`)
+      }
+      const chatId = openBody.data?.id || openBody.data?.chat_id || openBody.data
+      if (!chatId) throw new Error('MaxKB 打开会话未返回 chatId')
+
+      // 3. 发消息并解析 SSE
+      const msgResp = await fetch(`${baseUrl}/chat/api/chat_message/${chatId}`, {
+        method: 'POST', headers: H,
+        body: JSON.stringify({ message: content, stream: true, re_chat: false, form_data: {}, image_list: [] }),
+        signal: controller.signal
+      })
+      if (!msgResp.ok || !msgResp.body) throw new Error(`MaxKB 消息通道失败：HTTP ${msgResp.status}`)
+      const reader = (msgResp.body as ReadableStream<Uint8Array>).getReader()
+      const dec = new TextDecoder()
+      let buf = '', answer = '', stopped = false
+      while (!stopped) {
+        const { value, done: streamDone } = await reader.read()
+        if (streamDone) break
+        buf += dec.decode(value, { stream: true })
+        let idx
+        while ((idx = buf.indexOf('\n\n')) !== -1) {
+          const raw = buf.slice(0, idx); buf = buf.slice(idx + 2)
+          for (const line of raw.split('\n')) {
+            if (!line.startsWith('data:')) continue
+            try {
+              const ev = JSON.parse(line.slice(5))
+              if (ev.event === 'message' || (ev.content !== undefined && ev.chat_id)) {
+                answer += ev.content || ''
+              }
+              if (ev.is_stop) stopped = true
+            } catch { /* 忽略非 JSON 帧 */ }
+          }
+        }
+      }
+      if (!answer.trim()) throw new Error('MaxKB 选品调研员未返回内容')
+      return { ok: true, content: (await materializeGeneratedMarkdownReply(answer)).content }
+    } finally {
+      clearTimeout(timer)
+      if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort)
+    }
   }
 
   // ─── RAGFlow 智能体（fetch 逻辑与原 main.ts 逐字一致） ─────────────────────
-  private async ragflowChat(request: AiEmployeeAskRequest, content: string, timeoutMs = CHAT_TIMEOUT_MS): Promise<{ ok: true; content: string }> {
+  private async ragflowChat(request: AiEmployeeAskRequest, content: string, timeoutMs = CHAT_TIMEOUT_MS, externalSignal?: AbortSignal): Promise<{ ok: true; content: string }> {
     // RAGFlow API Key 外置到 .env.local（RAGFLOW_API_KEY）：不能在模块顶层读 process.env（import 早于 loadLocalEnvironment），只能在此方法内懒读取
     const base = ragflowAgentBaseUrl()
     if (!base) throw new Error('服务器地址无效，请检查配置')
@@ -505,6 +652,8 @@ export class AiEmployeeChatService {
     const controller = new AbortController()
     // 六部分选品报告包含多张竞品与利润表，完整生成可超过 120 秒。
     const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const onExternalAbort = () => controller.abort()
+    if (externalSignal) externalSignal.addEventListener('abort', onExternalAbort)
     try {
       const response = await fetch(`${base}/api/v1/agents/chat/completions`, {
         method: 'POST',
@@ -522,6 +671,7 @@ export class AiEmployeeChatService {
       throw error instanceof Error ? error : new Error('分析请求失败')
     } finally {
       clearTimeout(timer)
+      if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort)
     }
   }
 
@@ -531,7 +681,8 @@ export class AiEmployeeChatService {
     request: AiEmployeeAskRequest,
     docBlocks: string[],
     images: AiEmployeeAttachment[],
-    descriptionBlocks: string[]
+    descriptionBlocks: string[],
+    externalSignal?: AbortSignal
   ): Promise<{ ok: true; content: string }> {
     let apiKey = ''
     let endpoint = ''
@@ -559,6 +710,8 @@ export class AiEmployeeChatService {
 
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), CHAT_TIMEOUT_MS)
+    const onExternalAbort = () => controller.abort()
+    if (externalSignal) externalSignal.addEventListener('abort', onExternalAbort)
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -581,6 +734,7 @@ export class AiEmployeeChatService {
       throw error instanceof Error ? error : new Error('分析请求失败')
     } finally {
       clearTimeout(timer)
+      if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort)
     }
   }
 

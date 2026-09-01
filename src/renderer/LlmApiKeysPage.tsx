@@ -44,7 +44,7 @@ const LLM_PROVIDERS: LlmProviderMeta[] = [
   },
   {
     id: 'linduo',
-    name: '零度API（37 个大模型聚合）',
+    name: '零度API（28 个大模型聚合）',
     usage: 'OpenAI / Anthropic / Google / Vidu 一把 Key',
     color: '#7e22ce',
     icon: <><path d="M12 2l2.39 6.96H22l-6.19 4.5 2.36 6.94L12 15.9l-6.17 4.5 2.36-6.94L2 8.96h7.61z"/></>

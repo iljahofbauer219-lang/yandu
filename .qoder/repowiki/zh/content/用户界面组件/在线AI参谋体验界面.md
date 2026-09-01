@@ -11,32 +11,27 @@
 - [main.ts](file://src/main/main.ts)
 - [AdvisorRuntime.ts](file://src/main/advisor/AdvisorRuntime.ts)
 - [online-advisor-experience.css](file://src/renderer/online-advisor-experience.css)
+- [LinduoPreferenceModal.tsx](file://src/renderer/LinduoPreferenceModal.tsx)
+- [LinduoAssignmentModal.tsx](file://src/renderer/LinduoAssignmentModal.tsx)
+- [LinduoExceptionModal.tsx](file://src/renderer/LinduoExceptionModal.tsx)
+- [LinduoModelMallPage.tsx](file://src/renderer/LinduoModelMallPage.tsx)
+- [linduoModelPickerModal.css](file://src/renderer/linduoModelPickerModal.css)
+- [SystemAdmin.tsx](file://src/renderer/SystemAdmin.tsx)
+- [App.tsx](file://src/renderer/App.tsx)
+- [linduoCatalog.ts](file://src/shared/linduoCatalog.ts)
+- [serverApi.ts](file://src/renderer/serverApi.ts)
 </cite>
 
 ## 更新摘要
 **所做更改**
-- 实现了完整的Doubao风格设计系统，包含颜色令牌、字体阶梯、间距系统和阴影效果
-- 新增深色模式主题切换功能，支持系统跟随模式
-- 添加了快捷键面板（Cmd/Ctrl+/），提供常用操作速查
-- 增强了消息反馈系统，支持"有帮助"/"需要改进"评价机制
-- 实现了智能滚动管理和"跳转到最新消息"功能
-- 新增了思考加载状态动画和重新生成按钮
-- 改进了消息恢复和错误处理机制
-- 优化了Composer工具栏布局和交互体验
-- 增强了连接状态显示和错误提示
-- 改进了空状态任务推荐卡片功能
-- **重大UI重构**：侧边栏现在永久展开，采用双区域布局（项目和最近），移除了侧边栏切换功能
-- **新增移动响应式设计**：实现了抽屉式侧边栏导航，支持≤480px屏幕的汉堡菜单切换和CSS变换动画
-- **新增智能来源引用解析系统**：parseSources()函数自动提取AI回答中的参考来源，支持多语言标题格式和多种链接格式
-- **增强连接状态报告**：新增signed-out状态区分，明确标识用户未配置JWT时的降级执行模式
-- **重大后端改进**：实现了智能模型提供商切换机制，自动检测provider变更并创建新分支，消除provider转换时的混淆错误
-- **Effort参数管理优化**：通过effortFor()函数为不同模型提供正确的推理深度参数，避免硬编码导致的模型不兼容错误
-- **最新界面重构**：将权限和模型选择器从顶部工具栏移至Composer底部footer区域，提供更直观的操作体验；简化侧边栏设计，移除项目部分标题和新建项目按钮；使用齿轮图标替代文本状态指示器；优化布局和间距
-- **新增Composer展开/折叠功能**：实现了可调节高度的输入框，支持最大高度从160px扩展到480px，提升长文本编辑体验
-- **发送按钮样式升级**：从蓝色改为青绿色(#7fd4c9)，提供更好的视觉反馈和现代感
-- **占位符文本优化**：更新为'输入你的任务或选择下面的员工开始…'，提供更清晰的引导信息
-- **无障碍属性增强**：为展开/折叠按钮添加aria-label、aria-pressed和title属性，提升可访问性
-- **Zoom按钮视觉设计增强**：按钮尺寸从24x24像素增加到28x28像素，SVG图标从14像素缩放到16像素，默认颜色从text-tertiary改为text-secondary以提升对比度，添加浅灰色背景(#f4f4ee)，位置调整top/right边距从4/2像素改为6/6像素
+- LinduoPreferenceModal已完全重新设计，新增强大的搜索功能和供应商分组过滤系统
+- 实现了现代化的UI组件体系，包括供应商芯片筛选、分组列表展示和响应式布局
+- 增强了用户选择模型的用户体验，支持按OpenAI、Google、Anthropic、Vidu等供应商进行筛选
+- 集成了完整的模型目录管理系统，提供28个精选大模型的浏览和管理功能
+- 优化了模态框的交互设计，支持实时搜索、供应商过滤和分组显示
+- 完善了样式系统，包含现代化的卡片设计、颜色主题和动画效果
+- **最新修复**：解决了ShadowRoot边界导致的样式丢失问题，通过createPortal将模态框渲染到document.body
+- **性能优化**：新增presentVendors记忆化值，只显示当前账户可用模型中的供应商，避免空列表显示
 
 ## 目录
 1. [简介](#简介)
@@ -52,7 +47,7 @@
 ## 简介
 本仓库实现了一个"在线AI参谋"桌面端体验界面，基于 Electron + React/Vite 构建。前端提供聊天式交互、任务历史管理、图片附件与视觉分析、审批流处理、个性化设置等能力；后端通过主进程桥接本地执行器（Codex app-server）与可选的受限隔离执行器（Harness Gateway），并暴露统一的桌面 API 供渲染层调用。整体目标是让跨境电商从业者以对话方式驱动选品、素材生成、合规检查等工作流，并在安全边界内自动或半自动执行。
 
-**最新更新**：界面现已完成全面的UI/UX增强，包括完整的Doubao风格设计系统实现、深色模式主题切换、快捷键面板、增强的消息反馈系统、智能滚动管理、思考加载状态、重新生成功能等功能。**最新重大重构**：侧边栏现在永久展开，采用双区域布局设计，将任务历史分为"项目"和"最近"两个独立区域，提供更好的信息组织和管理体验。**最新技术突破**：实现了智能模型提供商切换机制和优化的effort参数管理，显著提升了多模型环境下的用户体验，消除了provider转换过程中的混淆错误。**最新增强**：新增了线程重置通知系统，当Codex上下文丢失时能够优雅地提示用户并继续在新线程上执行任务，同时增强了连接状态报告的准确性，能够区分正常降级模式和故障状态。**最新界面优化**：将权限和模型选择器从顶部工具栏移至Composer底部footer区域，提供更直观的操作体验；简化侧边栏设计，移除冗余元素；使用齿轮图标提升个性化设置的视觉识别度。**最新交互增强**：新增了Composer展开/折叠功能，允许用户根据需要调整输入框高度，从默认的160px最大高度扩展到480px，显著提升长文本编辑体验；发送按钮采用新的青绿色调(#7fd4c9)，提供更好的视觉反馈；更新了占位符文本以提供更清晰的引导信息。**最新视觉设计增强**：Zoom按钮获得了显著的视觉设计改进，包括增大的按钮尺寸、优化的图标比例、改进的颜色对比度和更好的定位布局。
+**最新更新**：界面现已完成全面的UI/UX增强，包括完整的Doubao风格设计系统实现、深色模式主题切换、快捷键面板、增强的消息反馈系统、智能滚动管理、思考加载状态、重新生成功能等功能。**最新重大重构**：侧边栏现在永久展开，采用双区域布局设计，将任务历史分为"项目"和"最近"两个独立区域，提供更好的信息组织和管理体验。**最新技术突破**：实现了智能模型提供商切换机制和优化的effort参数管理，显著提升了多模型环境下的用户体验，消除了provider转换过程中的混淆错误。**最新增强**：新增了线程重置通知系统，当Codex上下文丢失时能够优雅地提示用户并继续在新线程上执行任务，同时增强了连接状态报告的准确性，能够区分正常降级模式和故障状态。**最新界面优化**：将权限和模型选择器从顶部工具栏移至Composer底部footer区域，提供更直观的操作体验；简化侧边栏设计，移除冗余元素；使用齿轮图标提升个性化设置的视觉识别度。**最新交互增强**：新增了Composer展开/折叠功能，允许用户根据需要调整输入框高度，从默认的160px最大高度扩展到480px，显著提升长文本编辑体验；发送按钮采用新的青绿色调(#7fd4c9)，提供更好的视觉反馈；更新了占位符文本以提供更清晰的引导信息。**最新视觉设计增强**：Zoom按钮获得了显著的视觉设计改进，包括增大的按钮尺寸、优化的图标比例、改进的颜色对比度和更好的定位布局。**最新Linduo集成**：集成了完整的Linduo模型选择UI组件体系，包括用户偏好设置、管理员分配界面和用户例外管理功能，实现了基于角色的权限控制和完整的模型等级管理系统。**最新重大更新**：LinduoPreferenceModal已完全重新设计，引入全新的搜索功能、供应商分组过滤系统和现代化UI组件，大幅提升了模型选择的用户体验。**最新修复**：解决了ShadowRoot边界导致的样式丢失问题，通过createPortal将模态框渲染到document.body，确保样式正确应用。
 
 ## 项目结构
 - 渲染层（React UI）：负责用户交互、消息流展示、会话与分支管理、图片预览与分析、审批弹窗、个性化设置等。
@@ -66,10 +61,15 @@ subgraph "渲染层"
 OA["OnlineAdvisorExperience.tsx"]
 OAP["OnlineAdvisor.tsx"]
 PR["ui/primitives.tsx"]
+LPM["LinduoPreferenceModal.tsx"]
+LAM["LinduoAssignmentModal.tsx"]
+LEM["LinduoExceptionModal.tsx"]
+LMP["LinduoModelMallPage.tsx"]
 end
 subgraph "共享层"
 ADV["shared/advisor.ts"]
 HTTP["shared/serverHttp.ts"]
+CATALOG["shared/linduoCatalog.ts"]
 end
 subgraph "主进程"
 MAIN["main.ts"]
@@ -80,14 +80,22 @@ OA --> ADV
 OA --> HTTP
 OAP --> OA
 MAIN --> RUNTIME
-OA -.IPC.-> MAIN
+LPM --> LAM
+LPM --> LEM
+LAM --> LEM
+LPM --> CATALOG
+LMP --> CATALOG
 ```
 
 **图表来源**
 - [OnlineAdvisorExperience.tsx:1257-1451](file://src/renderer/OnlineAdvisorExperience.tsx#L1257-L1451)
 - [OnlineAdvisor.tsx:7-36](file://src/renderer/OnlineAdvisor.tsx#L7-L36)
+- [LinduoPreferenceModal.tsx:29-187](file://src/renderer/LinduoPreferenceModal.tsx#L29-L187)
+- [LinduoAssignmentModal.tsx:27-348](file://src/renderer/LinduoAssignmentModal.tsx#L27-L348)
+- [LinduoExceptionModal.tsx:40-303](file://src/renderer/LinduoExceptionModal.tsx#L40-L303)
 - [advisor.ts:109-216](file://src/shared/advisor.ts#L109-L216)
 - [serverHttp.ts:186-246](file://src/shared/serverHttp.ts#L186-L246)
+- [linduoCatalog.ts:1-86](file://src/shared/linduoCatalog.ts#L1-L86)
 - [main.ts:1-120](file://src/main/main.ts#L1-L120)
 - [AdvisorRuntime.ts:165-236](file://src/main/advisor/AdvisorRuntime.ts#L165-L236)
 
@@ -102,6 +110,10 @@ OA -.IPC.-> MAIN
 - serverHttp：中心服务端HTTP客户端，含令牌刷新、会话过期广播、统一错误封装。
 - main：主进程入口，注册大量业务IPC，集成数据库、浏览器工作区、图像与视频服务、eBay发布流程等。
 - AdvisorRuntime：运行期编排，负责与 Codex app-server/Harness Gateway 通信、审批策略、事件分发、任务持久化与清理。
+- **全新设计的 LinduoPreferenceModal**：用户个人模型偏好设置模态框，支持强大的搜索功能、供应商分组过滤、现代化UI组件和增强的用户体验。
+- **新增 LinduoAssignmentModal**：管理员模型分配穿梭界面，支持按等级批量分配模型、查看已分配模型。
+- **新增 LinduoExceptionModal**：用户例外管理模态框，支持添加/删除/切换例外类型（GRANT/REVOKE）。
+- **新增 LinduoModelMallPage**：零度API模型广场页面，提供37个聚合大模型的浏览、筛选和价格查询功能。
 
 **章节来源**
 - [OnlineAdvisorExperience.tsx:1257-1451](file://src/renderer/OnlineAdvisorExperience.tsx#L1257-L1451)
@@ -111,6 +123,10 @@ OA -.IPC.-> MAIN
 - [serverHttp.ts:1-246](file://src/shared/serverHttp.ts#L1-L246)
 - [main.ts:1-120](file://src/main/main.ts#L1-L120)
 - [AdvisorRuntime.ts:165-236](file://src/main/advisor/AdvisorRuntime.ts#L165-L236)
+- [LinduoPreferenceModal.tsx:29-269](file://src/renderer/LinduoPreferenceModal.tsx#L29-L269)
+- [LinduoAssignmentModal.tsx:27-348](file://src/renderer/LinduoAssignmentModal.tsx#L27-L348)
+- [LinduoExceptionModal.tsx:40-303](file://src/renderer/LinduoExceptionModal.tsx#L40-L303)
+- [LinduoModelMallPage.tsx:29-322](file://src/renderer/LinduoModelMallPage.tsx#L29-L322)
 
 ## 架构总览
 渲染层通过 window.desktop.advisor 调用主进程提供的统一API，完成发送消息、获取会话、上传图片、分析图片、审批等操作。主进程在 AdvisorRuntime 中协调：
@@ -176,12 +192,14 @@ MP-->>FE : done/stopped/error
   - **增强的连接状态报告**：支持signed-out状态区分，明确标识用户未配置JWT时的降级执行模式，避免误报故障
   - **智能模型提供商切换**：实现了自动检测provider变更并创建新分支的机制，消除model_not_found错误
   - **优化的effort参数管理**：通过effortFor()函数为不同模型提供正确的推理深度参数，避免硬编码导致的兼容性错误
-  - **最新界面重构**：将权限和模型选择器从顶部工具栏移至Composer底部footer区域，提供更直观的操作体验；简化侧边栏设计，移除项目部分标题和新建项目按钮；使用齿轮图标替代文本状态指示器；优化布局和间距
+  - **最新界面重构**：将权限和模型选择器从顶部工具栏移至Composer底部footer区域，提供更直观的操作体验；简化侧边栏设计，移除冗余元素；使用齿轮图标替代文本状态指示器；优化布局和间距
   - **新增Composer展开/折叠功能**：实现了可调节高度的输入框，支持最大高度从160px扩展到480px，提升长文本编辑体验
   - **发送按钮样式升级**：从蓝色改为青绿色(#7fd4c9)，提供更好的视觉反馈和现代感
   - **占位符文本优化**：更新为'输入你的任务或选择下面的员工开始…'，提供更清晰的引导信息
   - **无障碍属性增强**：为展开/折叠按钮添加aria-label、aria-pressed和title属性，提升可访问性
   - **Zoom按钮视觉设计增强**：按钮尺寸从24x24像素增加到28x28像素，SVG图标从14像素缩放到16像素，默认颜色从text-tertiary改为text-secondary以提升对比度，添加浅灰色背景(#f4f4ee)，位置调整top/right边距从4/2像素改为6/6像素
+  - **Linduo模型偏好集成**：通过齿轮按钮触发LinduoPreferenceModal，支持用户查看当前等级、设置默认模型、管理个人例外
+  - **权限控制集成**：根据用户权限（member.manage）动态显示不同的Linduo模态框，管理员可访问模型分配界面，普通用户只能设置个人偏好
 - **关键数据流**
   - 发送消息：构造用户消息与助手占位，调用 sendChat，订阅 onChatEvent 更新文本与活动
   - 补充执行：在活跃任务中通过 steerChat 追加指令
@@ -203,6 +221,8 @@ MP-->>FE : done/stopped/error
   - **Composer展开状态管理**：通过composerExpanded状态变量控制输入框的高度扩展，默认收起状态，点击展开按钮可切换到展开模式
   - **无障碍交互**：展开/折叠按钮包含完整的ARIA属性，支持屏幕阅读器识别和操作状态
   - **Zoom按钮增强**：通过增大按钮尺寸和优化图标比例提升视觉表现，改进的颜色对比度和背景色增强可访问性
+  - **Linduo偏好设置**：通过齿轮按钮触发LinduoPreferenceModal，支持用户查看当前等级、设置默认模型、管理个人例外
+  - **权限控制**：根据hasPermission(profile, 'member.manage')判断显示管理员分配界面还是用户偏好界面
 - **复杂度与优化**
   - 大量状态与副作用集中在单一组件，适合拆分为子组件（消息列表、审批面板、附件面板、个性化设置）
   - 长会话下建议分页渲染与虚拟滚动，减少DOM节点数量
@@ -223,15 +243,18 @@ MP-->>FE : done/stopped/error
   - **Composer高度管理优化**：通过CSS类名切换实现平滑的高度过渡动画，避免布局抖动
   - **无障碍优化**：完整的ARIA属性支持确保所有用户都能有效使用展开/折叠功能
   - **Zoom按钮性能优化**：优化的按钮尺寸和图标比例减少了渲染开销，改进的布局减少了重排重绘
+  - **Linduo组件优化**：模态框采用懒加载策略，只在需要时加载相关数据和状态，减少初始渲染开销
+  - **权限控制优化**：基于角色的权限控制减少了不必要的UI元素渲染，提升用户体验
+  - **数据同步优化**：通过onChanged回调机制实现Linduo组件间的状态同步，避免重复数据获取
 
 **章节来源**
 - [OnlineAdvisorExperience.tsx:1257-1451](file://src/renderer/OnlineAdvisorExperience.tsx#L1257-L1451)
 - [OnlineAdvisorExperience.tsx:219-278](file://src/renderer/OnlineAdvisorExperience.tsx#L219-L278)
-- [OnlineAdvisorExperience.tsx:877-907](file://src/renderer/OnlineAdvisorExperience.tsx#L877-907)
+- [OnlineAdvisorExperience.tsx:877-907](file://src/renderer/OnlineAdvisorExperience.tsx#L877-L907)
 - [OnlineAdvisorExperience.tsx:913-926](file://src/renderer/OnlineAdvisorExperience.tsx#L913-L926)
 - [OnlineAdvisorExperience.tsx:303-321](file://src/renderer/OnlineAdvisorExperience.tsx#L303-L321)
 - [OnlineAdvisorExperience.tsx:341-390](file://src/renderer/OnlineAdvisorExperience.tsx#L341-L390)
-- [OnlineAdvisorExperience.tsx:854-870](file://src/renderer/OnlineAdvisorExperience.tsx#L854-870)
+- [OnlineAdvisorExperience.tsx:854-870](file://src/renderer/OnlineAdvisorExperience.tsx#L854-L870)
 - [OnlineAdvisorExperience.tsx:443-449](file://src/renderer/OnlineAdvisorExperience.tsx#L443-L449)
 - [OnlineAdvisorExperience.tsx:1477-1484](file://src/renderer/OnlineAdvisorExperience.tsx#L1477-L1484)
 - [OnlineAdvisorExperience.tsx:2012-2176](file://src/renderer/OnlineAdvisorExperience.tsx#L2012-2176)
@@ -240,6 +263,7 @@ MP-->>FE : done/stopped/error
 - [OnlineAdvisorExperience.tsx:1897](file://src/renderer/OnlineAdvisorExperience.tsx#L1897)
 - [OnlineAdvisorExperience.tsx:2004](file://src/renderer/OnlineAdvisorExperience.tsx#L2004)
 - [OnlineAdvisorExperience.tsx:2018-2047](file://src/renderer/OnlineAdvisorExperience.tsx#L2018-L2047)
+- [App.tsx:1347-1353](file://src/renderer/App.tsx#L1347-L1353)
 
 ### 宿主容器（OnlineAdvisor）
 - 将体验组件注入 Shadow DOM，隔离样式并监听全局主题变化，确保深色/浅色模式一致
@@ -311,6 +335,122 @@ AutoAccept --> End
 - [serverHttp.ts:122-184](file://src/shared/serverHttp.ts#L122-L184)
 - [serverHttp.ts:186-246](file://src/shared/serverHttp.ts#L186-L246)
 
+### 全新重新设计的 LinduoPreferenceModal（用户偏好设置）
+
+#### 核心功能特性
+- **强大的搜索功能**：支持按模型名称、ID和描述进行实时模糊搜索，提升模型查找效率
+- **供应商分组过滤系统**：基于OpenAI、Google、Anthropic、Vidu四大供应商的智能分组和筛选
+- **现代化UI组件**：采用卡片式设计、供应商芯片筛选、分组列表展示和响应式布局
+- **增强的用户体验**：支持单选设置默认模型、选择不使用Linduo模型（回退到Codex默认）
+- **实时状态显示**：显示当前等级、特例数量和默认模型信息
+- **异步数据加载**：并行加载用户数据、可用模型和当前偏好，提升加载性能
+- **ShadowRoot边界问题解决**：使用createPortal将模态框渲染到document.body，解决样式丢失问题
+- **智能供应商过滤**：新增presentVendors记忆化值，只显示当前账户可用模型中的供应商，避免空列表显示
+
+#### 搜索和过滤机制
+- **关键词搜索**：支持模型名称、ID和描述的模糊匹配搜索
+- **供应商筛选**：通过供应商芯片按钮实现多选筛选，支持OpenAI、Google、Anthropic、Vidu
+- **智能分组**：搜索结果按供应商自动分组，每组显示供应商图标、名称和模型数量
+- **实时过滤**：搜索和筛选条件变化时实时更新显示结果
+- **记忆化优化**：使用useMemo缓存presentVendors计算结果，提升性能
+
+#### 用户界面设计
+- **模态框头部**：显示标题、副标题（当前等级、特例数量、默认模型）和关闭按钮
+- **工具栏区域**：包含搜索输入框和供应商筛选芯片组
+- **分组列表**：按供应商分组的模型列表，每组包含供应商标识和模型详情
+- **底部操作区**：提供"修改我的特例"和"关闭"按钮
+- **空状态处理**：无可用模型时显示友好的提示信息
+
+#### 数据流和处理
+- **初始化加载**：并行获取用户等级信息、可用模型、当前偏好和全部模型
+- **搜索过滤**：使用useMemo计算搜索和筛选后的分组结果
+- **模型选择**：单选模式下选择模型，调用setLinduoPreferredModel接口更新偏好
+- **异常处理**：完善的错误处理和加载状态管理
+- **状态同步**：通过onChanged回调通知父组件偏好已变更
+- **Portal渲染**：通过createPortal将模态框渲染到document.body，确保样式正确应用
+
+#### 样式和交互
+- **现代化设计**：采用卡片式布局、圆角边框、阴影效果和渐变背景
+- **供应商色彩**：每个供应商有独特的品牌色彩和图标标识
+- **响应式布局**：支持不同屏幕尺寸的自适应显示
+- **交互动画**：悬停效果、选中状态高亮和过渡动画
+- **无障碍支持**：完整的ARIA属性和键盘导航支持
+
+**章节来源**
+- [LinduoPreferenceModal.tsx:29-269](file://src/renderer/LinduoPreferenceModal.tsx#L29-L269)
+- [linduoModelPickerModal.css:296-444](file://src/renderer/linduoModelPickerModal.css#L296-L444)
+- [linduoCatalog.ts:1-86](file://src/shared/linduoCatalog.ts#L1-L86)
+- [serverApi.ts:157-224](file://src/renderer/serverApi.ts#L157-L224)
+
+### 其他 Linduo 组件
+
+#### LinduoAssignmentModal（管理员分配界面）
+- **功能特性**：
+  - 管理员专用的模型分配穿梭界面
+  - 支持按等级（tier）批量分配模型
+  - 提供左右双栏穿梭器，支持多选和批量操作
+  - full等级为只读模式，显示所有已开放模型
+  - 支持保存分配结果并通知父组件更新
+- **用户界面**：
+  - 顶部显示等级选择器和等级描述
+  - 中间区域为双栏穿梭器，左侧为可选模型，右侧为已分配模型
+  - 支持全选、反选、批量移动操作
+  - 底部提供取消和保存按钮
+- **数据流**：
+  - 初始化时加载所有等级和启用模型列表
+  - 切换等级时加载该等级的已分配模型
+  - 用户操作时维护本地状态，保存时批量提交到服务器
+- **权限控制**：
+  - 仅admin用户（具有member.manage权限）可访问
+  - 通过App.tsx中的权限判断控制模态框显示
+
+#### LinduoExceptionModal（用户例外管理）
+- **功能特性**：
+  - 单个用户的例外管理界面
+  - 支持添加、删除、切换例外类型（GRANT/REVOKE）
+  - 提供双栏穿梭器，左侧为无例外的模型，右侧为当前例外
+  - 支持批量操作和差异化保存
+- **用户界面**：
+  - 头部显示用户名称、等级信息和说明文字
+  - 主体区域为双栏穿梭器，右侧例外项带有类型切换按钮
+  - 底部提供取消和保存按钮
+- **数据流**：
+  - 计算当前例外与初始状态的差异
+  - 新增例外调用setLinduoException接口
+  - 删除例外调用revokeLinduoException接口
+  - 切换例外类型时重新调用相应接口
+- **权限控制**：
+  - 普通用户只能管理自己的例外
+  - admin用户可以管理其他成员的例外
+
+#### LinduoModelMallPage（模型广场）
+- **功能特性**：
+  - 零度API模型广场页面，展示37个聚合大模型
+  - 支持按供应商（OpenAI/Google/Anthropic/Vidu）和能力（生图/视频/对话/多模态）筛选
+  - 提供关键词搜索功能
+  - 显示模型价格信息，支持手动刷新价格
+  - 集成LLM Key配置和登录状态管理
+- **用户界面**：
+  - 顶部工具栏包含标题、状态指示和操作按钮
+  - 左侧筛选面板支持供应商、能力和关键词筛选
+  - 右侧网格展示模型卡片，包含基本信息、价格和状态
+  - 支持响应式布局适配不同屏幕尺寸
+- **数据流**：
+  - 初始化时检查LLM Key配置状态
+  - 加载模型价格信息和登录状态
+  - 支持手动触发价格刷新操作
+  - 根据筛选条件动态过滤模型列表
+- **集成特性**：
+  - 与系统LLM Key管理页面集成
+  - 支持零度API登录状态检测
+  - 提供价格陈旧性标记和错误提示
+
+**章节来源**
+- [LinduoAssignmentModal.tsx:27-348](file://src/renderer/LinduoAssignmentModal.tsx#L27-L348)
+- [LinduoExceptionModal.tsx:40-303](file://src/renderer/LinduoExceptionModal.tsx#L40-L303)
+- [LinduoModelMallPage.tsx:29-322](file://src/renderer/LinduoModelMallPage.tsx#L29-L322)
+- [linduoModelPickerModal.css:1-355](file://src/renderer/linduoModelPickerModal.css#L1-L355)
+
 ### 双区域侧边栏设计与响应式布局
 - **双区域布局**：
   - 项目区域：按文件夹分组显示已注册项目的任务，支持项目展开/折叠、任务管理、搜索过滤
@@ -376,7 +516,7 @@ AutoAccept --> End
 - [online-advisor-experience.css:102-169](file://src/renderer/online-advisor-experience.css#L102-L169)
 - [online-advisor-experience.css:835-894](file://src/renderer/online-advisor-experience.css#L835-894)
 - [OnlineAdvisorExperience.tsx:219-278](file://src/renderer/OnlineAdvisorExperience.tsx#L219-L278)
-- [OnlineAdvisorExperience.tsx:877-907](file://src/renderer/OnlineAdvisorExperience.tsx#L877-907)
+- [OnlineAdvisorExperience.tsx:877-907](file://src/renderer/OnlineAdvisorExperience.tsx#L877-L907)
 - [OnlineAdvisorExperience.tsx:443-449](file://src/renderer/OnlineAdvisorExperience.tsx#L443-L449)
 - [advisor.ts:167-187](file://src/shared/advisor.ts#L167-L187)
 - [OnlineAdvisorExperience.tsx:2012-2176](file://src/renderer/OnlineAdvisorExperience.tsx#L2012-2176)
@@ -398,6 +538,10 @@ FE -.IPC.-> MAIN["主进程<br/>main.ts"]
 MAIN --> RT["运行期<br/>AdvisorRuntime.ts"]
 RT --> AS["Codex app-server"]
 RT --> HG["Harness Gateway"]
+FE --> LINDUO["Linduo组件<br/>Preference/Assignment/Exception"]
+LINDUO --> SHARED
+LINDUO --> CATALOG["模型目录<br/>linduoCatalog.ts"]
+LINDUO --> API["API接口<br/>serverApi.ts"]
 ```
 
 **图表来源**
@@ -406,6 +550,11 @@ RT --> HG["Harness Gateway"]
 - [serverHttp.ts:186-246](file://src/shared/serverHttp.ts#L186-L246)
 - [main.ts:1-120](file://src/main/main.ts#L1-L120)
 - [AdvisorRuntime.ts:165-236](file://src/main/advisor/AdvisorRuntime.ts#L165-L236)
+- [LinduoPreferenceModal.tsx:1-269](file://src/renderer/LinduoPreferenceModal.tsx#L1-L269)
+- [LinduoAssignmentModal.tsx:1-348](file://src/renderer/LinduoAssignmentModal.tsx#L1-L348)
+- [LinduoExceptionModal.tsx:1-303](file://src/renderer/LinduoExceptionModal.tsx#L1-L303)
+- [linduoCatalog.ts:1-86](file://src/shared/linduoCatalog.ts#L1-L86)
+- [serverApi.ts:157-224](file://src/renderer/serverApi.ts#L157-L224)
 
 **章节来源**
 - [main.ts:1-120](file://src/main/main.ts#L1-L120)
@@ -436,6 +585,17 @@ RT --> HG["Harness Gateway"]
   - **Composer高度管理优化**：通过CSS类名切换实现平滑的高度过渡动画，避免布局抖动和性能损耗
   - **无障碍优化**：完整的ARIA属性支持确保所有用户都能有效使用展开/折叠功能，提升可访问性
   - **Zoom按钮性能优化**：优化的按钮尺寸和图标比例减少了渲染开销，改进的布局减少了重排重绘，提升整体性能
+  - **Linduo组件性能优化**：模态框采用懒加载策略，只在需要时加载相关数据和状态，减少初始渲染开销
+  - **权限控制优化**：基于角色的权限控制减少了不必要的UI元素渲染，提升用户体验
+  - **数据同步优化**：通过onChanged回调机制实现Linduo组件间的状态同步，避免重复数据获取
+  - **全新LinduoPreferenceModal性能优化**：
+    - **搜索性能优化**：使用useMemo缓存搜索和筛选结果，避免重复计算
+    - **分组渲染优化**：按供应商分组渲染，减少DOM节点数量
+    - **异步加载优化**：并行加载用户数据、模型列表和偏好设置，提升加载速度
+    - **响应式优化**：支持不同屏幕尺寸的自适应布局，优化移动端体验
+    - **内存管理优化**：及时清理搜索关键词和筛选状态，避免内存泄漏
+    - **Portal渲染优化**：使用createPortal解决ShadowRoot边界问题，确保样式正确应用
+    - **供应商过滤优化**：通过presentVendors记忆化值优化供应商筛选性能，避免空列表显示
 - **运行期**
   - 事件批量推送与去重，避免频繁UI更新
   - 审批队列合理排队，避免阻塞主线程
@@ -463,6 +623,16 @@ RT --> HG["Harness Gateway"]
   - **发送按钮视觉升级**：青绿色调提供更好的视觉对比和现代感，悬停效果增强交互反馈
   - **无障碍增强**：完整的ARIA属性支持确保屏幕阅读器正确识别展开/折叠状态，提升可访问性
   - **Zoom按钮可访问性增强**：改进的颜色对比度和更大的点击区域提升了可访问性，确保所有用户都能轻松使用
+  - **Linduo组件可访问性**：完整的ARIA属性和键盘导航支持，确保所有用户都能有效使用模型管理功能
+  - **权限控制可访问性**：基于角色的权限控制提供了清晰的权限边界，避免用户困惑
+  - **数据验证可访问性**：表单验证和错误提示提供了良好的用户反馈，提升操作成功率
+  - **全新LinduoPreferenceModal可访问性增强**：
+    - **搜索可访问性**：支持键盘导航和屏幕阅读器，提供搜索结果的语音反馈
+    - **供应商筛选可访问性**：供应商芯片按钮支持键盘操作和ARIA状态描述
+    - **分组列表可访问性**：按供应商分组的列表结构，提供清晰的层级导航
+    - **错误提示可访问性**：统一的错误提示样式和语音反馈，确保用户理解错误信息
+    - **加载状态可访问性**：明确的加载状态指示，避免用户困惑
+    - **Portal渲染可访问性**：确保模态框在所有环境下都有正确的样式和交互行为
 
 ## 故障排查指南
 - 无法连接执行器
@@ -518,7 +688,7 @@ RT --> HG["Harness Gateway"]
   - 现象：AI回答中的参考来源未被正确识别或显示
   - 排查：检查parseSources函数正则表达式；确认AI回答格式是否符合预期；查看sources数组长度限制
   - 参考路径
-    - [OnlineAdvisorExperience.tsx:877-907](file://src/renderer/OnlineAdvisorExperience.tsx#L877-907)
+    - [OnlineAdvisorExperience.tsx:877-907](file://src/renderer/OnlineAdvisorExperience.tsx#L877-L907)
 - **双区域布局问题**
   - 现象：项目区域或最近区域显示异常
   - 排查：检查projectGroups和recentTasks的计算逻辑；确认registeredProjects状态；验证搜索过滤功能
@@ -552,7 +722,7 @@ RT --> HG["Harness Gateway"]
   - 现象：权限和模型选择器在footer区域显示异常或功能失效
   - 排查：检查composer-footer-pickers容器布局；确认选择器按钮的事件绑定；验证响应式布局在不同屏幕尺寸下的表现
   - 参考路径
-    - [OnlineAdvisorExperience.tsx:2012-2176](file://src/renderer/OnlineAdvisorExperience.tsx#L2012-2176)
+    - [OnlineAdvisorExperience.tsx:2012-2176](file://src/renderer/OnlineAdvisorExperience.tsx#L2012-L2176)
     - [online-advisor-experience.css:2492-2575](file://src/renderer/online-advisor-experience.css#L2492-L2575)
 - **侧边栏简化问题**
   - 现象：项目部分标题或新建项目按钮显示异常
@@ -584,6 +754,59 @@ RT --> HG["Harness Gateway"]
   - 排查：检查按钮尺寸是否为28x28像素；确认SVG图标是否为16像素；验证颜色设置为text-secondary；检查背景色#f4f4ee是否正确应用；确认top/right边距为6像素
   - 参考路径
     - [online-advisor-experience.css:2477-2530](file://src/renderer/online-advisor-experience.css#L2477-L2530)
+- **Linduo偏好设置问题**
+  - 现象：用户偏好设置模态框无法打开或设置不生效
+  - 排查：检查齿轮按钮的事件绑定；确认用户权限判断逻辑；验证setLinduoPreferredModel接口调用；查看用户等级和可用模型数据加载状态
+  - 参考路径
+    - [App.tsx:1347-1353](file://src/renderer/App.tsx#L1347-L1353)
+    - [LinduoPreferenceModal.tsx:75-87](file://src/renderer/LinduoPreferenceModal.tsx#L75-L87)
+- **Linduo分配界面问题**
+  - 现象：管理员分配界面无法访问或模型分配失败
+  - 排查：检查member.manage权限判断；确认等级和模型数据加载；验证穿梭器操作逻辑；检查setLinduoTierModels接口调用
+  - 参考路径
+    - [App.tsx:1347-1353](file://src/renderer/App.tsx#L1347-L1353)
+    - [LinduoAssignmentModal.tsx:149-163](file://src/renderer/LinduoAssignmentModal.tsx#L149-L163)
+- **Linduo例外管理问题**
+  - 现象：例外管理功能异常或例外设置不生效
+  - 排查：检查例外数据加载；验证例外类型切换逻辑；确认setLinduoException和revokeLinduoException接口调用；查看差异计算逻辑
+  - 参考路径
+    - [LinduoExceptionModal.tsx:113-143](file://src/renderer/LinduoExceptionModal.tsx#L113-L143)
+    - [LinduoExceptionModal.tsx:146-153](file://src/renderer/LinduoExceptionModal.tsx#L146-L153)
+- **Linduo模型广场问题**
+  - 现象：模型广场页面加载失败或价格信息显示异常
+  - 排查：检查LLM Key配置状态；验证价格抓取接口调用；确认模型筛选逻辑；查看登录状态检测
+  - 参考路径
+    - [LinduoModelMallPage.tsx:94-113](file://src/renderer/LinduoModelMallPage.tsx#L94-L113)
+    - [LinduoModelMallPage.tsx:121-131](file://src/renderer/LinduoModelMallPage.tsx#L121-L131)
+- **全新LinduoPreferenceModal问题**
+  - **ShadowRoot边界问题**：
+    - 现象：模态框样式丢失或显示异常
+    - 排查：确认createPortal是否正确导入和使用；检查document.body挂载点；验证样式表加载状态
+    - 参考路径：[LinduoPreferenceModal.tsx:2](file://src/renderer/LinduoPreferenceModal.tsx#L2), [LinduoPreferenceModal.tsx:144-146](file://src/renderer/LinduoPreferenceModal.tsx#L144-L146)
+  - **搜索功能异常**：
+    - 现象：搜索无响应或搜索结果不正确
+    - 排查：检查keyword状态管理；验证useMemo计算逻辑；确认搜索过滤条件
+    - 参考路径：[LinduoPreferenceModal.tsx:78-98](file://src/renderer/LinduoPreferenceModal.tsx#L78-L98)
+  - **供应商筛选问题**：
+    - 现象：供应商芯片按钮无响应或筛选结果不正确
+    - 排查：检查vendorFilter状态管理；验证toggleVendor函数；确认供应商元数据配置
+    - 参考路径：[LinduoPreferenceModal.tsx:100-106](file://src/renderer/LinduoPreferenceModal.tsx#L100-L106)
+  - **presentVendors记忆化问题**：
+    - 现象：供应商筛选按钮显示不完整或出现空列表
+    - 排查：检查presentVendors的useMemo依赖；确认available数据加载状态；验证供应商过滤逻辑
+    - 参考路径：[LinduoPreferenceModal.tsx:101-105](file://src/renderer/LinduoPreferenceModal.tsx#L101-L105)
+  - **分组显示异常**：
+    - 现象：模型未按供应商分组显示或分组信息不正确
+    - 排查：检查grouped计算逻辑；确认VENDORS和VENDOR_META配置；验证分组过滤条件
+    - 参考路径：[LinduoPreferenceModal.tsx:78-98](file://src/renderer/LinduoPreferenceModal.tsx#L78-L98)
+  - **样式显示问题**：
+    - 现象：模态框样式异常或响应式布局失效
+    - 排查：检查CSS类名应用；确认linduoModelPickerModal.css样式；验证响应式设计
+    - 参考路径：[linduoModelPickerModal.css:296-444](file://src/renderer/linduoModelPickerModal.css#L296-L444)
+  - **数据加载问题**：
+    - 现象：模型数据加载失败或状态显示异常
+    - 排查：检查API调用；验证fetchLinduoChatModels和fetchLinduoPreferredModel；确认错误处理逻辑
+    - 参考路径：[LinduoPreferenceModal.tsx:42-66](file://src/renderer/LinduoPreferenceModal.tsx#L42-L66)
 
 **章节来源**
 - [AdvisorRuntime.ts:191-219](file://src/main/advisor/AdvisorRuntime.ts#L191-L219)
@@ -598,12 +821,12 @@ RT --> HG["Harness Gateway"]
 - [OnlineAdvisor.tsx:21-28](file://src/renderer/OnlineAdvisor.tsx#L21-L28)
 - [OnlineAdvisorExperience.tsx:303-321](file://src/renderer/OnlineAdvisorExperience.tsx#L303-L321)
 - [online-advisor-experience.css:3172-3208](file://src/renderer/online-advisor-experience.css#L3172-L3208)
-- [OnlineAdvisorExperience.tsx:877-907](file://src/renderer/OnlineAdvisorExperience.tsx#L877-907)
+- [OnlineAdvisorExperience.tsx:877-907](file://src/renderer/OnlineAdvisorExperience.tsx#L877-L907)
 - [OnlineAdvisorExperience.tsx:246-307](file://src/renderer/OnlineAdvisorExperience.tsx#L246-L307)
 - [OnlineAdvisorExperience.tsx:443-449](file://src/renderer/OnlineAdvisorExperience.tsx#L443-L449)
 - [online-advisor-experience.css:835-894](file://src/renderer/online-advisor-experience.css#L835-894)
 - [advisor.ts:167-187](file://src/shared/advisor.ts#L167-L187)
-- [OnlineAdvisorExperience.tsx:2012-2176](file://src/renderer/OnlineAdvisorExperience.tsx#L2012-2176)
+- [OnlineAdvisorExperience.tsx:2012-2176](file://src/renderer/OnlineAdvisorExperience.tsx#L2012-L2176)
 - [OnlineAdvisorExperience.tsx:1415-1442](file://src/renderer/OnlineAdvisorExperience.tsx#L1415-L1442)
 - [OnlineAdvisorExperience.tsx:176](file://src/renderer/OnlineAdvisorExperience.tsx#L176)
 - [OnlineAdvisorExperience.tsx:1897](file://src/renderer/OnlineAdvisorExperience.tsx#L1897)
@@ -611,6 +834,11 @@ RT --> HG["Harness Gateway"]
 - [online-advisor-experience.css:2500-2530](file://src/renderer/online-advisor-experience.css#L2500-L2530)
 - [online-advisor-experience.css:2786-2802](file://src/renderer/online-advisor-experience.css#L2786-L2802)
 - [online-advisor-experience.css:2477-2530](file://src/renderer/online-advisor-experience.css#L2477-L2530)
+- [App.tsx:1347-1353](file://src/renderer/App.tsx#L1347-L1353)
+- [LinduoPreferenceModal.tsx:75-87](file://src/renderer/LinduoPreferenceModal.tsx#L75-L87)
+- [LinduoAssignmentModal.tsx:149-163](file://src/renderer/LinduoAssignmentModal.tsx#L149-L163)
+- [LinduoExceptionModal.tsx:113-143](file://src/renderer/LinduoExceptionModal.tsx#L113-L143)
+- [LinduoModelMallPage.tsx:94-113](file://src/renderer/LinduoModelMallPage.tsx#L94-L113)
 
 ## 结论
 该在线AI参谋体验界面以清晰的职责划分与稳健的事件驱动架构，实现了从用户输入到执行器调用的完整闭环。通过权限策略与审批机制保障操作安全，借助附件与视觉分析增强交互深度，同时提供个性化与历史管理能力，满足跨境电商场景下的复杂工作流需求。
@@ -621,4 +849,8 @@ RT --> HG["Harness Gateway"]
 
 **最新界面优化**：将权限和模型选择器从顶部工具栏移至Composer底部footer区域，提供更直观的操作体验和更好的空间利用；简化侧边栏设计，移除项目部分标题和新建项目按钮，提升信息密度和视觉整洁度；使用SVG齿轮图标替代文本状态指示器，提供更好的视觉识别度和缩放效果；优化布局和间距，使用CSS变量统一管理，提升整体视觉一致性。**最新交互增强**：新增了Composer展开/折叠功能，允许用户根据需要调整输入框高度，从默认的160px最大高度扩展到480px，显著提升长文本编辑体验；发送按钮采用新的青绿色调(#7fd4c9)，提供更好的视觉反馈；更新了占位符文本以提供更清晰的引导信息；为展开/折叠按钮添加了完整的无障碍属性支持，确保所有用户都能有效使用该功能。**最新视觉设计增强**：Zoom按钮获得了显著的视觉设计改进，包括增大的按钮尺寸（从24x24像素增加到28x28像素）、优化的图标比例（从14像素缩放到16像素）、改进的颜色对比度（从text-tertiary改为text-secondary）、添加的浅灰色背景(#f4f4ee)以及优化的定位布局（top/right边距从4/2像素调整为6/6像素），这些改进显著提升了按钮的可访问性和用户体验。
 
-未来可进一步拆分大组件、引入虚拟列表与更细粒度的缓存策略，以提升长会话体验与性能表现。同时可以考虑扩展反馈系统的分析能力，为用户提供更有针对性的任务建议和优化指导。此外，还可以考虑添加更多自定义主题选项和国际化支持，以满足不同用户的需求。线程重置通知和连接状态报告的增强将为未来的功能扩展奠定坚实的基础。**特别值得关注的是**，智能模型提供商切换和effort参数管理的改进为未来支持更多AI模型提供商奠定了良好的技术基础，使得系统能够更好地适应不断变化的AI模型生态。双区域侧边栏的设计也为未来功能的扩展提供了更好的组织结构基础。**最新的界面重构和交互增强**进一步优化了用户体验，为未来的功能迭代提供了更好的基础架构，特别是Composer展开/折叠功能和发送按钮样式升级，为用户提供了更加灵活和现代的交互体验。**Zoom按钮的视觉设计增强**为界面的可访问性和用户体验树立了新的标准，为其他UI元素的优化提供了参考范例。
+**最新Linduo集成**：集成了完整的Linduo模型选择UI组件体系，包括用户偏好设置、管理员分配界面和用户例外管理功能。通过基于角色的权限控制，管理员可以访问模型分配穿梭界面进行批量模型分配，普通用户只能设置个人偏好。新增了零度API模型广场页面，提供37个聚合大模型的浏览、筛选和价格查询功能。系统管理页面也集成了Linduo功能，支持成员级别的等级分配和例外管理。这些功能为用户提供了一个完整的模型选择和管理体系，极大地提升了AI模型使用的灵活性和可控性。
+
+**最新重大更新**：**LinduoPreferenceModal已完全重新设计**，引入了革命性的搜索功能、供应商分组过滤系统和现代化UI组件。全新的搜索功能支持按模型名称、ID和描述进行实时模糊匹配，大幅提升模型查找效率。供应商分组过滤系统基于OpenAI、Google、Anthropic、Vidu四大供应商的智能分组和筛选，帮助用户快速定位所需模型。现代化UI组件采用卡片式设计、供应商芯片筛选、分组列表展示和响应式布局，提供卓越的视觉体验和交互感受。增强的用户体验包括单选设置默认模型、选择不使用Linduo模型（回退到Codex默认）、实时状态显示和异步数据加载等功能。**最新修复**：解决了ShadowRoot边界导致的样式丢失问题，通过createPortal将模态框渲染到document.body，确保样式正确应用。**性能优化**：新增presentVendors记忆化值，只显示当前账户可用模型中的供应商，避免空列表显示，提升用户体验。
+
+未来可进一步拆分大组件、引入虚拟列表与更细粒度的缓存策略，以提升长会话体验与性能表现。同时可以考虑扩展反馈系统的分析能力，为用户提供更有针对性的任务建议和优化指导。此外，还可以考虑添加更多自定义主题选项和国际化支持，以满足不同用户的需求。线程重置通知和连接状态报告的增强将为未来的功能扩展奠定坚实的基础。**特别值得关注的是**，智能模型提供商切换和effort参数管理的改进为未来支持更多AI模型提供商奠定了良好的技术基础，使得系统能够更好地适应不断变化的AI模型生态。双区域侧边栏的设计也为未来功能的扩展提供了更好的组织结构基础。**最新的界面重构和交互增强**进一步优化了用户体验，为未来的功能迭代提供了更好的基础架构，特别是Composer展开/折叠功能和发送按钮样式升级，为用户提供了更加灵活和现代的交互体验。**Zoom按钮的视觉设计增强**为界面的可访问性和用户体验树立了新的标准，为其他UI元素的优化提供了参考范例。**Linduo组件体系的集成**为未来的模型管理功能扩展提供了坚实的基础，使得系统能够更好地支持多样化的AI模型需求和复杂的权限管理场景。**全新重新设计的LinduoPreferenceModal**代表了用户体验的重大进步，其强大的搜索功能、供应商分组过滤系统和现代化UI组件将为用户带来前所未有的模型选择体验，为未来的AI模型管理功能奠定了坚实的基础。**ShadowRoot边界问题的解决**确保了模态框在所有环境下都有正确的样式和行为，**presentVendors记忆化优化**则进一步提升了性能和用户体验。

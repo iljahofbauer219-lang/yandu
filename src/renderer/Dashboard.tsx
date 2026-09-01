@@ -163,7 +163,18 @@ export default function Dashboard() {
     )
   }
 
-  if (!summary) return null
+  // 服务端返回空数据（非异常）时不能整页空白，给出可重试的空态提示
+  if (!summary) {
+    return (
+      <section className="dashboard-page">
+        <div className="dashboard-error">
+          <strong>暂无工作台数据</strong>
+          <span>服务端未返回团队工作台数据，可能是服务端版本较旧或数据仍在初始化。</span>
+          <button onClick={() => void load(false)}>重试</button>
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section className="dashboard-page">

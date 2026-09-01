@@ -1,4 +1,4 @@
-// 零度API 37 个模型目录（OpenAI 14 / Google 10 / Anthropic 10 / Vidu 3）。
+// 零度API 28 个模型目录（OpenAI 5 / Google 10 / Anthropic 10 / Vidu 3；api000.com/pricing 37 个的精选子集）。
 //
 // 这是 src/shared/linduoCatalog.ts 的服务端镜像：
 // - 服务端 tsconfig 的 rootDir=.  + include=[src, scripts] 不允许跨目录 import ../shared
@@ -29,16 +29,7 @@ export interface LinduoModelEntry {
 }
 
 export const LINDUO_MODELS: LinduoModelEntry[] = [
-  // OpenAI 14
-  { id: 'gpt-4o',             name: 'GPT-4o',             vendor: 'openai', capabilities: ['CHAT', 'VISION'], description: 'OpenAI 多模态旗舰，文本与视觉对话',         briefRating: '视觉对话主力，多模态首选',     contextLabel: '1M' },
-  { id: 'gpt-4o-2024-05-13',  name: 'GPT-4o (2024-05)',   vendor: 'openai', capabilities: ['CHAT', 'VISION'], description: 'GPT-4o 2024-05 快照版本，输出更便宜',       briefRating: '旧快照，输出更便宜',           contextLabel: '1M' },
-  { id: 'gpt-4o-mini',        name: 'GPT-4o mini',        vendor: 'openai', capabilities: ['CHAT', 'VISION'], description: '轻量多模态，成本低、速度快',                 briefRating: '大量打标/分类首选',             contextLabel: '1M' },
-  { id: 'gpt-5',              name: 'GPT-5',              vendor: 'openai', capabilities: ['CHAT', 'VISION'], description: 'GPT-5 主力对话模型，推理与视觉综合强',         briefRating: '复杂推理综合强，综合首选',     contextLabel: '1M' },
-  { id: 'gpt-5-mini',         name: 'GPT-5 mini',         vendor: 'openai', capabilities: ['CHAT'],           description: '轻量 GPT-5，速度更快、成本极低',             briefRating: '速度与价格平衡',               contextLabel: '1M' },
-  { id: 'gpt-5.3-codex',      name: 'GPT-5.3 Codex',      vendor: 'openai', capabilities: ['CHAT'],           description: 'GPT-5.3 Codex 编码专用版',                  briefRating: '代码生成与重构专用',           contextLabel: '1M' },
-  { id: 'gpt-5.4',            name: 'GPT-5.4',            vendor: 'openai', capabilities: ['CHAT', 'VISION'], description: 'GPT-5.4 进阶版，复杂任务与多模态',         briefRating: '新版综合（待评估）',           contextLabel: '1M' },
-  { id: 'gpt-5.4-mini',       name: 'GPT-5.4 mini',       vendor: 'openai', capabilities: ['CHAT'],           description: '轻量 GPT-5.4，速度与成本平衡',               briefRating: '新版轻量，速度优先',           contextLabel: '1M' },
-  { id: 'gpt-5.5',            name: 'GPT-5.5',            vendor: 'openai', capabilities: ['CHAT', 'VISION'], description: 'GPT-5.5 多模态升级，推理与视觉更稳',         briefRating: '大参数量，长文本与深度推理',   contextLabel: '1M' },
+  // OpenAI 5（2026-08-28 用户策展：退役 gpt-4o/4o-快照/4o-mini/gpt-5/5-mini/5.3-codex/5.4/5.4-mini/5.5）
   { id: 'gpt-5.6-luna',       name: 'GPT-5.6 Luna',       vendor: 'openai', capabilities: ['CHAT'],           description: 'GPT-5.6 入门款，价格最便宜',                 briefRating: '新版极轻量，最便宜',           contextLabel: '1M' },
   { id: 'gpt-5.6-sol',        name: 'GPT-5.6 Sol',        vendor: 'openai', capabilities: ['CHAT', 'VISION'], description: 'GPT-5.6 旗舰款，复杂任务首选',               briefRating: '新版旗舰，复杂任务',           contextLabel: '1M' },
   { id: 'gpt-5.6-terra',      name: 'GPT-5.6 Terra',      vendor: 'openai', capabilities: ['CHAT', 'VISION'], description: 'GPT-5.6 均衡款，性能与价格平衡',             briefRating: '新版均衡款',                   contextLabel: '1M' },

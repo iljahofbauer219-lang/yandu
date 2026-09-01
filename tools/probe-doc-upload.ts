@@ -20,7 +20,7 @@ async function loadEnv() {
 async function main() {
   const env = await loadEnv()
   const BASE = env.MAXKB_BASE_URL
-  const PASSWORD = 'zq2525063'
+  const PASSWORD = process.env.MAXKB_ADMIN_PASSWORD || ''
   const KB = '01a00117-e215-7e90-b6ed-e782da8ddbb1'
   const loginRes = await fetch(`${BASE}/admin/api/user/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

@@ -390,6 +390,13 @@ export default function AIEmployee({ initialTab, position = '选品调研员', o
   // P2 阶段:执行步骤面板的请求 id + 重置信号
   const [execRequestId, setExecRequestId] = useState<string>('')
   const [execResetSignal, setExecResetSignal] = useState(0)
+  // 三件套护栏：send 进行中时记录起始时间戳，并维护一个 1s 递增的「已等待 Xs」计数。
+  // - sendingStartedAt:每次 setSending(true) 时拍下 Date.now();setSending(false) 时清空。
+  // - sendingElapsed:useEffect 里 setInterval 每秒重算，供按钮文案和提示使用。
+  const [sendingStartedAt, setSendingStartedAt] = useState<number | null>(null)
+  const [sendingElapsed, setSendingElapsed] = useState(0)
+  // 60s 保险：超时只重置 UI（不强行 abort 上游）；避免上游慢响应时按钮卡在「思考中…」无法恢复。
+  const SENDING_HARD_TIMEOUT_MS = 60_000
 
   // ─── 附件与大模型选择 ────────────────────────────────
   const [attachments, setAttachments] = useState<AiEmployeeAttachment[]>([])
@@ -529,10 +536,10 @@ export default function AIEmployee({ initialTab, position = '选品调研员', o
     if (notice) noticeRef.current?.scrollIntoView({ block: 'nearest' })
   }, [notice])
 
-  // 加载可用模型列表；当前选中项缺失或不可用时回退默认模型
+  // 加载可用模型列表；按当前工作台 position 过滤（per-position 白名单，下拉只显示岗位对应模型）
   useEffect(() => {
     let cancelled = false
-    window.desktop.aiEmployee.models().then(list => {
+    window.desktop.aiEmployee.models(position).then(list => {
       if (cancelled) return
       setModels(list)
       setModelId(current => {
@@ -543,12 +550,14 @@ export default function AIEmployee({ initialTab, position = '选品调研员', o
         }
         const hit = list.find(item => item.id === current)
         if (hit && hit.available) return current
+        // 白名单过滤后列表为空（如未就绪岗位）→ 保留 current 等待后续扩展；否则回退到 positionDefaultModel
+        if (list.length === 0) return current
         try { localStorage.setItem(`${CHAT_MODEL_KEY}:${position}`, positionDefaultModel) } catch { /* ignore quota errors */ }
         return positionDefaultModel
       })
     }).catch(() => { /* 模型列表加载失败时保留当前选择 */ })
     return () => { cancelled = true }
-  }, [])
+  }, [position])
 
   // 订阅浏览器 URL / 加载状态；占位区域尺寸变化时同步原生视图边界；卸载时隐藏视图
   useEffect(() => {
@@ -597,6 +606,66 @@ export default function AIEmployee({ initialTab, position = '选品调研员', o
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
     }
   }, [messages, sending, activeTab])
+
+  // 三件套护栏 #1：send 进行中时每 1s 刷新「已等待 Xs」显示。
+  // 三件套护栏 #3：sending=true 超过 60s 后强制重置 UI 状态，避免按钮卡在「思考中…」。
+  // 强化：60s 保险不再只重置 UI，还主动调 cancelChat 中断上游 fetch；
+  //      避免上游占着主进程 240s CHAT_TIMEOUT_MS 浪费连接、避免用户取消按钮“未命中”现象。
+  useEffect(() => {
+    if (!sending) {
+      setSendingElapsed(0)
+      setSendingStartedAt(null)
+      return undefined
+    }
+    const start = Date.now()
+    setSendingElapsed(0)
+    setSendingStartedAt(start)
+    const tick = setInterval(() => {
+      setSendingElapsed(Math.max(0, Math.floor((Date.now() - start) / 1000)))
+    }, 1000)
+    const hard = setTimeout(() => {
+      // 超时同时中断上游 + 重置 UI；不抹掉「正在依据本品身份锁…」等业务提示。
+      const id = execRequestId
+      if (id) {
+        void window.desktop.aiEmployee.cancelAsk(id).catch(() => { /* 主进程未命中时静默 */ })
+      }
+      setSending(false)
+      setSendingStartedAt(null)
+      setNotice((prev) => prev
+        ? `${prev}（已等待 60s，UI 状态已自动恢复，上游已主动中断）`
+        : '请求等待超过 60 秒，UI 状态已自动恢复，上游已主动中断；如需重试请点发送')
+    }, SENDING_HARD_TIMEOUT_MS)
+    return () => {
+      clearInterval(tick)
+      clearTimeout(hard)
+    }
+  }, [sending, execRequestId])
+
+  // 关键 UX 修复:send 触发后立即折叠 extracted 卡片,避免 floating-composer 内容撑高覆盖 stage。
+  // 之前 setExtractedCollapsed(true) 写在 send() 流程 line 1270 (payloadIssues check 之后),
+  // 但市场抓取 (line 1054-1097) + enrichment (line 1303-1359) 可能持续 10-60s,期间 extracted
+  // 保持展开 (来自 startExtraction line 911 setExtractedCollapsed(false)),浮动输入栏内
+  // quick-profit + full-cost + entry-decision 高度 ≈ 800-1000px,几乎覆盖整个 stage,用户看不到任何报告。
+  // 用 useEffect 绑定 [sending] → 折叠; sending=false 不重置 (保留用户手动 toggle 的状态)。
+  // useState 闭包: 提取 floating-composer 高度也用此 hook 同步 (line 1816 的 with-floating-composer)。
+  useEffect(() => {
+    if (sending) {
+      setExtractedCollapsed(true)
+    }
+  }, [sending])
+
+  // 主动取消 send：调主进程 cancelAsk 中断上游 fetch，同时重置 UI。
+  // 渲染端状态与上游 abort 解耦：cancelAsk 即便未命中（请求已自然完成）也无副作用。
+  const cancelSend = useCallback(() => {
+    const id = execRequestId
+    if (id) {
+      void window.desktop.aiEmployee.cancelAsk(id).catch(() => { /* 主进程未命中时静默 */ })
+    }
+    setSending(false)
+    setSendingStartedAt(null)
+    setSendingElapsed(0)
+    setNotice((prev) => prev ? `${prev}（已主动取消）` : '已取消当前请求')
+  }, [execRequestId])
 
   // ─── History helpers ─────────────────────────────────
   const persistConversation = useCallback((msgs: ChatMessage[], id: string) => {
@@ -971,6 +1040,7 @@ export default function AIEmployee({ initialTab, position = '选品调研员', o
     const requirement = draft.trim()
     if (!requirement || sending) return
     // P2 阶段:为本次请求生成 requestId,让 ExecutionPanel 隔离多轮任务
+    // 三件套护栏:同一 requestId 同步到上游(cancelAsk 命中点)和渲染端(三件套按钮的取消动作)。
     const newRequestId = `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
     setExecRequestId(newRequestId)
     setExecResetSignal(s => s + 1)
@@ -1257,7 +1327,9 @@ ${selectionReportPayloadFactBlock(reportPayload)}` : ''}`
               modelId: enrichmentModelId,
               attachments: [],
               // I.4 阶段新增：报告增强同样让 MaxKB 智能体可参考 4 样例 + 门禁
-              useSampleLibrary
+              useSampleLibrary,
+              // 三件套护栏：共享 send() 的 requestId，让 cancelSend 能取消 enrich 路径的上游。
+              requestId: newRequestId
             })
             return parseSelectionReportEnrichment(result.content, enrichmentModelId, reportPayload.listingEvidence?.map(item => item.asin) || [])
           } catch {
@@ -1301,7 +1373,7 @@ ${selectionReportPayloadFactBlock(reportPayload)}` : ''}`
     }
 
     try {
-      const result = await window.desktop.aiEmployee.ask({ query: text, history: prevHistory, modelId, attachments: outgoingAttachments, useSampleLibrary })
+      const result = await window.desktop.aiEmployee.ask({ query: text, history: prevHistory, modelId, attachments: outgoingAttachments, useSampleLibrary, requestId: newRequestId })
       // 报告已返回，清除抓取阶段提示；抓取失败时的提示仍会在请求阶段保留。
       setNotice('')
       const validateReport = (content: string) => [
@@ -1334,7 +1406,7 @@ ${selectionReportPayloadFactBlock(reportPayload)}` : ''}`
           `未通过项：\n${qualityIssues.map(issue => `- ${issue}`).join('\n')}`,
           `本次用户要求与系统事实：\n${text}`
        ].join('\n\n')
-        const repaired = await Promise.allSettled(repairModelIds.map(repairModelId => window.desktop.aiEmployee.ask({ query: repairQuery, history: [], modelId: repairModelId, attachments: [] })))
+        const repaired = await Promise.allSettled(repairModelIds.map(repairModelId => window.desktop.aiEmployee.ask({ query: repairQuery, history: [], modelId: repairModelId, attachments: [], requestId: newRequestId })))
         const candidates = repaired.flatMap((result, index) => result.status === 'fulfilled'
           ? [{ content: result.value.content, modelId: repairModelIds[index], issues: validateReport(result.value.content) }]
           : [])
@@ -1475,7 +1547,7 @@ ${selectionReportPayloadFactBlock(reportPayload)}` : ''}`
         ))}
       </div>
       {/* 提取结果卡（条件显示） */}
-      {notice && <div ref={noticeRef} className="ai-employee-notice">{notice}</div>}
+      {notice && <div ref={noticeRef} className="ai-employee-notice">{notice}{sending && sendingElapsed > 0 ? `（已等待 ${sendingElapsed}s）` : ''}</div>}
       {marketAudit && (
         <section className="ai-employee-market-audit" aria-label="Amazon 样本可比性审计">
           <header><b>Amazon 样本可比性</b><span className={`confidence ${marketAudit.audit.confidence === '可决策' ? 'high' : marketAudit.audit.confidence === '中等' ? 'medium' : 'low'}`}>结论置信度：{marketAudit.audit.confidence}</span></header>
@@ -1678,8 +1750,14 @@ ${selectionReportPayloadFactBlock(reportPayload)}` : ''}`
           </div>
           <div className="ai-employee-composer-right">
             <AiEmployeeModelPicker models={models} selectedId={modelId} onSelect={handleSelectModel} />
-            <button type="button" className="ai-employee-send-btn primary" disabled={sending || !draft.trim()} onClick={() => void send()}>
-              {sending ? '思考中…' : '发送'}
+            <button
+              type="button"
+              className={`ai-employee-send-btn ${sending ? 'cancel' : 'primary'}`}
+              disabled={sending ? false : !draft.trim()}
+              onClick={sending ? cancelSend : () => void send()}
+              title={sending ? '主动取消本次问询（中断上游 fetch）' : '发送'}
+            >
+              {sending ? `取消（${sendingElapsed}s）` : '发送'}
             </button>
           </div>
         </div>
@@ -1752,7 +1830,7 @@ ${selectionReportPayloadFactBlock(reportPayload)}` : ''}`
 
         {/* 工作处理：会话工作区；无会话时显示空态并引导去首页/档案 */}
         {activeTab === 'process' && (
-          <div className="ai-employee-stage-process">
+          <div className={`ai-employee-stage-process${messages.length > 0 ? ' with-floating-composer' : ''}`}>
             {messages.length === 0 ? (
               <div className="ai-employee-work-empty">
                 <h2>暂无进行中的工作</h2>

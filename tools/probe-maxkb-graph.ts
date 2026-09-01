@@ -4,7 +4,7 @@ import { promises as fsp } from 'node:fs'
 async function main() {
   const envRaw = await fsp.readFile('.env.local', 'utf8')
   const env = Object.fromEntries(envRaw.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')).map(l => { const i = l.indexOf('='); return i === -1 ? [l, ''] : [l.slice(0, i).trim(), l.slice(i + 1).trim()] }))
-  const T = (await (await fetch(env.MAXKB_BASE_URL + '/admin/api/user/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'admin', password: 'zq2525063' }) })).json()).data.token
+  const T = (await (await fetch(env.MAXKB_BASE_URL + '/admin/api/user/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'admin', password: env.MAXKB_ADMIN_PASSWORD || '' }) })).json()).data.token
   process.env.MAXKB_ADMIN_TOKEN = T
   console.log('token len:', T.length, 'MAXKB_ADMIN_TOKEN set')
 

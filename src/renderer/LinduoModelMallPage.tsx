@@ -13,11 +13,11 @@ import {
 } from '../shared/linduoCatalog'
 
 /**
- * 零度API 模型广场：浏览 37 个聚合大模型（OpenAI 14 / Google 10 / Anthropic 10 / Vidu 3）。
+ * 零度API 模型广场：浏览 28 个精选大模型（OpenAI 5 / Google 10 / Anthropic 10 / Vidu 3；api000.com/pricing 37 个的精选子集）。
  * 模型目录与元数据抽离到 src/shared/linduoCatalog.ts，主进程 + 渲染层共用。
  *
  * 设计要点：
- * - 模型元数据内置（37 个模型 id + 名称 + 能力 + 选型口诀），无需调用 /v1/models；接入 Key 状态通过 llm-keys:list 读取。
+ * - 模型元数据内置（28 个模型 id + 名称 + 能力 + 选型口诀），无需调用 /v1/models；接入 Key 状态通过 llm-keys:list 读取。
  * - 左侧筛选：供应商（OpenAI / Google / Anthropic / Vidu）与能力（生图 / 视频 / 对话 / 多模态）。
  * - 顶部搜索按 id / 名称 / 描述模糊匹配。
  * - 价格行：每张卡片底部展示输入/输出/缓存价（USD/1M tokens），图片/视频模型用 pricePerUnit + unitLabel。

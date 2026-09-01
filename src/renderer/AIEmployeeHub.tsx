@@ -14,6 +14,7 @@
 import { useState, type FormEvent } from 'react'
 import SceneEntryGrid from './SceneEntry'
 import BestPracticeGrid from './BestPractice'
+import CrossborderAgentGrid from './CrossborderAgentGrid'
 import SkillSelector from './SkillSelector'
 import ProductLibrary from './ProductLibrary'
 import {
@@ -130,6 +131,12 @@ export default function AIEmployeeHub({ onEnterAgent }: Props) {
           </form>
         </div>
       </header>
+
+      {/* 跨境智能体（部门分组卡片，位于「场景入口」之前） */}
+      <section className="ai-employee-hub-agents" aria-label="跨境智能体">
+        <h2 className="ai-employee-hub-section-title">跨境智能体</h2>
+        <CrossborderAgentGrid onSelect={agent => onEnterAgent(agent.name)} />
+      </section>
 
       {/* 场景入口 */}
       <section className="ai-employee-hub-scenes" aria-label="场景入口">

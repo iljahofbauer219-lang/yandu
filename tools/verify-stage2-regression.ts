@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const REPORT_FILE = path.join(__dirname, 'verify-stage2-regression-report.json')
-const PASSWORD = 'zq2525063'
+const PASSWORD = process.env.MAXKB_ADMIN_PASSWORD || ''
 
 async function loadEnv() {
   const envRaw = await fsp.readFile(path.join(ROOT, '.env.local'), 'utf8')

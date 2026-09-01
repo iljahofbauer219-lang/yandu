@@ -1305,14 +1305,6 @@ export interface CollectorPluginProduct {
   sourceCategory?: SupplySourceCategory
 }
 
-export interface CollectorPluginStatus {
-  running: boolean
-  port: number
-  pairingCode: string
-  extensionPath: string
-  importedCount: number
-}
-
 export interface CollectorPluginImportResult {
   imported: number
   updated: number

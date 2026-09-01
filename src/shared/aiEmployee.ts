@@ -33,5 +33,8 @@ export interface AiEmployeeAskRequest {
   // - 优先对 MaxKB 智能体链路生效（amazon-skills-agent / maxkb-sourcing / maxkb-listing / maxkb-guardian）；
   //   RAGFlow 30 天回退链路（ragflow-agent / listing-agent）也注入但即将停服；直连模型（百炼/DeepSeek）不注入
   useSampleLibrary?: boolean
+  // 三件套护栏：渲染端复用的 requestId，用于 cancelAsk 命中 activeChats 中的 controller。
+  // 缺省时主进程 fallback 生成；推荐渲染端在 send() 入口生成并在 cancelSend 中复用。
+  requestId?: string
 }
 export interface AiEmployeePickResult { ok: boolean; attachments: AiEmployeeAttachment[]; message?: string }

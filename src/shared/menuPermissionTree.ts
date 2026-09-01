@@ -56,6 +56,7 @@ export const MENU_PERMISSION_TREE: MenuPermNode[] = [
       { code: 'menu.hq.feishu', label: 'AI飞书' },
       { code: 'menu.hq.vpn', label: '翻墙管理' },
       { code: 'menu.hq.crossborder', label: '跨境导航' },
+      { code: 'menu.hq.crawler', label: '文章抓取' },
       { code: 'menu.hq.admin', label: '系统管理' },
       { code: 'menu.tasks', label: 'AI任务' }
     ]

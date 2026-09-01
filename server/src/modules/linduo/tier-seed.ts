@@ -11,12 +11,12 @@ const TIER_DEFS: TierDef[] = [
   { key: 'full', name: '全开组', description: '全部启用对话模型,主账号默认', isSystem: true }
 ]
 
-/** 进阶组默认 13 模型（中阶日常运营：轻量批量 + 主力写作；旗舰/高价款留给全开组）。
- * 依据 2026-08 新 catalog（37 模型）选型，旧 catalog 的 gpt-4-turbo/claude-3.5/gemini-1.5 等已下架。
+/** 进阶组默认 9 模型（中阶日常运营：轻量批量 + 主力写作；旗舰/高价款留给全开组）。
+ * 依据 2026-08-28 策展后 catalog（28 模型，OpenAI 仅留 5.6 三件套 + 双生图）选型。
  * 仅首次建 tier 时灌入，之后尊重管理员调整。 */
 const ADVANCED_DEFAULT_MODEL_IDS = [
-  // OpenAI 6：多模态主力 + 低成本批量款
-  'gpt-4o', 'gpt-4o-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5.4-mini', 'gpt-5.6-luna',
+  // OpenAI 2：最便宜批量款 + 均衡主力
+  'gpt-5.6-luna', 'gpt-5.6-terra',
   // Google 4：轻量高性价比款
   'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.1-flash', 'gemini-3.1-flash-lite',
   // Anthropic 3：分类打标 + Listing 写作主力

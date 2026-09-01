@@ -9,7 +9,7 @@
  * 5. 每个二级员工有独立颜色与图标，便于在徽章 / chip / 卡片中复用
  *
  * 数据流：
- * - AIEmployeeHub 主页 -> AgentAccordion 手风琴 -> 二级卡片 -> 点"进入"跳到员工工作台
+ * - AIEmployeeHub 主页 -> 跨境智能体卡片（CrossborderAgentGrid）-> 点卡片跳到员工工作台
  * - 员工工作台（AIEmployee.tsx）的 position props 直接用 AgentProfile.name
  * - 旧版 AGENTS 数组（AIEmployee.tsx:62）保留作为局部兼容垫片，本文件为唯一来源
  */
@@ -396,6 +396,32 @@ export const BEST_PRACTICES: BestPractice[] = [
     description: '5 个头部 ASIN 对比',
     icon: '🎯',
     targetAgent: '竞品分析员'
+  }
+]
+
+/** Hub 主页「跨境智能体」部门分组（卡片按 name 引用现有 AgentProfile，不重复定义） */
+export interface CrossborderDepartment {
+  id: string
+  /** 部门标题（含序号） */
+  name: string
+  /** 部门色条颜色 */
+  color: string
+  /** 部门成员（AgentProfile.name） */
+  agents: string[]
+}
+
+export const CROSSBORDER_DEPARTMENTS: CrossborderDepartment[] = [
+  {
+    id: 'cb-ops',
+    name: '一、跨境营运部',
+    color: '#0abab5',
+    agents: ['选品调研员', '竞品分析员', '产品定价员', '类目优选员']
+  },
+  {
+    id: 'cb-product-optimization',
+    name: '二、产品优化部',
+    color: '#f59e0b',
+    agents: ['Listing精造师']
   }
 ]
 

@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const REPORT_FILE = path.join(__dirname, 'migrate-docs-to-maxkb-report.json')
 
-const PASSWORD = 'zq2525063'
+const PASSWORD = process.env.MAXKB_ADMIN_PASSWORD || ''
 
 // ─── 1. 加载 .env ───────────────────────────────────────────
 async function loadEnv() {

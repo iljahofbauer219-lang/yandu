@@ -13,7 +13,7 @@ import { useSession } from './SessionGate'
 import { Button, EmptyState, LoadingState, Notice, StatusBadge } from './ui/primitives'
 import { MENU_PERMISSION_TREE, menuCheckState, summarizeMenuPermissions, toggleMenu, toggleMenuCard } from '../shared/menuPermissionTree'
 
-type AdminTab = 'members' | 'review' | 'org'
+type AdminTab = 'members' | 'review' | 'crawler' | 'org'
 
 /** 两级使用权限勾选树：一级三态（未选/半选/全选），二级与一级联动 */
 function MenuPermTree(props: { selected: string[]; onChange: (next: string[]) => void; disabled?: boolean }) {
@@ -275,6 +275,194 @@ function MemberRow(props: {
   </tr>
 }
 
+// ---------------------------------------------------------------- 文章抓取配置
+
+type CrawlerServiceState = 'STOPPED' | 'STARTING' | 'RUNNING' | 'START_FAILED'
+
+interface CrawlerConfig {
+  installPath: string
+  webUiUrl: string
+  dataDir: string
+  autoStart: boolean
+}
+
+interface CrawlerStatus {
+  state: CrawlerServiceState
+  config: CrawlerConfig
+  dockerAvailable: boolean
+  dockerComposeAvailable: boolean
+  installPathValid: boolean
+  dataDirValid: boolean
+  webUiReachable: boolean
+  message: string
+  lastCheckedAt: string
+}
+
+const CRAWLER_STATE_LABEL: Record<CrawlerServiceState, string> = {
+  STOPPED: '未启动',
+  STARTING: '启动中',
+  RUNNING: '运行中',
+  START_FAILED: '启动失败'
+}
+
+const CRAWLER_STATE_TONE: Record<CrawlerServiceState, 'muted' | 'warning' | 'success' | 'danger'> = {
+  STOPPED: 'muted',
+  STARTING: 'warning',
+  RUNNING: 'success',
+  START_FAILED: 'danger'
+}
+
+function CrawlerConfigTab() {
+  const [status, setStatus] = useState<CrawlerStatus | null>(null)
+  const [installPath, setInstallPath] = useState('')
+  const [webUiUrl, setWebUiUrl] = useState('')
+  const [autoStart, setAutoStart] = useState(false)
+  const [busy, setBusy] = useState<'start' | 'stop' | 'save' | 'pick' | null>(null)
+  const [message, setMessage] = useState<{ tone: 'info' | 'success' | 'danger'; text: string } | null>(null)
+
+  const refresh = useCallback(async () => {
+    try {
+      const s = await window.desktop.articleCrawler.status()
+      setStatus(s)
+      setInstallPath(s.config.installPath)
+      setWebUiUrl(s.config.webUiUrl)
+      setAutoStart(s.config.autoStart)
+    } catch (err) {
+      setMessage({ tone: 'danger', text: err instanceof Error ? err.message : String(err) })
+    }
+  }, [])
+
+  useEffect(() => { void refresh() }, [refresh])
+
+  const handleSave = async () => {
+    setBusy('save'); setMessage(null)
+    try {
+      await window.desktop.articleCrawler.saveConfig({ installPath: installPath.trim(), webUiUrl: webUiUrl.trim(), autoStart })
+      setMessage({ tone: 'success', text: '已保存配置' })
+      await refresh()
+    } catch (err) {
+      setMessage({ tone: 'danger', text: `保存失败：${err instanceof Error ? err.message : String(err)}` })
+    } finally { setBusy(null) }
+  }
+
+  const handlePickPath = async () => {
+    setBusy('pick'); setMessage(null)
+    try {
+      const picked = await window.desktop.articleCrawler.pickInstallPath()
+      if (picked) {
+        setInstallPath(picked)
+        await refresh()
+        setMessage({ tone: 'success', text: `已选择安装目录：${picked}` })
+      }
+    } catch (err) {
+      setMessage({ tone: 'danger', text: `选择失败：${err instanceof Error ? err.message : String(err)}` })
+    } finally { setBusy(null) }
+  }
+
+  const handleStart = async () => {
+    setBusy('start'); setMessage(null)
+    try {
+      const s = await window.desktop.articleCrawler.start()
+      setStatus(s)
+      setMessage({ tone: s.webUiReachable ? 'success' : 'info', text: s.message })
+    } catch (err) {
+      setMessage({ tone: 'danger', text: `启动失败：${err instanceof Error ? err.message : String(err)}` })
+    } finally { setBusy(null) }
+  }
+
+  const handleStop = async () => {
+    setBusy('stop'); setMessage(null)
+    try {
+      const s = await window.desktop.articleCrawler.stop()
+      setStatus(s)
+      setMessage({ tone: 'info', text: s.message })
+    } catch (err) {
+      setMessage({ tone: 'danger', text: `停止失败：${err instanceof Error ? err.message : String(err)}` })
+    } finally { setBusy(null) }
+  }
+
+  const stateTone = status ? CRAWLER_STATE_TONE[status.state] : 'muted'
+  const stateLabel = status ? CRAWLER_STATE_LABEL[status.state] : '检测中'
+  const isRunning = status?.state === 'RUNNING'
+  const canStart = !!status?.dockerAvailable && !!status?.dockerComposeAvailable && !!status?.installPathValid
+
+  return <div className="crawler-config-tab">
+    <div className="crawler-status-strip">
+      <span className={`crawler-state-tag crawler-state-${stateTone}`}>
+        <i className={isRunning ? 'pulse' : ''} />
+        {stateLabel}
+      </span>
+      <span className="crawler-state-msg">{status?.message || '正在检测服务状态…'}</span>
+      <button type="button" className="muted" onClick={() => void refresh()}>↻ 重新检测</button>
+    </div>
+
+    {message && <Notice tone={message.tone} role="status">{message.text}</Notice>}
+
+    {!status?.dockerAvailable && <Notice tone="warning" role="alert">未检测到 docker 命令，请先安装 Docker Desktop</Notice>}
+    {status?.dockerAvailable && !status?.dockerComposeAvailable && <Notice tone="warning" role="alert">未检测到 docker compose 子命令，请升级 Docker Desktop 4.x+</Notice>}
+
+    <section className="crawler-config-card">
+      <div className="config-card-title"><span>01</span><div><b>NewsCrawler 安装路径</b><small>包含 docker-compose.yml 的目录</small></div></div>
+      <div className="config-card-body">
+        <label>安装路径
+          <div className="crawler-path-row">
+            <input value={installPath} onChange={e => setInstallPath(e.target.value)} placeholder="例如 /Users/you/NewsCrawler" />
+            <button type="button" onClick={() => void handlePickPath()} disabled={busy === 'pick'}>📁 选择目录</button>
+          </div>
+        </label>
+        <label>Web UI 地址
+          <input value={webUiUrl} onChange={e => setWebUiUrl(e.target.value)} placeholder="http://localhost:3021" />
+        </label>
+        <label className="crawler-checkbox">
+          <input type="checkbox" checked={autoStart} onChange={e => setAutoStart(e.target.checked)} />
+          <span>应用启动时自动拉起 NewsCrawler</span>
+        </label>
+        <div className="crawler-config-actions">
+          <button type="button" className="primary" onClick={() => void handleSave()} disabled={busy === 'save' || !installPath.trim()}>
+            {busy === 'save' ? '保存中…' : '保存配置'}
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section className="crawler-config-card">
+      <div className="config-card-title"><span>02</span><div><b>服务启停</b><small>基于 docker compose 控制 NewsCrawler 容器</small></div></div>
+      <div className="config-card-body crawler-runtime-grid">
+        <div>
+          <small>Docker</small>
+          <b className={status?.dockerAvailable ? 'ok' : 'fail'}>{status?.dockerAvailable ? '✓ 可用' : '✗ 不可用'}</b>
+        </div>
+        <div>
+          <small>docker compose</small>
+          <b className={status?.dockerComposeAvailable ? 'ok' : 'fail'}>{status?.dockerComposeAvailable ? '✓ 可用' : '✗ 不可用'}</b>
+        </div>
+        <div>
+          <small>docker-compose.yml</small>
+          <b className={status?.installPathValid ? 'ok' : 'fail'}>{status?.installPathValid ? '✓ 找到' : '✗ 未找到'}</b>
+        </div>
+        <div>
+          <small>Web UI</small>
+          <b className={status?.webUiReachable ? 'ok' : 'fail'}>{status?.webUiReachable ? '✓ 响应中' : '○ 离线'}</b>
+        </div>
+        <div className="crawler-runtime-actions">
+          <button type="button" className="primary" onClick={() => void handleStart()} disabled={busy === 'start' || !canStart}>
+            {busy === 'start' ? '启动中…' : '▶ 启动 NewsCrawler'}
+          </button>
+          <button type="button" onClick={() => void handleStop()} disabled={busy === 'stop' || !isRunning}>
+            {busy === 'stop' ? '停止中…' : '■ 停止'}
+          </button>
+          <button type="button" onClick={() => void window.desktop.articleCrawler.openInstallDir().catch(err => setMessage({ tone: 'danger', text: err.message }))} disabled={!status?.installPathValid}>
+            📁 打开安装目录
+          </button>
+          <button type="button" onClick={() => void window.desktop.articleCrawler.openDataDir().catch(err => setMessage({ tone: 'danger', text: err.message }))} disabled={!status?.dataDirValid}>
+            📂 打开数据目录
+          </button>
+        </div>
+      </div>
+    </section>
+  </div>
+}
+
 // ---------------------------------------------------------------- 主组件
 
 export default function SystemAdmin() {
@@ -394,6 +582,7 @@ export default function SystemAdmin() {
         <button role="tab" aria-selected={tab === 'review'} className={tab === 'review' ? 'active' : ''} onClick={() => setTab('review')}>
           注册审核{pendingMembers.length > 0 ? `（${pendingMembers.length}）` : ''}
         </button>
+        <button role="tab" aria-selected={tab === 'crawler'} className={tab === 'crawler' ? 'active' : ''} onClick={() => setTab('crawler')}>文章抓取</button>
         <button role="tab" aria-selected={tab === 'org'} className={tab === 'org' ? 'active' : ''} onClick={() => setTab('org')}>组织信息</button>
       </div>
     </div>
@@ -454,6 +643,8 @@ export default function SystemAdmin() {
           </tbody>
         </table>}
     </>}
+
+    {tab === 'crawler' && <CrawlerConfigTab />}
 
     {tab === 'org' && <div className="sysadmin-org">
       <dl className="sysadmin-org-info">

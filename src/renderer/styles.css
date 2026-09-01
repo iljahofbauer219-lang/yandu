@@ -549,6 +549,55 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .linduo-pricing-login-actions button:disabled { opacity:.6; cursor:not-allowed; }
 .linduo-pricing-hint { color:var(--text-muted); font-size:10px; line-height:1.5; }
 
+/* 阿里百炼 模型广场页（BailianModelMallPage.tsx）：同构于 Linduo，供应商色 #2563eb */
+.bailian-mall-page { flex:1; min-height:0; display:flex; flex-direction:column; margin:14px; padding:0; gap:12px; }
+.bailian-mall-toolbar { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding:0 4px; }
+.bailian-mall-toolbar-text { display:flex; flex-direction:column; gap:4px; }
+.bailian-mall-toolbar-text>b { font-size:18px; color:var(--text-primary); }
+.bailian-mall-toolbar-text>small { color:var(--text-muted); font-size:12px; }
+.bailian-mall-toolbar-actions { display:flex; align-items:center; gap:10px; }
+.bailian-mall-status { padding:5px 10px; border-radius:8px; font-size:11px; color:var(--text-secondary); background:var(--bg-soft); border:1px solid var(--border-soft); }
+.bailian-mall-status.ready { color:#075955; background:var(--accent-soft); border-color:var(--accent); }
+.bailian-mall-status.pending { color:#a33b32; background:var(--danger-bg); border-color:var(--danger); }
+.bailian-mall-layout { flex:1; min-height:0; display:grid; grid-template-columns:240px minmax(0,1fr); gap:14px; }
+.bailian-mall-filter { display:flex; flex-direction:column; gap:14px; padding:16px; background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:13px; box-shadow:var(--shadow-card); overflow-y:auto; }
+.bailian-mall-filter-section { display:flex; flex-direction:column; gap:8px; }
+.bailian-mall-filter-section>b { font-size:12px; color:var(--text-primary); }
+.bailian-mall-filter-section input[type='search'] { width:100%; height:34px; padding:0 10px; border:1px solid var(--border-strong); border-radius:8px; background:var(--bg-panel); color:var(--text-primary); font-size:12px; outline:none; }
+.bailian-mall-filter-section input[type='search']:focus { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); }
+.bailian-mall-chip { display:flex; align-items:center; justify-content:space-between; gap:6px; padding:6px 10px; border:1px solid var(--border-strong); border-radius:8px; background:var(--bg-panel); color:var(--text-secondary); font-size:11px; cursor:pointer; transition:all .15s ease; }
+.bailian-mall-chip:hover { border-color:var(--accent); color:var(--text-primary); }
+.bailian-mall-chip.active { font-weight:650; }
+.bailian-mall-chip em { font-style:normal; font-size:10px; padding:1px 6px; border-radius:10px; background:var(--bg-soft); color:var(--text-muted); }
+.bailian-mall-filter-hint { margin-top:auto; padding-top:12px; border-top:1px solid var(--border-soft); color:var(--text-muted); font-size:11px; }
+.bailian-mall-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; padding:16px; background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:13px; box-shadow:var(--shadow-card); overflow-y:auto; align-content:start; }
+.bailian-mall-empty { grid-column:1/-1; text-align:center; padding:60px 20px; color:var(--text-muted); font-size:12px; }
+.bailian-mall-card { display:flex; flex-direction:column; gap:10px; padding:14px; border:1px solid var(--border-soft); border-radius:12px; background:var(--bg-panel); transition:all .15s ease; }
+.bailian-mall-card:hover { border-color:var(--accent); box-shadow:0 6px 18px rgba(10,186,181,.12); }
+.bailian-mall-card-head { display:flex; align-items:center; justify-content:space-between; padding:6px 10px; border-radius:8px; border:1px solid transparent; }
+.bailian-mall-card-vendor { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:650; }
+.bailian-mall-card-vendor-icon { font-size:14px; line-height:1; }
+.bailian-mall-card-context { font-size:10px; padding:2px 6px; border-radius:6px; background:rgba(255,255,255,.6); color:var(--text-secondary); }
+.bailian-mall-card-body { display:flex; flex-direction:column; gap:6px; }
+.bailian-mall-card-name { margin:0; font-size:14px; font-weight:700; color:var(--text-primary); line-height:18px; }
+.bailian-mall-card-id { display:block; padding:2px 6px; border-radius:4px; background:var(--bg-soft); color:var(--text-muted); font-size:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; word-break:break-all; }
+.bailian-mall-card-desc { margin:0; color:var(--text-secondary); font-size:11px; line-height:16px; min-height:48px; }
+.bailian-mall-card-rating { display:inline-block; align-self:flex-start; padding:3px 8px; border-radius:6px; background:#9333ea14; color:#9333ea; border:1px solid #9333ea30; font-size:10px; font-weight:600; line-height:14px; max-width:100%; word-break:break-word; }
+.bailian-mall-card-rating-warn { background:#d9770614; color:#d97706; border-color:#d9770630; }
+.bailian-mall-card-tags { display:flex; flex-wrap:wrap; gap:5px; }
+.bailian-mall-card-tag { padding:2px 7px; border:1px solid transparent; border-radius:10px; font-size:10px; font-weight:600; }
+.bailian-mall-card-tag-wired { color:#075955 !important; background:var(--accent-soft) !important; border-color:var(--accent) !important; }
+.bailian-mall-pricing { position:relative; padding:8px 10px; border:1px solid var(--border-soft); border-radius:8px; background:linear-gradient(180deg,var(--accent-soft) 0%,transparent 100%); display:flex; flex-direction:column; gap:6px; }
+.bailian-mall-pricing-empty { color:var(--text-muted); font-size:11px; text-align:center; padding:14px 0; background:var(--bg-soft); }
+.bailian-mall-pricing-grid { display:grid; grid-template-columns:1fr; gap:6px; }
+.bailian-mall-pricing-cell { display:flex; flex-direction:column; gap:1px; padding:4px 6px; border-radius:6px; background:var(--bg-panel); border:1px solid var(--border-soft); }
+.bailian-mall-pricing-label { font-size:10px; color:var(--text-muted); letter-spacing:.02em; }
+.bailian-mall-pricing-value { font-size:13px; font-weight:700; color:var(--text-primary); font-variant-numeric:tabular-nums; }
+.bailian-mall-card-foot { display:flex; align-items:center; justify-content:flex-start; padding-top:8px; border-top:1px solid var(--border-soft); font-size:11px; }
+.bailian-mall-card-foot em { font-style:normal; padding:3px 8px; border-radius:6px; }
+.bailian-mall-card-foot em.ready { color:#075955; background:var(--accent-soft); }
+.bailian-mall-card-foot .bailian-mall-card-pending { color:#a33b32; background:var(--danger-bg); }
+
 
 /* ============ Linduo 模型分配 Modal (M1) ============ */
 /* Linduo 等级下拉（SystemAdmin 成员行 R-2） */

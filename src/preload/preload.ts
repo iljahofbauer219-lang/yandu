@@ -148,14 +148,16 @@ contextBridge.exposeInMainWorld('desktop', {
     }
   },
   aiEmployee: {
-    ask: (request: AiEmployeeAskRequest): Promise<{ ok: boolean; content: string }> => ipcRenderer.invoke('ai-employee:ask', request),
+    ask: (request: AiEmployeeAskRequest & { requestId?: string }): Promise<{ ok: boolean; content: string }> => ipcRenderer.invoke('ai-employee:ask', request),
+    // 三件套护栏 #2：渲染端主动取消进行中的 ask（命中主进程 activeChats 并 abort 上游 fetch）
+    cancelAsk: (requestId: string): Promise<boolean> => ipcRenderer.invoke('ai-employee:cancel-ask', requestId),
     // P2 阶段:订阅执行步骤事件
     onEvent: (callback: (event: import('../shared/executionEvent').ExecutionEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: import('../shared/executionEvent').ExecutionEvent) => callback(payload)
       ipcRenderer.on('ai-employee:event', listener)
       return () => ipcRenderer.removeListener('ai-employee:event', listener)
     },
-    models: (): Promise<AiEmployeeChatModelProfile[]> => ipcRenderer.invoke('ai-employee:chat-models'),
+    models: (position?: string): Promise<AiEmployeeChatModelProfile[]> => ipcRenderer.invoke('ai-employee:chat-models', position),
     pickAttachments: (): Promise<AiEmployeePickResult> => ipcRenderer.invoke('ai-employee:pick-attachments'),
     materializeMarkdownReport: (content: string): Promise<{ content: string; materialized: boolean }> => ipcRenderer.invoke('ai-employee:materialize-markdown-report', content),
     browserShow: (bounds: BrowserBounds): Promise<void> => ipcRenderer.invoke('ai-employee:browser:show', bounds),
@@ -499,5 +501,67 @@ contextBridge.exposeInMainWorld('desktop', {
     deleteCredential: (accountId: string): Promise<MarketplaceCredentialStatus> => ipcRenderer.invoke('marketplace:credential:delete', accountId),
     openCredentialLogin: (accountId: string, platformCode: string): Promise<string> => ipcRenderer.invoke('marketplace:credential:open-login', accountId, platformCode),
     fillCredential: (accountId: string, submit = false): Promise<{ usernameFilled:boolean; passwordFilled:boolean; submitted:boolean; verificationRequired:boolean; url:string }> => ipcRenderer.invoke('marketplace:credential:fill', accountId, submit)
+  },
+  articleCrawler: {
+    status: (): Promise<{
+      state: 'STOPPED' | 'STARTING' | 'RUNNING' | 'START_FAILED'
+      config: { installPath: string; webUiUrl: string; dataDir: string; autoStart: boolean }
+      dockerAvailable: boolean
+      dockerComposeAvailable: boolean
+      installPathValid: boolean
+      dataDirValid: boolean
+      webUiReachable: boolean
+      message: string
+      lastCheckedAt: string
+    }> => ipcRenderer.invoke('article-crawler:status'),
+    start: (): Promise<{
+      state: 'STOPPED' | 'STARTING' | 'RUNNING' | 'START_FAILED'
+      config: { installPath: string; webUiUrl: string; dataDir: string; autoStart: boolean }
+      dockerAvailable: boolean
+      dockerComposeAvailable: boolean
+      installPathValid: boolean
+      dataDirValid: boolean
+      webUiReachable: boolean
+      message: string
+      lastCheckedAt: string
+    }> => ipcRenderer.invoke('article-crawler:start'),
+    stop: () => ipcRenderer.invoke('article-crawler:stop'),
+    getConfig: (): Promise<{ installPath: string; webUiUrl: string; dataDir: string; autoStart: boolean }> => ipcRenderer.invoke('article-crawler:config:get'),
+    saveConfig: (input: { installPath?: string; webUiUrl?: string; dataDir?: string; autoStart?: boolean }): Promise<{ installPath: string; webUiUrl: string; dataDir: string; autoStart: boolean }> => ipcRenderer.invoke('article-crawler:config:save', input),
+    pickInstallPath: (): Promise<string | null> => ipcRenderer.invoke('article-crawler:pick-install-path'),
+    openInstallDir: (): Promise<void> => ipcRenderer.invoke('article-crawler:open-install-dir'),
+    openDataDir: (): Promise<void> => ipcRenderer.invoke('article-crawler:open-data-dir'),
+    listArticles: (): Promise<Array<{
+      fileName: string
+      filePath: string
+      platform: string
+      title: string
+      url: string
+      author: string
+      publishTime: string
+      sizeBytes: number
+      charCount: number
+      content: string
+      format: 'markdown' | 'json'
+    }>> => ipcRenderer.invoke('article-crawler:list-articles'),
+    extract: (url: string): Promise<{
+      fileName: string
+      filePath: string
+      platform: string
+      title: string
+      url: string
+      author: string
+      publishTime: string
+      sizeBytes: number
+      charCount: number
+      content: string
+      format: 'markdown' | 'json'
+    }> => ipcRenderer.invoke('article-crawler:extract', url),
+    importToKnowledge: (request: { kbId?: string; filePaths: string[]; category?: string }): Promise<{
+      kbId: string
+      kbName: string
+      uploaded: Array<{ fileName: string; docId: string }>
+      failed: Array<{ fileName: string; error: string }>
+    }> => ipcRenderer.invoke('article-crawler:import', request)
   }
 })
