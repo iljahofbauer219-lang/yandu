@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { DatabaseSync } from 'node:sqlite'
 import path from 'node:path'
-import type { CandidateCollectionRecord, CandidateCollectionRun, CandidateUpdateRequest, CandidateWorkspace, CollectedOzonProduct, CollectedSupplyProduct, CollectorDuplicateProduct, CollectorDuplicateStage, CollectorPluginImportResult, ComparisonCostSettings, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonRecordView, ComparisonSupplierMatch, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceAuditEvent, ComplianceBatchRecheckResult, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementAction, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceFinding, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReleasePermit, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceRuleVersion, ComplianceSource, ComplianceSourceChange, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, EbayAcceptanceBatch, EbayCategoryChange, EbayCategorySyncSummary, EbayCategoryWorkspace, EbayCollectedProduct, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayDirectoryProductScanCategory, EbayDirectoryProductSyncCheckpoint, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductSnapshot, EbayLocalProductSnapshotInput, EbayMarketResearchDecisionRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayProductDetails, EbayProductSyncChange, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayStore, EbayStoreCategory, EbayTitleDecision, EbayTitleDecisionInput, EbayTitleHandoff, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, SelectionCatalogItem, SelectionDecision, SelectionImportRequest, SelectionTask, SupplyWarehouseProduct } from '../../shared/contracts'
+import type { CandidateCollectionRecord, CandidateCollectionRun, CandidateUpdateRequest, CandidateWorkspace, CollectedOzonProduct, CollectedSupplyProduct, CollectorDuplicateProduct, CollectorDuplicateStage, CollectorPluginImportResult, ComparisonCostSettings, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonRecordView, ComparisonSupplierMatch, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceAuditEvent, ComplianceBatchRecheckResult, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementAction, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceFinding, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReleasePermit, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceRuleVersion, ComplianceSource, ComplianceSourceChange, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, EbayAcceptanceBatch, EbayCategoryChange, EbayCategorySyncSummary, EbayCategoryWorkspace, EbayCollectedProduct, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayDirectoryProductScanCategory, EbayDirectoryProductSyncCheckpoint, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductSnapshot, EbayLocalProductSnapshotInput, EbayMarketResearchDecisionRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayProductDetails, EbayProductSyncChange, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayStore, EbayStoreCategory, EbayTitleDecision, EbayTitleDecisionInput, EbayTitleHandoff, EliminatedOrigin, EliminatedProductRecord, EliminatedRecordStatus, EliminateRequest, InboundErpIntakeInput, InboundOrigin, InboundPatchInput, InboundProcessingItem, InboundSnapshot, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, SelectionCatalogItem, SelectionDecision, SelectionImportRequest, SelectionTask, SupplyProductDownload, SupplyWarehouseCode, SupplyWarehouseProduct } from '../../shared/contracts'
 import { complianceCheckFingerprint } from '../../shared/complianceFingerprint'
 
 function isUsableCandidateImage(value: string) {
@@ -61,6 +61,16 @@ export class AppDatabase {
   constructor() {
     const databasePath = path.join(app.getPath('userData'), 'sourcing-data.sqlite')
     this.database = new DatabaseSync(databasePath)
+    // ── 建表 schema 说明（死表清理，2026-09-29）────────────────────────────────
+    // 已从这里移除、全仓零读写的 14 张死表（客服工单域 support_*、本地知识库域 knowledge_*、
+    // AI 客服域 ai_support_*）：它们只被 CREATE 出来过，没有任何 INSERT/SELECT/UPDATE，
+    // 客服与知识库能力实际都跑在服务端 Postgres / MaxKB 上。
+    // 老库不做 DROP：残留空表无害，而 DROP 一旦误判就是不可逆的数据丢失；新装不再建即可。
+    // 保留说明：
+    // - purchase_orders / reconciliation_records 仍被 getWorkflowCounts() 计数读取，不能删；
+    // - sales_orders / shipments 虽是死表，但被保留下来的 purchase_orders、shipments 以外键引用，
+    //   单独删掉会在全新库里留下悬空外键（将来任何写入都会报 no such table），故一并保留；
+    // - 删表不涉及"新列必须先 ensureColumn"的迁移顺序坑，也没有为任何表补建索引。
     this.database.exec(`
       PRAGMA journal_mode = WAL;
       CREATE TABLE IF NOT EXISTS selection_tasks (
@@ -220,6 +230,7 @@ export class AppDatabase {
       CREATE INDEX IF NOT EXISTS idx_ebay_local_product_snapshots_product ON ebay_local_product_snapshots(local_product_id, version DESC);
       CREATE TABLE IF NOT EXISTS ebay_local_product_media (
         id TEXT PRIMARY KEY,
+        media_key TEXT NOT NULL DEFAULT '',
         snapshot_id TEXT NOT NULL,
         media_type TEXT NOT NULL,
         sort_order INTEGER NOT NULL,
@@ -641,6 +652,14 @@ export class AppDatabase {
         CASE WHEN COALESCE(json_extract(t.payload, '$.collectionMethod'), 'KEYWORD') = 'KEYWORD' THEN COALESCE(json_extract(t.payload, '$.keyword'), '') ELSE COALESCE(json_extract(t.payload, '$.sourceUrl'), '') END,
         0, m.updated_at
       FROM market_candidates m JOIN selection_tasks t ON t.id = m.latest_task_id;
+      INSERT OR IGNORE INTO candidate_collection_records (candidate_area, candidate_key, collection_run_id, platform_code, collection_method, source_entry, source_rank, collected_at)
+      SELECT 'SUPPLY', COALESCE(json_extract(s.payload, '$.platformCode'), '1688') || ':' || s.url, s.task_id,
+        COALESCE(json_extract(s.payload, '$.platformCode'), '1688'), COALESCE(json_extract(t.payload, '$.collectionMethod'), 'KEYWORD'),
+        CASE WHEN COALESCE(json_extract(t.payload, '$.collectionMethod'), 'KEYWORD') = 'KEYWORD' THEN COALESCE(json_extract(t.payload, '$.keyword'), '') ELSE COALESCE(json_extract(t.payload, '$.sourceUrl'), '') END,
+        s.sort_order, t.created_at
+      FROM supply_candidates s JOIN selection_tasks t ON t.id = s.task_id
+      WHERE s.deleted_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM candidate_collection_records r WHERE r.candidate_area = 'SUPPLY' AND r.candidate_key = COALESCE(json_extract(s.payload, '$.platformCode'), '1688') || ':' || s.url);
       CREATE TABLE IF NOT EXISTS comparison_records (
         id TEXT PRIMARY KEY,
         task_id TEXT NOT NULL,
@@ -671,6 +690,29 @@ export class AppDatabase {
         FOREIGN KEY (comparison_id) REFERENCES comparison_records(id)
       );
       CREATE INDEX IF NOT EXISTS idx_selection_task ON selection_records(task_id, decision);
+      CREATE TABLE IF NOT EXISTS eliminated_products (
+        id TEXT PRIMARY KEY,
+        identity_key TEXT NOT NULL,
+        platform_code TEXT NOT NULL,
+        product_id TEXT,
+        source_url TEXT NOT NULL,
+        title TEXT,
+        image_url TEXT,
+        price_text TEXT,
+        origin TEXT NOT NULL,
+        origin_record_id TEXT,
+        reason TEXT,
+        operator TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'ACTIVE',
+        eliminated_at TEXT NOT NULL,
+        reenabled_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_eliminated_identity ON eliminated_products(identity_key, status);
+      CREATE INDEX IF NOT EXISTS idx_eliminated_time ON eliminated_products(eliminated_at DESC);
+      CREATE TABLE IF NOT EXISTS elimination_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS inventory_records (
         id TEXT PRIMARY KEY,
         task_id TEXT NOT NULL,
@@ -788,6 +830,42 @@ export class AppDatabase {
         FOREIGN KEY (selection_id) REFERENCES selection_records(id)
       );
       CREATE INDEX IF NOT EXISTS idx_supply_warehouse_code ON supply_warehouse_products(warehouse_code, status, updated_at DESC);
+      CREATE TABLE IF NOT EXISTS pallet_warehouse_items (
+        id TEXT PRIMARY KEY,
+        warehouse_product_id TEXT NOT NULL UNIQUE,
+        warehouse_code TEXT NOT NULL,
+        item_code TEXT NOT NULL DEFAULT '',
+        title TEXT NOT NULL,
+        image_url TEXT NOT NULL DEFAULT '',
+        price_text TEXT NOT NULL DEFAULT '',
+        category TEXT NOT NULL DEFAULT '未分类',
+        subcategory TEXT NOT NULL DEFAULT '待人工分类',
+        tertiary_category TEXT NOT NULL DEFAULT '待细分',
+        source_url TEXT NOT NULL DEFAULT '',
+        stored_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_pallet_warehouse_code ON pallet_warehouse_items(warehouse_code, stored_at DESC);
+      CREATE TABLE IF NOT EXISTS inbound_processing_items (
+        id TEXT PRIMARY KEY,
+        origin TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        selection_id TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'PENDING',
+        snapshot_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        confirmed_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS supply_product_downloads (
+        warehouse_product_id TEXT PRIMARY KEY,
+        directory TEXT NOT NULL DEFAULT '',
+        image_count INTEGER NOT NULL DEFAULT 0,
+        failed_count INTEGER NOT NULL DEFAULT 0,
+        detail_path TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'DOWNLOADED',
+        error TEXT NOT NULL DEFAULT '',
+        downloaded_at TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS marketplace_selection_products (
         id TEXT PRIMARY KEY,
         marketplace_code TEXT NOT NULL,
@@ -1206,140 +1284,6 @@ export class AppDatabase {
         payload TEXT NOT NULL DEFAULT '{}',
         updated_at TEXT NOT NULL
       );
-      CREATE TABLE IF NOT EXISTS support_channels (
-        id TEXT PRIMARY KEY,
-        channel_type TEXT NOT NULL,
-        account_name TEXT NOT NULL,
-        default_language TEXT,
-        status TEXT NOT NULL DEFAULT 'DISCONNECTED',
-        config TEXT NOT NULL DEFAULT '{}',
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS support_customers (
-        id TEXT PRIMARY KEY,
-        display_name TEXT,
-        country_code TEXT,
-        preferred_language TEXT,
-        email_masked TEXT,
-        phone_masked TEXT,
-        risk_level TEXT NOT NULL DEFAULT 'NORMAL',
-        payload TEXT NOT NULL DEFAULT '{}',
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS support_customer_identities (
-        id TEXT PRIMARY KEY,
-        customer_id TEXT NOT NULL,
-        channel_id TEXT NOT NULL,
-        external_customer_id TEXT NOT NULL,
-        UNIQUE(channel_id, external_customer_id),
-        FOREIGN KEY (customer_id) REFERENCES support_customers(id) ON DELETE CASCADE,
-        FOREIGN KEY (channel_id) REFERENCES support_channels(id) ON DELETE CASCADE
-      );
-      CREATE TABLE IF NOT EXISTS support_conversations (
-        id TEXT PRIMARY KEY,
-        channel_id TEXT NOT NULL,
-        customer_id TEXT,
-        external_conversation_id TEXT,
-        order_id TEXT,
-        status TEXT NOT NULL DEFAULT 'OPEN',
-        handling_mode TEXT NOT NULL DEFAULT 'AI_SUGGEST',
-        detected_language TEXT,
-        intent TEXT,
-        sentiment TEXT,
-        priority TEXT NOT NULL DEFAULT 'NORMAL',
-        assigned_to TEXT,
-        last_message_at TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        FOREIGN KEY (channel_id) REFERENCES support_channels(id),
-        FOREIGN KEY (customer_id) REFERENCES support_customers(id),
-        FOREIGN KEY (order_id) REFERENCES sales_orders(id)
-      );
-      CREATE INDEX IF NOT EXISTS idx_support_conversation_queue ON support_conversations(status, priority, last_message_at);
-      CREATE TABLE IF NOT EXISTS support_messages (
-        id TEXT PRIMARY KEY,
-        conversation_id TEXT NOT NULL,
-        external_message_id TEXT,
-        sender_type TEXT NOT NULL,
-        message_type TEXT NOT NULL DEFAULT 'TEXT',
-        original_language TEXT,
-        original_content TEXT NOT NULL,
-        working_language TEXT NOT NULL DEFAULT 'zh-CN',
-        working_translation TEXT,
-        reply_language TEXT,
-        reply_content TEXT,
-        translation_confidence REAL,
-        translation_provider TEXT,
-        translation_model TEXT,
-        ai_generated INTEGER NOT NULL DEFAULT 0,
-        human_edited INTEGER NOT NULL DEFAULT 0,
-        sent_at TEXT NOT NULL,
-        FOREIGN KEY (conversation_id) REFERENCES support_conversations(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_support_message_conversation ON support_messages(conversation_id, sent_at);
-      CREATE TABLE IF NOT EXISTS support_attachments (
-        id TEXT PRIMARY KEY,
-        message_id TEXT NOT NULL,
-        file_name TEXT,
-        mime_type TEXT,
-        local_path TEXT,
-        remote_url TEXT,
-        ocr_text TEXT,
-        FOREIGN KEY (message_id) REFERENCES support_messages(id) ON DELETE CASCADE
-      );
-      CREATE TABLE IF NOT EXISTS support_tickets (
-        id TEXT PRIMARY KEY,
-        conversation_id TEXT,
-        order_id TEXT,
-        ticket_type TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'OPEN',
-        priority TEXT NOT NULL DEFAULT 'NORMAL',
-        summary TEXT,
-        assigned_to TEXT,
-        due_at TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        FOREIGN KEY (conversation_id) REFERENCES support_conversations(id),
-        FOREIGN KEY (order_id) REFERENCES sales_orders(id)
-      );
-      CREATE TABLE IF NOT EXISTS knowledge_documents (
-        id TEXT PRIMARY KEY,
-        source_type TEXT NOT NULL,
-        visibility TEXT NOT NULL DEFAULT 'INTERNAL',
-        title TEXT NOT NULL,
-        language TEXT NOT NULL,
-        brand TEXT,
-        country_code TEXT,
-        status TEXT NOT NULL DEFAULT 'DRAFT',
-        current_version INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS knowledge_document_versions (
-        id TEXT PRIMARY KEY,
-        document_id TEXT NOT NULL,
-        version INTEGER NOT NULL,
-        content TEXT NOT NULL,
-        effective_at TEXT,
-        expires_at TEXT,
-        approved_by TEXT,
-        created_at TEXT NOT NULL,
-        UNIQUE(document_id, version),
-        FOREIGN KEY (document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE
-      );
-      CREATE TABLE IF NOT EXISTS knowledge_chunks (
-        id TEXT PRIMARY KEY,
-        version_id TEXT NOT NULL,
-        chunk_index INTEGER NOT NULL,
-        content TEXT NOT NULL,
-        embedding_provider TEXT,
-        embedding_model TEXT,
-        embedding BLOB,
-        metadata TEXT NOT NULL DEFAULT '{}',
-        FOREIGN KEY (version_id) REFERENCES knowledge_document_versions(id) ON DELETE CASCADE
-      );
       CREATE TABLE IF NOT EXISTS translation_glossary (
         id TEXT PRIMARY KEY,
         source_language TEXT NOT NULL,
@@ -1352,66 +1296,6 @@ export class AppDatabase {
         status TEXT NOT NULL DEFAULT 'ACTIVE',
         UNIQUE(source_language, target_language, source_term, brand)
       );
-      CREATE TABLE IF NOT EXISTS ai_support_runs (
-        id TEXT PRIMARY KEY,
-        conversation_id TEXT NOT NULL,
-        agent_version TEXT,
-        model_provider TEXT,
-        model_name TEXT,
-        prompt_version TEXT,
-        detected_language TEXT,
-        intent TEXT,
-        confidence REAL,
-        risk_level TEXT,
-        outcome TEXT,
-        input_tokens INTEGER,
-        output_tokens INTEGER,
-        latency_ms INTEGER,
-        error TEXT,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (conversation_id) REFERENCES support_conversations(id) ON DELETE CASCADE
-      );
-      CREATE TABLE IF NOT EXISTS ai_support_replies (
-        id TEXT PRIMARY KEY,
-        run_id TEXT NOT NULL,
-        working_reply TEXT,
-        customer_language TEXT,
-        customer_reply TEXT,
-        citation_data TEXT NOT NULL DEFAULT '[]',
-        status TEXT NOT NULL DEFAULT 'SUGGESTED',
-        human_edited_content TEXT,
-        sent_message_id TEXT,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (run_id) REFERENCES ai_support_runs(id) ON DELETE CASCADE,
-        FOREIGN KEY (sent_message_id) REFERENCES support_messages(id)
-      );
-      CREATE TABLE IF NOT EXISTS ai_support_tool_calls (
-        id TEXT PRIMARY KEY,
-        run_id TEXT NOT NULL,
-        tool_name TEXT NOT NULL,
-        risk_level TEXT NOT NULL,
-        arguments_masked TEXT NOT NULL DEFAULT '{}',
-        result_masked TEXT,
-        status TEXT NOT NULL,
-        approval_status TEXT,
-        approved_by TEXT,
-        started_at TEXT NOT NULL,
-        completed_at TEXT,
-        FOREIGN KEY (run_id) REFERENCES ai_support_runs(id) ON DELETE CASCADE
-      );
-      CREATE TABLE IF NOT EXISTS ai_support_escalations (
-        id TEXT PRIMARY KEY,
-        conversation_id TEXT NOT NULL,
-        run_id TEXT,
-        reason TEXT NOT NULL,
-        handoff_summary TEXT,
-        target_team TEXT,
-        status TEXT NOT NULL DEFAULT 'PENDING',
-        created_at TEXT NOT NULL,
-        accepted_at TEXT,
-        FOREIGN KEY (conversation_id) REFERENCES support_conversations(id) ON DELETE CASCADE,
-        FOREIGN KEY (run_id) REFERENCES ai_support_runs(id)
-      );
     `)
     const ensureColumn = (table: string, column: string, definition: string) => {
       const columns = this.database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
@@ -1422,6 +1306,8 @@ export class AppDatabase {
     ensureColumn('compliance_check_runs', 'reviewed_at', 'TEXT')
     ensureColumn('compliance_check_runs', 'reviewed_by', 'TEXT')
     ensureColumn('compliance_check_runs', 'review_note', 'TEXT')
+    ensureColumn('supply_product_downloads', 'page_id', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('supply_product_downloads', 'page_url', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('compliance_check_runs', 'input_fingerprint', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('compliance_check_runs', 'request_json', "TEXT NOT NULL DEFAULT '{}'")
     ensureColumn('compliance_sources', 'content_hash', "TEXT NOT NULL DEFAULT ''")
@@ -1436,6 +1322,14 @@ export class AppDatabase {
     ensureColumn('ebay_product_sync_runs', 'suspected_ended_count', 'INTEGER NOT NULL DEFAULT 0')
     ensureColumn('ebay_product_sync_runs', 'changes', "TEXT NOT NULL DEFAULT '[]'")
     ensureColumn('ebay_local_product_media', 'file_size', 'INTEGER NOT NULL DEFAULT 0')
+    // 媒体行主键改代理键：逻辑媒体 id 迁到 media_key。既有行的 id 就是逻辑 id
+    //（同 id 的第二行从来插不进来，故一对一无歧义），直接回填。
+    ensureColumn('ebay_local_product_media', 'media_key', "TEXT NOT NULL DEFAULT ''")
+    this.database.prepare(`UPDATE ebay_local_product_media SET media_key=id WHERE media_key=''`).run()
+    // 索引必须建在补列之后：schema exec 块跑在 ensureColumn 之前，老库此时还没有 media_key 列，
+    // 把 CREATE INDEX 放进 schema 块会 no such column 直接抛错，而构造函数失败等于应用启动崩溃。
+    this.database.exec(`CREATE INDEX IF NOT EXISTS idx_ebay_local_product_media_key ON ebay_local_product_media(snapshot_id, media_key)`)
+    this.migrateInboundProcessingQueue()
     this.seedComplianceKnowledge()
     this.database.prepare(`DELETE FROM ebay_listings WHERE status='REMOVED'`).run()
     this.repairPlaceholderCandidateImages()
@@ -1453,7 +1347,7 @@ export class AppDatabase {
   private registerProductIntake(platformCode: string, productId: string, url: string, title: string, stage: CollectorDuplicateStage, seenAt: string, deletedAt: string | null = null) {
     const identityKey = this.intakeIdentity(platformCode, productId, url)
     const existing = this.database.prepare(`SELECT first_collected_at, last_stage FROM product_intake_registry WHERE identity_key = ?`).get(identityKey) as { first_collected_at:string; last_stage:CollectorDuplicateStage } | undefined
-    const rank:Record<CollectorDuplicateStage,number> = { HISTORY:0, CANDIDATE:1, SELECTION:2, WAREHOUSE:3 }
+    const rank:Record<CollectorDuplicateStage,number> = { HISTORY:0, CANDIDATE:1, SELECTION:2, WAREHOUSE:3, ELIMINATED:4 }
     const resolvedStage = existing && rank[existing.last_stage] > rank[stage] ? existing.last_stage : stage
     const candidateDeletedAt = resolvedStage === 'CANDIDATE' ? null : deletedAt
     this.database.prepare(`INSERT INTO product_intake_registry (identity_key, platform_code, product_id, canonical_url, title_snapshot, first_collected_at, last_seen_at, last_stage, candidate_deleted_at)
@@ -1465,6 +1359,10 @@ export class AppDatabase {
 
   private duplicateForProduct(product: CollectedSupplyProduct): CollectorDuplicateProduct | null {
     const identityKey = this.intakeIdentity(product.platformCode, product.productId, product.url)
+    if (this.getEliminationSetting('filter_on_precheck') === '1') {
+      const eliminated = this.database.prepare(`SELECT 1 FROM eliminated_products WHERE status='ACTIVE' AND (identity_key = ? OR source_url = ?) LIMIT 1`).get(identityKey, product.url)
+      if (eliminated) return { platformCode:product.platformCode, productId:product.productId, title:product.title, stage:'ELIMINATED', message:'该商品已淘汰，采集预检查已自动过滤' }
+    }
     const warehouse = this.database.prepare(`SELECT 1 FROM supply_warehouse_products WHERE warehouse_code = ? AND product_id = ? AND status = 'ACTIVE' LIMIT 1`).get(product.platformCode,product.productId)
     if (warehouse) return { platformCode:product.platformCode, productId:product.productId, title:product.title, stage:'WAREHOUSE', message:'该商品已正式入库' }
     const selection = this.database.prepare(`SELECT 1 FROM selection_records WHERE json_extract(payload, '$.platformCode') = ? AND json_extract(payload, '$.productId') = ? LIMIT 1`).get(product.platformCode,product.productId)
@@ -1482,6 +1380,47 @@ export class AppDatabase {
     const stage:CollectorDuplicateStage=warehouse?'WAREHOUSE':selection?'SELECTION':'HISTORY'
     this.database.prepare(`UPDATE product_intake_registry SET last_stage=?, last_seen_at=?, candidate_deleted_at=? WHERE identity_key=?`)
       .run(stage,deletedAt,deletedAt,this.intakeIdentity(product.platformCode,product.productId,product.url))
+  }
+
+  /** 入库闸口 v2：老平铺表重建为 (origin, source_id, selection_id, status, snapshot_json)，存量行按 origin=ERP 搬运 */
+  private migrateInboundProcessingQueue() {
+    const columns = this.database.prepare(`PRAGMA table_info(inbound_processing_items)`).all() as Array<{ name: string }>
+    if (columns.some(item => item.name === 'snapshot_json')) {
+      this.database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_inbound_origin_source ON inbound_processing_items(origin, source_id)`)
+      return
+    }
+    this.database.exec(`
+      CREATE TABLE inbound_processing_items_v2 (
+        id TEXT PRIMARY KEY,
+        origin TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        selection_id TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL,
+        snapshot_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        confirmed_at TEXT
+      );
+      INSERT INTO inbound_processing_items_v2 (id, origin, source_id, selection_id, status, snapshot_json, created_at, updated_at, confirmed_at)
+      SELECT id, 'ERP', erp_product_id, '', review_status, json_object(
+        'platformCode', platform_code,
+        'warehouseCode', CASE WHEN platform_code = 'GIGACLOUD' THEN 'GIGACLOUD' ELSE '1688' END,
+        'itemCode', item_code,
+        'title', CASE WHEN title_edit <> '' THEN title_edit ELSE title END,
+        'imageUrl', image_url,
+        'priceText', CASE WHEN price_edit <> '' THEN price_edit ELSE price_text END,
+        'category', CASE WHEN category_edit <> '' THEN category_edit ELSE category END,
+        'subcategory', CASE WHEN subcategory_edit <> '' THEN subcategory_edit ELSE subcategory END,
+        'tertiaryCategory', CASE WHEN tertiary_edit <> '' THEN tertiary_edit ELSE tertiary_category END,
+        'sourceUrl', source_url,
+        'tags', json(tags),
+        'collectedAt', collected_at
+      ), created_at, updated_at, CASE WHEN review_status = 'CONFIRMED' THEN updated_at ELSE NULL END
+      FROM inbound_processing_items;
+      DROP TABLE inbound_processing_items;
+      ALTER TABLE inbound_processing_items_v2 RENAME TO inbound_processing_items;
+      CREATE UNIQUE INDEX uq_inbound_origin_source ON inbound_processing_items(origin, source_id);
+    `)
   }
 
   private migrateProductIntakeRegistry() {
@@ -2209,8 +2148,10 @@ export class AppDatabase {
     try {
       this.database.prepare(`INSERT INTO ebay_local_products (id,store_id,marketplace_id,listing_id,category_id,category_name,title,status,version_count,latest_snapshot_id,downloaded_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(store_id,marketplace_id,listing_id) DO UPDATE SET category_id=excluded.category_id,category_name=excluded.category_name,title=excluded.title,status=excluded.status,version_count=excluded.version_count,latest_snapshot_id=excluded.latest_snapshot_id,downloaded_at=excluded.downloaded_at,updated_at=excluded.updated_at`).run(localProductId,listing.storeId,listing.marketplaceId,listing.listingId,listing.categoryId,listing.categoryName,listing.title,status,version,snapshotId,input.capturedAt,input.capturedAt)
       this.database.prepare(`INSERT INTO ebay_local_product_snapshots (id,local_product_id,version,payload,content_hash,captured_at) VALUES (?,?,?,?,?,?)`).run(snapshotId,localProductId,version,JSON.stringify(snapshot),input.contentHash,input.capturedAt)
-      const insertMedia=this.database.prepare(`INSERT INTO ebay_local_product_media (id,snapshot_id,media_type,sort_order,remote_url,local_path,mime_type,width,height,file_size,sha256,download_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-      for(const media of input.media)insertMedia.run(media.id,snapshotId,media.mediaType,media.sortOrder,media.remoteUrl,media.localPath,media.mimeType,media.width,media.height,media.fileSize||0,media.sha256,media.downloadStatus)
+      // id 是代理键：媒体记录会被下一版快照连 id 一起继承（main.ts updateEbayLocalProduct），
+      // 拿它当主键会让第二次编辑撞 UNIQUE 并整体 ROLLBACK；逻辑 id 存 media_key。
+      const insertMedia=this.database.prepare(`INSERT INTO ebay_local_product_media (id,media_key,snapshot_id,media_type,sort_order,remote_url,local_path,mime_type,width,height,file_size,sha256,download_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      for(const media of input.media)insertMedia.run(crypto.randomUUID(),media.id,snapshotId,media.mediaType,media.sortOrder,media.remoteUrl,media.localPath,media.mimeType,media.width,media.height,media.fileSize||0,media.sha256,media.downloadStatus)
       this.database.exec('COMMIT')
     } catch(error) {
       this.database.exec('ROLLBACK')
@@ -2355,6 +2296,10 @@ export class AppDatabase {
     }
     this.saveTask(task)
     const existingPayloads = this.database.prepare(`SELECT payload FROM supply_candidates WHERE url = ? AND COALESCE(json_extract(payload, '$.platformCode'), '1688') = ? ORDER BY rowid DESC`)
+    // upsert 的冲突键是 (task_id, url)，而 task_id 由 createCollectorTask 固定为 `collector-plugin-<平台>`，
+    // 所以同一商品第二次确认采集会走 DO UPDATE 分支 —— 这一行是"更新"而不是"新增"。
+    // 此前 imported 恒等于 accepted.length、updated 恒为 0，重复采集被全部报成"新增"。
+    const existsForTask = this.database.prepare(`SELECT 1 AS hit FROM supply_candidates WHERE task_id = ? AND url = ? LIMIT 1`)
     const upsert = this.database.prepare(`
       INSERT INTO supply_candidates (task_id, url, payload, score, selected, sort_order, deleted_at)
       VALUES (?, ?, ?, ?, ?, ?, NULL)
@@ -2365,7 +2310,8 @@ export class AppDatabase {
     const saveRun = this.database.prepare(`INSERT INTO candidate_collection_runs (id, task_id, candidate_area, platform_code, collection_method, source_entry, requested_count, collected_count, new_count, updated_count, selected_count, status, started_at, completed_at) VALUES (?, ?, 'SUPPLY', ?, 'PRODUCT_URL', '内置选择采集', ?, ?, ?, ?, 0, 'COMPLETED', ?, ?)`)
     const saveRecord = this.database.prepare(`INSERT INTO candidate_collection_records (candidate_area, candidate_key, collection_run_id, platform_code, collection_method, source_entry, source_rank, collected_at) VALUES ('SUPPLY', ?, ?, ?, 'PRODUCT_URL', '内置选择采集', ?, ?)`)
     const totalForPlatform = this.database.prepare(`SELECT COUNT(DISTINCT url) AS total FROM supply_candidates WHERE deleted_at IS NULL AND COALESCE(json_extract(payload, '$.platformCode'), '1688') = ?`)
-    const updated = 0
+    let imported = 0
+    let updated = 0
     const now = new Date().toISOString()
     const runId = crypto.randomUUID()
     this.database.exec('BEGIN IMMEDIATE')
@@ -2384,10 +2330,14 @@ export class AppDatabase {
         const categoryRank = (status?: string) => status === 'EXACT' ? 3 : status === 'PARTIAL' ? 2 : status === 'NEEDS_REVIEW' ? 1 : 0
         const sourceCategory = categoryRank(previousCategory?.status) > categoryRank(product.sourceCategory?.status) ? previousCategory : product.sourceCategory
         const savedProduct = { ...product, imageUrl, sourceCategory }
+        // 必须在 upsert 之前判定：upsert 之后该行一定存在，就分不清新增还是更新了
+        const isUpdate = Boolean(existsForTask.get(task.id, product.url))
         upsert.run(task.id, product.url, JSON.stringify(savedProduct), product.score, 0, index)
+        if (isUpdate) updated += 1
+        else imported += 1
         this.registerProductIntake(product.platformCode,product.productId,product.url,product.title,'CANDIDATE',now)
       })
-      saveRun.run(runId, task.id, task.supplyPlatforms[0], products.length, accepted.length, accepted.length, 0, now, now)
+      saveRun.run(runId, task.id, task.supplyPlatforms[0], products.length, accepted.length, imported, updated, now, now)
       accepted.forEach((product, index) => saveRecord.run(`${product.platformCode}:${product.url}`, runId, product.platformCode, index, now))
       this.database.exec('COMMIT')
     } catch (error) {
@@ -2395,7 +2345,7 @@ export class AppDatabase {
       throw error
     }
     const row = totalForPlatform.get(task.supplyPlatforms[0]) as { total: number }
-    return { imported:accepted.length, updated:0, total:Number(row.total), blocked:duplicates.length, duplicates }
+    return { imported, updated, total:Number(row.total), blocked:duplicates.length, duplicates }
   }
 
   getLatestWorkspace(): PersistedWorkspace | null {
@@ -2662,6 +2612,108 @@ export class AppDatabase {
     return this.getSelectionCatalog().find(item => item.id === id)!
   }
 
+  // ── 淘汰产品收录追踪 ─────────────────────────────
+  getEliminationSetting(key: string): string {
+    const row = this.database.prepare(`SELECT value FROM elimination_settings WHERE key = ?`).get(key) as { value: string } | undefined
+    if (row) return row.value
+    return key === 'filter_on_precheck' ? '1' : ''
+  }
+
+  setEliminationSetting(key: string, value: string): string {
+    this.database.prepare(`INSERT INTO elimination_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(key, value)
+    return value
+  }
+
+  listEliminatedProducts(): EliminatedProductRecord[] {
+    const rows = this.database.prepare(`SELECT * FROM eliminated_products ORDER BY eliminated_at DESC`).all() as Array<Record<string, unknown>>
+    return rows.map(row => this.mapEliminatedRow(row))
+  }
+
+  private mapEliminatedRow(row: Record<string, unknown>): EliminatedProductRecord {
+    return {
+      id: String(row.id),
+      identityKey: String(row.identity_key),
+      platformCode: String(row.platform_code),
+      productId: row.product_id ? String(row.product_id) : '',
+      sourceUrl: String(row.source_url),
+      title: row.title ? String(row.title) : '',
+      imageUrl: row.image_url ? String(row.image_url) : '',
+      priceText: row.price_text ? String(row.price_text) : '',
+      origin: String(row.origin) as EliminatedOrigin,
+      originRecordId: row.origin_record_id ? String(row.origin_record_id) : '',
+      reason: row.reason ? String(row.reason) : '',
+      operator: String(row.operator),
+      status: String(row.status) as EliminatedRecordStatus,
+      eliminatedAt: String(row.eliminated_at),
+      reenabledAt: row.reenabled_at ? String(row.reenabled_at) : null
+    }
+  }
+
+  eliminateProduct(input: EliminateRequest): EliminatedProductRecord {
+    const now = new Date().toISOString()
+    let platformCode = input.platformCode || ''
+    let productId = input.productId || ''
+    let sourceUrl = input.url || ''
+    let title = input.title || ''
+    let imageUrl = input.imageUrl || ''
+    let priceText = input.priceText || ''
+    let originRecordId = input.recordId || ''
+    if (input.origin === 'SELECTION') {
+      const row = this.database.prepare(`SELECT payload FROM selection_records WHERE id = ?`).get(input.recordId || '') as { payload: string } | undefined
+      if (!row) throw new Error('选品记录不存在')
+      const payload = JSON.parse(row.payload) as SelectionCatalogItem
+      platformCode = payload.platformCode
+      productId = payload.productId || ''
+      sourceUrl = payload.sourceUrl
+      title = payload.title
+      imageUrl = payload.imageUrl || ''
+      priceText = payload.priceText || ''
+      originRecordId = payload.id
+      this.updateSelectionDecision(payload.id, 'REJECTED')
+    } else {
+      if (!sourceUrl) throw new Error('候选淘汰缺少商品 URL')
+      if (!platformCode) platformCode = '1688'
+      originRecordId = `${platformCode}:${sourceUrl}`
+      this.setCandidatesDeleted({ candidateArea: 'SUPPLY', candidateKeys: [originRecordId] }, true)
+    }
+    const id = crypto.randomUUID()
+    const identityKey = this.intakeIdentity(platformCode, productId, sourceUrl)
+    this.database.prepare(`INSERT INTO eliminated_products (id, identity_key, platform_code, product_id, source_url, title, image_url, price_text, origin, origin_record_id, reason, operator, status, eliminated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)`)
+      .run(id, identityKey, platformCode, productId, sourceUrl, title, imageUrl, priceText, input.origin, originRecordId, input.reason || '', input.operator, now)
+    return this.mapEliminatedRow(this.database.prepare(`SELECT * FROM eliminated_products WHERE id = ?`).get(id) as Record<string, unknown>)
+  }
+
+  reenableEliminated(id: string): EliminatedProductRecord {
+    const row = this.database.prepare(`SELECT * FROM eliminated_products WHERE id = ?`).get(id) as Record<string, unknown> | undefined
+    if (!row) throw new Error('淘汰记录不存在')
+    const record = this.mapEliminatedRow(row)
+    const now = new Date().toISOString()
+    this.database.prepare(`UPDATE eliminated_products SET status='REENABLED', reenabled_at=? WHERE id=?`).run(now, id)
+    if (record.status === 'ACTIVE') {
+      if (record.origin === 'SELECTION' && record.originRecordId) {
+        try { this.updateSelectionDecision(record.originRecordId, 'PENDING') } catch { /* 原选品记录可能已不存在，仅恢复淘汰记录状态 */ }
+      } else if (record.origin === 'CANDIDATE' && record.originRecordId) {
+        this.setCandidatesDeleted({ candidateArea: 'SUPPLY', candidateKeys: [record.originRecordId] }, false)
+      }
+    }
+    return this.mapEliminatedRow(this.database.prepare(`SELECT * FROM eliminated_products WHERE id = ?`).get(id) as Record<string, unknown>)
+  }
+
+  deleteEliminated(ids: string[]): EliminatedProductRecord[] {
+    if (!ids.length) return this.listEliminatedProducts()
+    const remove = this.database.prepare(`DELETE FROM eliminated_products WHERE id = ?`)
+    this.database.exec('BEGIN IMMEDIATE')
+    try {
+      ids.forEach(id => remove.run(id))
+      this.database.exec('COMMIT')
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
+    return this.listEliminatedProducts()
+  }
+
   private upsertSupplyWarehouseProduct(item: SelectionCatalogItem) {
     const now = new Date().toISOString()
     const sourceUrl = item.sourceArea === 'MARKET' && item.supplierUrl ? item.supplierUrl : item.sourceUrl
@@ -2686,6 +2738,91 @@ export class AppDatabase {
   getSupplyWarehouseProducts(): SupplyWarehouseProduct[] {
     const rows = this.database.prepare(`SELECT id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, updated_at FROM supply_warehouse_products WHERE status = 'ACTIVE' ORDER BY updated_at DESC`).all() as unknown as Array<Record<string,unknown>>
     return rows.map(row => ({ id:String(row.id), warehouseCode:row.warehouse_code as SupplyWarehouseProduct['warehouseCode'], selectionId:String(row.selection_id), sourceUrl:String(row.source_url), productId:String(row.product_id), title:String(row.title), imageUrl:String(row.image_url), priceText:String(row.price_text), supplierName:String(row.supplier_name), category:String(row.category), subcategory:String(row.subcategory), tertiaryCategory:String(row.tertiary_category), status:row.status as SupplyWarehouseProduct['status'], updatedAt:String(row.updated_at) }))
+  }
+
+  getSupplyWarehouseProductById(id: string): SupplyWarehouseProduct | undefined {
+    return this.getSupplyWarehouseProducts().find(item => item.id === id)
+  }
+
+  listPalletItems(): PalletWarehouseItem[] {
+    const rows = this.database.prepare(`SELECT id, warehouse_product_id, warehouse_code, item_code, title, image_url, price_text, category, subcategory, tertiary_category, source_url, stored_at FROM pallet_warehouse_items ORDER BY stored_at DESC`).all() as unknown as Array<Record<string,unknown>>
+    return rows.map(row => ({ id:String(row.id), warehouseProductId:String(row.warehouse_product_id), warehouseCode:row.warehouse_code as PalletWarehouseItem['warehouseCode'], itemCode:String(row.item_code), title:String(row.title), imageUrl:String(row.image_url), priceText:String(row.price_text), category:String(row.category), subcategory:String(row.subcategory), tertiaryCategory:String(row.tertiary_category), sourceUrl:String(row.source_url), storedAt:String(row.stored_at) }))
+  }
+
+  removePalletItems(ids: string[]): PalletWarehouseItem[] {
+    if (ids.length) {
+      const statement = this.database.prepare(`DELETE FROM pallet_warehouse_items WHERE id = ?`)
+      ids.forEach(id => statement.run(id))
+    }
+    return this.listPalletItems()
+  }
+
+  /** 入库处理：全状态队列（UI 侧筛选），按更新时间倒序 */
+  listInbound(): InboundProcessingItem[] {
+    const rows = this.database.prepare(`SELECT * FROM inbound_processing_items ORDER BY updated_at DESC`).all() as unknown as Array<Record<string, unknown>>
+    return rows.map(row => this.mapInboundRow(row))
+  }
+
+  private mapInboundRow(row: Record<string, unknown>): InboundProcessingItem {
+    return {
+      id: String(row.id), origin: String(row.origin) as InboundProcessingItem['origin'], sourceId: String(row.source_id), selectionId: String(row.selection_id),
+      status: String(row.status) as InboundProcessingItem['status'], snapshot: JSON.parse(String(row.snapshot_json)) as InboundSnapshot,
+      createdAt: String(row.created_at), updatedAt: String(row.updated_at), confirmedAt: row.confirmed_at ? String(row.confirmed_at) : null
+    }
+  }
+
+  /** 重编辑/补标签：仅更新补丁字段并刷新 updated_at */
+  patchInbound(id: string, patch: InboundPatchInput): InboundProcessingItem[] {
+    const sets: string[] = []
+    const values: string[] = []
+    const columns: Array<[keyof InboundPatchInput, string]> = [['titleEdit', 'title_edit'], ['priceEdit', 'price_edit'], ['categoryEdit', 'category_edit'], ['subcategoryEdit', 'subcategory_edit'], ['tertiaryEdit', 'tertiary_edit']]
+    for (const [key, column] of columns) {
+      if (patch[key] !== undefined) { sets.push(`${column} = ?`); values.push(patch[key] as string) }
+    }
+    if (patch.tags !== undefined) { sets.push(`tags = ?`); values.push(JSON.stringify(patch.tags)) }
+    if (sets.length) {
+      sets.push(`updated_at = ?`)
+      values.push(new Date().toISOString(), id)
+      this.database.prepare(`UPDATE inbound_processing_items SET ${sets.join(', ')} WHERE id = ?`).run(...values)
+    }
+    return this.listInbound()
+  }
+
+  /** 审核确认：写入 pallet_warehouse_items（正式入库流）并置 CONFIRMED */
+  confirmInbound(id: string): PalletWarehouseItem[] {
+    const row = this.database.prepare(`SELECT * FROM inbound_processing_items WHERE id = ?`).get(id) as Record<string, unknown> | undefined
+    if (!row) throw new Error('待确认产品不存在')
+    const item = this.mapInboundRow(row)
+    const exists = this.database.prepare(`SELECT 1 FROM pallet_warehouse_items WHERE warehouse_product_id = ? LIMIT 1`).get(item.erpProductId)
+    if (!exists) {
+      this.database.prepare(`INSERT INTO pallet_warehouse_items (id, warehouse_product_id, warehouse_code, item_code, title, image_url, price_text, category, subcategory, tertiary_category, source_url, stored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(crypto.randomUUID(), item.erpProductId, item.platformCode || '1688', item.itemCode, item.titleEdit || item.title, item.imageUrl, item.priceEdit || item.priceText, item.categoryEdit || item.category || '未分类', item.subcategoryEdit || item.subcategory || '待人工分类', item.tertiaryEdit || item.tertiaryCategory || '待细分', item.sourceUrl, new Date().toISOString())
+    }
+    this.database.prepare(`UPDATE inbound_processing_items SET review_status = 'CONFIRMED', updated_at = ? WHERE id = ?`).run(new Date().toISOString(), id)
+    return this.listPalletItems()
+  }
+
+  /** 审核驳回：置 REJECTED 并从待确认列表隐藏 */
+  rejectInbound(id: string): InboundProcessingItem[] {
+    this.database.prepare(`UPDATE inbound_processing_items SET review_status = 'REJECTED', updated_at = ? WHERE id = ?`).run(new Date().toISOString(), id)
+    return this.listInbound()
+  }
+
+  getSupplyDownload(warehouseProductId: string): SupplyProductDownload | null {
+    const row = this.database.prepare(`SELECT warehouse_product_id, page_id, page_url, image_count, failed_count, status, error, downloaded_at FROM supply_product_downloads WHERE warehouse_product_id=?`).get(warehouseProductId) as Record<string,unknown> | undefined
+    return row ? { warehouseProductId:String(row.warehouse_product_id), pageId:String(row.page_id ?? ''), pageUrl:String(row.page_url ?? ''), imageCount:Number(row.image_count), failedCount:Number(row.failed_count), status:row.status as SupplyProductDownload['status'], error:String(row.error), downloadedAt:String(row.downloaded_at) } : null
+  }
+
+  listSupplyDownloads(): SupplyProductDownload[] {
+    const rows = this.database.prepare(`SELECT warehouse_product_id, page_id, page_url, image_count, failed_count, status, error, downloaded_at FROM supply_product_downloads ORDER BY downloaded_at DESC`).all() as unknown as Array<Record<string,unknown>>
+    return rows.map(row => ({ warehouseProductId:String(row.warehouse_product_id), pageId:String(row.page_id ?? ''), pageUrl:String(row.page_url ?? ''), imageCount:Number(row.image_count), failedCount:Number(row.failed_count), status:row.status as SupplyProductDownload['status'], error:String(row.error), downloadedAt:String(row.downloaded_at) }))
+  }
+
+  upsertSupplyDownload(record: SupplyProductDownload): SupplyProductDownload {
+    this.database.prepare(`INSERT INTO supply_product_downloads (warehouse_product_id, page_id, page_url, image_count, failed_count, status, error, downloaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(warehouse_product_id) DO UPDATE SET page_id=excluded.page_id, page_url=excluded.page_url, image_count=excluded.image_count, failed_count=excluded.failed_count, status=excluded.status, error=excluded.error, downloaded_at=excluded.downloaded_at`)
+      .run(record.warehouseProductId, record.pageId, record.pageUrl, record.imageCount, record.failedCount, record.status, record.error, record.downloadedAt)
+    return record
   }
 
   getMarketplaceSelections(marketplaceCode: MarketplacePlatformCode): MarketplaceSelectionProduct[] {
@@ -3240,7 +3377,7 @@ export class AppDatabase {
     const gateStatus:ComplianceCheckResult['gateStatus']=findings.length?'BLOCKED':'PASSED'
     const checkedAt=new Date().toISOString()
     const id=crypto.randomUUID()
-    const ruleSetVersion='EBAY-DETAIL-PAGE-2026.07.21'
+    const ruleSetVersion='EBAY-DETAIL-PAGE-2026.07.22'
     const inputFingerprint=complianceCheckFingerprint(request)
     const result:ComplianceCheckResult={id,productId:request.productId,gateStatus,checkedAt,ruleSetVersion,inputFingerprint,findings}
     this.database.prepare(`INSERT INTO compliance_check_runs (id,product_id,platform,marketplace_site,country,gate_status,rule_set_version,input_fingerprint,request_json,findings_json,checked_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(id,request.productId,request.platform,request.marketplaceSite,request.country,gateStatus,ruleSetVersion,inputFingerprint,JSON.stringify(request),JSON.stringify(findings),checkedAt)
@@ -3268,7 +3405,9 @@ export class AppDatabase {
     const text=`${request.title}\n${request.description||''}`.toLowerCase()
     const fields:Record<string,unknown>={...request,itemSpecifics:request.itemSpecifics?.length?request.itemSpecifics:undefined,brand:specific('brand','品牌'),manufacturer:specific('manufacturer','制造商'),importer:specific('importer','进口商'),euResponsiblePerson:specific('responsible','负责人'),model:specific('model','型号'),batchNumber:specific('batch','批次'),barcode:specific('barcode','upc','ean','条码'),originCountry:specific('country of origin','原产地')}
     const findings:ComplianceFinding[]=[]
-    if(request.platform==='EBAY'&&request.title.trim().length>80)findings.push({id:crypto.randomUUID(),ruleId:'EBAY-TITLE-LENGTH',ruleCode:'EBAY-TITLE-LENGTH',riskLevel:'P0',title:'eBay 标题超过 80 字符',matchedContent:`当前 ${request.title.trim().length} 字符`,reason:'eBay 刊登标题有硬性长度限制，超长内容无法正常发布。',remediation:'缩短标题至 80 字符以内后重新检查。',sourceUrl:'https://www.ebay.com/help/selling/listings/creating-managing-listings/listing-policies?id=4213',ruleVersion:1,effectiveFrom:'2025-01-01',requiresReview:false})
+    // 注：本函数开头对 platform==='EBAY' 短路到 runEbayDetailPageCheck，故这里不再写 EBAY 专属分支。
+    // 此前有两条（标题超 80 字符、官方召回库未就绪）永远走不到：标题长度规则 runEbayDetailPageCheck 已实现，
+    // 召回库未就绪则从未对 eBay 生效过。留着只会让人误以为 eBay 也跑通用引擎。
     if(pending.length)findings.push({id:crypto.randomUUID(),ruleId:'KNOWLEDGE-REVIEW-PENDING',ruleCode:'KNOWLEDGE-REVIEW-PENDING',riskLevel:'P1',title:'适用规则存在待审核版本',matchedContent:pending.map(item=>`${item.code} v${item.currentVersion}`).join('、'),reason:'规则变更尚未完成人工审核，检查引擎不会将未审核规则当作已生效依据。',remediation:'请在合规知识库完成规则审核并启用，然后重新执行商品合规检查。',sourceUrl:'',ruleVersion:Math.max(...pending.map(item=>item.currentVersion)),effectiveFrom:new Date().toISOString().slice(0,10),requiresReview:true})
     const templates=workspace.templates.filter(template=>template.active&&this.complianceScopeMatches(template,request))
     const approvedDocumentTypes=new Set(workspace.documents.filter(item=>item.productId===request.productId&&(item.status==='APPROVED'||item.status==='EXPIRING')).map(item=>item.documentType))
@@ -3288,13 +3427,6 @@ export class AppDatabase {
     const requiredRecallSourceId=this.requiredRecallSourceId(request.country)
     for(const recall of workspace.recalls.filter(item=>requiredRecallSourceId&&item.sourceId===requiredRecallSourceId)){
       if(complianceRecallMatches(recallText,`${recall.title} ${recall.products}`))findings.push({id:crypto.randomUUID(),ruleId:`recall:${recall.id}`,ruleCode:'OFFICIAL-RECALL-MATCH',riskLevel:'P0',title:'疑似命中官方召回商品',matchedContent:recall.title,reason:recall.hazards||recall.description,remediation:'立即停止发布，核对型号、批次和召回范围，并提交人工复核。',sourceUrl:recall.sourceUrl,ruleVersion:1,effectiveFrom:recall.recallDate,requiresReview:true})
-    }
-    if(request.platform==='EBAY'&&requiredRecallSourceId){
-      const source=workspace.sources.find(item=>item.id===requiredRecallSourceId)
-      if(source?.syncStatus!=='READY'||!workspace.recalls.some(item=>item.sourceId===requiredRecallSourceId)){
-        const sourceName=requiredRecallSourceId==='source-cpsc'?'CPSC':requiredRecallSourceId==='source-uk-opss'?'UK OPSS':'EU Safety Gate'
-        findings.push({id:crypto.randomUUID(),ruleId:`${requiredRecallSourceId}-STALE`,ruleCode:'OFFICIAL-RECALL-SOURCE-STALE',riskLevel:'P1',title:`${sourceName} 官方召回库未就绪`,matchedContent:source?.syncStatus||'NOT_CONFIGURED',reason:`缺少可用的 ${sourceName} 官方召回数据时，系统不能将该市场商品误判为已排除召回风险。`,remediation:requiredRecallSourceId==='source-eu-safety-gate'?'打开 EU Safety Gate 官方页面人工核验并留存复核结论；在验证稳定官方接口前不会伪装自动同步。':`在合规知识库同步 ${sourceName} 数据，或人工查证官方召回页并留存复核结论。`,sourceUrl:source?.url||'',ruleVersion:1,effectiveFrom:new Date().toISOString().slice(0,10),requiresReview:true})
-      }
     }
     const gateStatus=findings.some(item=>item.riskLevel==='P0')?'BLOCKED':findings.some(item=>item.riskLevel==='P1')?'REVIEW_REQUIRED':findings.some(item=>item.riskLevel==='P2')?'RECHECK_REQUIRED':'PASSED'
     const checkedAt=new Date().toISOString();const id=crypto.randomUUID();const ruleSetVersion=this.complianceRuleSetVersion(request,workspace);const inputFingerprint=complianceCheckFingerprint(request)
