@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useSession } from './SessionGate'
@@ -6,7 +6,8 @@ import { hasPermission, getServerBaseUrl } from './serverApi'
 import { LinduoAssignmentModal } from './LinduoAssignmentModal'
 import { LinduoPreferenceModal } from './LinduoPreferenceModal'
 import { MENU_PERMISSION_TREE, hasMenuAccess } from '../shared/menuPermissionTree'
-import type { BrowserState, BrowserTab, BrowserTranslationMode, CandidateCollectionRecord, CandidateCollectionRun, CandidateArea, CollectionMethod, CollectionProtectionMode, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, ComparisonCostSettings, ComparisonDecision, ComparisonRecordView, ComplianceAlertStatus, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementStatus, ComplianceKnowledgeWorkspace, ComplianceProductProfileDraft, ComplianceReviewStatus, ComplianceRiskLevel, ComplianceRule, ComplianceRuleDraft, ComplianceTaskStatus, EbayAcceptanceBatch, EbayCategoryWorkspace, EbayCollectedProduct, EbayConfigurationStatus, EbayContentOptimizationResult, EbayContentTranslationResult, EbayDirectoryProductSyncCheckpoint, EbayDirectoryProductSyncProgress, EbayDirectoryProductSyncResult, EbayImageCandidateReview, EbayImageGenerationPurpose, EbayImageInspectionReport, EbayImageVisualInspectionReport, EbayListing, EbayLocalProduct, EbayLocalProductUpdateInput, EbayLoginResult, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayProductSyncRun, EbayPublishTask, EbayStore, EbayTitleOptimizationResult, GigaReturnRateFilter, GigaSellerIndexFilter, ImageModelProfile, ImageReferenceRole, ImportedProductImage, ImportedProductSource, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishStatus, MarketplaceSelectionProduct, NetworkStrategy, Platform, RealShiftProfile, RealShiftResult, SelectionCatalogItem, SelectionDecision, SelectionTask, SelectionTaskDraft, SupplyActivationResult, SupplyPlatformCode, SupplyWarehouseProduct, TaskProgress, WorkflowCounts } from '../shared/contracts'
+import { getTokens, refreshSession } from '../shared/serverHttp'
+import type { BrowserState, BrowserTab, BrowserTranslationMode, CandidateCollectionRecord, CandidateCollectionRun, CandidateArea, CollectionMethod, CollectionProtectionMode, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, ComparisonCostSettings, ComparisonDecision, ComparisonRecordView, ComplianceAlertStatus, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementStatus, ComplianceKnowledgeWorkspace, ComplianceProductProfileDraft, ComplianceReviewStatus, ComplianceRiskLevel, ComplianceRule, ComplianceRuleDraft, ComplianceTaskStatus, EbayAcceptanceBatch, EbayCategoryWorkspace, EbayCollectedProduct, EbayConfigurationStatus, EbayContentOptimizationResult, EbayContentTranslationResult, EbayDirectoryProductSyncCheckpoint, EbayDirectoryProductSyncProgress, EbayDirectoryProductSyncResult, EbayImageCandidateReview, EbayImageGenerationPurpose, EbayImageInspectionReport, EbayImageVisualInspectionReport, EbayListing, EbayLocalProduct, EbayLocalProductUpdateInput, EbayLoginResult, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayProductSyncRun, EbayPublishTask, EbayStore, EbayTitleOptimizationResult, GigaReturnRateFilter, GigaSellerIndexFilter, ImageModelProfile, ImageReferenceRole, ImportedProductImage, ImportedProductSource, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishStatus, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, Platform, RealShiftProfile, RealShiftResult, SelectionCatalogItem, SelectionDecision, SelectionTask, SelectionTaskDraft, SupplyActivationResult, SupplyPlatformCode, SupplyProductDownload, SupplyWarehouseProduct, TaskProgress, WorkflowCounts } from '../shared/contracts'
 import { evaluateEbayCompliance } from '../shared/ebayComplianceKnowledge'
 import { complianceCheckFingerprint } from '../shared/complianceFingerprint'
 import { buildEbayMarketDecisionReport } from '../shared/ebayMarketDecision'
@@ -29,14 +30,26 @@ import AIEmployeeHub from './AIEmployeeHub'
 import KnowledgeHub from './KnowledgeHub'
 import { MigrationBanner } from './MigrationBanner'
 import SampleLibrary from './SampleLibrary'
+import EliminatedProductsPage from './EliminatedProductsPage'
+import { EliminateReasonDialog } from './EliminateReasonDialog'
+import { describeTranslateError, isBailianKeyMissing } from './translateError'
+import { readScopedItem, scopedStorageKey, writeScopedItem } from './scopedStorage'
 import WindowTitleControls from './WindowTitleControls'
 import { IEBrowserPanel } from './IEBrowserPanel'
 import { ArticleCrawlerPanel } from './ArticleCrawlerPanel'
+import { AiWarehouseWorkbench } from './erp/AiWarehouseWorkbench'
+import { PalletWarehousePage } from './erp/PalletWarehousePage'
+import { fetchErpCapabilities } from './erp/erpApi'
+import { runWithSessionRetry } from './serverApi'
+import { CollectWorkbench } from './erp/CollectWorkbench'
+import { PanelCollapseButton, PanelExpandRail, TitlebarPanelToggle, usePanelCollapse } from './panel-collapse'
 import './ebay-collection.css'
 import './ebay-image-stage-panel.css'
 import './migration-banner.css'
+import './ai-collect.css'
+import './eliminated-products.css'
 
-type AppPage = 'dashboard' | 'ebay' | 'ebay-hub' | 'ebay-title' | 'ai-crossborder' | 'compliance-knowledge' | 'ops-knowledge' | 'system-admin' | 'warehouse-dashboard' | 'tasks' | 'ozon' | 'sourcing' | 'comparison' | 'review' | 'catalog' | 'image-studio' | 'realshift' | 'publishing' | 'procurement' | 'finance' | 'ai-support' | 'feishu' | 'ai-advisor' | 'online-advisor' | 'ai-collect' | 'ai-art' | 'ai-video' | 'ai-video-watch' | 'ai-video-resource' | 'ai-tasks' | 'ai-employee' | 'ai-employee-workspace' | 'ai-employee-listing' | 'ai-employee-guardian' | 'ai-planet' | 'ai-hq' | 'amazon-data-source' | 'llm-keys' | 'linduo-mall' | 'bailian-mall' | 'ai-sample-library' | 'cb-news' | 'ie-browser' | 'ai-warehouse' | 'article-crawler'
+type AppPage = 'dashboard' | 'ebay' | 'ebay-hub' | 'ebay-title' | 'ai-crossborder' | 'compliance-knowledge' | 'ops-knowledge' | 'system-admin' | 'warehouse-dashboard' | 'tasks' | 'ozon' | 'sourcing' | 'comparison' | 'eliminated' | 'review' | 'catalog' | 'image-studio' | 'realshift' | 'publishing' | 'procurement' | 'finance' | 'ai-support' | 'feishu' | 'ai-advisor' | 'online-advisor' | 'ai-collect' | 'ai-art' | 'ai-video' | 'ai-video-watch' | 'ai-video-resource' | 'ai-tasks' | 'ai-employee' | 'ai-employee-workspace' | 'ai-employee-listing' | 'ai-employee-guardian' | 'ai-planet' | 'ai-hq' | 'amazon-data-source' | 'llm-keys' | 'linduo-mall' | 'bailian-mall' | 'ai-sample-library' | 'cb-news' | 'ie-browser' | 'ai-warehouse' | 'ai-hub-warehouse' | 'article-crawler' | 'erp-collect'
 type EbayWorkspaceTab = 'browser' | 'library' | 'local' | 'optimize' | 'premium' | 'publish'
 
 // AI跨境之下的七个 AI 模块一级菜单（当前均为“功能建设中”占位页）
@@ -48,6 +61,8 @@ const aiModuleNav: { page: AppPage; label: string; icon: string; perm: string }[
   { page: 'ai-employee', label: 'AI员工', icon: 'ai-employee', perm: 'menu.employee' },
   { page: 'ai-crossborder', label: 'AI跨境', icon: 'ai-crossborder', perm: 'menu.crossborder' },
   { page: 'ai-warehouse', label: 'AI仓库', icon: 'ai-warehouse', perm: 'menu.warehouse' },
+  // 货盘仓库：与 AI仓库 同级的一级入口（占位页），权限独立登记 menu.warehouse.hub
+  { page: 'ai-hub-warehouse', label: '货盘仓库', icon: 'archive', perm: 'menu.warehouse.hub' },
   { page: 'ai-collect', label: 'AI采集', icon: 'ai-collect', perm: 'menu.collect' },
   { page: 'ai-art', label: 'AI美工', icon: 'ai-art', perm: 'menu.art' },
   { page: 'ai-video', label: 'AI视频', icon: 'ai-video', perm: 'menu.video' },
@@ -70,53 +85,55 @@ const ebayImageSourceRoleLabels:Record<EbayImageSourceRole,string>={HERO:'主图
 const ebayDefaultImageModelId='wan2.7-image-pro'
 // 参照图上限优先读 BailianImageService 随 connection() 返回的 maxReferenceImages 元数据（显式判断 number 以保留 0：0 表示纯文生图模型不支持参照图，不能回退成默认值）；缺失时按 id 回退（wan2.7 系列 8 张、Z-Image 1 张），未知模型默认 3 张，与服务端裁剪规则保持一致
 const ebayImageModelReferenceLimit=(model?:ImageModelProfile)=>typeof model?.maxReferenceImages==='number'?model.maxReferenceImages:(model?.id.startsWith('wan2.7')?8:model?.id==='z-image-turbo'?1:3)
-const ebayImageSourceCurationKey=(listingId:string)=>`ebay-image-source-curation:v1:${listingId}`
+// 按商品/店铺维度落地的本地配置统一走 scopedStorage：加 `scoped:v1:` 前缀 + 写入时按 LRU 裁剪，
+// 避免键数量随商品/店铺无限增长；历史键在首次读取时自动迁移（见 scopedStorage.ts）。
+const ebayImageSourceCurationKey=(listingId:string)=>scopedStorageKey('ebay-image-source-curation:v1',listingId)
 
 function readEbayImageSourceCuration(listingId:string):EbayImageSourceCuration {
   if(!listingId)return {}
   try {
-    const value=JSON.parse(localStorage.getItem(ebayImageSourceCurationKey(listingId))||'{}')
+    const value=JSON.parse(readScopedItem(localStorage,ebayImageSourceCurationKey(listingId))||'{}')
     return value&&typeof value==='object'?value as EbayImageSourceCuration:{}
   } catch { return {} }
 }
 
 function saveEbayImageSourceCuration(listingId:string,curation:EbayImageSourceCuration) {
-  if(listingId)localStorage.setItem(ebayImageSourceCurationKey(listingId),JSON.stringify(curation))
+  if(listingId)writeScopedItem(localStorage,ebayImageSourceCurationKey(listingId),JSON.stringify(curation))
 }
 
 // 手动改过角色的原图 URL 集合，单独存 key，不侵入 ebay-image-source-curation:v1 的条目结构；AI 建议永不覆盖这些条目。
-const ebayImageSourceTouchedKey=(listingId:string)=>`ebay-image-source-curation-touched:v1:${listingId}`
+const ebayImageSourceTouchedKey=(listingId:string)=>scopedStorageKey('ebay-image-source-curation-touched:v1',listingId)
 
 function readEbayImageSourceTouched(listingId:string):Set<string> {
   if(!listingId)return new Set()
   try {
-    const value=JSON.parse(localStorage.getItem(ebayImageSourceTouchedKey(listingId))||'[]')
+    const value=JSON.parse(readScopedItem(localStorage,ebayImageSourceTouchedKey(listingId))||'[]')
     return new Set(Array.isArray(value)?value.map(String):[])
   } catch { return new Set() }
 }
 
 // 用户手动勾选的参考图 URL 列表，按商品持久化；生成分镜时优先使用这些参照
-const ebayImageReferenceSelectionKey=(listingId:string)=>`ebay-image-reference-selection:v1:${listingId}`
+const ebayImageReferenceSelectionKey=(listingId:string)=>scopedStorageKey('ebay-image-reference-selection:v1',listingId)
 
 function readEbayImageReferenceSelection(listingId:string):string[] {
   if(!listingId)return []
   try {
-    const value=JSON.parse(localStorage.getItem(ebayImageReferenceSelectionKey(listingId))||'[]')
+    const value=JSON.parse(readScopedItem(localStorage,ebayImageReferenceSelectionKey(listingId))||'[]')
     return Array.isArray(value)?value.map(String):[]
   } catch { return [] }
 }
 
 function saveEbayImageReferenceSelection(listingId:string,urls:string[]) {
-  if(listingId)localStorage.setItem(ebayImageReferenceSelectionKey(listingId),JSON.stringify(urls))
+  if(listingId)writeScopedItem(localStorage,ebayImageReferenceSelectionKey(listingId),JSON.stringify(urls))
 }
 
 // 用户在「02 选择原图」点击“确定”后提交的原图 URL 列表，按商品持久化；返回 null 表示从未确定过（用于严格闸门：未确定前不进入生成选择区）
-const ebaySourceSelectionKey=(listingId:string)=>`ebay-source-selection:v1:${listingId}`
+const ebaySourceSelectionKey=(listingId:string)=>scopedStorageKey('ebay-source-selection:v1',listingId)
 
 function readEbaySourceSelection(listingId:string):string[]|null {
   if(!listingId)return null
   try {
-    const raw=localStorage.getItem(ebaySourceSelectionKey(listingId))
+    const raw=readScopedItem(localStorage,ebaySourceSelectionKey(listingId))
     if(raw===null)return null
     const value=JSON.parse(raw)
     return Array.isArray(value)?value.map(String):[]
@@ -124,7 +141,7 @@ function readEbaySourceSelection(listingId:string):string[]|null {
 }
 
 function saveEbaySourceSelection(listingId:string,urls:string[]) {
-  if(listingId)localStorage.setItem(ebaySourceSelectionKey(listingId),JSON.stringify(urls))
+  if(listingId)writeScopedItem(localStorage,ebaySourceSelectionKey(listingId),JSON.stringify(urls))
 }
 
 function normalizeEbayImageSourceCuration(images:string[],saved:EbayImageSourceCuration):EbayImageSourceCuration {
@@ -221,7 +238,7 @@ const defaultEbayProfitAssumptions:EbayProfitAssumptions={
   riskBufferRate:0,
   targetMarginRate:25
 }
-const ebayProfitAssumptionsKey=(productId:string)=>`ebay-profit-assumptions:${productId}`
+const ebayProfitAssumptionsKey=(productId:string)=>scopedStorageKey('ebay-profit-assumptions',productId)
 
 function ebayCategoryFeeRule(categoryName:string,salePrice:number) {
   const category=categoryName.trim().toLocaleLowerCase()
@@ -234,13 +251,13 @@ function ebayCategoryFeeRule(categoryName:string,salePrice:number) {
 function readEbayProfitAssumptions(productId:string):EbayProfitAssumptions {
   if(!productId)return defaultEbayProfitAssumptions
   try {
-    const saved=JSON.parse(localStorage.getItem(ebayProfitAssumptionsKey(productId))||'null') as Partial<EbayProfitAssumptions>|null
+    const saved=JSON.parse(readScopedItem(localStorage,ebayProfitAssumptionsKey(productId))||'null') as Partial<EbayProfitAssumptions>|null
     return {...defaultEbayProfitAssumptions,...saved}
   } catch { return defaultEbayProfitAssumptions }
 }
 
 function saveEbayProfitAssumptions(productId:string,assumptions:EbayProfitAssumptions) {
-  if(productId)localStorage.setItem(ebayProfitAssumptionsKey(productId),JSON.stringify(assumptions))
+  if(productId)writeScopedItem(localStorage,ebayProfitAssumptionsKey(productId),JSON.stringify(assumptions))
 }
 
 function ebayMoneyNumber(value:string|undefined) {
@@ -251,12 +268,12 @@ function ebayMoneyNumber(value:string|undefined) {
 type EbayPricingStrategy='SELL_THROUGH'|'BALANCED'|'PROFIT'
 type EbayCompetitivePricingDecision={researchSnapshotId:string;strategy:EbayPricingStrategy;recommendedPrice:number;currency:string;comparableSampleCount:number;marketLow:number;marketMedian:number;marketHigh:number;expectedProfitCny:number;expectedMarginRate:number;savedAt:string}
 
-const ebayCompetitivePricingKey=(productId:string)=>`ebay-competitive-pricing:${productId}`
+const ebayCompetitivePricingKey=(productId:string)=>scopedStorageKey('ebay-competitive-pricing',productId)
 
 function readEbayCompetitivePricingDecision(productId:string):EbayCompetitivePricingDecision|null {
   if(!productId)return null
   try {
-    const value=JSON.parse(localStorage.getItem(ebayCompetitivePricingKey(productId))||'null') as Partial<EbayCompetitivePricingDecision>|null
+    const value=JSON.parse(readScopedItem(localStorage,ebayCompetitivePricingKey(productId))||'null') as Partial<EbayCompetitivePricingDecision>|null
     if(!value||!value.researchSnapshotId||!['SELL_THROUGH','BALANCED','PROFIT'].includes(String(value.strategy)))return null
     const recommendedPrice=Number(value.recommendedPrice)
     if(!Number.isFinite(recommendedPrice)||recommendedPrice<=0)return null
@@ -265,7 +282,7 @@ function readEbayCompetitivePricingDecision(productId:string):EbayCompetitivePri
 }
 
 function saveEbayCompetitivePricingDecision(productId:string,decision:EbayCompetitivePricingDecision) {
-  if(productId)localStorage.setItem(ebayCompetitivePricingKey(productId),JSON.stringify(decision))
+  if(productId)writeScopedItem(localStorage,ebayCompetitivePricingKey(productId),JSON.stringify(decision))
 }
 
 function ebayMarketPriceNumber(value:string) {
@@ -287,11 +304,12 @@ function ebayPricingTokens(value:string) {
   return [...new Set(value.toLowerCase().replace(/[^a-z0-9]+/g,' ').split(/\s+/).filter(token=>token.length>2&&!stopWords.has(token)))]
 }
 
-const ebayResearchQueryPreferenceKey=(storeId:string,listingId:string)=>`ebay-research-query:${storeId}:${listingId}`
+// 市场调研词偏好：按「店铺 + 商品」双维度落地，id 用 `${storeId}:${listingId}` 拼成单段
+const ebayResearchQueryPreferenceKey=(storeId:string,listingId:string)=>scopedStorageKey('ebay-research-query',`${storeId}:${listingId}`)
 
 function readEbayResearchQueryPreference(storeId:string,listingId:string):EbayResearchQueryPreference|undefined {
   try {
-    const value=JSON.parse(localStorage.getItem(ebayResearchQueryPreferenceKey(storeId,listingId))||'null') as Partial<EbayResearchQueryPreference>|null
+    const value=JSON.parse(readScopedItem(localStorage,ebayResearchQueryPreferenceKey(storeId,listingId))||'null') as Partial<EbayResearchQueryPreference>|null
     const query=String(value?.query||'').replace(/\s+/g,' ').trim().slice(0,120)
     const source=value?.source
     if(!query||!source||!['PRODUCT_TYPE','TITLE','CATEGORY','MANUAL'].includes(source))return undefined
@@ -300,8 +318,11 @@ function readEbayResearchQueryPreference(storeId:string,listingId:string):EbayRe
 }
 
 function saveEbayResearchQueryPreference(storeId:string,listingId:string,preference:EbayResearchQueryPreference) {
-  localStorage.setItem(ebayResearchQueryPreferenceKey(storeId,listingId),JSON.stringify(preference))
+  writeScopedItem(localStorage,ebayResearchQueryPreferenceKey(storeId,listingId),JSON.stringify(preference))
 }
+
+// 标题中译缓存：同样按「店铺 + 商品」双维度落地，纳入统一前缀与 LRU 裁剪
+const ebayTitleZhKey=(storeId:string,listingId:string)=>scopedStorageKey('ebay-title-zh',`${storeId}:${listingId}`)
 
 const ebayResearchQueryDropWords=new Set(['with','for','and','the','a','an','of','to','in','on','by','at','pcs','pc','pack','set','sets','lot','lots','free','shipping','new','hot','sale','best','selling','premium','professional','high','quality','durable','heavy','duty','convenient','wholesale','fashion','multi','functional'])
 const ebayResearchQueryInvalidSpecificValue=/^(?:does not apply|not applicable|n\/a|unbranded|unknown|other|none|no|-)$/i
@@ -393,6 +414,10 @@ const aiCollectPlatformThemes: Record<ProductWarehouseCode,{color:string;icon:Re
   OZON:{color:'#2563eb',icon:<><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></>}
 }
 
+// AI采集顶页：平台权限映射与分区（供应货源/市场平台），分区对应导航站白卡区域
+const aiCollectPermMap: Record<ProductWarehouseCode,string> = {GIGACLOUD:'menu.collect.gigacloud','1688':'menu.collect.1688',ALIEXPRESS:'menu.collect.aliexpress',OZON:'menu.collect.ozon'}
+const aiCollectGroups: Array<{key:'SUPPLY'|'MARKET';title:string}> = [{key:'SUPPLY',title:'供应货源'},{key:'MARKET',title:'市场平台'}]
+
 const warehouseRuleProfiles:Record<ProductWarehouseCode,string[]>={
   GIGACLOUD:['海外仓可售库存','仓库位置与配送区域','尾程费用与履约时效','重量体积与破损风险'],
   ALIEXPRESS:['订单量与评价质量','售价及折扣稳定性','配送时效与店铺表现','竞争强度与货源利润'],
@@ -448,42 +473,60 @@ const platformSelectionDimensions: Record<string, { code: string; name: string }
   GIGACLOUD: [{code:'inventory',name:'海外仓库存'},{code:'fulfillment',name:'履约时效'},{code:'logistics',name:'物流成本'},{code:'quality',name:'商品质量'},{code:'supplier',name:'供应稳定'},{code:'risk',name:'破损退货风险'}]
 }
 
-let productCatalog = [
-  { name:'家具', children:['客厅家具','卧室家具','办公家具'] }, { name:'花园与户外', children:['户外家具','园艺工具','烧烤用品'] },
-  { name:'健身与运动', children:['健身器材','户外运动','运动配件'] }, { name:'卫浴与水龙头', children:['水龙头','淋浴用品','卫浴收纳'] },
-  { name:'厨房用品', children:['烹饪工具','餐厨收纳','饮水器具'] }, { name:'宠物用品', children:['宠物食品','喂食用品','清洁护理','宠物玩具','牵引与出行','宠物家居'] },
-  { name:'玩具', children:['益智玩具','模型玩具','户外玩具'] }, { name:'汽车配件与运输', children:['内饰用品','维修工具','车载电器'] },
-  { name:'照明', children:['室内照明','户外照明','装饰灯具'] }, { name:'未分类', children:['待人工分类'] }
-]
-
-let tertiaryCatalog: Record<string, Array<{ name:string; icon:string }>> = {
-  '客厅家具':[{name:'沙发',icon:'🛋'},{name:'茶几',icon:'🪑'},{name:'电视柜',icon:'📺'},{name:'收纳柜',icon:'🗄'}], '卧室家具':[{name:'床与床架',icon:'🛏'},{name:'床头柜',icon:'🗄'},{name:'衣柜',icon:'👗'}], '办公家具':[{name:'办公桌',icon:'🖥'},{name:'办公椅',icon:'🪑'},{name:'文件柜',icon:'🗂'}],
-  '户外家具':[{name:'庭院桌椅',icon:'⛱'},{name:'户外沙发',icon:'🛋'},{name:'遮阳伞',icon:'☂'}], '园艺工具':[{name:'修剪工具',icon:'✂'},{name:'浇灌用品',icon:'💧'},{name:'种植工具',icon:'🌱'}], '烧烤用品':[{name:'烧烤炉',icon:'🔥'},{name:'烧烤工具',icon:'🍴'},{name:'露营炊具',icon:'⛺'}],
-  '健身器材':[{name:'跑步机',icon:'🏃'},{name:'哑铃',icon:'🏋'},{name:'力量训练器',icon:'💪'}], '户外运动':[{name:'露营装备',icon:'⛺'},{name:'自行车用品',icon:'🚲'},{name:'球类用品',icon:'⚽'}], '运动配件':[{name:'运动护具',icon:'🪖'},{name:'训练辅助',icon:'🎯'},{name:'运动包',icon:'🎒'}],
-  '水龙头':[{name:'厨房水龙头',icon:'🚰'},{name:'浴室水龙头',icon:'🚿'},{name:'感应水龙头',icon:'💧'}], '淋浴用品':[{name:'花洒',icon:'🚿'},{name:'淋浴套装',icon:'🛁'},{name:'浴帘与配件',icon:'🧼'}], '卫浴收纳':[{name:'浴室置物架',icon:'🧴'},{name:'马桶收纳',icon:'🚽'},{name:'洗漱台收纳',icon:'🗄'}],
-  '烹饪工具':[{name:'锅具',icon:'🍳'},{name:'刀具',icon:'🔪'},{name:'厨房小工具',icon:'🥄'},{name:'厨房电器',icon:'🧇'}], '餐厨收纳':[{name:'调料架',icon:'🫙'},{name:'碗盘架',icon:'🍽'},{name:'厨房置物架',icon:'🗄'}], '饮水器具':[{name:'水杯与杯壶',icon:'🥤'},{name:'咖啡用具',icon:'☕'},{name:'净水器具',icon:'💧'}],
-  '宠物食品':[{name:'狗粮',icon:'🐶'},{name:'猫粮',icon:'🐱'},{name:'宠物零食',icon:'🦴'},{name:'营养补充剂',icon:'💊'}], '喂食用品':[{name:'宠物食盆',icon:'🥣'},{name:'自动喂食器',icon:'⏲'},{name:'宠物饮水机',icon:'💧'}], '清洁护理':[{name:'宠物洗护',icon:'🧴'},{name:'梳毛工具',icon:'🪮'},{name:'宠物烘干箱',icon:'🌬'}], '宠物玩具':[{name:'狗玩具',icon:'🦴'},{name:'猫玩具',icon:'🧶'},{name:'训练玩具',icon:'🎯'}], '牵引与出行':[{name:'牵引绳',icon:'🪢'},{name:'宠物背包',icon:'🎒'},{name:'宠物推车',icon:'🐕'}], '宠物家居':[{name:'宠物窝',icon:'🏠'},{name:'猫爬架',icon:'🌳'},{name:'宠物围栏',icon:'🪜'}],
-  '益智玩具':[{name:'积木',icon:'🧱'},{name:'拼图',icon:'🧩'},{name:'科学玩具',icon:'🧪'}], '模型玩具':[{name:'车辆模型',icon:'🚗'},{name:'动物模型',icon:'🦕'},{name:'拼装模型',icon:'🧰'}], '户外玩具':[{name:'水玩具',icon:'💦'},{name:'沙滩玩具',icon:'🏖'},{name:'儿童运动玩具',icon:'🏀'}],
-  '内饰用品':[{name:'座椅用品',icon:'💺'},{name:'车内收纳',icon:'🗄'},{name:'方向盘配件',icon:'🚘'}], '维修工具':[{name:'随车工具',icon:'🧰'},{name:'清洗养护',icon:'🧽'},{name:'轮胎工具',icon:'🛠'}], '车载电器':[{name:'车载充电器',icon:'🔌'},{name:'行车记录仪',icon:'📷'},{name:'车载吸尘器',icon:'🧹'}],
-  '室内照明':[{name:'吸顶灯',icon:'💡'},{name:'台灯',icon:'💡'},{name:'壁灯',icon:'🕯'}], '户外照明':[{name:'庭院灯',icon:'🌙'},{name:'太阳能灯',icon:'☀'},{name:'户外探照灯',icon:'🔦'}], '装饰灯具':[{name:'灯带',icon:'✨'},{name:'氛围灯',icon:'🌈'},{name:'节日灯饰',icon:'🎆'}], '待人工分类':[{name:'待细分',icon:'❓'}]
-}
+// 产品目录三级树：模块级「只读快照 + 订阅」存储。
+// 原实现是两个模块级 let 变量（默认字面量在下一行就被 gigaCatalog 派生值无条件覆盖），
+// 编辑时就地改绑：StrictMode/HMR 下跨实例共享可变状态，且只有 CatalogManager 自己靠 revision
+// 强制重渲染，其余消费者继续读旧目录（鬼影）。现改为：目录只能经 catalogStore.commit 产生新的
+// 冻结快照，组件用 useCatalog 订阅，非组件场景用 catalogStore.getSnapshot 取当前快照。
+type CatalogGroup = { name:string; children:string[] }
+type TertiaryItem = { name:string; icon:string }
+type CatalogSnapshot = { groups:CatalogGroup[]; tertiary:Record<string,TertiaryItem[]> }
 
 const catalogVersion = 'gigab2b-2026-07-13'
+const catalogDefinitionKey = 'product-catalog-definition'
 const tertiaryKey = (category:string,subcategory:string) => `${category}::${subcategory}`
-productCatalog = [...gigaCatalog.map(group=>({name:group.name,children:group.children.map(child=>child.name)})),{name:'类目待核实',children:['待核实']}]
-tertiaryCatalog = Object.fromEntries(gigaCatalog.flatMap(group=>group.children.map(child=>[
-  tertiaryKey(group.name,child.name),child.children.map(item=>({name:item.name,icon:item.icon}))
-])))
-tertiaryCatalog[tertiaryKey('类目待核实','待核实')] = [{name:'待核实',icon:'❓'}]
 
-try {
-  const saved=localStorage.getItem('product-catalog-definition')
-  if(saved){const parsed=JSON.parse(saved);if(parsed.version===catalogVersion&&Array.isArray(parsed.groups)&&parsed.tertiary){productCatalog=parsed.groups;tertiaryCatalog=parsed.tertiary}}
-} catch { /* 保留默认目录 */ }
+// 默认目录：由 gigaCatalog.json 派生 + 「类目待核实」兜底组
+const defaultCatalogSnapshot:CatalogSnapshot = (()=>{
+  const groups:CatalogGroup[] = [...gigaCatalog.map(group=>({name:group.name,children:group.children.map(child=>child.name)})),{name:'类目待核实',children:['待核实']}]
+  const tertiary:Record<string,TertiaryItem[]> = Object.fromEntries(gigaCatalog.flatMap(group=>group.children.map(child=>[
+    tertiaryKey(group.name,child.name),child.children.map(item=>({name:item.name,icon:item.icon}))
+  ])))
+  tertiary[tertiaryKey('类目待核实','待核实')] = [{name:'待核实',icon:'❓'}]
+  return Object.freeze({groups,tertiary})
+})()
 
-const saveCatalogDefinition=()=>localStorage.setItem('product-catalog-definition',JSON.stringify({version:catalogVersion,groups:productCatalog,tertiary:tertiaryCatalog}))
+// 本地自定义目录：版本号不符或结构不合法时回退默认目录（解析失败同样回退，绝不抛到模块加载）
+const savedCatalogSnapshot:CatalogSnapshot|null = (()=>{
+  try {
+    const saved=localStorage.getItem(catalogDefinitionKey)
+    if(!saved)return null
+    const parsed=JSON.parse(saved) as {version?:string;groups?:CatalogGroup[];tertiary?:Record<string,TertiaryItem[]>}
+    if(parsed.version!==catalogVersion||!Array.isArray(parsed.groups)||!parsed.tertiary)return null
+    return Object.freeze({groups:parsed.groups,tertiary:parsed.tertiary})
+  } catch { return null }
+})()
 
-const tertiaryOptions = (subcategory:string,category='') => [...(tertiaryCatalog[tertiaryKey(category,subcategory)] || tertiaryCatalog[subcategory] || []),{name:'待细分',icon:'❓'}].filter((item,index,array)=>array.findIndex(other=>other.name===item.name)===index)
+const catalogStore = (()=>{
+  // 快照变量私有于闭包：外部只能整体替换，无法就地改内容或跨实例改绑
+  let snapshot:CatalogSnapshot = savedCatalogSnapshot ?? defaultCatalogSnapshot
+  const listeners = new Set<()=>void>()
+  return {
+    subscribe(listener:()=>void) { listeners.add(listener);return ()=>{listeners.delete(listener)} },
+    getSnapshot:()=>snapshot,
+    /** 目录编辑的唯一入口：替换快照 → 持久化 → 通知全部订阅者 */
+    commit(groups:CatalogGroup[],tertiary:Record<string,TertiaryItem[]>) {
+      snapshot=Object.freeze({groups,tertiary})
+      try{localStorage.setItem(catalogDefinitionKey,JSON.stringify({version:catalogVersion,groups,tertiary}))}catch{ /* 本地存储不可用时仅本次会话生效 */ }
+      listeners.forEach(listener=>listener())
+    }
+  }
+})()
+
+/** 组件内订阅目录快照（替代直接读模块级可变变量） */
+const useCatalog = ():CatalogSnapshot => useSyncExternalStore(catalogStore.subscribe,catalogStore.getSnapshot)
+
+const tertiaryOptions = (catalog:CatalogSnapshot,subcategory:string,category='') => [...(catalog.tertiary[tertiaryKey(category,subcategory)] || catalog.tertiary[subcategory] || []),{name:'待细分',icon:'❓'}].filter((item,index,array)=>array.findIndex(other=>other.name===item.name)===index)
 const CatalogIcon = ({icon}:{icon:string}) => /^https?:\/\//.test(icon)?<img src={icon} alt=""/>:<>{icon}</>
 const readableError = (reason:unknown,fallback:string) => (reason instanceof Error ? reason.message : fallback).replace(/^Error invoking remote method '[^']+': Error:\s*/, '')
 
@@ -515,7 +558,7 @@ function supplyCatalog(product: CollectedSupplyProduct) {
   return exactSupplyCatalog(product) || { category:'类目待核实', subcategory:'待核实', tertiaryCategory:'待核实' }
 }
 
-function SupplyCandidateCard({ product, candidateKey, sourceCount, sourceText, catalog, exactCatalog, batchMode, checked, preferred, onToggle, onRestore, onPurge, onPrefer, onOpen, onDelete }: {
+function SupplyCandidateCard({ product, candidateKey, sourceCount, sourceText, catalog, exactCatalog, batchMode, checked, preferred, onToggle, onRestore, onPurge, onPrefer, onOpen, onEliminate }: {
   product: CollectedSupplyProduct
   candidateKey: string
   sourceCount: number
@@ -530,7 +573,7 @@ function SupplyCandidateCard({ product, candidateKey, sourceCount, sourceText, c
   onPurge: () => void
   onPrefer: () => void
   onOpen: () => void
-  onDelete: () => void
+  onEliminate: () => void
 }) {
   const inferredGigaIndex = product.gigaIndex ?? (product.platformCode === 'GIGACLOUD' && product.supplierBadges.includes('GIGA_INDEX') && product.score > 0 ? product.score : null)
   const grade = inferredGigaIndex === null ? null : Math.round(inferredGigaIndex) >= 80 ? 'A' : Math.round(inferredGigaIndex) >= 65 ? 'B' : 'C'
@@ -546,7 +589,7 @@ function SupplyCandidateCard({ product, candidateKey, sourceCount, sourceText, c
       <dl className="candidate-source-facts"><div><dt>物流费</dt><dd>{product.shippingFeeText || '待补采'}</dd></div><div><dt>可售库存</dt><dd>{inventoryText}</dd></div><div><dt>原始类目</dt><dd title={`${catalog.category} / ${catalog.subcategory} / ${catalog.tertiaryCategory}`}>{catalog.category} / {catalog.subcategory} / {catalog.tertiaryCategory}</dd></div><div><dt>GIGA Index</dt><dd>{inferredGigaIndex ?? '待补采'}</dd></div></dl>
       <div className="original-price" title={sourceText}>{sourceText}</div>
       <div className="product-tags"><span>{product.candidateDeletedAt?'已删除':preferred?'已优选':product.selected?'AI入选':'待人工复核'}</span><span>{exactCatalog?'精确类目':'类目待核实'}</span></div>
-      <div className="product-actions candidate-next-actions"><button className="search-1688" disabled={Boolean(product.candidateDeletedAt)} onClick={onPrefer}>{preferred?'已优选':'优选'} <i>→</i></button><button onClick={onOpen}>原址 <i>↗</i></button><button className="candidate-delete" disabled={Boolean(product.candidateDeletedAt)} onClick={onDelete}>删除</button></div>
+      <div className="product-actions candidate-next-actions"><button className="search-1688" disabled={Boolean(product.candidateDeletedAt)} onClick={onPrefer}>{preferred?'已优选':'优选'} <i>→</i></button><button onClick={onOpen}>原址 <i>↗</i></button><button className="candidate-delete" disabled={Boolean(product.candidateDeletedAt)} onClick={onEliminate} title="淘汰商品并记录原因">淘汰</button></div>
     </div>
   </article>
 }
@@ -595,7 +638,27 @@ function WatchSkillPage({ onBack }: { onBack: () => void }) {
 }
 
 function Resource2SkillModelPanel({busy,configured,apiKey,baseUrl,url,onApiKey,onUrl,onSave,onClear,onAnalyze}:{busy:boolean;configured:boolean;apiKey:string;baseUrl:string;url:string;onApiKey:(value:string)=>void;onUrl:(value:string)=>void;onSave:()=>void;onClear:()=>void;onAnalyze:()=>void}){
-  return <section className="resource2skill-model"><b>02 官方模型蒸馏</b><label>Gemini API Key<input aria-label="Gemini API Key" type="password" value={apiKey} onChange={event=>onApiKey(event.target.value)} placeholder={configured?'已配置，留空不修改':'输入 API Key'} autoComplete="new-password"/></label><div><button disabled={busy||!apiKey.trim()} onClick={onSave}>保存 Key</button><button disabled={busy||!configured} onClick={onClear}>清除 Key</button></div><label>API Base URL<input aria-label="API Base URL" value={baseUrl} readOnly/></label><label>YouTube URL<input aria-label="YouTube URL" value={url} onChange={event=>onUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=..."/></label><button className="primary" disabled={busy||!configured||!url.trim()} onClick={onAnalyze}>开始官方模型蒸馏</button><small>Key 使用系统安全存储；当前通过 api000.com 的 Gemini 兼容接口调用，可能产生费用。</small></section>
+  return (
+    <section className="resource2skill-model">
+      <header className="resource2skill-model-head">
+        <b>02 官方模型蒸馏</b>
+        {configured && <em className="resource2skill-model-badge" aria-label="API Key 已配置">已配置 ✓</em>}
+      </header>
+      <div className="resource2skill-model-config">
+        <label>Gemini API Key<input aria-label="Gemini API Key" type="password" value={apiKey} onChange={event=>onApiKey(event.target.value)} placeholder={configured?'已配置，留空不修改':'输入 API Key'} autoComplete="new-password"/></label>
+        <div className="resource2skill-model-actions">
+          <button disabled={busy||!apiKey.trim()} onClick={onSave}>保存 Key</button>
+          <button disabled={busy||!configured} onClick={onClear}>清除 Key</button>
+        </div>
+        <label>API Base URL<input aria-label="API Base URL" value={baseUrl} readOnly/></label>
+      </div>
+      <div className="resource2skill-model-task">
+        <label>YouTube URL<input aria-label="YouTube URL" value={url} onChange={event=>onUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=..."/></label>
+        <button className="primary resource2skill-model-analyze" disabled={busy||!configured||!url.trim()} onClick={onAnalyze}>{busy?'蒸馏中…':'开始官方模型蒸馏'}</button>
+      </div>
+      <small>Key 使用系统安全存储；当前通过 api000.com 的 Gemini 兼容接口调用，可能产生费用。</small>
+    </section>
+  )
 }
 
 function Resource2SkillPage({onBack}:{onBack:()=>void}){
@@ -644,10 +707,26 @@ export function App() {
     'ai-employee-listing': 'menu.employee',
     'ai-employee-guardian': 'menu.employee',
     'ai-sample-library': 'menu.advisor',
-    'ai-tasks': 'menu.tasks'
+    'ai-hub-warehouse': 'menu.warehouse.hub',
+    'ai-tasks': 'menu.tasks',
+    // AI视频在 MENU_PERMISSION_TREE 中没有二级卡码（menu.video 的 cards 为空），
+    // 故 Watch Skill 页映射到最接近的既有一级码 menu.video；因该节点无子卡，
+    // pageAllowed 的 hasPermission 判断与同级 ai-video / ai-video-resource 用的 canMenu('menu.video') 等价。
+    'ai-video-watch': 'menu.video'
   }
-  const pageAllowed = (p: AppPage) => { const code = PAGE_PERM[p]; return !code || hasPermission(profile, code) }
+  const pageAllowed = (p: AppPage) => {
+    const code = PAGE_PERM[p]
+    // 货盘仓库与 AI仓库 同级：显式持有父权限也可进入，不把其他仓库子权限抬升为本页权限。
+    return !code || hasPermission(profile, code) || (p === 'ai-hub-warehouse' && hasPermission(profile, 'menu.warehouse'))
+  }
   const [page, setPage] = useState<AppPage>('dashboard')
+  // 全局侧面板收起/展开：AI采集工作台左栏（标题栏开关经注册表作用于当前页主面板）
+  const collectPanel = usePanelCollapse('collect-workbench', { active: page === 'tasks' })
+  // 淘汰操作人快照：写入淘汰记录供追溯
+  const operatorLabel = profile ? `${profile.name}（${profile.email}）` : '未知操作人'
+  // AI采集顶页分区筛选（对应导航站 region-tabs）；切换后滚动定位到对应分区白卡
+  const [collectRegion,setCollectRegion]=useState<'ALL'|'SUPPLY'|'MARKET'>('ALL')
+  useEffect(()=>{if(collectRegion==='ALL')return;document.getElementById(`ai-collect-region-${collectRegion}`)?.scrollIntoView({behavior:'smooth',block:'start'})},[collectRegion])
   // 默认首页不可访问时（如成员无 dashboard.view）回退到第一个可访问的一级菜单，避免登录后首屏空白
   useEffect(() => {
     if (page !== 'dashboard' || canMenu('dashboard.view')) return
@@ -711,6 +790,10 @@ export function App() {
   const [selectedCandidateKeys, setSelectedCandidateKeys] = useState<Set<string>>(new Set())
   const [selectionItems, setSelectionItems] = useState<SelectionCatalogItem[]>([])
   const [warehouseProducts, setWarehouseProducts] = useState<SupplyWarehouseProduct[]>([])
+  const [supplyDownloads, setSupplyDownloads] = useState<SupplyProductDownload[]>([])
+  const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set())
+  const [erpCanEdit, setErpCanEdit] = useState(false)
+  const [reviewNotices, setReviewNotices] = useState<Record<string, string>>({})
   const [comparisons, setComparisons] = useState<ComparisonRecordView[]>([])
   const [,setCatalogRevision] = useState(0)
   const [workflowCounts, setWorkflowCounts] = useState<WorkflowCounts>({ collected: 0, compared: 0, selected: 0, stocked: 0, listed: 0, purchasing: 0, reconciled: 0 })
@@ -720,6 +803,7 @@ export function App() {
   const [translationCount, setTranslationCount] = useState(0)
   const [translationMenuOpen, setTranslationMenuOpen] = useState(false)
   const [translating, setTranslating] = useState(false)
+  const [translationKeyMissing, setTranslationKeyMissing] = useState(false)
   const [imageProduct, setImageProduct] = useState<ImageSourceProduct | null>(null)
   const [imageMarketplaceSelection, setImageMarketplaceSelection] = useState<MarketplaceSelectionProduct | null>(null)
   const [activeWarehouse,setActiveWarehouse] = useState<ProductWarehouseCode>('1688')
@@ -825,6 +909,44 @@ export function App() {
 
   useEffect(() => { void window.desktop.selections.list().then(setSelectionItems).catch(reason => setError(reason instanceof Error ? reason.message : '选品库加载失败')) }, [])
   useEffect(() => { void window.desktop.warehouses.list().then(setWarehouseProducts).catch(reason => setError(reason instanceof Error ? reason.message : '供应仓库加载失败')) }, [])
+  useEffect(() => { void window.desktop.warehouses.downloads().then(setSupplyDownloads).catch(() => undefined) }, [])
+  useEffect(() => {
+    fetchErpCapabilities().then(caps => setErpCanEdit(caps.canEdit)).catch(() => setErpCanEdit(false))
+  }, [])
+
+  const reviewNotice = useCallback((id: string, text: string) => setReviewNotices(current => ({ ...current, [id]: text })), [])
+  const handleWarehouseDownload = useCallback(async (item: SupplyWarehouseProduct) => {
+    setDownloadingIds(current => new Set(current).add(item.id))
+    reviewNotice(item.id, '')
+    try {
+      let record
+      try {
+        record = await window.desktop.warehouses.download(item.id, getTokens()?.accessToken ?? '')
+      } catch (reason) {
+        // 服务器会话过期：刷新令牌后重试一次
+        if (!(reason instanceof Error) || reason.message !== 'SERVER_SESSION_EXPIRED') throw reason
+        const refreshed = await refreshSession(getTokens()?.accessToken ?? '')
+        if (!refreshed) throw new Error('登录会话已过期，请重新登录后重试')
+        record = await window.desktop.warehouses.download(item.id, getTokens()?.accessToken ?? '')
+      }
+      setSupplyDownloads(current => [record, ...current.filter(entry => entry.warehouseProductId !== item.id)])
+      reviewNotice(item.id, '')
+    } catch (reason) {
+      reviewNotice(item.id, reason instanceof Error ? reason.message : '下载失败，请重试')
+    } finally {
+      setDownloadingIds(current => { const next = new Set(current); next.delete(item.id); return next })
+    }
+  }, [reviewNotice])
+  const handleReturnToInbound = useCallback(async (item: SupplyWarehouseProduct) => {
+    if (!window.confirm(`确认将「${item.title}」退回入库处理？将同时从正式入库与货盘仓库移除。`)) return
+    try {
+      await runWithSessionRetry(token => window.desktop.inbound.return(item.id, token))
+      reviewNotice(item.id, '已退回入库处理（待确认）')
+      setWarehouseProducts(await window.desktop.warehouses.list())
+    } catch (reason) {
+      reviewNotice(item.id, reason instanceof Error ? reason.message : '退回入库处理失败')
+    }
+  }, [reviewNotice])
   useEffect(() => { void window.desktop.comparisons.list().then(setComparisons).catch(reason => setError(reason instanceof Error ? reason.message : '比价数据加载失败')) }, [])
 
   useEffect(() => {
@@ -1000,6 +1122,15 @@ export function App() {
     }), 80)
   }
 
+  // 货盘仓库卡片「原址 ↗」：经内嵌浏览器打开商品原网址（复用对应平台会话）
+  const openPalletSource = (item: PalletWarehouseItem) => {
+    const browserPlatform: Platform = item.warehouseCode === '1688' ? '1688' : 'web'
+    setPage('tasks'); setPlatform(browserPlatform)
+    setTimeout(() => void window.desktop.browser.openTab(browserPlatform, item.sourceUrl, item.title).catch(reason => {
+      setError(reason instanceof Error ? reason.message : '原网址打开失败')
+    }), 80)
+  }
+
   const activateBrowserTab = (tab: BrowserTab) => {
     setPlatform(tab.platform)
     void window.desktop.browser.switchTab(tab.id)
@@ -1086,7 +1217,7 @@ export function App() {
   const activeMarketplace = marketplacePlatforms.find(item => item.code === task.marketplacePlatform)
   const visibleMarketplaceAccounts = marketplaceAccounts.filter(item => item.platformCode === task.marketplacePlatform)
   const activeSupplyPlatform = supplyPlatformOptions.find(item => item.code === task.supplyPlatforms[0]) || supplyPlatformOptions[0]
-  const isGigaCloudCollector = task.selectionMode === 'FORWARD_SUPPLY' && task.supplyPlatforms[0] === 'GIGACLOUD'
+  const isGigaCloudCollector = task.selectionMode === 'FORWARD_SUPPLY' && task.supplyPlatforms[0] === 'GIGACLOUD' && task.collectionMethod === 'KEYWORD'
   const activeFilterCount = task.selectionMode === 'FORWARD_SUPPLY'
     ? task.supplyPlatforms[0] === 'GIGACLOUD'
       ? Number(task.gigaSellerIndexFilter !== 'ANY') + Number(task.gigaReturnRateFilter !== 'ANY')
@@ -1108,8 +1239,14 @@ export function App() {
   const normalizedCandidateQuery = candidateQuery.trim().toLocaleLowerCase()
   const candidateAreaRuns = candidateRuns.filter(run => run.candidateArea === candidateArea)
   const candidateAreaRecords = candidateRecords.filter(record => record.candidateArea === candidateArea)
+  const preferredSupplyKeys = new Set(selectionItems.filter(item => item.sourceArea === 'SUPPLY').map(item => `${item.platformCode}:${item.sourceUrl}`))
+  const isPreferredSupply = (product: CollectedSupplyProduct) => preferredSupplyKeys.has(`${product.platformCode}:${product.url}`)
+  const stockedSupplyKeys = new Set(warehouseProducts.map(item => `${item.warehouseCode}:${item.sourceUrl}`))
+  const isStockedSupply = (product: CollectedSupplyProduct) => stockedSupplyKeys.has(`${product.platformCode}:${product.url}`)
+  const isExcludedSupply = (product: CollectedSupplyProduct) => isPreferredSupply(product) || isStockedSupply(product)
+  const preferredHiddenCandidateCount = supplyProducts.filter(product => !product.candidateDeletedAt && isExcludedSupply(product)).length
   const candidatePlatformOptions = candidateArea === 'SUPPLY'
-    ? supplyPlatformOptions.map(option => ({ code: option.code, name: option.name, count: supplyProducts.filter(product => product.platformCode === option.code && (candidateStatus === 'DELETED' ? Boolean(product.candidateDeletedAt) : !product.candidateDeletedAt)).length }))
+    ? supplyPlatformOptions.map(option => ({ code: option.code, name: option.name, count: supplyProducts.filter(product => product.platformCode === option.code && (candidateStatus === 'DELETED' ? Boolean(product.candidateDeletedAt) : !product.candidateDeletedAt) && !isExcludedSupply(product)).length }))
     : (marketplacePlatforms.length ? marketplacePlatforms : [{ code: 'OZON' as MarketplacePlatformCode, name: 'Ozon / 欧众', homeUrl: '', defaultNetworkStrategy: 'LOCAL_DIRECT' as NetworkStrategy, collectorReady: true }]).map(option => ({ code: option.code, name: option.name, count: option.code === 'OZON' ? products.filter(product => candidateStatus === 'DELETED' ? Boolean(product.candidateDeletedAt) : !product.candidateDeletedAt).length : 0 }))
   const candidatePlatformRuns = candidateAreaRuns.filter(run => candidatePlatform === 'ALL' || run.platformCode === candidatePlatform)
   const methodName = (method: CollectionMethod) => method === 'KEYWORD' ? '关键词搜索' : method === 'PRODUCT_URL' ? '单链接采集' : '类目页采集'
@@ -1122,7 +1259,7 @@ export function App() {
     const queryMatches = !normalizedCandidateQuery || `${product.title} ${product.productId} ${product.supplierName}`.toLocaleLowerCase().includes(normalizedCandidateQuery)
     const deletionMatches = candidateStatus === 'DELETED' ? Boolean(product.candidateDeletedAt) : !product.candidateDeletedAt
     const statusMatches = candidateStatus === 'ALL' || candidateStatus === 'DELETED' || (candidateStatus === 'SELECTED' ? product.selected : !product.selected)
-    return queryMatches && deletionMatches && statusMatches && provenanceMatches(`${product.platformCode}:${product.url}`)
+    return queryMatches && deletionMatches && statusMatches && !isExcludedSupply(product) && provenanceMatches(`${product.platformCode}:${product.url}`)
   })
   const marketCandidatePool = products.filter(product => (candidateStatus === 'DELETED' ? Boolean(product.candidateDeletedAt) : !product.candidateDeletedAt) && (!normalizedCandidateQuery || `${product.title} ${product.productId} ${product.brand}`.toLocaleLowerCase().includes(normalizedCandidateQuery)) && provenanceMatches(`OZON:${product.url}`))
   const candidateCatalogPaths = (candidateArea === 'SUPPLY' ? supplyCandidatePool : marketCandidatePool).map(candidateCatalogPath)
@@ -1158,6 +1295,25 @@ export function App() {
       const workspace = await window.desktop.candidates[action]({ candidateArea, candidateKeys })
       applyCandidateWorkspace(workspace)
     } catch (reason) { setError(reason instanceof Error ? reason.message : '候选商品操作失败') }
+  }
+
+  // 采集侯选淘汰：原因对话框 → 写入淘汰记录（主进程内部完成候选软删）→ 刷新候选工作台
+  const [eliminateCandidate, setEliminateCandidate] = useState<CollectedSupplyProduct | null>(null)
+  const confirmEliminateCandidate = async (reason: string) => {
+    const product = eliminateCandidate
+    if (!product) return
+    setEliminateCandidate(null)
+    setError('')
+    try {
+      await window.desktop.eliminations.eliminate({ origin: 'CANDIDATE', url: product.url, platformCode: product.platformCode, productId: product.productId, title: product.title, imageUrl: product.imageUrl || '', priceText: product.priceText || '', reason, operator: operatorLabel })
+      applyCandidateWorkspace(await window.desktop.candidates.list())
+    } catch (reasonError) { setError(reasonError instanceof Error ? reasonError.message : '淘汰失败') }
+  }
+
+  // 淘汰产品页重新启用会回滚原记录决策：同步刷新优选/候选内存态，避免返回旧页看到陈旧状态
+  const refreshSelectionAndCandidates = async () => {
+    setSelectionItems(await window.desktop.selections.list())
+    applyCandidateWorkspace(await window.desktop.candidates.list())
   }
 
   const toggleCandidateSelection = (candidateKey: string) => setSelectedCandidateKeys(current => {
@@ -1227,8 +1383,10 @@ export function App() {
       setTranslationCount(current => current + status.translated)
       setTranslationActive(true)
       setTranslationMode(mode)
+      setTranslationKeyMissing(false)
     } catch (reason) {
-      if (!silent) setError(reason instanceof Error ? reason.message : '网页翻译失败')
+      setTranslationKeyMissing(isBailianKeyMissing(reason))
+      if (!silent) setError(describeTranslateError(reason))
     } finally {
       translationRunning.current = false
       if (!silent) setTranslating(false)
@@ -1313,25 +1471,26 @@ export function App() {
     } catch (reason) { setError(reason instanceof Error ? reason.message : '发起比价失败') }
   }
 
-  const selectionModulePages: AppPage[] = ['warehouse-dashboard','tasks','ozon','sourcing','comparison','review','catalog']
+  const selectionModulePages: AppPage[] = ['warehouse-dashboard','tasks','ozon','sourcing','comparison','eliminated','review','catalog']
   const inSelectionModule = selectionModulePages.includes(page)
   const artModulePages: AppPage[] = ['image-studio','realshift']
   const aiHqChildPages: AppPage[] = ['system-admin','finance','ai-support','feishu','amazon-data-source','llm-keys','article-crawler']
   const activeWarehouseProfile=productWarehouses.find(item=>item.code===activeWarehouse)!
   const warehouseSelectionItems=selectionItems.filter(item=>item.platformCode===activeWarehouse)
+  const activeSelectionItems=warehouseSelectionItems.filter(item=>item.decision!=='APPROVED')
   const warehouseComparisons=activeWarehouse==='OZON'?comparisons:[]
   const warehouseCount=(code:ProductWarehouseCode)=>code==='1688'||code==='GIGACLOUD'
     ? warehouseProducts.filter(item=>item.warehouseCode===code).length
     : selectionItems.filter(item=>item.platformCode===code&&item.decision==='APPROVED').length
   const warehouseCandidateCount=(code:ProductWarehouseCode)=>code==='1688'||code==='GIGACLOUD'
-    ? supplyProducts.filter(item=>item.platformCode===code&&!item.candidateDeletedAt).length
+    ? supplyProducts.filter(item=>item.platformCode===code&&!item.candidateDeletedAt&&!isPreferredSupply(item)&&!isStockedSupply(item)).length
     : code==='OZON'?products.filter(item=>!item.candidateDeletedAt).length:0
   const warehouseSelectedCount=(code:ProductWarehouseCode)=>selectionItems.filter(item=>item.platformCode===code&&item.decision==='APPROVED').length
   const warehouseComparedCount=(code:ProductWarehouseCode)=>code==='OZON'?comparisons.length:0
   const warehouseLastRun=(code:ProductWarehouseCode)=>candidateRuns.find(run=>run.platformCode===code)
   const dashboardToday=new Date().toISOString().slice(0,10)
   const dashboardTodayNew=candidateRuns.filter(run=>run.completedAt?.slice(0,10)===dashboardToday).reduce((sum,run)=>sum+run.newCount,0)
-  const dashboardCandidateTotal=products.filter(item=>!item.candidateDeletedAt).length+supplyProducts.filter(item=>!item.candidateDeletedAt).length
+  const dashboardCandidateTotal=warehouseCandidateCount('1688')+warehouseCandidateCount('GIGACLOUD')+warehouseCandidateCount('OZON')
   const dashboardSelectedTotal=selectionItems.filter(item=>item.decision==='APPROVED').length
   const recentDashboardRuns=[...candidateRuns].sort((a,b)=>b.startedAt.localeCompare(a.startedAt)).slice(0,6)
   const mergeWarehouseSelections=(next:SelectionCatalogItem[])=>setSelectionItems(current=>[...current.filter(item=>item.platformCode!==activeWarehouse),...next])
@@ -1341,6 +1500,8 @@ export function App() {
     <div className="app-titlebar">
       <strong className="app-titlebar-title">砚都跨境</strong>
       <div className="app-titlebar-actions">
+        <span className="build-stamp" title="渲染包构建时间">{__BUILD_STAMP__}</span>
+        <TitlebarPanelToggle />
         <button type="button" title="刷新页面" onClick={() => window.location.reload()}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>刷新
         </button>
@@ -1370,7 +1531,7 @@ export function App() {
     </div>
     <aside className="sidebar">
       <nav>
-        {aiModuleNav.filter(item=>canMenu(item.perm)).map(item=><NavButton key={item.page} label={item.label} icon={item.icon} active={page===item.page||(item.page==='ai-advisor'&&page==='online-advisor')||(item.page==='ai-planet'&&(page==='compliance-knowledge'||page==='ops-knowledge'))||(item.page==='ai-hq'&&aiHqChildPages.includes(page))||(item.page==='ai-art'&&artModulePages.includes(page))||(item.page==='ai-employee'&&(page==='ai-employee-workspace'||page==='ai-employee-listing'||page==='ai-employee-guardian'))||(item.page==='ai-crossborder'&&(page==='ebay-hub'||page==='ebay'||page==='ebay-title'))} onClick={()=>{
+        {aiModuleNav.filter(item=>item.page==='ai-hub-warehouse'?pageAllowed(item.page):canMenu(item.perm)).map(item=><NavButton key={item.page} label={item.label} icon={item.icon} active={page===item.page||(item.page==='ai-advisor'&&page==='online-advisor')||(item.page==='ai-planet'&&(page==='compliance-knowledge'||page==='ops-knowledge'))||(item.page==='ai-hq'&&aiHqChildPages.includes(page))||(item.page==='ai-art'&&artModulePages.includes(page))||(item.page==='ai-employee'&&(page==='ai-employee-workspace'||page==='ai-employee-listing'||page==='ai-employee-guardian'))||(item.page==='ai-crossborder'&&(page==='ebay-hub'||page==='ebay'||page==='ebay-title'))} onClick={()=>{
           // 三个新图标（CB资讯 / IE浏览 / AI仓库）仅作为占位入口，不执行业务逻辑
           if(item.page==='cb-news'||item.page==='ie-browser'||item.page==='ai-warehouse'){setPage(item.page);return}
           setPage(item.page==='ai-advisor'?'online-advisor':item.page)
@@ -1408,8 +1569,10 @@ export function App() {
         </div>
       </section>}
       {page==='ebay-hub'&&<section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>eBay</h2><p>eBay平台智能运营中心</p></div><div className="ai-crossborder-entries">{hasPermission(profile,'menu.crossborder.login')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('ebay')}><span className="ai-crossborder-logo" style={{color:'#E53238',background:'#E5323814',borderColor:'#E5323830'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.85 12.15L19 4"/><path d="M18 5l2 2"/><path d="M15 8l2 2"/></svg></span><b>平台登录</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.crossborder.title')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('ebay-title')}><span className="ai-crossborder-logo" style={{color:'#0064D2',background:'#0064D214',borderColor:'#0064D230'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg></span><b>标题优化</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.crossborder.desc')&&<div className="ai-crossborder-card"><span className="ai-crossborder-logo" style={{color:'#f59e0b',background:'#f59e0b14',borderColor:'#f59e0b30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h8"/></svg></span><b>描述优化</b><em>即将上线</em></div>}{hasPermission(profile,'menu.crossborder.image')&&<div className="ai-crossborder-card"><span className="ai-crossborder-logo" style={{color:'#86B817',background:'#86B81714',borderColor:'#86B81730'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M4 17l5-5 4 4 2-2 5 4"/></svg></span><b>图片优化</b><em>即将上线</em></div>}</div></section>}
-      {(()=>{const current=aiModuleNav.find(item=>item.page===page);if(!current)return null;if(!canMenu(current.perm))return null;if(page==='ie-browser')return <IEBrowserPanel/>;if(page==='dashboard')return <Dashboard/>;if(page==='ai-employee')return <AIEmployeeHub onEnterAgent={navigateEmployeePosition}/>;if(page==='ai-art')return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>AI美工</h2><p>商品视觉生成与图片优化入口</p></div><div className="ai-crossborder-entries">{hasPermission(profile,'menu.art.studio')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('image-studio')}><span className="ai-crossborder-logo" style={{color:'#e11d48',background:'#e11d4814',borderColor:'#e11d4830'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M4 17l5-5 4 4 2-2 5 4"/></svg></span><b>AI生图</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.art.realshift')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('realshift')}><span className="ai-crossborder-logo" style={{color:'#9333ea',background:'#9333ea14',borderColor:'#9333ea30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 18l7-7M9 5l1 2 2 1-2 1-1 2-1-2-2-1 2-1zM17 12l1.2 2.8L21 16l-2.8 1.2L17 20l-1.2-2.8L13 16l2.8-1.2z"/><path d="M5 21l-2-2 9-9 2 2z"/></svg></span><b>AI洗图</b><em className="ready">进入</em></div>}</div></section>;if(page==='ai-hq')return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>AI总部</h2><p>管理与服务功能入口</p></div><div className="ai-crossborder-entries">{hasPermission(profile,'menu.hq.finance')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('finance')}><span className="ai-crossborder-logo" style={{color:'#2563eb',background:'#2563eb14',borderColor:'#2563eb30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h16M6 17V9M10 17V5M14 17v-4M18 17V7"/></svg></span><b>AI财务</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.hq.support')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('ai-support')}><span className="ai-crossborder-logo" style={{color:'#0891b2',background:'#0891b214',borderColor:'#0891b230'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 13v-2a8 8 0 0116 0v2M4 13h3v6H5a2 2 0 01-2-2v-2a2 2 0 011-2zM20 13h-3v6h2a2 2 0 002-2v-2a2 2 0 00-1-2zM17 19c0 2-2 2-5 2"/></svg></span><b>AI客服</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.hq.feishu')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('feishu')}><span className="ai-crossborder-logo" style={{color:'#7c3aed',background:'#7c3aed14',borderColor:'#7c3aed30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 12h8M12 8v8"/></svg></span><b>AI飞书</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.hq.crossborder')&&<div className="ai-crossborder-card clickable" onClick={() => void window.desktop.system.openExternal('http://114.55.149.192/nav/')}><span className="ai-crossborder-logo" style={{color:'#ff6a00',background:'#ff6a0014',borderColor:'#ff6a0030'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a13 13 0 010 18M12 3a13 13 0 000 18"/></svg></span><b>跨境导航</b><small>amz123 镜像 · 12区 130+ 平台</small><em className="ready">打开 <i>↗</i></em></div>}{hasPermission(profile,'menu.hq.vpn')&&<div className="ai-crossborder-card clickable" onClick={()=>void window.desktop.system.openVpnPanel()}><span className="ai-crossborder-logo" style={{color:'#0f766e',background:'#0f766e14',borderColor:'#0f766e30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a9 9 0 109 9"/><path d="M12 3a9 9 0 019 9M3 12h18M12 3c2.2 2.5 3.3 5.5 3.3 9S14.2 18.5 12 21M12 3C9.8 5.5 8.7 8.5 8.7 12S9.8 18.5 12 21"/></svg></span><b>翻墙管理</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.advisor')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('ai-sample-library')}><span className="ai-crossborder-logo" style={{color:'#0ea5e9',background:'#0ea5e914',borderColor:'#0ea5e930'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><path d="M9 7h7M9 11h5"/></svg></span><b>报告样例库</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.tasks')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('ai-tasks')}><span className="ai-crossborder-logo" style={{color:'#8b5cf6',background:'#8b5cf614',borderColor:'#8b5cf630'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4.5H7A2.5 2.5 0 004.5 7v12A2.5 2.5 0 007 21.5h10a2.5 2.5 0 002.5-2.5V7A2.5 2.5 0 0017 4.5h-2"/><rect x="9" y="2.5" width="6" height="4" rx="1.2"/><path d="M9 13.5l2.2 2.2 4.3-4.7"/></svg></span><b>AI任务</b><em className="ready">进入</em></div>}<div className="ai-crossborder-card clickable" onClick={()=>setPage('llm-keys')}><span className="ai-crossborder-logo" style={{color:'#d97706',background:'#d9770614',borderColor:'#d9770630'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg></span><b>大模型API Key</b><em className="ready">进入</em></div><div className="ai-crossborder-card clickable" onClick={()=>setPage('linduo-mall')}><span className="ai-crossborder-logo" style={{color:'#7e22ce',background:'#7e22ce14',borderColor:'#7e22ce30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l2.39 6.96H22l-6.19 4.5 2.36 6.94L12 15.9l-6.17 4.5 2.36-6.94L2 8.96h7.61z"/></svg></span><b>模型广场</b><small>零度API 旗下 28 个大模型浏览与筛选</small><em className="ready">进入</em></div><div className="ai-crossborder-card clickable" onClick={()=>setPage('bailian-mall')}><span className="ai-crossborder-logo" style={{color:'#2563eb',background:'#2563eb14',borderColor:'#2563eb30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/></svg></span><b>百炼模型广场</b><small>阿里百炼 24 个大模型浏览与筛选</small><em className="ready">进入</em></div><div className="ai-crossborder-card clickable" onClick={() => void window.desktop.system.openExternal('http://114.55.149.192:8080/admin/login')}><span className="ai-crossborder-logo" style={{color:'#7c3aed',background:'#7c3aed14',borderColor:'#7c3aed30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 4.5A3.5 3.5 0 006 8v1a3 3 0 00-2 2.83V13a3 3 0 002 2.83V17a3 3 0 003 3h1V4.5z"/><path d="M14.5 4.5A3.5 3.5 0 0118 8v1a3 3 0 012 2.83V13a3 3 0 01-2 2.83V17a3 3 0 01-3 3h-1V4.5z"/><path d="M10 8H8.5A2.5 2.5 0 006 10.5M14 8h1.5a2.5 2.5 0 012.5 2.5M10 15H8.5A2.5 2.5 0 016 12.5M14 15h1.5a2.5 2.5 0 002.5-2.5"/></svg></span><b>MaxKB智体</b><em className="ready"> 打开 <i>↗</i></em></div>{hasPermission(profile,'menu.planet.compliance')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('compliance-knowledge')}><span className="ai-crossborder-logo" style={{color:'#0d9488',background:'#0d948814',borderColor:'#0d948830'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l7 3v5c0 4.8-2.8 8.2-7 10-4.2-1.8-7-5.2-7-10V6z"/><path d="M9 12l2 2 4-5"/></svg></span><b>合规知识库</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.hq.crawler')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('article-crawler')}><span className="ai-crossborder-logo" style={{color:'#10b981',background:'#10b98114',borderColor:'#10b98130'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5a2 2 0 012-2h11a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2z"/><path d="M8 7h8M8 11h8M8 15h5"/><path d="M19 8l-1 2 2 1-1 1"/></svg></span><b>文章抓取</b><small>NewsCrawler · 12 平台一键抓取</small><em className="ready">进入</em></div>}{hasPermission(profile,'menu.hq.admin')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('system-admin')}><span className="ai-crossborder-logo" style={{color:'#64748b',background:'#64748b14',borderColor:'#64748b30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span><b>系统管理</b><em className="ready">进入</em></div>}</div></section>;if(page==='ai-planet')return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>AI星球</h2><p>聚合AI能力入口</p></div><div className="ai-crossborder-entries">{hasPermission(profile,'menu.planet.ops')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('ops-knowledge')}><span className="ai-crossborder-logo" style={{color:'#2563eb',background:'#2563eb14',borderColor:'#2563eb30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><path d="M9 7h7M9 11h5"/></svg></span><b>知识库</b><small>智能体知识库 · 自定义知识库</small><em className="ready">进入</em></div>}</div></section>;if(page==='ai-collect')return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>AI采集</h2><p>选择货源平台，开始智能采集</p></div><div className="ai-crossborder-entries">{productWarehouses.map(item=>{const collectPerm:Record<string,string>={GIGACLOUD:'menu.collect.gigacloud','1688':'menu.collect.1688',ALIEXPRESS:'menu.collect.aliexpress',OZON:'menu.collect.ozon'};if(!hasPermission(profile,collectPerm[item.code]))return null;const theme=aiCollectPlatformThemes[item.code];return <div className="ai-crossborder-card clickable" key={item.code} onClick={()=>void activateProductWarehouse(item.code,'tasks')}><span className="ai-crossborder-logo" style={{color:theme.color,background:`${theme.color}14`,borderColor:`${theme.color}30`}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{theme.icon}</svg></span><b>{item.name}</b><small>{item.description}</small><em className="ready">进入</em></div>})}</div></section>;return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>{current.label}</h2><p>功能建设中…</p></div></section>})()}
+      {(()=>{const current=aiModuleNav.find(item=>item.page===page);if(!current)return null;if(!canMenu(current.perm))return null;if(page==='ai-hub-warehouse')return null;if(page==='ie-browser')return <IEBrowserPanel/>;if(page==='dashboard')return <Dashboard/>;if(page==='ai-employee')return <AIEmployeeHub onEnterAgent={navigateEmployeePosition}/>;if(page==='ai-art')return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>AI美工</h2><p>商品视觉生成与图片优化入口</p></div><div className="ai-crossborder-entries">{hasPermission(profile,'menu.art.studio')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('image-studio')}><span className="ai-crossborder-logo" style={{color:'#e11d48',background:'#e11d4814',borderColor:'#e11d4830'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M4 17l5-5 4 4 2-2 5 4"/></svg></span><b>AI生图</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.art.realshift')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('realshift')}><span className="ai-crossborder-logo" style={{color:'#9333ea',background:'#9333ea14',borderColor:'#9333ea30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 18l7-7M9 5l1 2 2 1-2 1-1 2-1-2-2-1 2-1zM17 12l1.2 2.8L21 16l-2.8 1.2L17 20l-1.2-2.8L13 16l2.8-1.2z"/><path d="M5 21l-2-2 9-9 2 2z"/></svg></span><b>AI洗图</b><em className="ready">进入</em></div>}</div></section>;if(page==='ai-hq')return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>AI总部</h2><p>管理与服务功能入口</p></div><div className="ai-crossborder-entries">{hasPermission(profile,'menu.hq.finance')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('finance')}><span className="ai-crossborder-logo" style={{color:'#2563eb',background:'#2563eb14',borderColor:'#2563eb30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h16M6 17V9M10 17V5M14 17v-4M18 17V7"/></svg></span><b>AI财务</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.hq.support')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('ai-support')}><span className="ai-crossborder-logo" style={{color:'#0891b2',background:'#0891b214',borderColor:'#0891b230'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 13v-2a8 8 0 0116 0v2M4 13h3v6H5a2 2 0 01-2-2v-2a2 2 0 011-2zM20 13h-3v6h2a2 2 0 002-2v-2a2 2 0 00-1-2zM17 19c0 2-2 2-5 2"/></svg></span><b>AI客服</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.hq.feishu')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('feishu')}><span className="ai-crossborder-logo" style={{color:'#7c3aed',background:'#7c3aed14',borderColor:'#7c3aed30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 12h8M12 8v8"/></svg></span><b>AI飞书</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.hq.crossborder')&&<div className="ai-crossborder-card clickable" onClick={() => void window.desktop.system.openExternal('http://114.55.149.192/nav/')}><span className="ai-crossborder-logo" style={{color:'#ff6a00',background:'#ff6a0014',borderColor:'#ff6a0030'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a13 13 0 010 18M12 3a13 13 0 000 18"/></svg></span><b>跨境导航</b><small>amz123 镜像 · 12区 130+ 平台</small><em className="ready">打开 <i>↗</i></em></div>}{hasPermission(profile,'menu.hq.vpn')&&<div className="ai-crossborder-card clickable" onClick={()=>void window.desktop.system.openVpnPanel()}><span className="ai-crossborder-logo" style={{color:'#0f766e',background:'#0f766e14',borderColor:'#0f766e30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a9 9 0 109 9"/><path d="M12 3a9 9 0 019 9M3 12h18M12 3c2.2 2.5 3.3 5.5 3.3 9S14.2 18.5 12 21M12 3C9.8 5.5 8.7 8.5 8.7 12S9.8 18.5 12 21"/></svg></span><b>翻墙管理</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.advisor')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('ai-sample-library')}><span className="ai-crossborder-logo" style={{color:'#0ea5e9',background:'#0ea5e914',borderColor:'#0ea5e930'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><path d="M9 7h7M9 11h5"/></svg></span><b>报告样例库</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.tasks')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('ai-tasks')}><span className="ai-crossborder-logo" style={{color:'#8b5cf6',background:'#8b5cf614',borderColor:'#8b5cf630'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4.5H7A2.5 2.5 0 004.5 7v12A2.5 2.5 0 007 21.5h10a2.5 2.5 0 002.5-2.5V7A2.5 2.5 0 0017 4.5h-2"/><rect x="9" y="2.5" width="6" height="4" rx="1.2"/><path d="M9 13.5l2.2 2.2 4.3-4.7"/></svg></span><b>AI任务</b><em className="ready">进入</em></div>}<div className="ai-crossborder-card clickable" onClick={()=>setPage('llm-keys')}><span className="ai-crossborder-logo" style={{color:'#d97706',background:'#d9770614',borderColor:'#d9770630'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg></span><b>大模型API Key</b><em className="ready">进入</em></div><div className="ai-crossborder-card clickable" onClick={()=>setPage('linduo-mall')}><span className="ai-crossborder-logo" style={{color:'#7e22ce',background:'#7e22ce14',borderColor:'#7e22ce30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l2.39 6.96H22l-6.19 4.5 2.36 6.94L12 15.9l-6.17 4.5 2.36-6.94L2 8.96h7.61z"/></svg></span><b>模型广场</b><small>零度API 旗下 28 个大模型浏览与筛选</small><em className="ready">进入</em></div><div className="ai-crossborder-card clickable" onClick={()=>setPage('bailian-mall')}><span className="ai-crossborder-logo" style={{color:'#2563eb',background:'#2563eb14',borderColor:'#2563eb30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/></svg></span><b>百炼模型广场</b><small>阿里百炼 24 个大模型浏览与筛选</small><em className="ready">进入</em></div><div className="ai-crossborder-card clickable" onClick={() => void window.desktop.system.openExternal('http://114.55.149.192:8080/admin/login')}><span className="ai-crossborder-logo" style={{color:'#7c3aed',background:'#7c3aed14',borderColor:'#7c3aed30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 4.5A3.5 3.5 0 006 8v1a3 3 0 00-2 2.83V13a3 3 0 002 2.83V17a3 3 0 003 3h1V4.5z"/><path d="M14.5 4.5A3.5 3.5 0 0118 8v1a3 3 0 012 2.83V13a3 3 0 01-2 2.83V17a3 3 0 01-3 3h-1V4.5z"/><path d="M10 8H8.5A2.5 2.5 0 006 10.5M14 8h1.5a2.5 2.5 0 012.5 2.5M10 15H8.5A2.5 2.5 0 016 12.5M14 15h1.5a2.5 2.5 0 002.5-2.5"/></svg></span><b>MaxKB智体</b><em className="ready"> 打开 <i>↗</i></em></div>{hasPermission(profile,'menu.planet.compliance')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('compliance-knowledge')}><span className="ai-crossborder-logo" style={{color:'#0d9488',background:'#0d948814',borderColor:'#0d948830'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l7 3v5c0 4.8-2.8 8.2-7 10-4.2-1.8-7-5.2-7-10V6z"/><path d="M9 12l2 2 4-5"/></svg></span><b>合规知识库</b><em className="ready">进入</em></div>}{hasPermission(profile,'menu.hq.crawler')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('article-crawler')}><span className="ai-crossborder-logo" style={{color:'#10b981',background:'#10b98114',borderColor:'#10b98130'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5a2 2 0 012-2h11a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2z"/><path d="M8 7h8M8 11h8M8 15h5"/><path d="M19 8l-1 2 2 1-1 1"/></svg></span><b>文章抓取</b><small>NewsCrawler · 12 平台一键抓取</small><em className="ready">进入</em></div>}{hasPermission(profile,'menu.hq.admin')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('system-admin')}><span className="ai-crossborder-logo" style={{color:'#64748b',background:'#64748b14',borderColor:'#64748b30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span><b>系统管理</b><em className="ready">进入</em></div>}</div></section>;if(page==='ai-planet')return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>AI星球</h2><p>聚合AI能力入口</p></div><div className="ai-crossborder-entries">{hasPermission(profile,'menu.planet.ops')&&<div className="ai-crossborder-card clickable" onClick={()=>setPage('ops-knowledge')}><span className="ai-crossborder-logo" style={{color:'#2563eb',background:'#2563eb14',borderColor:'#2563eb30'}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><path d="M9 7h7M9 11h5"/></svg></span><b>知识库</b><small>智能体知识库 · 自定义知识库</small><em className="ready">进入</em></div>}</div></section>;if(page==='ai-collect')return <section className="ai-collect-page"><nav className="ai-collect-tabs">{([['ALL','全部'],['SUPPLY','供应货源'],['MARKET','市场平台']] as const).map(([key,label])=>{const count=productWarehouses.filter(item=>(key==='ALL'||item.kind===key)&&hasPermission(profile,aiCollectPermMap[item.code])).length;return <button key={key} type="button" className={`ai-collect-tab${collectRegion===key?' active':''}`} onClick={()=>setCollectRegion(key)}>{label}<span className="ai-collect-tab-count">{count}</span></button>})}</nav><div className="ai-collect-main">{aiCollectGroups.map(group=>{const items=productWarehouses.filter(item=>item.kind===group.key&&hasPermission(profile,aiCollectPermMap[item.code]));if(!items.length||(collectRegion!=='ALL'&&collectRegion!==group.key))return null;return <section className="ai-collect-region" key={group.key} id={`ai-collect-region-${group.key}`}><div className="ai-collect-region-title"><span className="ai-collect-bar"/><b>{group.title}</b><span className="ai-collect-region-count">{items.length} 个平台</span></div><div className="ai-collect-grid">{items.map(item=>{const theme=aiCollectPlatformThemes[item.code];return <button type="button" className="ai-collect-card" key={item.code} onClick={()=>void activateProductWarehouse(item.code,'tasks')}><span className="ai-collect-card-logo" style={{color:theme.color,background:`${theme.color}14`,borderColor:`${theme.color}30`}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{theme.icon}</svg></span><span className="ai-collect-card-body"><b>{item.name}</b><small>{item.description}</small></span><span className="ai-collect-card-count">候选 {warehouseCandidateCount(item.code)}</span></button>})}</div></section>})}</div></section>;if(page==='ai-warehouse')return <AiWarehouseWorkbench onEnterCollect={()=>setPage('erp-collect')}/>;return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>{current.label}</h2><p>功能建设中…</p></div></section>})()}
+      {page==='ai-hub-warehouse'&&pageAllowed('ai-hub-warehouse')&&<PalletWarehousePage onOpenSource={openPalletSource} canEdit={erpCanEdit} onReturn={async item => { await runWithSessionRetry(token => window.desktop.inbound.return(item.warehouseProductId, token)) }}/>}
       {page==='article-crawler'&&<ArticleCrawlerPanel onBack={()=>setPage('ai-hq')} />}
+      {page==='erp-collect'&&<CollectWorkbench onBack={()=>setPage('ai-warehouse')} onOpenPool={()=>setPage('ai-warehouse')} />}
       {page==='ai-tasks'&&pageAllowed('ai-tasks')&&<section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>AI任务</h2><p>功能建设中…</p></div></section>}
       {page==='ai-video'&&canMenu('menu.video')&&<section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>AI视频</h2><p>视频理解与智能创作能力</p></div><div className="ai-crossborder-entries"><div className="ai-crossborder-card clickable" onClick={()=>setPage('ai-video-watch')}><b>Watch Skill</b><small>独立解析视频</small><em className="ready">进入</em></div><div className="ai-crossborder-card clickable" onClick={()=>setPage('ai-video-resource')}><b>Resource2Skill</b><small>生成 SKILL.md</small><em className="ready">进入</em></div></div></section>}
       {page==='ai-video-watch'&&pageAllowed('ai-video-watch')&&<WatchSkillPage onBack={()=>setPage('ai-video')} />}
@@ -1422,7 +1585,7 @@ export function App() {
       {page==='compliance-knowledge'&&pageAllowed('compliance-knowledge')&&<ComplianceKnowledgePage/>}
       {page==='ops-knowledge'&&pageAllowed('ops-knowledge')&&<KnowledgeHub onOpenEmployee={()=>setPage('ai-employee')}/>}
       {page==='system-admin'&&pageAllowed('system-admin')&&<SystemAdmin/>}
-      {inSelectionModule && <>{page!=='warehouse-dashboard'&&<div className="selection-module-nav warehouse-flow-nav"><button className={page==='tasks'?'active':''} onClick={()=>setPage('tasks')}><span>AI采集</span></button><button className={page==='ozon'?'active':''} onClick={()=>setPage('ozon')}><span>采集侯选</span></button><button className={page==='comparison'?'active':''} onClick={()=>setPage('comparison')}><span>优选产品</span>{warehouseSelectionItems.length>0&&<em>{warehouseSelectionItems.length}</em>}</button>{activeWarehouse!=='GIGACLOUD'&&<button className={page==='sourcing'?'active':''} onClick={()=>setPage('sourcing')}><span>AI比价</span>{warehouseComparisons.length>0&&<em>{warehouseComparisons.length}</em>}</button>}<button className={page==='review'?'active':''} onClick={()=>setPage('review')}><span>正式入库</span>{warehouseCount(activeWarehouse)>0&&<em>{warehouseCount(activeWarehouse)}</em>}</button></div>}</>}
+      {inSelectionModule && <>{page!=='warehouse-dashboard'&&<div className="selection-module-nav warehouse-flow-nav"><button className={page==='tasks'?'active':''} onClick={()=>setPage('tasks')}><span>AI采集</span></button><button className={page==='ozon'?'active':''} onClick={()=>setPage('ozon')}><span>采集侯选</span></button><button className={page==='comparison'?'active':''} onClick={()=>setPage('comparison')}><span>优选产品</span>{activeSelectionItems.length>0&&<em>{activeSelectionItems.length}</em>}</button>{activeWarehouse!=='GIGACLOUD'&&<button className={page==='sourcing'?'active':''} onClick={()=>setPage('sourcing')}><span>AI比价</span>{warehouseComparisons.length>0&&<em>{warehouseComparisons.length}</em>}</button>}{page==='eliminated'&&<button className="active" onClick={()=>setPage('eliminated')}><span>淘汰产品</span></button>}<button className={page==='review'?'active':''} onClick={()=>setPage('review')}><span>正式入库</span>{warehouseCount(activeWarehouse)>0&&<em>{warehouseCount(activeWarehouse)}</em>}</button></div>}</>}
       {page==='warehouse-dashboard'&&<section className="warehouse-dashboard">
         <div className="warehouse-dashboard-heading"><div><small>WAREHOUSE OVERVIEW</small><h2>供应仓库总览</h2><p>本页只读取本地业务数据，不连接或登录任何供应平台。</p></div><span>本地数据</span></div>
         <div className="warehouse-dashboard-metrics">
@@ -1443,8 +1606,9 @@ export function App() {
           <section><div className="dashboard-section-title"><b>最近任务</b><small>仅展示本地执行记录</small></div>{recentDashboardRuns.length?<div className="dashboard-run-list">{recentDashboardRuns.map(run=><article key={run.id}><span>{productWarehouses.find(item=>item.code===run.platformCode)?.name||run.platformCode}</span><b>{run.collectedCount} 个</b><small>{run.status}</small></article>)}</div>:<p className="dashboard-empty">暂无采集任务</p>}</section>
         </div>
       </section>}
-      {page === 'tasks' && <div className="workspace">
-        <section className="task-panel">
+      {page === 'tasks' && <div className={`workspace${collectPanel.collapsed?' side-collapsed':''}`}>
+        {collectPanel.collapsed?<PanelExpandRail panel={collectPanel} label="采集工作台"/>:<section className="task-panel collapsible-aside">
+          <PanelCollapseButton panel={collectPanel}/>
           <div className="task-workbench-heading"><small>COLLECTION WORKBENCH</small><h2>采集工作台</h2><p>配置采集平台、入口和任务参数</p></div>
           <form onSubmit={createTask}>
             <section className="task-config-card">
@@ -1466,9 +1630,11 @@ export function App() {
             <section className="task-config-card">
               <div className="config-card-title"><span>02</span><div><b>采集入口</b><small>{isGigaCloudCollector?'在右侧浏览器选择商品并统一确认':'配置关键词、商品链接或类目入口'}</small></div></div>
               <div className="config-card-body">
-                {isGigaCloudCollector?<div className="collector-entry-guide"><div><span>🤖</span><p><b>浏览器采集插件已开启</b><small>请先使用大健云仓原生条件筛选，再点击商品“采集”，选好后统一确认。</small></p></div><dl><div><dt>当前已选</dt><dd>{previewSelectedCount} 个</dd></div><div><dt>任务上限</dt><dd>{task.maxProducts} 个</dd></div></dl></div>:<><label className="compact-select-field">采集方式<select value={task.collectionMethod} onChange={e=>setTask({...task,collectionMethod:e.target.value as SelectionTaskDraft['collectionMethod']})}><option value="KEYWORD">关键词搜索</option>{task.selectionMode === 'FORWARD_SUPPLY' && <><option value="PRODUCT_URL">单链接采集</option><option value="CATEGORY_URL">类目页采集</option></>}</select></label>
-                {task.collectionMethod === 'KEYWORD' ? <label>{task.selectionMode === 'FORWARD_SUPPLY' ? '商品关键词' : `${activeMarketplace?.name || '跨境平台'}搜索词`}<input required placeholder="例如：宠物食品" value={task.keyword} onChange={e => setTask({ ...task, keyword: e.target.value })} /></label> : <label>{task.collectionMethod === 'PRODUCT_URL' ? '商品详情链接' : '产品类目页链接'}<div className="url-input-row"><input required type="url" placeholder="https://" value={task.sourceUrl} onChange={e=>setTask({...task,sourceUrl:e.target.value})} />{task.selectionMode === 'FORWARD_SUPPLY' && <button type="button" onClick={useCurrentSupplyPage}>当前页面</button>}</div></label>}
-                <div className="field-row"><label>最多采集商品<input type="number" min="1" value={task.maxProducts} onChange={e=>setTask({...task,maxProducts:+e.target.value})} /></label>{task.collectionMethod === 'CATEGORY_URL' && <label>最多采集页数<input type="number" min="1" value={task.maxPages} onChange={e=>setTask({...task,maxPages:+e.target.value})} /></label>}</div></>}
+                <label className="compact-select-field">采集方式<select value={task.collectionMethod} onChange={e=>setTask({...task,collectionMethod:e.target.value as SelectionTaskDraft['collectionMethod']})}><option value="KEYWORD">关键词搜索</option>{task.selectionMode === 'FORWARD_SUPPLY' && <><option value="PRODUCT_URL">单链接采集</option><option value="CATEGORY_URL">类目页采集</option></>}</select></label>
+                {isGigaCloudCollector&&<div className="collector-entry-guide"><div><span>🤖</span><p><b>浏览器采集插件已开启</b><small>请先使用大健云仓原生条件筛选，再点击商品“采集”，选好后统一确认。</small></p></div><dl><div><dt>当前已选</dt><dd>{previewSelectedCount} 个</dd></div><div><dt>任务上限</dt><dd>{task.maxProducts} 个</dd></div></dl></div>}
+                {task.selectionMode === 'FORWARD_SUPPLY' && task.supplyPlatforms[0]==='GIGACLOUD'&&<p className="giga-filter-note">内置插件选择确认与单链接采集任务的商品均归入采集候选的“单链接采集”分类。</p>}
+                {task.collectionMethod === 'KEYWORD' ? (isGigaCloudCollector?null:<label>{task.selectionMode === 'FORWARD_SUPPLY' ? '商品关键词' : `${activeMarketplace?.name || '跨境平台'}搜索词`}<input required placeholder="例如：宠物食品" value={task.keyword} onChange={e => setTask({ ...task, keyword: e.target.value })} /></label>) : <label>{task.collectionMethod === 'PRODUCT_URL' ? '商品详情链接' : '产品类目页链接'}<div className="url-input-row"><input required type="url" placeholder="https://" value={task.sourceUrl} onChange={e=>setTask({...task,sourceUrl:e.target.value})} />{task.selectionMode === 'FORWARD_SUPPLY' && <button type="button" onClick={useCurrentSupplyPage}>当前页面</button>}</div></label>}
+                <div className="field-row"><label>最多采集商品<input type="number" min="1" value={task.maxProducts} onChange={e=>setTask({...task,maxProducts:+e.target.value})} /></label>{task.collectionMethod === 'CATEGORY_URL' && <label>最多采集页数<input type="number" min="1" value={task.maxPages} onChange={e=>setTask({...task,maxPages:+e.target.value})} /></label>}</div>
               </div>
             </section>
 
@@ -1492,13 +1658,14 @@ export function App() {
             </details>
 
             {allPreviewItems.length>0&&<section className="collection-preview-card">
-              <div className="collection-preview-title"><div><b>预采集产品</b><small>已选 {previewSelectedCount} / {allPreviewItems.length}，确认前不会进入采集侯选</small></div><button type="button" className={previewOnlySelected?'active':''} onClick={()=>setPreviewOnlySelected(value=>!value)}>仅看已选</button></div>
+              <div className="collection-preview-title"><span className="ai-collect-bar"/><b>预采集产品</b><small>确认前不会进入采集侯选</small><em className="collection-preview-count">已选 {previewSelectedCount} / {allPreviewItems.length}</em><button type="button" className={previewOnlySelected?'active':''} onClick={()=>setPreviewOnlySelected(value=>!value)}>仅看已选</button></div>
               <div className="collection-preview-tools"><input value={previewQuery} onChange={event=>setPreviewQuery(event.target.value)} placeholder="筛选标题、商品ID或供应商"/>{!pluginPreviewItems.length&&<><button type="button" onClick={()=>setPreviewSelectedUrls(new Set(regularPreviewItems.map(item=>item.url)))}>全选</button><button type="button" onClick={()=>setPreviewSelectedUrls(new Set())}>清空</button></>}</div>
-              <div className="collection-preview-grid">{visiblePreviewItems.map(item=><article key={item.url} className={item.source==='PLUGIN'||previewSelectedUrls.has(item.url)?'selected':''}>
-                <label><input type="checkbox" checked={item.source==='PLUGIN'||previewSelectedUrls.has(item.url)} onChange={()=>togglePreviewItem(item.url,item.source)}/><span>{item.source==='PLUGIN'?'移除':'选择'}</span></label>
-                <button type="button" className="preview-product-open" onClick={()=>item.source==='MARKET'?openProduct(item):openSupplyProduct(item)}>{item.imageUrl?<img src={item.imageUrl} alt=""/>:<span className="preview-no-image">无图</span>}</button>
-                <div><b title={item.title}>{item.title}</b><strong>{item.priceText||'价格待采集'}</strong><small>{item.meta}</small></div>
-              </article>)}</div>
+              <div className="collection-preview-list">{visiblePreviewItems.map(item=><div key={item.url} className={`collection-preview-row${item.source==='PLUGIN'||previewSelectedUrls.has(item.url)?' selected':''}`}>
+                <label className="row-check" title={item.source==='PLUGIN'?'移除':'选择'}><input type="checkbox" checked={item.source==='PLUGIN'||previewSelectedUrls.has(item.url)} onChange={()=>togglePreviewItem(item.url,item.source)}/></label>
+                <button type="button" className="row-thumb" title={item.title} onClick={()=>item.source==='MARKET'?openProduct(item):openSupplyProduct(item)}>{item.imageUrl?<img src={item.imageUrl} alt=""/>:<span>无图</span>}</button>
+                <div className="row-main"><div className="row-line"><b title={item.title}>{item.title}</b><strong className="row-price">{item.priceText||'价格待采集'}</strong></div><div className="row-line"><code title={item.url}>{item.url}</code><small className="row-meta" title={item.meta}>{item.meta}</small></div></div>
+                <div className="row-actions"><button type="button" className="row-action" title="打开原址" onClick={()=>item.source==='MARKET'?openProduct(item):openSupplyProduct(item)}>↗</button><button type="button" className="row-action" title="复制网址" onClick={()=>void navigator.clipboard.writeText(item.url)}>⧉</button></div>
+              </div>)}</div>
               {!visiblePreviewItems.length&&<p className="collection-preview-empty">没有符合当前筛选条件的商品</p>}
             </section>}
 
@@ -1508,34 +1675,34 @@ export function App() {
               {allPreviewItems.length?<button className="primary full" type="button" disabled={running||builtInCollectorConfirming||previewSelectedCount===0} onClick={()=>void (pluginPreviewItems.length?confirmBuiltInCollector():confirmPreview())}>{builtInCollectorConfirming?'正在正式采集…':collectionActionLabel}</button>:<button className="primary full" type="submit" disabled={running}>{task.supplyPlatforms[0]==='GIGACLOUD'?(builtInCollectorActive?'请在右侧选择商品':'开始预采集'):collectionActionLabel}</button>}
             </section>
           </form>
-        </section>
+        </section>}
 
         <section className="browser-panel">
           <div className="browser-workspace-heading"><div><small>WORKSPACE BROWSER</small><b>采集浏览器</b></div><div className="browser-heading-actions">{task.supplyPlatforms[0]==='GIGACLOUD'&&<button title={builtInCollectorActive?'采集插件已自动安装；点击可重新加载':'点击启用内置采集插件'} className={`built-in-collector-trigger${builtInCollectorActive?' active':''}`} onClick={()=>void startBuiltInCollector()}>{builtInCollectorActive?`🤖 采集插件 · 已开启 · 已选 ${builtInCollectorProducts.length} / 当前页识别 ${builtInCollectorRecognized}`:'🤖 启用采集插件'}</button>}<div className="browser-translation"><button className={`translation-trigger ${translationActive?'active':''}`} disabled={translating} onClick={()=>translationActive?setTranslationMenuOpen(open=>!open):void translateBrowserPage('BILINGUAL')}><span>{translating?'翻译中…':translationActive?`中文 ✓${translationCount?` · ${translationCount}`:''}`:'译 · 中文'}</span><i>{translationMenuOpen?'⌃':'⌄'}</i></button>{translationMenuOpen&&<div className="translation-menu"><b>网页翻译</b><small>Qwen-MT Flash · 自动识别语种</small><button className={translationMode==='BILINGUAL'?'active':''} onClick={()=>{setTranslationMenuOpen(false);void translateBrowserPage('BILINGUAL')}}><span>原文 + 中文</span><em>推荐</em></button><button className={translationMode==='CHINESE'?'active':''} onClick={()=>{setTranslationMenuOpen(false);void translateBrowserPage('CHINESE')}}><span>仅显示中文</span></button><button onClick={()=>void translateBrowserPage(translationMode)}><span>翻译新增内容</span></button><button className="restore" onClick={()=>void restoreBrowserTranslation()}><span>恢复原网页</span></button><p>滚动加载的新内容每5秒自动翻译；品牌、型号、SKU和数字将尽量保留。</p></div>}</div></div></div>
           <div className="tabs"><div className="tab-scroll">{browserTabs.map(tab=><button key={tab.id} className={tab.active?'active':''} onClick={()=>activateBrowserTab(tab)}><span>{tab.generic?'◎':tab.platform === 'ozon' ? '◉' : '淘'}</span><b>{tab.title}</b>{tab.closable && <i onClick={event=>{event.stopPropagation();void window.desktop.browser.closeTab(tab.id)}}>×</i>}</button>)}</div><button className="new-browser-tab" title="新建浏览页" aria-label="新建浏览页" onClick={()=>void createBrowserTab()}>＋</button>{state?.loading&&<span className="run-state loading"><i/>页面加载中</span>}</div>
           <form className="address-bar" onSubmit={navigate}><button type="button" title="后退" disabled={!state?.canGoBack} onClick={()=>window.desktop.browser.back(platform)}>←</button><button type="button" title="前进" disabled={!state?.canGoForward} onClick={()=>window.desktop.browser.forward(platform)}>→</button><button type="button" title="刷新" onClick={()=>window.desktop.browser.reload(platform)}>↻</button><input ref={addressInput} aria-label="网页地址" placeholder="输入网址并访问" value={address} onChange={e=>setAddress(e.target.value)} /><button className="address-go" type="submit">打开 <span>↗</span></button></form>
-          {error && <div className="error">{error}</div>}
+          {error && <div className="error">{error}{translationKeyMissing&&<button type="button" style={{marginLeft:8}} onClick={()=>{setError('');setTranslationKeyMissing(false);setPage('llm-keys')}}>去配置 →</button>}</div>}
           <div className="browser-slot" ref={browserSlot}><div className="browser-placeholder">正在准备 {platform === 'ozon' ? 'Ozon' : platform === 'web' ? '网页' : '1688'} 浏览器…</div></div>
         </section>
       </div>}
       {page === 'ozon' && <section className="candidate-page">
         <ThreeLevelCatalog paths={candidateCatalogPaths} selected={candidateCategory} onSelect={setCandidateCategory}/>
         <div className="candidate-catalog-main">
-        <div className="warehouse-page-heading"><div><small>{activeWarehouseProfile.kind==='SUPPLY'?'SUPPLY WAREHOUSE CANDIDATES':'MARKET OPPORTUNITY CANDIDATES'}</small><b>{activeWarehouseProfile.name} · AI候选</b><span>候选数据只归属于当前仓库</span></div><em>{candidatePlatformOptions.find(option=>option.code===candidatePlatform)?.count||0}</em></div>
-        <div className="candidate-controls-row"><div className="candidate-view-switch"><button className={candidateMethod==='ALL'?'active':''} onClick={()=>{setCandidateMethod('ALL');setCandidateRunId('ALL');setCandidateView('ALL')}}>全部商品</button><button className={candidateMethod==='KEYWORD'?'active':''} onClick={()=>{setCandidateMethod('KEYWORD');setCandidateRunId('ALL');setCandidateView('ALL')}}>关键词搜索</button><button className={candidateMethod==='PRODUCT_URL'?'active':''} onClick={()=>{setCandidateMethod('PRODUCT_URL');setCandidateRunId('ALL');setCandidateView('ALL')}}>单链接采集</button><button className={candidateMethod==='CATEGORY_URL'?'active':''} onClick={()=>{setCandidateMethod('CATEGORY_URL');setCandidateRunId('ALL');setCandidateView('ALL')}}>类目页采集</button></div></div>
+        <div className="warehouse-page-heading"><div><small>采集候选</small><div className="candidate-heading-title-row"><b>{activeWarehouseProfile.name} · AI候选</b><em>{candidateArea==='SUPPLY'?visibleSupplyCandidates.length:visibleMarketCandidates.length}</em></div></div><div className="candidate-heading-switch"><button type="button" className="eliminated-entry-link" onClick={()=>setPage('eliminated')}>淘汰产品 →</button><div className="candidate-view-switch"><button className={candidateMethod==='ALL'?'active':''} onClick={()=>{setCandidateMethod('ALL');setCandidateRunId('ALL');setCandidateView('ALL')}}>全部商品</button><button className={candidateMethod==='KEYWORD'?'active':''} onClick={()=>{setCandidateMethod('KEYWORD');setCandidateRunId('ALL');setCandidateView('ALL')}}>关键词搜索</button><button className={candidateMethod==='PRODUCT_URL'?'active':''} onClick={()=>{setCandidateMethod('PRODUCT_URL');setCandidateRunId('ALL');setCandidateView('ALL')}}>单链接采集</button><button className={candidateMethod==='CATEGORY_URL'?'active':''} onClick={()=>{setCandidateMethod('CATEGORY_URL');setCandidateRunId('ALL');setCandidateView('ALL')}}>类目页采集</button></div></div></div>
         <div className="candidate-filterbar"><input value={candidateQuery} onChange={event=>setCandidateQuery(event.target.value)} placeholder="搜索商品标题、商品ID或供应商"/><select value={candidateRunId} onChange={event=>setCandidateRunId(event.target.value)}><option value="ALL">全部采集批次</option>{candidatePlatformRuns.filter(run=>candidateMethod==='ALL'||run.collectionMethod===candidateMethod).map(run=><option key={run.id} value={run.id}>{new Date(run.completedAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}｜{methodName(run.collectionMethod)}｜{run.collectedCount}个</option>)}</select><select value={candidateStatus} onChange={event=>{setCandidateStatus(event.target.value as typeof candidateStatus);setSelectedCandidateKeys(new Set())}}><option value="ALL">全部状态</option>{candidateArea==='SUPPLY'&&<option value="SELECTED">AI已入选</option>}{candidateArea==='SUPPLY'&&<option value="REVIEW">待人工复核</option>}<option value="DELETED">已删除</option></select><button className={candidateBatchMode?'active candidate-batch-toggle':'candidate-batch-toggle'} onClick={()=>{setCandidateBatchMode(!candidateBatchMode);setSelectedCandidateKeys(new Set())}}>{candidateBatchMode?'退出批量':'批量管理'}</button></div>
         {candidateBatchMode&&<div className="candidate-batchbar"><label><input type="checkbox" checked={visibleCandidateKeys.length>0&&visibleCandidateKeys.every(key=>selectedCandidateKeys.has(key))} onChange={event=>setSelectedCandidateKeys(event.target.checked?new Set(visibleCandidateKeys):new Set())}/>全选当前结果</label><span>已选 <b>{selectedCandidateKeys.size}</b> 个</span><button className={candidateStatus==='DELETED'?'':'danger'} disabled={!selectedCandidateKeys.size} onClick={()=>void updateCandidates(candidateStatus==='DELETED'?'restore':'purge',[...selectedCandidateKeys])}>{candidateStatus==='DELETED'?'恢复已选':'删除已选'}</button>{candidateStatus==='DELETED'&&<button className="danger" disabled={!selectedCandidateKeys.size} onClick={()=>void updateCandidates('purge',[...selectedCandidateKeys])}>彻底删除</button>}</div>}
         <div className="candidate-zone-summary"><span>候选商品 <b>{candidatePlatformOptions.find(option=>option.code===candidatePlatform)?.count || 0}</b></span><span>采集批次 <b>{candidatePlatformRuns.length}</b></span><span>采集方式 <b>{candidateMethodGroups.length}</b></span><span>当前显示 <b>{candidateArea==='SUPPLY'?visibleSupplyCandidates.length:visibleMarketCandidates.length}</b></span></div>
         {candidateView === 'BATCH' ? <div className="candidate-group-grid">{candidatePlatformRuns.length===0?<EmptyState title="暂无采集批次" description="该平台完成采集后，会在这里形成独立批次。" action="去采集" onAction={()=>setPage('tasks')}/>:candidatePlatformRuns.map(run=><button key={run.id} className="candidate-group-card" onClick={()=>{setCandidateRunId(run.id);setCandidateMethod('ALL');setCandidateView('ALL')}}><small>{new Date(run.completedAt).toLocaleString('zh-CN')}</small><b>{run.platformCode} · {methodName(run.collectionMethod)}</b><p>{run.sourceEntry || '未记录采集入口'}</p><div><span>采集 {run.collectedCount}</span><span>新增 {run.newCount}</span><span>更新 {run.updatedCount}</span><span>AI入选 {run.selectedCount}</span></div></button>)}</div> : candidateView === 'METHOD' ? <div className="candidate-group-grid">{candidateMethodGroups.length===0?<EmptyState title="暂无采集方式记录" description="该平台完成采集后会按关键词、单链接和类目页自动归类。" action="去采集" onAction={()=>setPage('tasks')}/>:candidateMethodGroups.map(group=><button key={group.method} className="candidate-group-card" onClick={()=>{setCandidateMethod(group.method);setCandidateRunId('ALL');setCandidateView('ALL')}}><small>COLLECTION METHOD</small><b>{methodName(group.method)}</b><p>共 {group.runs.length} 个采集批次</p><div><span>去重商品 {group.productCount}</span><span>AI入选 {group.selectedCount}</span></div></button>)}</div> : candidateArea === 'SUPPLY' ? <>
-          {visibleSupplyCandidates.length === 0 ? <EmptyState title="暂无供应链候选" description="当前筛选条件下没有候选商品。" action="清除筛选" onAction={()=>{setCandidateRunId('ALL');setCandidateMethod('ALL');setCandidateStatus('ALL')}} /> : <div className="product-grid">{visibleSupplyCandidates.map(product=>{const candidateKey=`${product.platformCode}:${product.url}`;const sources=candidateProvenance(candidateKey);const source=sources[0];const exactCatalog=exactSupplyCatalog(product);const catalog=candidateCatalogPath(product);const preferred=warehouseSelectionItems.some(item=>item.sourceUrl===product.url);return <SupplyCandidateCard key={`supply-${product.url}`} product={product} candidateKey={candidateKey} sourceCount={sources.length} sourceText={source?`${methodName(source.collectionMethod)} · ${source.sourceEntry}`:'采集来源待补充'} catalog={catalog} exactCatalog={Boolean(exactCatalog)} batchMode={candidateBatchMode} checked={selectedCandidateKeys.has(candidateKey)} preferred={preferred} onToggle={()=>toggleCandidateSelection(candidateKey)} onRestore={()=>void updateCandidates('restore',[candidateKey])} onPurge={()=>void updateCandidates('purge',[candidateKey])} onPrefer={()=>preferred?setPage('comparison'):void importCandidate('SUPPLY',product)} onOpen={()=>openSupplyProduct(product)} onDelete={()=>void updateCandidates('delete',[candidateKey])}/>})}</div>}
+          {visibleSupplyCandidates.length === 0 ? <EmptyState title="暂无供应链候选" description={preferredHiddenCandidateCount>0?'已优选或已正式入库商品已移入对应仓库，不再重复显示在采集候选。':'当前筛选条件下没有候选商品。'} action="清除筛选" onAction={()=>{setCandidateRunId('ALL');setCandidateMethod('ALL');setCandidateStatus('ALL')}} /> : <div className="product-grid">{visibleSupplyCandidates.map(product=>{const candidateKey=`${product.platformCode}:${product.url}`;const sources=candidateProvenance(candidateKey);const source=sources[0];const exactCatalog=exactSupplyCatalog(product);const catalog=candidateCatalogPath(product);const preferred=isPreferredSupply(product);return <SupplyCandidateCard key={`supply-${product.url}`} product={product} candidateKey={candidateKey} sourceCount={sources.length} sourceText={source?`${methodName(source.collectionMethod)} · ${source.sourceEntry}`:'采集来源待补充'} catalog={catalog} exactCatalog={Boolean(exactCatalog)} batchMode={candidateBatchMode} checked={selectedCandidateKeys.has(candidateKey)} preferred={preferred} onToggle={()=>toggleCandidateSelection(candidateKey)} onRestore={()=>void updateCandidates('restore',[candidateKey])} onPurge={()=>void updateCandidates('purge',[candidateKey])} onPrefer={()=>preferred?setPage('comparison'):void importCandidate('SUPPLY',product)} onOpen={()=>openSupplyProduct(product)} onEliminate={()=>setEliminateCandidate(product)}/>})}</div>}
         </> : <>
           {visibleMarketCandidates.length === 0 ? <EmptyState title="暂无跨境方候选" description="当前筛选条件下没有候选商品。" action="清除筛选" onAction={()=>{setCandidateRunId('ALL');setCandidateMethod('ALL');setCandidateStatus('ALL')}} /> : <div className="product-grid">{visibleMarketCandidates.map(product=>{const candidateKey=`OZON:${product.url}`;const sources=candidateProvenance(candidateKey);const source=sources[0];return <article className={`product-card candidate-product-card${product.candidateDeletedAt?' is-deleted':''}`} key={`market-${product.url}`}><div className="candidate-card-tools">{candidateBatchMode?<label title="选择商品"><input type="checkbox" checked={selectedCandidateKeys.has(candidateKey)} onChange={()=>toggleCandidateSelection(candidateKey)}/></label>:product.candidateDeletedAt?<><button title="恢复商品" onClick={()=>void updateCandidates('restore',[candidateKey])}>恢复</button><button className="danger" title="彻底删除" onClick={()=>void updateCandidates('purge',[candidateKey])}>删除</button></>:<button className="danger" title="从AI候选删除" onClick={()=>void updateCandidates('delete',[candidateKey])}>×</button>}</div><button type="button" className="product-image" title="打开 Ozon 原商品详情" aria-label={`打开 Ozon 商品：${product.title}`} onClick={()=>openProduct(product)}>{product.imageUrl ? <img src={product.imageUrl} alt={product.title} /> : <span>无图片</span>}<span className="image-link-hint">查看 Ozon 详情 ↗</span></button><div className="product-info"><small>Ozon · ID {product.productId || '待识别'} · 来源批次 {sources.length}</small><b title={product.title}>{product.title}</b><strong>{priceInCny(product.priceText)}</strong><div className="original-price">{source ? `${methodName(source.collectionMethod)} · ${source.sourceEntry}` : '采集来源待补充'}</div><div className="product-tags"><span>{product.candidateDeletedAt?'已删除':'待市场分析'}</span><span>{product.brand || '品牌待识别'}</span></div><div className="product-actions candidate-next-actions"><button className="search-1688" disabled={Boolean(product.candidateDeletedAt)} onClick={()=>importCandidate('MARKET', product)}>进入AI选品 <i>→</i></button><button disabled={Boolean(product.candidateDeletedAt)} onClick={()=>searchOn1688(product)}>搜同款</button><button onClick={()=>openProduct(product)}>详情 <i>↗</i></button></div></div></article>})}</div>}
         </>}
         </div>
       </section>}
-      {page === 'sourcing' && activeWarehouse!=='GIGACLOUD' && (activeWarehouseProfile.kind==='SUPPLY'?<SupplyPlatformComparisonWorkspace warehouse={activeWarehouse} products={supplyProducts.filter(item=>item.platformCode===activeWarehouse&&!item.candidateDeletedAt)} onCandidates={()=>setPage('ozon')} onSelection={product=>void importCandidate('SUPPLY',product)} onOpen={openSupplyProduct}/>:<ComparisonWorkspace warehouseName={activeWarehouseProfile.name} warehouseRules={warehouseRuleProfiles[activeWarehouse]} records={warehouseComparisons} onRecordsChange={next=>setComparisons(current=>[...current.filter(item=>!warehouseComparisons.some(entry=>entry.id===item.id)),...next])} onCandidates={()=>setPage('ozon')} onSearch={async product=>{const url=await window.desktop.browser.create1688SearchUrl(product.title);setPage('tasks');setPlatform('1688');setTimeout(()=>void window.desktop.browser.openTab('1688',url,`${product.title} · 1688搜款`),80)}} onSelection={async record=>{const imported=await window.desktop.selections.import({sourceArea:'MARKET',product:record.marketProduct,...inferCatalog(record.marketProduct.title),comparison:record});setSelectionItems(current=>[imported,...current.filter(item=>item.id!==imported.id)]);setPage('comparison')}} onPromote={async record=>{const result=await window.desktop.comparisons.promote({id:record.id,...inferCatalog(record.marketProduct.title),tertiaryCategory:'待细分'});setComparisons(current=>current.map(item=>item.id===record.id?result.comparison:item));setSelectionItems(current=>[result.selection,...current.filter(item=>item.id!==result.selection.id)]);setWarehouseProducts(current=>[result.warehouseProduct,...current.filter(item=>item.id!==result.warehouseProduct.id)]);setWorkflowCounts(await window.desktop.workflow.counts())}} onOpenMarket={product=>openProduct(product)} onOpenSupply={url=>{setPage('tasks');setPlatform('1688');void window.desktop.browser.openTab('1688',url,'1688货源')}} />)}
-      {page === 'comparison' && <SelectionWorkspace warehouseName={activeWarehouseProfile.name} items={warehouseSelectionItems} onItemsChange={mergeWarehouseSelections} onDecision={()=>{void window.desktop.workflow.counts().then(setWorkflowCounts);void window.desktop.warehouses.list().then(setWarehouseProducts)}} onCandidates={()=>setPage('ozon')} onReturnCandidate={returnSelectionToCandidates} onOpen={item=>{const browserPlatform:Platform=item.platformCode==='1688'?'1688':item.platformCode==='OZON'?'ozon':'web';setPage('tasks');setPlatform(browserPlatform);void window.desktop.browser.openTab(browserPlatform,item.sourceUrl,item.title)}} onNext={activeWarehouse==='GIGACLOUD'?()=>setPage('review'):undefined} nextLabel={activeWarehouse==='GIGACLOUD'?'进入正式入库':undefined} />}
-      {page === 'review' && <CatalogWorkspace paths={activeWarehouseProfile.kind==='SUPPLY'?warehouseProducts.filter(item=>item.warehouseCode===activeWarehouse).map(item=>({id:item.id,category:item.category,subcategory:item.subcategory,tertiaryCategory:item.tertiaryCategory})):warehouseSelectionItems.filter(item=>item.decision==='APPROVED').map(item=>({id:item.id,category:item.category,subcategory:item.subcategory,tertiaryCategory:item.tertiaryCategory||'待细分'}))}>{category=>activeWarehouseProfile.kind==='SUPPLY'?<SupplyWarehouseWorkspace products={warehouseProducts.filter(item=>item.warehouseCode===activeWarehouse&&catalogSelectionMatches(item,category))} warehouse={activeWarehouse as '1688'|'GIGACLOUD'} onOpenSelection={()=>setPage('comparison')} onOpenCatalog={()=>setPage('catalog')} onCreateImage={item=>{setImageMarketplaceSelection(null);setImageProduct(item);setPage('image-studio')}} />:<MarketOpportunityWarehouse warehouse={activeWarehouse as 'ALIEXPRESS'|'OZON'} items={warehouseSelectionItems.filter(item=>item.decision==='APPROVED'&&catalogSelectionMatches(item,category))} onOpenSelection={()=>setPage('comparison')} onOpen={item=>{setPage('tasks');setPlatform(item.platformCode==='OZON'?'ozon':'web');void window.desktop.browser.openTab(item.platformCode==='OZON'?'ozon':'web',item.sourceUrl,item.title)}} />}</CatalogWorkspace>}
+      {page === 'sourcing' && activeWarehouse!=='GIGACLOUD' && (activeWarehouseProfile.kind==='SUPPLY'?<SupplyPlatformComparisonWorkspace warehouse={activeWarehouse} products={supplyProducts.filter(item=>item.platformCode===activeWarehouse&&!item.candidateDeletedAt&&!isExcludedSupply(item))} onCandidates={()=>setPage('ozon')} onSelection={product=>void importCandidate('SUPPLY',product)} onOpen={openSupplyProduct}/>:<ComparisonWorkspace warehouseName={activeWarehouseProfile.name} warehouseRules={warehouseRuleProfiles[activeWarehouse]} records={warehouseComparisons} onRecordsChange={next=>setComparisons(current=>[...current.filter(item=>!warehouseComparisons.some(entry=>entry.id===item.id)),...next])} onCandidates={()=>setPage('ozon')} onSearch={async product=>{const url=await window.desktop.browser.create1688SearchUrl(product.title);setPage('tasks');setPlatform('1688');setTimeout(()=>void window.desktop.browser.openTab('1688',url,`${product.title} · 1688搜款`),80)}} onSelection={async record=>{const imported=await window.desktop.selections.import({sourceArea:'MARKET',product:record.marketProduct,...inferCatalog(record.marketProduct.title),comparison:record});setSelectionItems(current=>[imported,...current.filter(item=>item.id!==imported.id)]);setPage('comparison')}} onPromote={async record=>{const result=await window.desktop.comparisons.promote({id:record.id,...inferCatalog(record.marketProduct.title),tertiaryCategory:'待细分'});setComparisons(current=>current.map(item=>item.id===record.id?result.comparison:item));setSelectionItems(current=>[result.selection,...current.filter(item=>item.id!==result.selection.id)]);setWorkflowCounts(await window.desktop.workflow.counts())}} onOpenMarket={product=>openProduct(product)} onOpenSupply={url=>{setPage('tasks');setPlatform('1688');void window.desktop.browser.openTab('1688',url,'1688货源')}} />)}
+      {page === 'comparison' && <SelectionWorkspace warehouseName={activeWarehouseProfile.name} items={warehouseSelectionItems} onItemsChange={mergeWarehouseSelections} onDecision={()=>{void window.desktop.workflow.counts().then(setWorkflowCounts);void window.desktop.warehouses.list().then(setWarehouseProducts)}} onCandidates={()=>setPage('ozon')} onReturnCandidate={returnSelectionToCandidates} onOpen={item=>{const browserPlatform:Platform=item.platformCode==='1688'?'1688':item.platformCode==='OZON'?'ozon':'web';setPage('tasks');setPlatform(browserPlatform);void window.desktop.browser.openTab(browserPlatform,item.sourceUrl,item.title)}} operator={operatorLabel} />}
+      {page==='eliminated'&&<EliminatedProductsPage onBack={()=>setPage('comparison')} onDataChange={refreshSelectionAndCandidates}/>}
+      {page === 'review' && <CatalogWorkspace paths={activeWarehouseProfile.kind==='SUPPLY'?warehouseProducts.filter(item=>item.warehouseCode===activeWarehouse).map(item=>({id:item.id,category:item.category,subcategory:item.subcategory,tertiaryCategory:item.tertiaryCategory})):warehouseSelectionItems.filter(item=>item.decision==='APPROVED').map(item=>({id:item.id,category:item.category,subcategory:item.subcategory,tertiaryCategory:item.tertiaryCategory||'待细分'}))}>{category=>activeWarehouseProfile.kind==='SUPPLY'?<SupplyWarehouseWorkspace products={warehouseProducts.filter(item=>item.warehouseCode===activeWarehouse&&catalogSelectionMatches(item,category))} warehouse={activeWarehouse as '1688'|'GIGACLOUD'} onOpenSelection={()=>setPage('comparison')} onOpenCatalog={()=>setPage('catalog')} onCreateImage={item=>{setImageMarketplaceSelection(null);setImageProduct(item);setPage('image-studio')}} downloads={Object.fromEntries(supplyDownloads.map(record=>[record.warehouseProductId,record]))} downloadingIds={downloadingIds} notices={reviewNotices} onDownload={item=>void handleWarehouseDownload(item)} onOpenDownload={id=>void window.desktop.warehouses.openDownload(id).catch(reason=>reviewNotice(id,reason instanceof Error?reason.message:'打开下载目录失败'))} canEdit={erpCanEdit} onReturn={item=>void handleReturnToInbound(item)} />:<MarketOpportunityWarehouse warehouse={activeWarehouse as 'ALIEXPRESS'|'OZON'} items={warehouseSelectionItems.filter(item=>item.decision==='APPROVED'&&catalogSelectionMatches(item,category))} onOpenSelection={()=>setPage('comparison')} onOpen={item=>{setPage('tasks');setPlatform(item.platformCode==='OZON'?'ozon':'web');void window.desktop.browser.openTab(item.platformCode==='OZON'?'ozon':'web',item.sourceUrl,item.title)}} />}</CatalogWorkspace>}
       {page === 'catalog' && <CatalogManager usagePaths={[...selectionItems.map(item=>({id:item.id,category:item.category,subcategory:item.subcategory,tertiaryCategory:item.tertiaryCategory||'待细分'})),...supplyProducts.filter(item=>item.selected).map(stockCatalogPath)]} onChanged={()=>setCatalogRevision(value=>value+1)} />}
       {page === 'image-studio' && pageAllowed('image-studio') && <ImageStudio product={imageProduct} marketplaceSelection={imageMarketplaceSelection} onOpenInventory={()=>setPage(imageMarketplaceSelection?'publishing':'review')} />}
       {page === 'realshift' && pageAllowed('realshift') && <RealShiftWorkbench />}
@@ -1548,6 +1715,7 @@ export function App() {
       {page==='llm-keys'&&<LlmApiKeysPage onBack={()=>setPage('ai-hq')} onOpenAmazonDataSource={()=>setPage('amazon-data-source')}/>}
       {page==='linduo-mall'&&<LinduoModelMallPage onBack={()=>setPage('ai-hq')} onOpenLlmKeys={()=>setPage('llm-keys')} />}
       {page==='bailian-mall'&&<BailianModelMallPage onBack={()=>setPage('ai-hq')} />}
+      {eliminateCandidate&&<EliminateReasonDialog kind="candidate" title={eliminateCandidate.title} meta={`${eliminateCandidate.platformCode} · ID ${eliminateCandidate.productId||'待识别'} · ${eliminateCandidate.url}`} onCancel={()=>setEliminateCandidate(null)} onConfirm={reason=>void confirmEliminateCandidate(reason)} />}
       {linduoModal === 'assignment' && (
         <LinduoAssignmentModal onClose={() => setLinduoModal(null)} />
       )}
@@ -1641,7 +1809,7 @@ function ComparisonWorkspace({ warehouseName, warehouseRules, records, onRecords
   const update = async (request: Parameters<typeof window.desktop.comparisons.update>[0]) => replace(await window.desktop.comparisons.update(request))
   const decisionLabel: Record<ComparisonDecision,string> = {PENDING:'待复核',REVIEW:'人工复核',RECOMMENDED:'强推荐',REJECTED:'不建议',FAILED:'比价失败'}
   const changeSetting = (record: ComparisonRecordView, key: keyof ComparisonCostSettings, value: number) => void update({id:record.id,settings:{...record.settings,[key]:Math.max(0,value)}})
-  const promote = async(record:ComparisonRecordView)=>{if(record.warehouseProductId)return;setPromoting(record.id);setMessage('');try{await onPromote(record);setMessage(`“${record.marketProduct.title}”已根据主货源进入供应仓。`)}catch(reason){setMessage(readableError(reason,'进入供应仓失败'))}finally{setPromoting('')}}
+  const promote = async(record:ComparisonRecordView)=>{if(record.warehouseProductId)return;setPromoting(record.id);setMessage('');try{await onPromote(record);setMessage(`“${record.marketProduct.title}”已送入入库处理待确认，请在货盘仓库「入库处理」确认。`)}catch(reason){setMessage(readableError(reason,'进入供应仓失败'))}finally{setPromoting('')}}
   return <section className="compare-workbench">
     <aside className="compare-control"><div className="compare-control-heading"><small>REVERSE MARKET COMPARISON</small><h2>{warehouseName} · 跨境对比</h2><p>跨境商品 → 1688同款 → 供应仓</p></div><div className="compare-control-card reverse-flow-card"><b>反向对比流程</b><span>1　跨境市场机会</span><span>2　绑定1688主货源</span><span>3　测算成本与利润</span><span>4　优选进入供应仓</span></div><div className="compare-control-card"><b>任务概况</b><div className="compare-mini-stats"><span><strong>{records.length}</strong><small>全部</small></span><span><strong>{records.filter(item=>item.decision==='PENDING'||item.decision==='REVIEW').length}</strong><small>待复核</small></span><span><strong>{records.filter(item=>item.decision==='RECOMMENDED').length}</strong><small>已推荐</small></span><span><strong>{records.filter(item=>item.warehouseProductId).length}</strong><small>已入供应仓</small></span></div></div><div className="compare-control-card"><b>1688货源环境</b><label>货源账号<select><option>1688 当前浏览器会话</option></select></label><label>线路/IP策略<select><option>本机直连 / VPN分流</option><option>系统代理</option></select></label><p>账号Cookie与跨境平台隔离；登录或验证码需人工处理。</p></div><div className="compare-control-card reverse-flow-card"><b>{warehouseName}专属规则</b>{warehouseRules.map((rule,index)=><span key={rule}>{index+1}　{rule}</span>)}</div><button className="primary compare-start" onClick={onCandidates}>＋ 从跨境候选发起对比</button>
     </aside>
@@ -1654,13 +1822,16 @@ function ComparisonWorkspace({ warehouseName, warehouseRules, records, onRecords
 type CatalogPath = { id:string; category:string; subcategory:string; tertiaryCategory:string }
 
 function CatalogManager({usagePaths,onChanged}:{usagePaths:CatalogPath[];onChanged:()=>void}) {
+  // 订阅目录快照：编辑后本组件与其余消费者（ThreeLevelCatalog / SelectionWorkspace）一起重渲染
+  const catalog=useCatalog()
+  const productCatalog=catalog.groups,tertiaryCatalog=catalog.tertiary
   const [revision,setRevision]=useState(0)
   const [level1,setLevel1]=useState(productCatalog[0]?.name||'')
   const group=productCatalog.find(item=>item.name===level1)||productCatalog[0]
   const [level2,setLevel2]=useState(group?.children[0]||'')
   const level2Key=tertiaryKey(group?.name||'',level2)
-  const third=tertiaryOptions(level2,group?.name)
-  const commit=(groups=productCatalog,tertiary=tertiaryCatalog)=>{productCatalog=groups;tertiaryCatalog=tertiary;saveCatalogDefinition();setRevision(value=>value+1);onChanged()}
+  const third=tertiaryOptions(catalog,level2,group?.name)
+  const commit=(groups=productCatalog,tertiary=tertiaryCatalog)=>{catalogStore.commit(groups,tertiary);setRevision(value=>value+1);onChanged()}
   const promptName=(label:string,initial='')=>window.prompt(label,initial)?.trim()||''
   const addLevel1=()=>{const name=promptName('请输入一级目录名称');if(!name||productCatalog.some(item=>item.name===name))return;commit([...productCatalog,{name,children:[]}]);setLevel1(name);setLevel2('')}
   const addLevel2=()=>{if(!group)return;const name=promptName(`在“${group.name}”下新增二级目录`);if(!name||group.children.includes(name))return;commit(productCatalog.map(item=>item.name===group.name?{...item,children:[...item.children,name]}:item),{...tertiaryCatalog,[tertiaryKey(group.name,name)]:[]});setLevel2(name)}
@@ -1678,10 +1849,12 @@ function CatalogManageColumn({title,onAdd,wide,children}:{title:string;onAdd:()=
 function CatalogManageRow({name,count,active,onSelect,onRename,onMove,onUp,onDown,onDelete}:{name:string;count:number;active:boolean;onSelect:()=>void;onRename:()=>void;onMove?:()=>void;onUp:()=>void;onDown:()=>void;onDelete:()=>void}) { return <article className={active?'active':''}><button className="catalog-row-main" aria-pressed={active} onClick={onSelect}><b>{name}</b><em>{count}</em></button><div><button onClick={onRename}>改名</button>{onMove&&<button onClick={onMove}>移动</button>}<button onClick={onUp}>↑</button><button onClick={onDown}>↓</button><button className="danger" onClick={onDelete}>删</button></div></article> }
 
 function ThreeLevelCatalog({ paths, selected, onSelect }: { paths:CatalogPath[]; selected:string; onSelect:(value:string)=>void }) {
+  const catalog=useCatalog()
+  const productCatalog=catalog.groups
   const [expanded,setExpanded] = useState('')
   const [selectedSubcategory,setSelectedSubcategory] = useState('')
   const count = (level:'category'|'subcategory'|'tertiaryCategory',value:string)=>paths.filter(path=>path[level]===value).length
-  return <aside className="catalog-panel"><div className="catalog-heading"><small>PRODUCT CATALOG</small><h2>产品目录库</h2><p>大健云仓三级目录 · 支持人工调整</p></div><button className={`catalog-all ${selected==='ALL'||selected==='全部产品'?'active':''}`} onClick={()=>{onSelect('ALL');setSelectedSubcategory('')}}><span>全部产品</span><em>{paths.length}</em></button><div className="catalog-tree">{productCatalog.map(group=>{const open=expanded===group.name;return <div className="catalog-group" key={group.name}><button className={selected===group.name?'active':''} onClick={()=>{onSelect(group.name);setExpanded(open?'':group.name);setSelectedSubcategory(open?'':group.children[0])}}><i>{open?'⌄':'›'}</i><span>{group.name}</span><em>{count('category',group.name)}</em></button>{open&&<div>{group.children.map(child=><button key={child} className={selected===child?'active':''} onClick={()=>{onSelect(child);setSelectedSubcategory(child)}}><span>{child}</span><em>{paths.filter(path=>path.category===group.name&&path.subcategory===child).length}</em></button>)}</div>}</div>})}</div>{selectedSubcategory&&<div className="tertiary-flyout"><div><small>LEVEL 3 CATEGORY</small><b>{selectedSubcategory}</b><button onClick={()=>setSelectedSubcategory('')}>×</button></div><div className="tertiary-icon-grid">{tertiaryOptions(selectedSubcategory,expanded).map(option=><button key={option.name} className={selected===option.name?'active':''} onClick={()=>{onSelect(option.name);setSelectedSubcategory('')}}><i><CatalogIcon icon={option.icon}/></i><span>{option.name}</span><em>{count('tertiaryCategory',option.name)}</em></button>)}</div></div>}</aside>
+  return <aside className="catalog-panel"><div className="catalog-heading"><small>PRODUCT CATALOG</small><h2>产品目录库</h2><p>大健云仓三级目录 · 支持人工调整</p></div><button className={`catalog-all ${selected==='ALL'||selected==='全部产品'?'active':''}`} onClick={()=>{onSelect('ALL');setSelectedSubcategory('')}}><span>全部产品</span><em>{paths.length}</em></button><div className="catalog-tree">{productCatalog.map(group=>{const open=expanded===group.name;return <div className="catalog-group" key={group.name}><button className={selected===group.name?'active':''} onClick={()=>{onSelect(group.name);setExpanded(open?'':group.name);setSelectedSubcategory(open?'':group.children[0])}}><i>{open?'⌄':'›'}</i><span>{group.name}</span><em>{count('category',group.name)}</em></button>{open&&<div>{group.children.map(child=><button key={child} className={selected===child?'active':''} onClick={()=>{onSelect(child);setSelectedSubcategory(child)}}><span>{child}</span><em>{paths.filter(path=>path.category===group.name&&path.subcategory===child).length}</em></button>)}</div>}</div>})}</div>{selectedSubcategory&&<div className="tertiary-flyout"><div><small>LEVEL 3 CATEGORY</small><b>{selectedSubcategory}</b><button onClick={()=>setSelectedSubcategory('')}>×</button></div><div className="tertiary-icon-grid">{tertiaryOptions(catalog,selectedSubcategory,expanded).map(option=><button key={option.name} className={selected===option.name?'active':''} onClick={()=>{onSelect(option.name);setSelectedSubcategory('')}}><i><CatalogIcon icon={option.icon}/></i><span>{option.name}</span><em>{count('tertiaryCategory',option.name)}</em></button>)}</div></div>}</aside>
 }
 
 const catalogSelectionMatches = (item:{category:string;subcategory:string;tertiaryCategory?:string},selected:string) => selected==='ALL'||item.category===selected||item.subcategory===selected||item.tertiaryCategory===selected
@@ -1691,22 +1864,39 @@ function CatalogWorkspace({paths,children}:{paths:CatalogPath[];children:(select
   return <section className="warehouse-catalog-layout"><ThreeLevelCatalog paths={paths} selected={selected} onSelect={setSelected}/><div className="warehouse-catalog-main">{children(selected)}</div></section>
 }
 
-function SelectionWorkspace({ warehouseName, items, onItemsChange, onDecision, onCandidates, onReturnCandidate, onOpen, onNext, nextLabel }: { warehouseName:string; items: SelectionCatalogItem[]; onItemsChange: (items: SelectionCatalogItem[]) => void; onDecision: () => void; onCandidates: () => void; onReturnCandidate: (item: SelectionCatalogItem) => Promise<void>; onOpen: (item: SelectionCatalogItem) => void; onNext?:()=>void; nextLabel?:string }) {
+function SelectionWorkspace({ warehouseName, items, onItemsChange, onDecision, onCandidates, onReturnCandidate, onOpen, operator }: { warehouseName:string; items: SelectionCatalogItem[]; onItemsChange: (items: SelectionCatalogItem[]) => void; onDecision: () => void; onCandidates: () => void; onReturnCandidate: (item: SelectionCatalogItem) => Promise<void>; onOpen: (item: SelectionCatalogItem) => void; operator: string }) {
+  const catalog=useCatalog()
+  const productCatalog=catalog.groups
   const [category, setCategory] = useState('ALL')
   const [decision, setDecision] = useState<'ALL' | SelectionDecision>('ALL')
   const [query, setQuery] = useState('')
+  const [eliminateTarget, setEliminateTarget] = useState<SelectionCatalogItem | null>(null)
+  const [eliminateError, setEliminateError] = useState('')
+  const confirmEliminate = async (reason: string) => {
+    if (!eliminateTarget) return
+    const target = eliminateTarget
+    setEliminateTarget(null)
+    setEliminateError('')
+    try {
+      await window.desktop.eliminations.eliminate({ origin: 'SELECTION', recordId: target.id, reason, operator })
+      onItemsChange(await window.desktop.selections.list())
+      onDecision()
+    } catch (error) { setEliminateError(error instanceof Error ? error.message : '淘汰失败') }
+  }
   const normalized = query.trim().toLocaleLowerCase()
-  const visible = items.filter(item => (category === 'ALL' || item.category === category || item.subcategory === category || item.tertiaryCategory === category) && (decision === 'ALL' || item.decision === decision) && (!normalized || `${item.title} ${item.productId} ${item.platformCode}`.toLocaleLowerCase().includes(normalized)))
+  const activeItems = items.filter(item => item.decision !== 'APPROVED')
+  const visible = activeItems.filter(item => (category === 'ALL' || item.category === category || item.subcategory === category || item.tertiaryCategory === category) && (decision === 'ALL' || item.decision === decision) && (!normalized || `${item.title} ${item.productId} ${item.platformCode}`.toLocaleLowerCase().includes(normalized)))
   const count = (value: SelectionDecision) => items.filter(item => item.decision === value).length
   const replaceItem = (next: SelectionCatalogItem) => onItemsChange(items.map(item => item.id === next.id ? next : item))
   const decide = async (item: SelectionCatalogItem, value: SelectionDecision) => { replaceItem(await window.desktop.selections.decide(item.id, value)); onDecision() }
   const categorize = async (item: SelectionCatalogItem, nextCategory: string, nextSubcategory: string, nextTertiary: string) => replaceItem(await window.desktop.selections.categorize(item.id,nextCategory,nextSubcategory,nextTertiary))
   return <section className="selection-workbench">
-    <ThreeLevelCatalog paths={items.map(item=>({id:item.id,category:item.category,subcategory:item.subcategory,tertiaryCategory:item.tertiaryCategory||'待细分'}))} selected={category} onSelect={setCategory}/>
-    <div className="selection-main"><div className="selection-heading"><div><small>AI SELECTION WORKSPACE</small><b>{warehouseName} · AI选品</b><span>当前选品决策只影响本仓库</span></div><div><button className="primary" onClick={onCandidates}>＋ 从AI候选导入</button>{onNext&&<button className="primary" onClick={onNext}>{nextLabel||'下一步'} →</button>}</div></div>
-      <div className="selection-stats"><button onClick={()=>setDecision('ALL')}><b>{items.length}</b><small>选品商品</small></button><button onClick={()=>setDecision('PENDING')}><b>{count('PENDING')}</b><small>待复核</small></button><button onClick={()=>setDecision('APPROVED')}><b>{count('APPROVED')}</b><small>已通过</small></button><button onClick={()=>setDecision('REJECTED')}><b>{count('REJECTED')}</b><small>已淘汰</small></button></div>
-      <div className="selection-filters"><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="搜索商品标题、ID或平台"/><select value={decision} onChange={event=>setDecision(event.target.value as typeof decision)}><option value="ALL">全部状态</option><option value="PENDING">待人工复核</option><option value="APPROVED">已通过</option><option value="REJECTED">已淘汰</option></select><span>当前显示 <b>{visible.length}</b> 个商品</span></div>
-      {visible.length===0?<EmptyState title={items.length?'当前筛选下暂无商品':'暂无选品商品'} description={items.length?'请切换目录、状态或清除搜索条件。':'请从AI候选中将商品加入AI选品。'} action="进入AI候选" onAction={onCandidates}/>:<div className="selection-grid">{visible.map(item=>{const group=productCatalog.find(entry=>entry.name===item.category)||productCatalog[0];const subcategory=group.children.includes(item.subcategory)?item.subcategory:group.children[0];return <article className={`selection-card decision-${item.decision.toLocaleLowerCase()}`} key={item.id}><button className="selection-image" onClick={()=>onOpen(item)}>{item.imageUrl?<img src={item.imageUrl} alt={item.title}/>:<span>无图片</span>}<strong>{item.score}分</strong></button><div className="selection-card-body"><small>{item.platformCode} · ID {item.productId||'待识别'}</small><b title={item.title}>{item.title}</b><strong>{item.priceText||'价格待核验'}</strong><div className="selection-category-selects"><select value={item.category} onChange={event=>{const next=productCatalog.find(entry=>entry.name===event.target.value)!;void categorize(item,next.name,next.children[0],'待细分')}}>{productCatalog.map(entry=><option key={entry.name}>{entry.name}</option>)}</select><select value={subcategory} onChange={event=>void categorize(item,item.category,event.target.value,'待细分')}>{group.children.map(child=><option key={child}>{child}</option>)}</select><select value={item.tertiaryCategory||'待细分'} onChange={event=>void categorize(item,item.category,subcategory,event.target.value)}>{tertiaryOptions(subcategory,item.category).map(option=><option key={option.name}>{option.name}</option>)}</select></div><p>{item.recommendation||item.reason}</p><div className="selection-tags"><span>{item.category} / {subcategory} / {item.tertiaryCategory||'待细分'}</span><span>{item.riskFlags.length?`${item.riskFlags.length}项风险`:'暂无风险'}</span></div><div className="selection-decisions"><button className="candidate" onClick={()=>void onReturnCandidate(item)}>候选</button><button className={item.decision==='APPROVED'?'approved':''} onClick={()=>void decide(item,'APPROVED')}>通过</button><button className={item.decision==='PENDING'?'pending':''} onClick={()=>void decide(item,'PENDING')}>待复核</button><button className={item.decision==='REJECTED'?'rejected':''} onClick={()=>void decide(item,'REJECTED')}>淘汰</button></div></div></article>})}</div>}
+    <ThreeLevelCatalog paths={activeItems.map(item=>({id:item.id,category:item.category,subcategory:item.subcategory,tertiaryCategory:item.tertiaryCategory||'待细分'}))} selected={category} onSelect={setCategory}/>
+    <div className="selection-main"><div className="selection-heading"><div><small>AI SELECTION WORKSPACE</small><b>{warehouseName} · AI选品</b><span>当前选品决策只影响本仓库</span></div></div>
+      <div className="selection-stats"><button onClick={()=>setDecision('ALL')}><b>{activeItems.length}</b><small>选品商品</small></button><button onClick={()=>setDecision('PENDING')}><b>{count('PENDING')}</b><small>待复核</small></button><button onClick={()=>setDecision('REJECTED')}><b>{count('REJECTED')}</b><small>已淘汰</small></button></div>
+      <div className="selection-filters"><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="搜索商品标题、ID或平台"/><select value={decision} onChange={event=>setDecision(event.target.value as typeof decision)}><option value="ALL">全部状态</option><option value="PENDING">待人工复核</option><option value="REJECTED">已淘汰</option></select><span>当前显示 <b>{visible.length}</b> 个商品</span></div>
+      {visible.length===0?<EmptyState title={activeItems.length?'当前筛选下暂无商品':'暂无选品商品'} description={activeItems.length?'请切换目录、状态或清除搜索条件。':'请从AI候选中将商品加入AI选品。'} action="进入AI候选" onAction={onCandidates}/>:<div className="selection-grid">{visible.map(item=>{const group=productCatalog.find(entry=>entry.name===item.category)||productCatalog[0];const subcategory=group.children.includes(item.subcategory)?item.subcategory:group.children[0];return <article className={`selection-card decision-${item.decision.toLocaleLowerCase()}`} key={item.id}><button className="selection-image" onClick={()=>onOpen(item)}>{item.imageUrl?<img src={item.imageUrl} alt={item.title}/>:<span>无图片</span>}<strong>{item.score}分</strong></button><div className="selection-card-body"><small>{item.platformCode} · ID {item.productId||'待识别'}</small><b title={item.title}>{item.title}</b><strong>{item.priceText||'价格待核验'}</strong><div className="selection-category-selects"><select value={item.category} onChange={event=>{const next=productCatalog.find(entry=>entry.name===event.target.value)!;void categorize(item,next.name,next.children[0],'待细分')}}>{productCatalog.map(entry=><option key={entry.name}>{entry.name}</option>)}</select><select value={subcategory} onChange={event=>void categorize(item,item.category,event.target.value,'待细分')}>{group.children.map(child=><option key={child}>{child}</option>)}</select><select value={item.tertiaryCategory||'待细分'} onChange={event=>void categorize(item,item.category,subcategory,event.target.value)}>{tertiaryOptions(catalog,subcategory,item.category).map(option=><option key={option.name}>{option.name}</option>)}</select></div><p>{item.recommendation||item.reason}</p><div className="selection-tags"><span>{item.category} / {subcategory} / {item.tertiaryCategory||'待细分'}</span><span>{item.riskFlags.length?`${item.riskFlags.length}项风险`:'暂无风险'}</span></div><div className="selection-decisions"><button className="candidate" onClick={()=>void onReturnCandidate(item)}>候选</button><button className={item.decision==='APPROVED'?'approved':''} onClick={()=>void decide(item,'APPROVED')}>通过</button><button className={item.decision==='REJECTED'?'rejected':''} onClick={()=>{setEliminateTarget(item);setEliminateError('')}}>淘汰</button></div></div></article>})}</div>}
+    {eliminateTarget&&<EliminateReasonDialog kind="product" title={eliminateTarget.title} meta={`${eliminateTarget.platformCode} · ID ${eliminateTarget.productId||'待识别'} · ${eliminateTarget.sourceUrl}`} error={eliminateError} onCancel={()=>setEliminateTarget(null)} onConfirm={reason=>void confirmEliminate(reason)} />}
     </div>
   </section>
 }
@@ -1733,7 +1923,7 @@ function stockCatalogPath(product: CollectedSupplyProduct): CatalogPath {
 function candidateCatalogPath(product: CollectedSupplyProduct | CollectedOzonProduct): CatalogPath {
   if ('platformCode' in product) return { id:product.url,...supplyCatalog(product) }
   const inferred = inferCatalog(product.title)
-  const matched = tertiaryOptions(inferred.subcategory,inferred.category).find(option=>option.name!=='待细分'&&product.title.includes(option.name.replace(/[与用品工具]/g,'')))
+  const matched = tertiaryOptions(catalogStore.getSnapshot(),inferred.subcategory,inferred.category).find(option=>option.name!=='待细分'&&product.title.includes(option.name.replace(/[与用品工具]/g,'')))
   return { id:product.url,category:inferred.category,subcategory:inferred.subcategory,tertiaryCategory:matched?.name||'待细分' }
 }
 
@@ -1768,12 +1958,12 @@ function MarketOpportunityWarehouse({warehouse,items,onOpenSelection,onOpen}:{wa
   return <section className="market-warehouse-page"><div className="warehouse-heading"><div><small>MARKET OPPORTUNITY WAREHOUSE</small><h2>{name}机会产品库</h2><p>保存{name}市场商品、竞品指标、利润机会及已绑定货源，不作为实物库存。</p></div><div className="warehouse-heading-actions"><button className="primary" onClick={onOpenSelection}>进入AI选品</button></div></div><div className="warehouse-toolbar"><input value={query} onChange={event=>setQuery(event.target.value)} placeholder={`搜索${name}商品或平台ID`}/><span>有效机会 <b>{visible.length}</b> 个</span></div>{visible.length?<div className="market-warehouse-grid">{visible.map(item=><article key={item.id}><button onClick={()=>onOpen(item)}>{item.imageUrl?<img src={item.imageUrl} alt=""/>:'无图'}</button><div><small>{name} · ID {item.productId||'待识别'}</small><b>{item.title}</b><strong>{item.priceText||'价格待采集'}</strong><p>{item.estimatedMargin!==undefined?`预计利润率 ${item.estimatedMargin}%`:'待完成货源比价'}</p><span>{item.supplierUrl?'已绑定供应货源':'货源待匹配'}</span></div></article>)}</div>:<EmptyState title={`${name}机会产品库为空`} description={`请在${name}仓完成采集、候选、选品和比价后入库。`} action="进入AI选品" onAction={onOpenSelection}/>}</section>
 }
 
-function SupplyWarehouseWorkspace({ products, warehouse, onOpenSelection, onOpenCatalog, onCreateImage }: { products: SupplyWarehouseProduct[]; warehouse:SupplyWarehouseProduct['warehouseCode']; onOpenSelection: () => void; onOpenCatalog:()=>void; onCreateImage: (product: SupplyWarehouseProduct) => void }) {
+function SupplyWarehouseWorkspace({ products, warehouse, onOpenSelection, onOpenCatalog, onCreateImage, downloads, downloadingIds, canEdit, notices, onDownload, onOpenDownload, onReturn }: { products: SupplyWarehouseProduct[]; warehouse:SupplyWarehouseProduct['warehouseCode']; onOpenSelection: () => void; onOpenCatalog:()=>void; onCreateImage: (product: SupplyWarehouseProduct) => void; downloads: Record<string, SupplyProductDownload>; downloadingIds: Set<string>; canEdit: boolean; notices: Record<string, string>; onDownload: (product: SupplyWarehouseProduct) => void; onOpenDownload: (warehouseProductId: string) => void; onReturn: (product: SupplyWarehouseProduct) => void }) {
   const [query,setQuery] = useState('')
   const names:Record<SupplyWarehouseProduct['warehouseCode'],string> = { '1688':'1688仓', GIGACLOUD:'大健云仓' }
   const visible = products.filter(item=>!query.trim()||`${item.title} ${item.productId} ${item.supplierName}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
   const note=warehouse==='1688'?'国内工厂、阶梯价、MOQ与供应商档案':'海外仓库存、配送区域与履约档案'
-  return <section className="supply-warehouse-page"><div className="warehouse-heading"><div><small>SUPPLY PRODUCT WAREHOUSE</small><h2>{names[warehouse]}产品库</h2><p>{note}；商品入库不代表已实际采购。</p></div><div className="warehouse-heading-actions"><button onClick={onOpenCatalog}>管理产品目录</button><button className="primary" onClick={onOpenSelection}>进入AI选品</button></div></div><div className="warehouse-toolbar"><input value={query} onChange={event=>setQuery(event.target.value)} placeholder={`搜索${names[warehouse]}商品、SKU或供应商`}/><span>当前显示 <b>{visible.length}</b> 个商品</span></div>{visible.length?<div className="warehouse-product-grid">{visible.map(item=><article key={item.id}><button className="warehouse-product-image" onClick={()=>onCreateImage(item)}>{item.imageUrl?<img src={item.imageUrl} alt={item.title}/>:<span>无图片</span>}<em>{names[item.warehouseCode]}</em></button><div><small>SKU {item.productId||'待生成'} · {item.category}</small><b>{item.title}</b><strong>{item.priceText||'价格待核验'}</strong><p>{item.supplierName||'供应商待补采'}</p><span>{item.category} / {item.subcategory} / {item.tertiaryCategory}</span><div><button onClick={()=>onCreateImage(item)}>AI做图</button><button className="primary" onClick={()=>onCreateImage(item)}>进入平台素材</button></div></div></article>)}</div>:<EmptyState title={`${names[warehouse]}暂无入库商品`} description="请在当前仓库的AI选品中审核商品，系统会自动归入本仓库。" action="进入AI选品" onAction={onOpenSelection}/>}</section>
+  return <section className="supply-warehouse-page"><div className="warehouse-heading"><div><small>SUPPLY PRODUCT WAREHOUSE</small><h2>{names[warehouse]}产品库</h2><p>{note}；商品入库不代表已实际采购。</p></div><div className="warehouse-heading-actions"><button onClick={onOpenCatalog}>管理产品目录</button><button className="primary" onClick={onOpenSelection}>进入AI选品</button></div></div><div className="warehouse-toolbar"><input value={query} onChange={event=>setQuery(event.target.value)} placeholder={`搜索${names[warehouse]}商品、SKU或供应商`}/><span>当前显示 <b>{visible.length}</b> 个商品</span></div>{visible.length?<div className="warehouse-product-grid">{visible.map(item=><article key={item.id}><button className="warehouse-product-image" onClick={()=>onCreateImage(item)}>{item.imageUrl?<img src={item.imageUrl} alt={item.title}/>:<span>无图片</span>}<em>{names[item.warehouseCode]}</em></button><div><small>SKU {item.productId||'待生成'} · {item.category}</small><b>{item.title}</b><strong>{item.priceText||'价格待核验'}</strong><p>{item.supplierName||'供应商待补采'}</p><span>{item.category} / {item.subcategory} / {item.tertiaryCategory}</span><div><button disabled={downloadingIds.has(item.id)} onClick={()=>onDownload(item)}>{downloadingIds.has(item.id)?'下载中…':downloads[item.id]?.status==='DOWNLOADED'?'重新下载':downloads[item.id]?.status==='FAILED'?'下载失败·重试':'下载产品'}</button>{canEdit&&<button onClick={()=>onReturn(item)}>退回入库处理</button>}</div>{downloads[item.id]?.status==='DOWNLOADED'&&<small className="warehouse-download-note">已生成服务器详情页（{downloads[item.id].imageCount} 张图片）{downloads[item.id].failedCount?`（${downloads[item.id].failedCount} 张失败）`:''} · <button type="button" onClick={()=>onOpenDownload(item.id)}>查看页面</button></small>}{downloads[item.id]?.status==='FAILED'&&<small className="warehouse-download-note error">{downloads[item.id].error||'下载失败，请重试'}</small>}{notices[item.id]?<small className="warehouse-download-note">{notices[item.id]}</small>:null}</div></article>)}</div>:<EmptyState title={`${names[warehouse]}暂无入库商品`} description="请在当前仓库的AI选品中审核商品，系统会自动归入本仓库。" action="进入AI选品" onAction={onOpenSelection}/>}</section>
 }
 
 const imageProductionStorageKey='image-production-projects:v1'
@@ -1848,6 +2038,8 @@ function saveImageProductionProject(project:ImageProductionProject) {
 }
 
 function ImageStudio({ product:inventoryProduct, marketplaceSelection, onOpenInventory }: { product: ImageSourceProduct | null; marketplaceSelection:MarketplaceSelectionProduct|null; onOpenInventory: () => void }) {
+  const toolPanel = usePanelCollapse('image-tool-panel')
+  const settingsPanel = usePanelCollapse('image-settings', { primary: false, side: 'right' })
   const usageStorageKey = `image-model-usage-${new Date().toISOString().slice(0,7)}`
   const [plan, setPlan] = useState<GenerationPlan>('full')
   const [targetPlatform, setTargetPlatform] = useState('Ozon')
@@ -2208,8 +2400,9 @@ function ImageStudio({ product:inventoryProduct, marketplaceSelection, onOpenInv
     localStorage.setItem('image-monthly-limit', String(parsed))
   }
 
-  return <section className="image-studio">
-    <aside className="image-tool-panel">
+  return <section className={`image-studio${toolPanel.collapsed?' side-collapsed':''}`}>
+    {toolPanel.collapsed?<PanelExpandRail panel={toolPanel} label="商品视觉生成面板"/>:<aside className="image-tool-panel collapsible-aside">
+      <PanelCollapseButton panel={toolPanel}/>
       <div className="image-panel-heading"><small>IMAGE WORKBENCH</small><h2>{marketplaceSelection?'Ozon平台素材':'商品视觉生成'}</h2><p>{marketplaceSelection?`平台SKU链路 · ${marketplaceSelection.productId||marketplaceSelection.id.slice(0,8)}`:'基于入库商品和目标平台要求生成'}</p></div>
       <div className="image-source-card">
         <div><b>商品来源</b><span>{product?('sourceKind' in product?product.sourceLabel:'AI入库'):'未选择'}</span></div>
@@ -2233,7 +2426,7 @@ function ImageStudio({ product:inventoryProduct, marketplaceSelection, onOpenInv
       <div className="generation-plan-list"><small>选择生成方案</small>{plans.map(item=><button key={item.id} className={plan===item.id?'active':''} onClick={()=>setPlan(item.id)}><i>{item.icon}</i><span><b>{item.name}{item.recommended&&<em>推荐</em>}</b><small>{item.note}</small></span><strong>{item.count}张</strong></button>)}
       </div>
       <div className="plan-count-settings"><b>自定义生成数量</b><div>{(plan==='full'||plan==='main')&&<label>主图<input aria-label="主图生成数量" type="number" min="1" max="99" value={mainImageCount} onChange={event=>setMainImageCount(Math.min(99,Math.max(1,Math.floor(Number(event.target.value)||1))))}/><span>张</span></label>}{(plan==='full'||plan==='detail')&&<label>详情页<input aria-label="详情页生成数量" type="number" min="1" max="99" value={detailImageCount} onChange={event=>setDetailImageCount(Math.min(99,Math.max(1,Math.floor(Number(event.target.value)||1))))}/><span>张</span></label>}</div><small>数量按平台分别保存，生成前可随时调整。</small></div>
-    </aside>
+    </aside>}
 
     <div className="image-workspace">
       <div className="image-workspace-toolbar"><div><small>当前方案</small><b>{activePlan.name} · {targetPlatform}</b></div><div className="image-toolbar-actions"><button onClick={openBatchWorkspace}>批量SKU与运营</button><button onClick={()=>{setHistory(readImageProductionProjects());setHistoryOpen(true)}}>生成历史</button>{project?.tasks.some(task=>task.status==='FAILED'||task.status==='REVIEW')&&<button onClick={retryFailed} disabled={generating}>重做待复核/失败项</button>}<button className="primary" disabled={!product || !facts?.confirmed || generating || !models.length} onClick={generateImage}>{generating?generationProgress:project?.approved&&project.tasks.some(task=>task.status==='FAILED'||task.status==='REVIEW')?'继生成待处理项':'确认并开始生成'}</button></div></div>
@@ -2241,11 +2434,12 @@ function ImageStudio({ product:inventoryProduct, marketplaceSelection, onOpenInv
       <div className="image-product-strip">
         <span>生成进度</span>{project?.tasks.length ? project.tasks.map(task=>{const position=taskPosition(task);return <button key={task.id} className={task.status.toLocaleLowerCase()} title={`${position.label} ${position.index}/${position.total} · ${task.title} · ${task.code}`}><i>{position.short}{position.index}</i></button>}) : <span className="generation-waiting">确认商品事实后生成逐图清单</span>}
       </div>
-      <div className="image-editor">
+      <div className={`image-editor${settingsPanel.collapsed?' side-right-collapsed':''}`}>
         <div className="image-canvas">
           {project?.tasks.length ? <div className="generation-results"><div className="task-group-filters"><button className={taskGroupFilter==='ALL'?'active':''} onClick={()=>setTaskGroupFilter('ALL')}>全部 <span>{project.tasks.length}</span></button><button className={taskGroupFilter==='MAIN'?'active main':''} onClick={()=>setTaskGroupFilter('MAIN')}>主图 <span>{mainTasks.length}</span></button><button className={taskGroupFilter==='DETAIL'?'active detail':''} onClick={()=>setTaskGroupFilter('DETAIL')}>详情页 <span>{detailTasks.length}</span></button></div><div className="generated-gallery production-task-gallery">{visibleTasks.map(task=>{const index=project.tasks.findIndex(item=>item.id===task.id),position=taskPosition(task);return <figure key={task.id} className={`production-task ${task.status.toLocaleLowerCase()} ${task.group.toLocaleLowerCase()}`}><div>{task.outputUrl?<img src={activeTaskImage(task)} alt={`${position.label} ${position.index}/${position.total} ${task.title}`}/>:<div className="production-task-placeholder"><b>{position.short}{position.index}</b><span>{task.status==='RUNNING'?'生成中':task.status==='FAILED'?'生成失败':'等待生成'}</span></div>}<span className={`production-status ${task.status.toLocaleLowerCase()}`}>{task.localEdits?.length?`局部修改 ${task.localEdits.length}版`:task.finalOutputUrl?'正式排版':task.status==='SUCCESS'?'已通过':task.status==='REVIEW'?'待人工复核':task.status==='FAILED'?'质检未通过':task.status==='RUNNING'?'生成/质检中':'等待中'}</span></div><figcaption><span><div className="task-readable-heading"><em className={task.group.toLocaleLowerCase()}>{position.label} {position.index}/{position.total}</em><b>{task.title}</b><small>{task.code}</small></div><small>{task.objective}</small>{task.finalOutputUrl&&<small>底图已保留 · {task.layoutDraft?.language}</small>}{task.sizeVariants?.length?<small>多尺寸 {task.sizeVariants.length}个 · 完整主体留白适配</small>:null}{task.referenceImageIds?.length?<small>参考图 {task.referenceImageIds.length}张 · {task.referenceRoles?.join('/')}</small>:null}{task.qualityReason&&<em className={`quality-${task.qualityStatus?.toLocaleLowerCase()}`}>{task.qualityReason}</em>}{task.error&&!task.qualityReason&&<em>{task.error}</em>}</span><div>{(task.status==='FAILED'||task.status==='REVIEW')&&<button disabled={generating} onClick={()=>void runTasks([task.id])}>单张重做</button>}{task.status==='REVIEW'&&<button onClick={()=>acceptReviewTask(task.id)}>人工通过</button>}{task.outputUrl&&imageTaskAllowsTypography(task)&&<button onClick={()=>openFormalLayout(task)}>{task.finalOutputUrl?'编辑排版':'正式排版'}</button>}{task.finalOutputUrl&&<button onClick={()=>restoreBaseImage(task.id)}>恢复底图</button>}{task.outputUrl&&<button onClick={()=>openLocalEdit(task)}>局部修改</button>}{task.localEdits?.length?<button onClick={()=>undoLocalEdit(task.id)}>撤销局改</button>:null}{task.outputUrl&&<button onClick={()=>openMultiSize(task)}>多尺寸</button>}{task.outputUrl&&marketplaceSelection&&<button className={savedChoices[index]==='original'?'selected':''} onClick={()=>void selectGeneratedAsset(index)}>设为平台图</button>}{task.outputUrl&&<button disabled={realShiftProcessing===index} onClick={()=>runRealShift(task.outputUrl!,index)}>{realShiftProcessing===index?'处理中':'真实感优化'}</button>}</div></figcaption></figure>})}</div></div> : referenceImageUrl ? <div className="image-preview"><span>{facts?.confirmed?'商品事实已确认，图片清单待生成':'商品参考原图'}</span><img src={referenceImageUrl} alt={product?.title||''}/></div> : <div className="image-canvas-empty"><i>▧</i><h3>请先添加商品</h3><p>支持本地图片、产品网址和AI入库商品</p><button className="primary" onClick={()=>setSourceMenuOpen(true)}>添加商品</button></div>}
         </div>
-        <aside className="image-settings">
+        {settingsPanel.collapsed?<PanelExpandRail panel={settingsPanel} label="生成设置"/>:<aside className="image-settings collapsible-aside-right">
+          <PanelCollapseButton panel={settingsPanel}/>
           <div className="settings-title"><b>{activePlan.name}</b><small>{activePlan.note}</small></div>
           <label className="model-picker-label">AI生图模型
             <button type="button" className={`model-picker-trigger ${modelMenuOpen?'open':''}`} onClick={()=>setModelMenuOpen(open=>!open)} disabled={!models.length}><span className="model-logo">AI</span><span><b>{selectedModel?.name || '暂无可用模型'}</b><small>{selectedModel?.description || modelStatus}</small></span><em>{modelMenuOpen?'⌃':'⌄'}</em></button>
@@ -2260,7 +2454,7 @@ function ImageStudio({ product:inventoryProduct, marketplaceSelection, onOpenInv
           {generationError && <div className="generation-error">{generationError}</div>}
           <div className="safety-note"><b>商品一致性保护</b><span>默认检查商品结构、颜色、配件数量和文字合规。</span></div>
           <button className="primary image-generate" disabled={!product || !facts?.confirmed || generating || !models.length} onClick={generateImage}>{generating?generationProgress:`确认${activePlan.name} · ${activePlan.count}张`}</button>
-        </aside>
+        </aside>}
       </div>
     </div>
     {localEditTaskId&&project&&<div className="image-production-backdrop"><div className="image-local-edit-dialog"><header><div><small>LOCAL EDIT</small><h3>局部修改 · {project.tasks.find(item=>item.id===localEditTaskId)?.code}</h3><p>先生成候选并执行四层复检，确认采用前原图不会被替换。</p></div><button onClick={()=>{setLocalEditCandidate(null);setLocalEditTaskId(null)}}>×</button></header><div className="image-local-edit-body"><div className={localEditCandidate?'local-edit-comparison':''}><div><b>修改前</b><div className="local-selection-canvas" onPointerDown={localEditCandidate?undefined:startLocalSelection} onPointerMove={localEditCandidate?undefined:moveLocalSelection} onPointerUp={localEditCandidate?undefined:finishLocalSelection} onPointerCancel={localEditCandidate?undefined:finishLocalSelection}>{project.tasks.find(item=>item.id===localEditTaskId)&&<img draggable={false} src={localEditCandidate?.beforeUrl||activeTaskImage(project.tasks.find(item=>item.id===localEditTaskId)!)} alt="修改前"/>}{!localEditCandidate&&<i style={{left:`${localEditRegion.x*100}%`,top:`${localEditRegion.y*100}%`,width:`${localEditRegion.width*100}%`,height:`${localEditRegion.height*100}%`}}/>}</div></div>{localEditCandidate&&<div><b>修改后候选</b><div className="local-selection-canvas"><img draggable={false} src={localEditCandidate.outputUrl} alt="修改后候选"/></div></div>}</div><div className="local-edit-controls"><b>修改方式</b><div>{([['BRIGHTEN','提亮'],['DARKEN','压暗'],['BLUR','模糊'],['AI_REPAINT','AI局部重绘']] as const).map(([value,label])=><button key={value} className={localEditOperation===value?'active':''} disabled={Boolean(localEditCandidate)||(value==='AI_REPAINT'&&(selectedModel?.maxReferenceImages??0)<1)} onClick={()=>setLocalEditOperation(value)}>{label}</button>)}</div>{localEditOperation==='AI_REPAINT'&&<label>重绘要求<textarea aria-label="局部重绘要求" disabled={Boolean(localEditCandidate)} value={localEditInstruction} onChange={event=>setLocalEditInstruction(event.target.value)} placeholder="例如：修复表面划痕，保持原有材质和颜色"/></label>}<dl><div><dt>X / Y</dt><dd>{Math.round(localEditRegion.x*100)}% / {Math.round(localEditRegion.y*100)}%</dd></div><div><dt>宽 / 高</dt><dd>{Math.round(localEditRegion.width*100)}% / {Math.round(localEditRegion.height*100)}%</dd></div></dl>{localEditCandidate&&<div className={`local-edit-review ${localEditCandidate.qualityStatus?.toLocaleLowerCase()}`}><b>{localEditCandidate.qualityStatus==='PASSED'?'四层复检通过':localEditCandidate.qualityStatus==='REVIEW'?'需要人工确认':'四层复检未通过'}</b><p>{localEditCandidate.qualityReason}</p></div>}{localEditOperation==='AI_REPAINT'&&!localEditCandidate&&<p>AI局部重绘会调用当前支持参考图的模型并产生1次模型用量；其他修正均在本地完成。</p>}{localEditError&&<div className="generation-error">{localEditError}</div>}</div></div><footer><button onClick={()=>{setLocalEditCandidate(null);setLocalEditTaskId(null)}}>取消并保留原图</button>{localEditCandidate?<><button onClick={()=>{setLocalEditCandidate(null);setLocalEditError('')}}>重新修改</button><button className="primary" disabled={localEditCandidate.qualityStatus==='REJECTED'} onClick={confirmLocalEdit}>{localEditCandidate.qualityStatus==='REVIEW'?'人工确认采用':'确认采用'}</button></>:<button className="primary" disabled={localEditBusy} onClick={()=>void applyLocalEdit()}>{localEditBusy?'生成并复检中…':'生成候选并复检'}</button>}</footer></div></div>}
@@ -2335,6 +2529,8 @@ function hasCurrentEbayTitleVariants(variants:Array<{id:string}>|undefined) {
 
 function EbayPlatformWorkspace({initialTab,lockTitleMode}:{initialTab?:EbayWorkspaceTab;lockTitleMode?:boolean}={}) {
   const [activeTab,setActiveTab]=useState<EbayWorkspaceTab>(initialTab||'browser')
+  const ebayWorkbenchPanel=usePanelCollapse('ebay-login-workbench',{active:activeTab==='browser'})
+  const ebayCatalogPanel=usePanelCollapse('ebay-product-catalog',{active:activeTab==='library'||activeTab==='local'||activeTab==='premium'})
   const [storeScope,setStoreScope]=useState('')
   const [titleUrlInput,setTitleUrlInput]=useState('')
   const [titleUrlError,setTitleUrlError]=useState('')
@@ -2727,8 +2923,8 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode}:{initialTab?:EbayWorks
   },[selectedListing?.listingId,selectedSourceImagesKey])
   useEffect(()=>{
     if(!selectedListing||!selectedTitleEnglish){setLiteralTitleTranslation('');return}
-    const storageKey=`ebay-title-zh:${selectedListing.storeId}:${selectedListing.listingId}`
-    const stored=localStorage.getItem(storageKey)?.trim()||''
+    const storageKey=ebayTitleZhKey(selectedListing.storeId,selectedListing.listingId)
+    const stored=readScopedItem(localStorage,storageKey)?.trim()||''
     const existing=selectedTranslatedTitle||stored
     setLiteralTitleTranslation(existing)
     if(existing)return
@@ -2737,7 +2933,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode}:{initialTab?:EbayWorks
       if(cancelled)return
       const chinese=result.segments[0]?.chinese.trim()||''
       if(!chinese||chinese===selectedTitleEnglish)return
-      localStorage.setItem(storageKey,chinese)
+      writeScopedItem(localStorage,storageKey,chinese)
       setLiteralTitleTranslation(chinese)
     }).catch(()=>undefined)
     return()=>{cancelled=true}
@@ -3290,16 +3486,17 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode}:{initialTab?:EbayWorks
       {notice&&<div className="ebay-success-notice">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
       {ebayError&&<div ref={ebayErrorRef} className="ebay-error-notice">{ebayError}<button onClick={()=>setEbayError('')}>×</button></div>}
       {activeTab==='browser'&&activeStore&&<div className={`ebay-auto-login-banner status-${(ebayLogin?.status||'CHECKING').toLowerCase()}`}><i/><div><b>{activeStore.name} · {ebayLoginLabel}</b><small>{ebayLogin?.message||'正在检查登录状态'}</small></div><button type="button" disabled={ebayLogin?.status==='AUTO_LOGIN_RUNNING'||ebayLogin?.status==='CHECKING'} onClick={()=>void ensureEbayLogin()}>一键登录</button></div>}
-      {activeTab==='browser'&&(activeStore?<div className="ebay-browser-layout"><aside className="ebay-login-workbench"><div className="ebay-workbench-heading"><small>EBAY WORKBENCH</small><h2>eBay店铺工作台</h2><p>登录身份与浏览会话按店铺独立保存</p></div><section><header><span>01</span><div><b>平台与登录身份</b><small>查看登录状态和管理登录凭据</small></div></header><div className="ebay-login-status"><i/><div><b>{activeStore.name} · {activeStore.passwordSaved?'凭据已保存':'待配置'}</b><small>{activeStore.loginUsername||'尚未设置登录账号'}</small></div></div><CredentialPanel accountId={`ebay:${activeStore.id}`} platformCode="EBAY"/></section></aside><main className="ebay-browser-panel"><div className="ebay-browser-heading"><div><small>WORKSPACE BROWSER</small><b>eBay浏览器</b></div><div className="browser-heading-actions"><button title="eBay页面商品识别插件" className={`built-in-collector-trigger${ebayPluginActive?' active':''}`} onClick={()=>void startEbayPlugin()}>{ebayPluginActive?`🤖 采集插件 · 已开启 · 已选 ${ebayPluginSelected} / 当前页识别 ${ebayPluginRecognized}`:'🤖 启用采集插件'}</button><div className="browser-translation"><button className={`translation-trigger ${ebayTranslationActive?'active':''}`} disabled={ebayTranslating} onClick={()=>ebayTranslationActive?setEbayTranslationMenuOpen(open=>!open):void translateEbayPage('BILINGUAL')}><span>{ebayTranslating?'翻译中…':ebayTranslationActive?`中文 ✓${ebayTranslationCount?` · ${ebayTranslationCount}`:''}`:'译 · 中文'}</span><i>{ebayTranslationMenuOpen?'⌃':'⌄'}</i></button>{ebayTranslationMenuOpen&&<div className="translation-menu"><b>网页翻译</b><small>Qwen-MT Flash · 自动识别语种</small><button className={ebayTranslationMode==='BILINGUAL'?'active':''} onClick={()=>{setEbayTranslationMenuOpen(false);void translateEbayPage('BILINGUAL')}}><span>原文 + 中文</span><em>推荐</em></button><button className={ebayTranslationMode==='CHINESE'?'active':''} onClick={()=>{setEbayTranslationMenuOpen(false);void translateEbayPage('CHINESE')}}><span>仅显示中文</span></button><button onClick={()=>void translateEbayPage(ebayTranslationMode)}><span>翻译新增内容</span></button><button className="restore" onClick={()=>void restoreEbayTranslation()}><span>恢复原网页</span></button></div>}</div></div></div><div className="tabs ebay-browser-tabs"><div className="tab-scroll">{ebayBrowserTabs.map(tab=><button key={tab.id} className={tab.active?'active':''} onClick={()=>void activateEbayBrowserTab(tab)}><span className={`ebay-tab-icon${tab.faviconUrl?' has-site-logo':''}`}>{tab.faviconUrl?<img src={tab.faviconUrl} alt="" onError={event=>{event.currentTarget.hidden=true}}/>:'e'}</span><b>{tab.title}</b>{tab.closable&&<i onClick={event=>{event.stopPropagation();void closeEbayBrowserTab(tab.id)}}>×</i>}</button>)}</div><button className="new-browser-tab" title="新建eBay浏览页" aria-label="新建eBay浏览页" onClick={()=>void createEbayBrowserTab()}>＋</button>{ebayBrowserState?.loading&&<span className="run-state loading"><i/>页面加载中</span>}</div><form className="address-bar ebay-address-bar" onSubmit={navigateEbay}><button type="button" title="后退" disabled={!ebayBrowserState?.canGoBack} onClick={()=>void window.desktop.browser.back('web')}>←</button><button type="button" title="前进" disabled={!ebayBrowserState?.canGoForward} onClick={()=>void window.desktop.browser.forward('web')}>→</button><button type="button" title="刷新" onClick={()=>void window.desktop.browser.reload('web')}>↻</button><input aria-label="eBay网页地址" value={ebayAddress} onChange={event=>setEbayAddress(event.target.value)}/><button className="address-go" type="submit">打开 <span>↗</span></button></form><div ref={ebayBrowserSlot} className="browser-slot ebay-browser-slot"><div className="browser-placeholder">正在打开 {activeStore.name} 的 eBay 独立浏览会话…</div></div></main></div>:<EbayEmpty title="尚未添加 eBay 店铺" description="点击顶部“添加店铺”，保存店名、登录账号和密码后进入独立浏览会话。" action="添加第一个店铺" onAction={addStore}/>)}
+      {activeTab==='browser'&&(activeStore?<div className={`ebay-browser-layout${ebayWorkbenchPanel.collapsed?' side-collapsed':''}`}>{ebayWorkbenchPanel.collapsed?<PanelExpandRail panel={ebayWorkbenchPanel} label="eBay店铺工作台"/>:<aside className="ebay-login-workbench collapsible-aside"><PanelCollapseButton panel={ebayWorkbenchPanel}/><div className="ebay-workbench-heading"><small>EBAY WORKBENCH</small><h2>eBay店铺工作台</h2><p>登录身份与浏览会话按店铺独立保存</p></div><section><header><span>01</span><div><b>平台与登录身份</b><small>查看登录状态和管理登录凭据</small></div></header><div className="ebay-login-status"><i/><div><b>{activeStore.name} · {activeStore.passwordSaved?'凭据已保存':'待配置'}</b><small>{activeStore.loginUsername||'尚未设置登录账号'}</small></div></div><CredentialPanel accountId={`ebay:${activeStore.id}`} platformCode="EBAY"/></section></aside>}<main className="ebay-browser-panel"><div className="ebay-browser-heading"><div><small>WORKSPACE BROWSER</small><b>eBay浏览器</b></div><div className="browser-heading-actions"><button title="eBay页面商品识别插件" className={`built-in-collector-trigger${ebayPluginActive?' active':''}`} onClick={()=>void startEbayPlugin()}>{ebayPluginActive?`🤖 采集插件 · 已开启 · 已选 ${ebayPluginSelected} / 当前页识别 ${ebayPluginRecognized}`:'🤖 启用采集插件'}</button><div className="browser-translation"><button className={`translation-trigger ${ebayTranslationActive?'active':''}`} disabled={ebayTranslating} onClick={()=>ebayTranslationActive?setEbayTranslationMenuOpen(open=>!open):void translateEbayPage('BILINGUAL')}><span>{ebayTranslating?'翻译中…':ebayTranslationActive?`中文 ✓${ebayTranslationCount?` · ${ebayTranslationCount}`:''}`:'译 · 中文'}</span><i>{ebayTranslationMenuOpen?'⌃':'⌄'}</i></button>{ebayTranslationMenuOpen&&<div className="translation-menu"><b>网页翻译</b><small>Qwen-MT Flash · 自动识别语种</small><button className={ebayTranslationMode==='BILINGUAL'?'active':''} onClick={()=>{setEbayTranslationMenuOpen(false);void translateEbayPage('BILINGUAL')}}><span>原文 + 中文</span><em>推荐</em></button><button className={ebayTranslationMode==='CHINESE'?'active':''} onClick={()=>{setEbayTranslationMenuOpen(false);void translateEbayPage('CHINESE')}}><span>仅显示中文</span></button><button onClick={()=>void translateEbayPage(ebayTranslationMode)}><span>翻译新增内容</span></button><button className="restore" onClick={()=>void restoreEbayTranslation()}><span>恢复原网页</span></button></div>}</div></div></div><div className="tabs ebay-browser-tabs"><div className="tab-scroll">{ebayBrowserTabs.map(tab=><button key={tab.id} className={tab.active?'active':''} onClick={()=>void activateEbayBrowserTab(tab)}><span className={`ebay-tab-icon${tab.faviconUrl?' has-site-logo':''}`}>{tab.faviconUrl?<img src={tab.faviconUrl} alt="" onError={event=>{event.currentTarget.hidden=true}}/>:'e'}</span><b>{tab.title}</b>{tab.closable&&<i onClick={event=>{event.stopPropagation();void closeEbayBrowserTab(tab.id)}}>×</i>}</button>)}</div><button className="new-browser-tab" title="新建eBay浏览页" aria-label="新建eBay浏览页" onClick={()=>void createEbayBrowserTab()}>＋</button>{ebayBrowserState?.loading&&<span className="run-state loading"><i/>页面加载中</span>}</div><form className="address-bar ebay-address-bar" onSubmit={navigateEbay}><button type="button" title="后退" disabled={!ebayBrowserState?.canGoBack} onClick={()=>void window.desktop.browser.back('web')}>←</button><button type="button" title="前进" disabled={!ebayBrowserState?.canGoForward} onClick={()=>void window.desktop.browser.forward('web')}>→</button><button type="button" title="刷新" onClick={()=>void window.desktop.browser.reload('web')}>↻</button><input aria-label="eBay网页地址" value={ebayAddress} onChange={event=>setEbayAddress(event.target.value)}/><button className="address-go" type="submit">打开 <span>↗</span></button></form><div ref={ebayBrowserSlot} className="browser-slot ebay-browser-slot"><div className="browser-placeholder">正在打开 {activeStore.name} 的 eBay 独立浏览会话…</div></div></main></div>:<EbayEmpty title="尚未添加 eBay 店铺" description="点击顶部“添加店铺”，保存店名、登录账号和密码后进入独立浏览会话。" action="添加第一个店铺" onAction={addStore}/>)}
       {activeTab!=='browser'&&!lockTitleMode&&<><div className="ebay-page-heading"><div><small>EBAY {activeTab==='optimize'?'V2.0':'V1.0'} · PRODUCTION · READ ONLY</small><h2>{tabs.find(tab=>tab.id===activeTab)?.name}</h2><p>当前店铺：{scopeName} · 正式环境只读模式</p></div>{activeTab==='library'&&<div className="ebay-library-sync"><div className="ebay-library-sync-status"><b>{categoryWorkspace.categories.length} 个目录</b><small>上次同步：{categorySyncedAt}</small>{categoryImportantChanges>0&&<em>{categoryImportantChanges} 项变化</em>}</div><div className="ebay-library-sync-actions"><button type="button" title={ebayLogin?.status==='ONLINE'?'同步 eBay 店铺目录':'请先在店铺采集完成登录'} disabled={categorySyncing||ebayLogin?.status!=='ONLINE'} onClick={()=>void syncStoreCategories()}>{categorySyncing?'目录同步中…':'同步目录'}</button><button type="button" className="primary" title={ebayLogin?.status==='ONLINE'?'按店铺目录同步线上产品':'请先在店铺采集完成登录'} disabled={!directoryProductCategories.length||ebayLogin?.status!=='ONLINE'} onClick={()=>void openDirectoryProductSync()}>同步产品</button></div></div>}<span className={configuration?.marketDataConfigured?'ready':'pending'}><i/>{configuration?.marketDataConfigured?'Omkar 市场数据已配置':'等待 Omkar API Key'}</span></div>{!configuration?.marketDataConfigured&&<div className="ebay-config-notice"><b>eBay 市场数据尚未配置 Omkar API Key</b><span>请在 AI总部的“Amazon 数据源配置”中保存 Key；同一 Key 同时用于 Amazon 和 eBay Scraper。</span></div>}</>}
       {activeTab==='library'&&<div className="ebay-inline-check-summary"><div><b>{listings.length}</b><small>线上产品</small></div><div className={titleIssues?'warn':''}><b>{titleIssues}</b><small>标题待优化</small></div><div className={imageIssues?'warn':''}><b>{imageIssues}</b><small>主图待补充</small></div><div className={healthRows.filter(row=>row.issues.length).length?'warn':''}><b>{healthRows.filter(row=>row.issues.length).length}</b><small>存在待优化项</small></div></div>}
-      {activeTab==='library'&&<div className="ebay-library-layout">
-        <aside className="ebay-product-catalog">
+      {activeTab==='library'&&<div className={`ebay-library-layout${ebayCatalogPanel.collapsed?' side-collapsed':''}`}>
+        {ebayCatalogPanel.collapsed?<PanelExpandRail panel={ebayCatalogPanel} label="产品目录"/>:<aside className="ebay-product-catalog collapsible-aside">
+          <PanelCollapseButton panel={ebayCatalogPanel}/>
           <header><b>产品目录</b><small>{categoryWorkspace.categories.length?`eBay店铺目录 · ${categorySyncedAt}`:'尚未同步店铺目录'}</small></header>
           <button className={selectedCategoryId==='ALL'?'active':''} onClick={()=>setSelectedCategoryId('ALL')}>全部产品 <em>{listings.length}</em></button>
           {categoryWorkspace.categories.length?<EbayStoreCategoryTree categories={categoryWorkspace.categories} listings={listings} selected={selectedCategoryId} onSelect={setSelectedCategoryId}/>:<p className="ebay-category-empty">请先在“店铺采集”中同步目录</p>}
           <div className="ebay-catalog-filters"><b>其他筛选</b><button className={selectedCategoryId==='UNCLASSIFIED'?'active':''} onClick={()=>setSelectedCategoryId('UNCLASSIFIED')}>未分类 <em>{unclassifiedCount}</em></button><button className={selectedCategoryId==='MISSING_IMAGE'?'active':''} onClick={()=>setSelectedCategoryId('MISSING_IMAGE')}>缺少主图 <em>{imageIssues}</em></button></div>
-        </aside>
+        </aside>}
         <section>
           <div className="ebay-toolbar ebay-toolbar-report"><input value={search} onChange={event=>setSearch(event.target.value)} placeholder="搜索标题、SKU、Item ID"/><select><option>在线商品</option></select><button disabled={!activeStore||Boolean(busy)} onClick={()=>activeStore&&void importReport(activeStore)}>{busy===`report:${activeStore?.id}`?'导入中':'导入Listings报表'}</button><button disabled={!activeStore||activeStore.status!=='CONNECTED'||Boolean(busy)} onClick={()=>activeStore&&void syncStore(activeStore)}>{busy===`sync:${activeStore?.id}`?'同步中':'API同步'}</button></div>
           {visibleListings.length?<div className="ebay-listing-grid">{visibleListings.map(item=><article className="ebay-market-card" key={item.id}>
@@ -3327,13 +3524,14 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode}:{initialTab?:EbayWorks
           </article>)}</div>:<EbayEmpty title={selectedCategoryId==='ALL'?'暂无已上架商品':'当前目录暂无商品'} description={activeStore?'可切换其他目录，或在店铺采集中采集商品。':'请先在顶部添加或选择具体店铺。'}/>} 
         </section>
       </div>}
-      {activeTab==='local'&&<div className="ebay-library-layout ebay-local-products-layout">
-        <aside className="ebay-product-catalog">
+      {activeTab==='local'&&<div className={`ebay-library-layout ebay-local-products-layout${ebayCatalogPanel.collapsed?' side-collapsed':''}`}>
+        {ebayCatalogPanel.collapsed?<PanelExpandRail panel={ebayCatalogPanel} label="本地产品目录"/>:<aside className="ebay-product-catalog collapsible-aside">
+          <PanelCollapseButton panel={ebayCatalogPanel}/>
           <header><b>本地产品目录</b><small>沿用线上商品类目 · 独立持久化</small></header>
           <button className={selectedCategoryId==='ALL'?'active':''} onClick={()=>setSelectedCategoryId('ALL')}>全部产品 <em>{localProducts.length}</em></button>
           {categoryWorkspace.categories.length?<EbayStoreCategoryTree categories={categoryWorkspace.categories} listings={localListings} selected={selectedCategoryId} onSelect={setSelectedCategoryId}/>:<p className="ebay-category-empty">请先同步 eBay 店铺目录</p>}
           <div className="ebay-catalog-filters"><b>快照状态</b><button className={selectedCategoryId==='UNCLASSIFIED'?'active':''} onClick={()=>setSelectedCategoryId('UNCLASSIFIED')}>未分类 <em>{localListings.filter(item=>!activeCategoryIds.has(item.categoryId)).length}</em></button><button className={selectedCategoryId==='MISSING_IMAGE'?'active':''} onClick={()=>setSelectedCategoryId('MISSING_IMAGE')}>缺少本地图片 <em>{localProducts.filter(product=>!product.snapshot.media.some(media=>media.downloadStatus==='DOWNLOADED')).length}</em></button></div>
-        </aside>
+        </aside>}
         <section>
           <div className="ebay-toolbar"><input value={search} onChange={event=>setSearch(event.target.value)} placeholder="搜索本地产品标题、SKU、Item ID"/><span className="ebay-local-library-note">AI优化仅使用这里保存的快照</span></div>
           {visibleLocalProducts.length?<div className="ebay-listing-grid">{visibleLocalProducts.map(product=>{const item=product.snapshot.sourceListing;const localMedia=product.snapshot.media.find(media=>media.downloadStatus==='DOWNLOADED');const imageUrl=ebayLocalMediaUrl(localMedia?.localPath||'',localMedia?.remoteUrl||item.imageUrl);const currencyCode=(item.currency||'').trim().toUpperCase();const priceNumber=ebayMoneyNumber(item.price);const cnyPrice=currencyCode==='CNY'||currencyCode==='RMB'||priceNumber<=0?0:priceNumber*readEbayProfitAssumptions(product.id).exchangeRate;return <article className="ebay-market-card ebay-local-product-card" key={product.id}>
@@ -3485,8 +3683,9 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode}:{initialTab?:EbayWorks
         </div>}
         {optimizeMode==='video'&&(contentResult?<EbayVideoStudio listingId={selectedListing.listingId} title={selectedTitle||selectedTitleEnglish} description={currentEnglishDescription} chineseDescription={contentResult.chineseReference||''} imageUrls={finalImageUrls} storyboard={contentResult.storyboard} imagesReady={finalImageInspectionPassed}/>:<div className="ebay-video-storyboard"><header><div><b>15秒产品视频生成</b><small>视频会直接读取描述优化内容和图片优化最终稿。</small></div><button className="primary" disabled={!selectedTitle||busy==='optimize-content'} onClick={()=>void optimizeContent()}>{busy==='optimize-content'?'生成中…':'先生成描述与视频脚本'}</button></header><div className="ebay-ai-placeholder">请先完成02描述优化，系统将自动生成视频脚本并进入方舟视频工作台。</div></div>)}
         {titleResult&&!lockTitleMode&&<div className="ebay-optimization-footer"><div><small>{optimizeMode==='pricing'?'保存后不会直接修改线上商品':`当前环节：${optimizeStageLabels[optimizeMode]}`}</small><b>{optimizeMode==='pricing'?(!complianceCheck?'尚未执行合规知识库检查':complianceCheck.gateStatus==='PASSED'?'合规门禁已通过':complianceCheck.gateStatus==='REVIEW_REQUIRED'&&complianceReviewed?'人工复核已确认':`合规门禁：${complianceCheck.gateStatus}`):nextOptimizeStatus}</b></div>{optimizeMode==='pricing'?<button className="primary" disabled={!selectedTitle||busy==='save-premium'||!complianceCheck||!imageVisualReport||!imageNaturalizationComplete||finalImageChecking||!finalImageInspection||finalImageInspection.blocked>0||finalImageInspection.review>0||complianceCheck.gateStatus==='BLOCKED'||complianceCheck.gateStatus==='RECHECK_REQUIRED'||complianceCheck.gateStatus==='REVIEW_REQUIRED'&&!complianceReviewed} onClick={()=>void saveToPremium()}>{busy==='save-premium'?'保存中…':'确认并存入优品仓库'}</button>:<button className="primary" disabled={!nextOptimizeReady} title={nextOptimizeReady?'进入下一个优化环节':nextOptimizeStatus} onClick={goToNextOptimizeStage}>下一步：{nextOptimizeMode?optimizeStageLabels[nextOptimizeMode]:''}</button>}</div>}</div>:lockTitleMode?<div className="ebay-title-empty-state"><div className="ebay-title-tools"><div className="ebay-title-tools-row"><button type="button" className={titleBrowserUrl==='https://www.ebay.com/'?'active':''} onClick={()=>void openTitleBrowser('https://www.ebay.com/')}>eBay</button><button type="button" className={titleBrowserUrl==='https://www.gigab2b.com/'?'active':''} onClick={()=>void openTitleBrowser('https://www.gigab2b.com/')}>大健云仓</button><button type="button" className={titleCustomUrlOpen?'active':''} onClick={()=>setTitleCustomUrlOpen(open=>!open)}>新建</button><span className="ebay-title-tools-spacer"/><button type="button" className="primary" disabled={!titleUrlInput.trim()||busy==='read-title-url'} onClick={()=>void readTitleProductByUrl()}>{busy==='read-title-url'?'正在读取…':'读取产品'}</button></div>{titleCustomUrlOpen&&<div className="ebay-title-custom-url-row"><input value={titleCustomUrl} onChange={event=>setTitleCustomUrl(event.target.value)} onKeyDown={event=>{if(event.key==='Enter')openTitleCustomUrl()}} placeholder="输入任意网址，例如 https://www.aliexpress.com"/><button type="button" disabled={!titleCustomUrl.trim()} onClick={openTitleCustomUrl}>访问</button></div>}</div><div className="ebay-title-url-form"><header><b>输入目标产品网址</b><small>粘贴 eBay 商品链接，系统读取产品并建立本地快照后，原地开始标题优化。</small></header><div className="ebay-title-url-row"><input value={titleUrlInput} onChange={event=>setTitleUrlInput(event.target.value)} onKeyDown={event=>{if(event.key==='Enter')void readTitleProductByUrl()}} placeholder="https://www.ebay.com/itm/123456789012"/><button type="button" className="primary" disabled={!titleUrlInput.trim()||busy==='read-title-url'} onClick={()=>void readTitleProductByUrl()}>{busy==='read-title-url'?'正在读取…':'读取产品'}</button></div>{titleUrlError&&<p className="ebay-title-url-error">{titleUrlError}</p>}</div>{titleBrowserUrl&&<div className="ebay-title-browser"><div className="ebay-title-browser-bar"><span title={titleBrowserUrl}>{titleBrowserUrl}</span><button type="button" onClick={closeTitleBrowser}>关闭浏览器</button></div><div ref={titleBrowserSlot} className="ebay-title-browser-slot"><div className="browser-placeholder">正在打开浏览器…</div></div></div>}</div>:<EbayEmpty title="请选择本地产品" description="AI优化只读取已下载的本地产品快照，请先在线上产品下载，再从本地产品进入。" action="前往本地产品" onAction={()=>setActiveTab('local')}/>}</section></div>}
-      {activeTab==='premium'&&<div className="ebay-library-layout ebay-premium-layout">
-        <aside className="ebay-product-catalog">
+      {activeTab==='premium'&&<div className={`ebay-library-layout ebay-premium-layout${ebayCatalogPanel.collapsed?' side-collapsed':''}`}>
+        {ebayCatalogPanel.collapsed?<PanelExpandRail panel={ebayCatalogPanel} label="优品目录"/>:<aside className="ebay-product-catalog collapsible-aside">
+          <PanelCollapseButton panel={ebayCatalogPanel}/>
           <header><b>优品目录</b><small>复用当前 eBay 店铺目录，仅统计已保存的优化版本</small></header>
           <button className={premiumCategoryId==='ALL'?'active':''} onClick={()=>setPremiumCategoryId('ALL')}>全部优品 <em>{optimizationDrafts.length}</em></button>
           {categoryWorkspace.categories.length?<EbayStoreCategoryTree categories={categoryWorkspace.categories} listings={premiumListings} selected={premiumCategoryId} onSelect={setPremiumCategoryId}/>:<p className="ebay-category-empty">请先在“店铺采集”中同步目录</p>}
@@ -3498,7 +3697,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode}:{initialTab?:EbayWorks
             <button className={premiumCategoryId==='PREMIUM_MISSING_DECISION'?'active':''} onClick={()=>setPremiumCategoryId('PREMIUM_MISSING_DECISION')}>缺少市场决策 <em>{premiumMissingDecisionCount}</em></button>
             <button className={premiumCategoryId==='UNCLASSIFIED'?'active':''} onClick={()=>setPremiumCategoryId('UNCLASSIFIED')}>未分类 <em>{premiumUnclassifiedCount}</em></button>
           </div>
-        </aside>
+        </aside>}
         <section className="ebay-premium-content">
           <div className="ebay-toolbar ebay-premium-toolbar">
             <input value={premiumSearch} onChange={event=>setPremiumSearch(event.target.value)} placeholder="搜索优化标题、SKU、Item ID"/>
@@ -3736,10 +3935,11 @@ function EmptyState({ title, description, action, onAction }: { title: string; d
 const supportedLanguages = ['中文 zh-CN','英语 en-US','俄语 ru-RU','西班牙语 es-ES','葡萄牙语 pt-BR','法语 fr-FR','德语 de-DE','意大利语 it-IT','波兰语 pl-PL','土耳其语 tr-TR','阿拉伯语 ar-SA','日语 ja-JP','韩语 ko-KR','泰语 th-TH','越南语 vi-VN','印尼语 id-ID']
 
 function AiSupportFramework() {
+  const conversationPanel = usePanelCollapse('support-conversations')
   return <section className="support-page">
     <div className="support-subnav"><button className="active">会话工作台</button><button>知识库</button><button>自动化</button><button>质检报表</button><button>渠道设置</button></div>
-    <div className="support-workspace">
-      <aside className="conversation-pane"><div className="pane-title"><div><b>客户会话</b><small>0 个待处理</small></div><button>筛选</button></div><input className="support-search" placeholder="搜索客户、订单号、会话" /><div className="queue-tabs"><button className="active">待处理</button><button>AI 处理中</button><button>待人工</button></div><div className="support-empty"><span>◌</span><b>尚未接入客服渠道</b><small>后续可连接 Ozon、邮件、网站聊天及其他跨境平台。</small></div></aside>
+    <div className={`support-workspace${conversationPanel.collapsed?' side-collapsed':''}`}>
+      {conversationPanel.collapsed?<PanelExpandRail panel={conversationPanel} label="客户会话"/>:<aside className="conversation-pane collapsible-aside"><PanelCollapseButton panel={conversationPanel}/><div className="pane-title"><div><b>客户会话</b><small>0 个待处理</small></div><button>筛选</button></div><input className="support-search" placeholder="搜索客户、订单号、会话" /><div className="queue-tabs"><button className="active">待处理</button><button>AI 处理中</button><button>待人工</button></div><div className="support-empty"><span>◌</span><b>尚未接入客服渠道</b><small>后续可连接 Ozon、邮件、网站聊天及其他跨境平台。</small></div></aside>}
       <main className="chat-pane"><div className="chat-header"><div><b>多语种 AI 客服</b><small>建议回复模式 · 人工确认后发送</small></div><span className="support-status">安全模式</span></div><div className="chat-onboarding"><div className="ai-orb">AI</div><h2>客服功能框架已就绪</h2><p>接入渠道后，客户原文会自动识别语言、生成中文工作译文，并以客户语言生成回复草稿。</p><div className="language-cloud">{supportedLanguages.map(language=><span key={language}>{language}</span>)}</div></div><div className="composer-disabled"><div>AI 建议回复将在这里生成</div><button disabled>发送回复</button></div></main>
       <aside className="context-pane"><div className="context-section"><b>客户与订单上下文</b><div className="context-row"><span>客户</span><em>待关联</em></div><div className="context-row"><span>销售订单</span><em>待关联</em></div><div className="context-row"><span>物流状态</span><em>待查询</em></div><div className="context-row"><span>原始语言</span><em>自动检测</em></div><div className="context-row"><span>回复语言</span><em>跟随客户</em></div></div><div className="context-section"><b>AI 处理边界</b><ul><li>查询订单、库存和物流</li><li>基于知识库建议回复</li><li>低置信度自动转人工</li><li>退款、取消、补发必须审批</li></ul></div><div className="context-section"><b>知识与审计</b><small>保存知识引用、模型版本、翻译记录、工具调用和人工修改，支持全程追溯。</small></div></aside>
     </div>

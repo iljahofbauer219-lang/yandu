@@ -48,7 +48,7 @@ let AppDatabase: typeof AppDatabaseType
 describe('入库闸口队列迁移', () => {
   beforeAll(async () => {
     await seedLegacyInboundTable()
-    AppDatabase = (await import('../AppDatabase')).AppDatabase
+    AppDatabase = (await import('../AppDatabase.js')).AppDatabase
   })
 
   it('老表平铺行搬运为 origin=ERP 快照行，编辑值覆盖原始值', () => {
