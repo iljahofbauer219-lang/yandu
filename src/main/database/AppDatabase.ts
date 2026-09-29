@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { DatabaseSync } from 'node:sqlite'
 import path from 'node:path'
-import type { CandidateCollectionRecord, CandidateCollectionRun, CandidateUpdateRequest, CandidateWorkspace, CollectedOzonProduct, CollectedSupplyProduct, CollectorDuplicateProduct, CollectorDuplicateStage, CollectorPluginImportResult, ComparisonCostSettings, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonRecordView, ComparisonSupplierMatch, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceAuditEvent, ComplianceBatchRecheckResult, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementAction, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceFinding, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReleasePermit, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceRuleVersion, ComplianceSource, ComplianceSourceChange, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, EbayAcceptanceBatch, EbayCategoryChange, EbayCategorySyncSummary, EbayCategoryWorkspace, EbayCollectedProduct, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayDirectoryProductScanCategory, EbayDirectoryProductSyncCheckpoint, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductSnapshot, EbayLocalProductSnapshotInput, EbayMarketResearchDecisionRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayProductDetails, EbayProductSyncChange, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayStore, EbayStoreCategory, EbayTitleDecision, EbayTitleDecisionInput, EbayTitleHandoff, EliminatedOrigin, EliminatedProductRecord, EliminatedRecordStatus, EliminateRequest, InboundErpIntakeInput, InboundOrigin, InboundPatchInput, InboundProcessingItem, InboundSnapshot, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, SelectionCatalogItem, SelectionDecision, SelectionImportRequest, SelectionTask, SupplyProductDownload, SupplyWarehouseCode, SupplyWarehouseProduct } from '../../shared/contracts'
+import type { CandidateCollectionRecord, CandidateCollectionRun, CandidateUpdateRequest, CandidateWorkspace, CollectedOzonProduct, CollectedSupplyProduct, CollectorDuplicateProduct, CollectorDuplicateStage, CollectorPluginImportResult, ComparisonCostSettings, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonRecordView, ComparisonSupplierMatch, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceAuditEvent, ComplianceBatchRecheckResult, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementAction, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceFinding, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReleasePermit, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceRuleVersion, ComplianceSource, ComplianceSourceChange, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, EbayAcceptanceBatch, EbayCategoryChange, EbayCategorySyncSummary, EbayCategoryWorkspace, EbayCollectedProduct, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayDirectoryProductScanCategory, EbayDirectoryProductSyncCheckpoint, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductSnapshot, EbayLocalProductSnapshotInput, EbayMarketResearchDecisionRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayProductDetails, EbayProductSyncChange, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayStore, EbayStoreCategory, EbayTitleDecision, EbayTitleDecisionInput, EbayTitleHandoff, EliminatedOrigin, EliminatedProductRecord, EliminatedRecordStatus, EliminateRequest, InboundErpIntakeInput, InboundOrigin, InboundProcessingItem, InboundSnapshot, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, SelectionCatalogItem, SelectionDecision, SelectionImportRequest, SelectionTask, SupplyProductDownload, SupplyWarehouseCode, SupplyWarehouseProduct } from '../../shared/contracts'
 import { complianceCheckFingerprint } from '../../shared/complianceFingerprint'
 
 function isUsableCandidateImage(value: string) {
@@ -1333,7 +1333,13 @@ export class AppDatabase {
     this.seedComplianceKnowledge()
     this.database.prepare(`DELETE FROM ebay_listings WHERE status='REMOVED'`).run()
     this.repairPlaceholderCandidateImages()
-    this.getSelectionCatalog().filter(item => item.decision === 'APPROVED' && (item.sourceArea === 'SUPPLY' || Boolean(item.supplierUrl))).forEach(item => this.upsertSupplyWarehouseProduct(item))
+    this.getSelectionCatalog()
+      .filter(item => item.decision === 'APPROVED' && (item.sourceArea === 'SUPPLY' || Boolean(item.supplierUrl)))
+      .forEach(item => {
+        const warehoused = this.database.prepare(`SELECT 1 FROM supply_warehouse_products WHERE selection_id = ? LIMIT 1`).get(item.id)
+        const queued = this.database.prepare(`SELECT 1 FROM inbound_processing_items WHERE origin = 'SELECTION' AND source_id = ? LIMIT 1`).get(item.id)
+        if (!warehoused && !queued) this.upsertInboundFromSelection(item)
+      })
     this.migrateProductIntakeRegistry()
     const ebayStores=this.database.prepare(`SELECT id FROM ebay_stores`).all() as Array<{id:string}>
     ebayStores.forEach(store=>this.reconcileEbayListingCategories(store.id))
@@ -2551,10 +2557,10 @@ export class AppDatabase {
     comparison = this.updateComparison({id:comparison.id,decision:'RECOMMENDED'})
     const imported = this.importSelection({sourceArea:'MARKET',product:comparison.marketProduct,category:request.category,subcategory:request.subcategory,tertiaryCategory:request.tertiaryCategory,comparison})
     const selection = this.updateSelectionDecision(imported.id,'APPROVED')
-    const warehouseProduct = this.getSupplyWarehouseProducts().find(item=>item.selectionId===selection.id)
-    if (!warehouseProduct) throw new Error('供应仓商品生成失败')
-    this.database.prepare(`INSERT INTO workflow_events (task_id, ozon_url, stage, action, detail, created_at) VALUES (?, ?, 'REVERSE_COMPARE', 'PROMOTE_TO_SUPPLY_WAREHOUSE', ?, ?)`).run(comparison.taskId,comparison.marketProduct.url,JSON.stringify({comparisonId:comparison.id,selectionId:selection.id,warehouseProductId:warehouseProduct.id,supplierUrl:primary.url,estimatedMargin:comparison.estimatedMargin}),new Date().toISOString())
-    return {comparison:this.getComparisons().find(item=>item.id===comparison.id)!,selection,warehouseProduct}
+    const inboundItem = this.listInbound().find(item=>item.origin==='SELECTION'&&item.sourceId===selection.id)
+    if (!inboundItem) throw new Error('入库处理队列条目生成失败')
+    this.database.prepare(`INSERT INTO workflow_events (task_id, ozon_url, stage, action, detail, created_at) VALUES (?, ?, 'REVERSE_COMPARE', 'PROMOTE_TO_INBOUND', ?, ?)`).run(comparison.taskId,comparison.marketProduct.url,JSON.stringify({comparisonId:comparison.id,selectionId:selection.id,inboundItemId:inboundItem.id,supplierUrl:primary.url,estimatedMargin:comparison.estimatedMargin}),new Date().toISOString())
+    return {comparison:this.getComparisons().find(item=>item.id===comparison.id)!,selection,inboundItemId:inboundItem.id}
   }
 
   getSelectionCatalog(): SelectionCatalogItem[] {
@@ -2606,7 +2612,7 @@ export class AppDatabase {
     payload.updatedAt = new Date().toISOString()
     this.database.prepare(`UPDATE selection_records SET decision = ?, payload = ?, updated_at = ? WHERE id = ?`).run(decision, JSON.stringify(payload), payload.updatedAt, id)
     if (payload.sourceArea === 'SUPPLY' || payload.supplierUrl) {
-      if (decision === 'APPROVED') this.upsertSupplyWarehouseProduct(payload)
+      if (decision === 'APPROVED') this.upsertInboundFromSelection(payload)
       else this.database.prepare(`UPDATE supply_warehouse_products SET status = 'ARCHIVED', updated_at = ? WHERE selection_id = ?`).run(payload.updatedAt, payload.id)
     }
     return this.getSelectionCatalog().find(item => item.id === id)!
@@ -2771,41 +2777,123 @@ export class AppDatabase {
     }
   }
 
-  /** 重编辑/补标签：仅更新补丁字段并刷新 updated_at */
-  patchInbound(id: string, patch: InboundPatchInput): InboundProcessingItem[] {
-    const sets: string[] = []
-    const values: string[] = []
-    const columns: Array<[keyof InboundPatchInput, string]> = [['titleEdit', 'title_edit'], ['priceEdit', 'price_edit'], ['categoryEdit', 'category_edit'], ['subcategoryEdit', 'subcategory_edit'], ['tertiaryEdit', 'tertiary_edit']]
-    for (const [key, column] of columns) {
-      if (patch[key] !== undefined) { sets.push(`${column} = ?`); values.push(patch[key] as string) }
+  /** 选品审批过闸：APPROVED 不落正式入库，落 SELECTION 待确认快照 */
+  private upsertInboundFromSelection(item: SelectionCatalogItem): InboundProcessingItem[] {
+    const now = new Date().toISOString()
+    const warehouseCode: SupplyWarehouseCode = item.platformCode === 'GIGACLOUD' ? 'GIGACLOUD' : '1688'
+    const snapshot: InboundSnapshot = {
+      platformCode: item.platformCode, warehouseCode, itemCode: item.productId, title: item.title, imageUrl: item.imageUrl, priceText: item.priceText,
+      category: item.category, subcategory: item.subcategory, tertiaryCategory: item.tertiaryCategory,
+      sourceUrl: item.supplierUrl || item.sourceUrl, tags: [], collectedAt: now
     }
-    if (patch.tags !== undefined) { sets.push(`tags = ?`); values.push(JSON.stringify(patch.tags)) }
-    if (sets.length) {
-      sets.push(`updated_at = ?`)
-      values.push(new Date().toISOString(), id)
-      this.database.prepare(`UPDATE inbound_processing_items SET ${sets.join(', ')} WHERE id = ?`).run(...values)
+    return this.upsertInboundRow({ origin: 'SELECTION', sourceId: item.id, selectionId: item.id, snapshot, now })
+  }
+
+  /** 建/刷新队列行；CONFIRMED 行冻结不覆盖 */
+  private upsertInboundRow(input: { origin: InboundOrigin; sourceId: string; selectionId: string; snapshot: InboundSnapshot; now: string }): InboundProcessingItem[] {
+    const existing = this.database.prepare(`SELECT id, status FROM inbound_processing_items WHERE origin = ? AND source_id = ?`).get(input.origin, input.sourceId) as { id: string; status: string } | undefined
+    if (existing && existing.status === 'CONFIRMED') return this.listInbound()
+    const snapshotJson = JSON.stringify(input.snapshot)
+    if (existing) {
+      this.database.prepare(`UPDATE inbound_processing_items SET selection_id = ?, status = 'PENDING', snapshot_json = ?, updated_at = ?, confirmed_at = NULL WHERE id = ?`)
+        .run(input.selectionId, snapshotJson, input.now, existing.id)
+    } else {
+      this.database.prepare(`INSERT INTO inbound_processing_items (id, origin, source_id, selection_id, status, snapshot_json, created_at, updated_at) VALUES (?, ?, ?, ?, 'PENDING', ?, ?, ?)`)
+        .run(crypto.randomUUID(), input.origin, input.sourceId, input.selectionId, snapshotJson, input.now, input.now)
     }
     return this.listInbound()
   }
 
-  /** 审核确认：写入 pallet_warehouse_items（正式入库流）并置 CONFIRMED */
-  confirmInbound(id: string): PalletWarehouseItem[] {
+  /** 服务器采集池 intake（origin=ERP） */
+  erpIntake(rows: InboundErpIntakeInput[]): InboundProcessingItem[] {
+    const now = new Date().toISOString()
+    for (const row of rows) this.upsertInboundRow({ origin: 'ERP', sourceId: row.sourceId, selectionId: '', snapshot: row.snapshot, now })
+    return this.listInbound()
+  }
+
+  /** 重新编辑：覆盖快照回 PENDING；CONFIRMED 冻结 */
+  reeditInbound(id: string, snapshot: InboundSnapshot): InboundProcessingItem[] {
+    const row = this.database.prepare(`SELECT status FROM inbound_processing_items WHERE id = ?`).get(id) as { status: string } | undefined
+    if (!row) throw new Error('待确认产品不存在')
+    if (row.status === 'CONFIRMED') throw new Error('已确认商品请从正式入库退回后再修改')
+    this.database.prepare(`UPDATE inbound_processing_items SET snapshot_json = ?, status = 'PENDING', updated_at = ?, confirmed_at = NULL WHERE id = ?`)
+      .run(JSON.stringify(snapshot), new Date().toISOString(), id)
+    return this.listInbound()
+  }
+
+  /** 审核确认：双写正式入库（ACTIVE）+ 货盘存放，队列置 CONFIRMED */
+  confirmInbound(id: string): InboundProcessingItem[] {
     const row = this.database.prepare(`SELECT * FROM inbound_processing_items WHERE id = ?`).get(id) as Record<string, unknown> | undefined
     if (!row) throw new Error('待确认产品不存在')
     const item = this.mapInboundRow(row)
-    const exists = this.database.prepare(`SELECT 1 FROM pallet_warehouse_items WHERE warehouse_product_id = ? LIMIT 1`).get(item.erpProductId)
-    if (!exists) {
+    if (item.status !== 'PENDING') throw new Error('仅待确认产品可确认入库')
+    const now = new Date().toISOString()
+    const snapshot = item.snapshot
+    const existingWarehouse = this.database.prepare(`SELECT id FROM supply_warehouse_products WHERE warehouse_code = ? AND source_url = ?`).get(snapshot.warehouseCode, snapshot.sourceUrl) as { id: string } | undefined
+    const warehouseId = existingWarehouse?.id || crypto.randomUUID()
+    const payload = JSON.stringify(snapshot)
+    this.database.prepare(`INSERT INTO supply_warehouse_products (id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, payload, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, 'ACTIVE', ?, ?, ?)
+      ON CONFLICT(warehouse_code, source_url) DO UPDATE SET selection_id=excluded.selection_id, product_id=excluded.product_id, title=excluded.title, image_url=excluded.image_url, price_text=excluded.price_text, category=excluded.category, subcategory=excluded.subcategory, tertiary_category=excluded.tertiary_category, status='ACTIVE', payload=excluded.payload, updated_at=excluded.updated_at`)
+      .run(warehouseId, snapshot.warehouseCode, item.selectionId, snapshot.sourceUrl, snapshot.itemCode, snapshot.title, snapshot.imageUrl, snapshot.priceText, snapshot.category, snapshot.subcategory, snapshot.tertiaryCategory, payload, now, now)
+    const palletExists = this.database.prepare(`SELECT 1 FROM pallet_warehouse_items WHERE warehouse_product_id = ? LIMIT 1`).get(warehouseId)
+    if (!palletExists) {
       this.database.prepare(`INSERT INTO pallet_warehouse_items (id, warehouse_product_id, warehouse_code, item_code, title, image_url, price_text, category, subcategory, tertiary_category, source_url, stored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(crypto.randomUUID(), item.erpProductId, item.platformCode || '1688', item.itemCode, item.titleEdit || item.title, item.imageUrl, item.priceEdit || item.priceText, item.categoryEdit || item.category || '未分类', item.subcategoryEdit || item.subcategory || '待人工分类', item.tertiaryEdit || item.tertiaryCategory || '待细分', item.sourceUrl, new Date().toISOString())
+        .run(crypto.randomUUID(), warehouseId, snapshot.warehouseCode, snapshot.itemCode, snapshot.title, snapshot.imageUrl, snapshot.priceText, snapshot.category, snapshot.subcategory, snapshot.tertiaryCategory, snapshot.sourceUrl, now)
     }
-    this.database.prepare(`UPDATE inbound_processing_items SET review_status = 'CONFIRMED', updated_at = ? WHERE id = ?`).run(new Date().toISOString(), id)
-    return this.listPalletItems()
+    this.registerProductIntake(snapshot.warehouseCode, snapshot.itemCode, snapshot.sourceUrl, snapshot.title, 'WAREHOUSE', now)
+    this.database.prepare(`UPDATE inbound_processing_items SET status = 'CONFIRMED', confirmed_at = ?, updated_at = ? WHERE id = ?`).run(now, now, id)
+    return this.listInbound()
   }
 
-  /** 审核驳回：置 REJECTED 并从待确认列表隐藏 */
+  /** 审核驳回：置 REJECTED，不写任何库 */
   rejectInbound(id: string): InboundProcessingItem[] {
-    this.database.prepare(`UPDATE inbound_processing_items SET review_status = 'REJECTED', updated_at = ? WHERE id = ?`).run(new Date().toISOString(), id)
+    this.database.prepare(`UPDATE inbound_processing_items SET status = 'REJECTED', updated_at = ? WHERE id = ?`).run(new Date().toISOString(), id)
     return this.listInbound()
+  }
+
+  /** 单件退回：正式入库归档 + 货盘删除 + 队列回 PENDING（含 CONFIRMED 重置） */
+  returnToInbound(warehouseProductId: string): InboundProcessingItem[] {
+    const row = this.database.prepare(`SELECT * FROM supply_warehouse_products WHERE id = ?`).get(warehouseProductId) as Record<string, unknown> | undefined
+    if (!row || String(row.status) !== 'ACTIVE') throw new Error('正式入库商品不存在或已归档')
+    const now = new Date().toISOString()
+    const selectionId = String(row.selection_id || '')
+    const origin: InboundOrigin = selectionId ? 'SELECTION' : 'ERP'
+    const sourceId = selectionId || warehouseProductId
+    const existing = this.database.prepare(`SELECT id, snapshot_json FROM inbound_processing_items WHERE origin = ? AND source_id = ?`).get(origin, sourceId) as { id: string; snapshot_json: string } | undefined
+    const inheritTags = existing ? (JSON.parse(existing.snapshot_json) as InboundSnapshot).tags : []
+    const snapshot: InboundSnapshot = {
+      platformCode: String(row.warehouse_code), warehouseCode: String(row.warehouse_code) as SupplyWarehouseCode, itemCode: String(row.product_id),
+      title: String(row.title), imageUrl: String(row.image_url), priceText: String(row.price_text),
+      category: String(row.category), subcategory: String(row.subcategory), tertiaryCategory: String(row.tertiary_category),
+      sourceUrl: String(row.source_url), tags: inheritTags, collectedAt: now
+    }
+    const snapshotJson = JSON.stringify(snapshot)
+    if (existing) {
+      this.database.prepare(`UPDATE inbound_processing_items SET selection_id = ?, status = 'PENDING', snapshot_json = ?, updated_at = ?, confirmed_at = NULL WHERE id = ?`)
+        .run(selectionId, snapshotJson, now, existing.id)
+    } else {
+      this.database.prepare(`INSERT INTO inbound_processing_items (id, origin, source_id, selection_id, status, snapshot_json, created_at, updated_at) VALUES (?, ?, ?, ?, 'PENDING', ?, ?, ?)`)
+        .run(crypto.randomUUID(), origin, sourceId, selectionId, snapshotJson, now, now)
+    }
+    this.database.prepare(`UPDATE supply_warehouse_products SET status = 'ARCHIVED', updated_at = ? WHERE id = ?`).run(now, warehouseProductId)
+    this.database.prepare(`DELETE FROM pallet_warehouse_items WHERE warehouse_product_id = ?`).run(warehouseProductId)
+    return this.listInbound()
+  }
+
+  /** 测试专用：直接落 selection_records 行（绕开候选任务依赖） */
+  importSelectionForTest(payload: SelectionCatalogItem): void {
+    this.database.prepare(`INSERT OR IGNORE INTO selection_tasks (id, payload, stage, created_at) VALUES (?, '{}', 'IDLE', ?)`).run(payload.taskId, payload.updatedAt)
+    this.database.prepare(`INSERT INTO selection_records (id, task_id, ozon_url, comparison_id, decision, reason, payload, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(payload.id, payload.taskId, payload.sourceUrl, null, payload.decision, payload.reason, JSON.stringify(payload), payload.updatedAt)
+  }
+
+  /** 测试专用：直接落 ACTIVE 正式入库行（source_url 与选品 payload 一致以满足 UNIQUE） */
+  importWarehouseForTest(id: string, selectionId: string): void {
+    const now = new Date().toISOString()
+    this.database.prepare(`INSERT INTO supply_warehouse_products (id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, payload, created_at, updated_at)
+      VALUES (?, 'GIGACLOUD', ?, ?, 'P1', ?, '', '$10', '', '家具', '卧室家具', '床架', 'ACTIVE', '{}', ?, ?)`)
+      .run(id, selectionId, `https://giga/${selectionId}`, `闸口床 ${selectionId}`, now, now)
   }
 
   getSupplyDownload(warehouseProductId: string): SupplyProductDownload | null {
