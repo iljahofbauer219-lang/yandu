@@ -1,4 +1,4 @@
-import type { BrowserBounds, BrowserState, BrowserTab, BrowserTranslationMode, BrowserTranslationStatus, BuiltInCollectorState, CandidateUpdateRequest, CandidateWorkspace, CollectedOzonProduct, CollectedSupplyProduct, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonRecordView, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, EbayAcceptanceBatch, EbayAcceptanceRunRequest, EbayBrowserPluginState, EbayCategoryWorkspace, EbayCollectionImportResult, EbayConfigurationStatus, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentOptimizationResult, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDeliveryLocationResult, EbayDirectoryProductSyncCheckpoint, EbayDirectoryProductSyncProgress, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReview, EbayImageCandidateReviewRequest, EbayImageGroundingPlan, EbayImageGroundingRequest, EbayImageRoleSuggestionRequest, EbayImageRoleSuggestionResult, EbayListing, EbayLocalProduct, EbayLocalProductSnapshot, EbayLocalProductUpdateInput, EbayLoginResult, EbayMarketResearchDecisionRequest, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayOptimizationExportResult, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayReportImportResult, EbayStore, EbaySyncResult, EbayTitleOptimizationRequest, EbayTitleOptimizationResult, EbayVideoStudioConfiguration, EbayVideoStudioProgress, EbayVideoStudioProject, EbayVideoStudioRequest, ImageGenerationRequest, ImageGenerationResult, ImageMarketingTranslationRequest, ImageMarketingTranslationResult, ImageModelConnection, ImportedProductSource, MarketplaceAccountProfile, MarketplaceCredentialInput, MarketplaceCredentialStatus, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, Platform, RealShiftRequest, RealShiftResult, SelectionCatalogItem, SelectionDecision, SelectionImportRequest, SelectionTask, SelectionTaskDraft, SupplyActivationResult, SupplyWarehouseProduct, TaskProgress, WorkflowCounts } from '../shared/contracts'
+import type { BrowserBounds, BrowserState, BrowserTab, BrowserTranslationMode, BrowserTranslationStatus, BuiltInCollectorState, CandidateUpdateRequest, CandidateWorkspace, CollectedOzonProduct, CollectedSupplyProduct, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonRecordView, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, EbayAcceptanceBatch, EbayAcceptanceRunRequest, EbayBrowserPluginState, EbayCategoryWorkspace, EbayCollectionImportResult, EbayConfigurationStatus, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentOptimizationResult, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDeliveryLocationResult, EbayDirectoryProductSyncCheckpoint, EbayDirectoryProductSyncProgress, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReview, EbayImageCandidateReviewRequest, EbayImageGroundingPlan, EbayImageGroundingRequest, EbayImageRoleSuggestionRequest, EbayImageRoleSuggestionResult, EbayListing, EbayLocalProduct, EbayLocalProductSnapshot, EbayLocalProductUpdateInput, EbayLoginResult, EbayMarketResearchDecisionRequest, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayOptimizationExportResult, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayReportImportResult, EbayStore, EbaySyncResult, EbayTitleOptimizationRequest, EbayTitleOptimizationResult, EbayVideoStudioConfiguration, EbayVideoStudioProgress, EbayVideoStudioProject, EbayVideoStudioRequest, EliminatedProductRecord, EliminateRequest, ImageGenerationRequest, ImageGenerationResult, ImageMarketingTranslationRequest, ImageMarketingTranslationResult, ImageModelConnection, ImportedProductSource, InboundErpIntakeInput, InboundProcessingItem, InboundSnapshot, MarketplaceAccountProfile, MarketplaceCredentialInput, MarketplaceCredentialStatus, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, Platform, RealShiftRequest, RealShiftResult, SelectionCatalogItem, SelectionDecision, SelectionImportRequest, SelectionTask, SelectionTaskDraft, SupplyActivationResult, SupplyProductDownload, SupplyWarehouseProduct, TaskProgress, WorkflowCounts } from '../shared/contracts'
 import type { ComplianceBatchRecheckResult } from '../shared/contracts'
 import type { EbayImageInspectionReport, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayLocalProductMedia, EbayLocalProductMediaUploadInput } from '../shared/contracts'
 import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
@@ -12,6 +12,10 @@ import type { ImagePackageTextExtractionRequest, ImagePackageTextExtractionResul
 import type { AmazonDataSourceSearchResult, AmazonListingEvidence, AmazonMarketSample, AmazonReviewEvidence, AmazonSearchIntent } from '../shared/amazonScraper'
 
 declare module '*.css'
+declare module '*.png' {
+  const src: string
+  export default src
+}
 
 export interface LlmKeyStatus { id: string; configured: boolean; maskedKey: string }
 
@@ -19,6 +23,10 @@ declare global {
   interface Window {
     desktop: {
       platform: string
+      /** Electron 32+ 移除了 File.path；取本地文件绝对路径必须走这里 */
+      file: {
+        getPathForFile(file: File): string
+      }
       windowControls: {
         minimize(): Promise<void>
         toggleMaximize(): Promise<boolean>
@@ -51,6 +59,7 @@ declare global {
       }
       appInfo: {
         checkUpdate(): Promise<{ current: string; latest: string; isLatest: boolean; error: string }>
+        checkUpdateNow(): Promise<{ current: string; latest: string; isLatest: boolean; error: string }>
         openDownload(): Promise<boolean>
         installUpdate(): Promise<boolean>
         onUpdateStatus(callback: (status: { phase: 'downloading' | 'downloaded' | 'error'; version: string; percent?: number; message?: string }) => void): () => void
@@ -210,6 +219,8 @@ declare global {
         getState(platform: Platform): Promise<BrowserState>
         activateSupply(platformCode: '1688' | 'GIGACLOUD'): Promise<SupplyActivationResult>
         openTab(platform: Platform, url: string, title?: string): Promise<string>
+        /** IE 浏览挂载自愈：无通用 web tab 则建默认 nav 站点，已有则补推 tab 快照；返回 tab id 或 null */
+        ensureDefaultNav(): Promise<string | null>
         newTab(): Promise<string>
         switchTab(tabId: string): Promise<void>
         closeTab(tabId: string): Promise<void>
@@ -229,6 +240,13 @@ declare global {
         openEbayDeliveryLocation(): Promise<EbayDeliveryLocationResult>
         onTabs(callback: (tabs: BrowserTab[]) => void): () => void
         onState(callback: (state: BrowserState) => void): () => void
+      }
+      erp: {
+        injectCollector(supplier: { id: string; code: string; name: string; domains: string[] }, crawlRules: Record<string, unknown>): Promise<{ active: boolean; injectedViews: number }>
+        drainOutbox(): Promise<{ active: boolean; supplierId: string; items: any[] }>
+        syncStates(states: Array<{ id: string; state: string }>): Promise<void>
+        collectorState(): Promise<{ active: boolean; supplier: { id: string; code: string; name: string; domains: string[] } | null }>
+        stopCollector(): Promise<void>
       }
       tasks: {
         latest(): Promise<{ task: SelectionTask; products: CollectedOzonProduct[]; supplyProducts?: CollectedSupplyProduct[] } | null>
@@ -250,6 +268,14 @@ declare global {
         decide(id: string, decision: SelectionDecision): Promise<SelectionCatalogItem>
         categorize(id: string, category: string, subcategory: string, tertiaryCategory: string): Promise<SelectionCatalogItem>
         returnToCandidates(id: string): Promise<void>
+      }
+      eliminations: {
+        list(): Promise<EliminatedProductRecord[]>
+        eliminate(input: EliminateRequest): Promise<EliminatedProductRecord>
+        reenable(id: string): Promise<EliminatedProductRecord>
+        delete(ids: string[]): Promise<EliminatedProductRecord[]>
+        getSetting(key: string): Promise<string>
+        setSetting(key: string, value: string): Promise<string>
       }
       comparisons: {
         list(): Promise<ComparisonRecordView[]>
@@ -279,7 +305,24 @@ declare global {
         exportEvidence():Promise<{canceled:boolean;filePath?:string}>
         recheckProfiles(platform?:string,country?:string):Promise<ComplianceBatchRecheckResult>
       }
-      warehouses: { list(): Promise<SupplyWarehouseProduct[]> }
+      warehouses: {
+        list(): Promise<SupplyWarehouseProduct[]>
+        download(warehouseProductId: string, accessToken: string): Promise<SupplyProductDownload>
+        downloads(): Promise<SupplyProductDownload[]>
+        openDownload(warehouseProductId: string): Promise<boolean>
+      }
+      pallet: {
+        list(): Promise<PalletWarehouseItem[]>
+        remove(ids: string[]): Promise<PalletWarehouseItem[]>
+      }
+      inbound: {
+        list(): Promise<InboundProcessingItem[]>
+        erpIntake(rows: InboundErpIntakeInput[], accessToken: string): Promise<InboundProcessingItem[]>
+        reedit(id: string, snapshot: InboundSnapshot, accessToken: string): Promise<InboundProcessingItem[]>
+        confirm(id: string, accessToken: string): Promise<InboundProcessingItem[]>
+        reject(id: string, accessToken: string): Promise<InboundProcessingItem[]>
+        return(warehouseProductId: string, accessToken: string): Promise<InboundProcessingItem[]>
+      }
       marketplaceSelections: {
         list(marketplaceCode: MarketplacePlatformCode): Promise<MarketplaceSelectionProduct[]>
         import(marketplaceCode: MarketplacePlatformCode, supplyProductId: string): Promise<MarketplaceSelectionProduct>
@@ -449,6 +492,10 @@ export interface ArticleCrawlerImportResult {
   kbName: string
   uploaded: Array<{ fileName: string; docId: string }>
   failed: Array<{ fileName: string; error: string }>
+}
+
+declare global {
+  const __BUILD_STAMP__: string
 }
 
 export {}

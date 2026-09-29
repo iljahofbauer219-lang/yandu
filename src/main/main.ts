@@ -8,7 +8,8 @@ import { createHash } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
-import { BrowserWorkspace } from './browser/BrowserWorkspace'
+import { hotFile } from './hotPaths'
+import { BrowserWorkspace, EBAY_STORE_VIEW_REQUIRED } from './browser/BrowserWorkspace'
 import { AppDatabase } from './database/AppDatabase'
 import { BailianImageService } from './services/BailianImageService'
 import { VolcImageService } from './services/VolcImageService'
@@ -17,6 +18,8 @@ import { LinduoImageService } from './services/LinduoImageService'
 import { LinduoLoginService } from './services/LinduoLoginService'
 import { LinduoChatModelService } from './services/LinduoChatModelService'
 import { BailianTranslationService } from './services/BailianTranslationService'
+import { SupplyProductDownloadService } from './services/SupplyProductDownloadService'
+import { requireInboundEditPermission } from './services/InboundPermissionGuard'
 import { FeishuBotService } from './services/FeishuBotService'
 import { RealShiftService } from './services/RealShiftService'
 import { EbayService } from './services/EbayService'
@@ -110,7 +113,7 @@ import { isLocalServerUrl, readServerUrl, writeServerUrl } from './serverConfig'
 import { autoUpdater } from 'electron-updater'
 import { reloadLinduoChatModels, shutdownAdvisorRuntime } from './advisor/AdvisorRuntime'
 import { auditEbayTitle } from '../shared/ebayTitleAudit'
-import type { BrowserBounds, BrowserTranslationMode, CandidateUpdateRequest, CollectedOzonProduct, CollectedSupplyProduct, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, CollectorPluginProduct, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonUpdateRequest, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceDocumentDraft, ComplianceEnforcementStatus, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReviewStatus, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceTaskStatus, EbayAcceptanceBatch, EbayAcceptanceCheck, EbayAcceptanceItemResult, EbayAcceptanceRunRequest, EbayAcceptanceScenarioResult, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReviewRequest, EbayImageGroundingRequest, EbayImageInspection, EbayImageInspectionReport, EbayImageRoleSuggestionRequest, EbayImageStage, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductMedia, EbayLocalProductMediaUploadInput, EbayLocalProductSnapshotInput, EbayLocalProductUpdateInput, EbayMarketKeywordStat, EbayMarketResearchDecisionRequest, EbayMarketResearchFinding, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayProductDetails, EbayPublishAuditEvent, EbayPublishComparisonItem, EbayPublishTask, EbaySellerHubAcceptanceSnapshot, EbayStageGroundingRequest, EbayStageStoryboardRequest, EbayTitleDecisionInput, EbayTitleOptimizationRequest, EbayVideoStudioRequest, ImageGenerationRequest, ImageModelProfile, ImportedProductImage, ImportedProductSource, MarketplaceCredentialInput, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePublishDraftUpdate, NetworkStrategy, Platform, RealShiftRequest, SelectionDecision, SelectionImportRequest, SelectionTask, SelectionTaskDraft, SupplyPlatformCode, TaskProgress } from '../shared/contracts'
+import type { BrowserBounds, BrowserTranslationMode, CandidateUpdateRequest, CollectedOzonProduct, CollectedSupplyProduct, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, CollectorPluginProduct, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonUpdateRequest, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceDocumentDraft, ComplianceEnforcementStatus, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReviewStatus, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceTaskStatus, EbayAcceptanceBatch, EbayAcceptanceCheck, EbayAcceptanceItemResult, EbayAcceptanceRunRequest, EbayAcceptanceScenarioResult, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReviewRequest, EbayImageGroundingRequest, EbayImageInspection, EbayImageInspectionReport, EbayImageRoleSuggestionRequest, EbayImageStage, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductMedia, EbayLocalProductMediaUploadInput, EbayLocalProductSnapshotInput, EbayLocalProductUpdateInput, EbayMarketKeywordStat, EbayMarketResearchDecisionRequest, EbayMarketResearchFinding, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayProductDetails, EbayPublishAuditEvent, EbayPublishComparisonItem, EbayPublishTask, EbaySellerHubAcceptanceSnapshot, EbayStageGroundingRequest, EbayStageStoryboardRequest, EbayTitleDecisionInput, EbayTitleOptimizationRequest, EbayVideoStudioRequest, EliminateRequest, ImageGenerationRequest, ImageModelProfile, ImportedProductImage, ImportedProductSource, InboundErpIntakeInput, InboundSnapshot, MarketplaceCredentialInput, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePublishDraftUpdate, NetworkStrategy, Platform, RealShiftRequest, SelectionDecision, SelectionImportRequest, SelectionTask, SelectionTaskDraft, SupplyPlatformCode, TaskProgress } from '../shared/contracts'
 
 import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
 import type { AiEmployeeAskRequest } from '../shared/aiEmployee'
@@ -208,8 +211,16 @@ function validateBuiltInCollectorProducts(products: CollectorPluginProduct[]) {
   })
 }
 
+// 打包态 asar 内无 .env.local 且双击启动 cwd 不可控，userData 是唯一可读写位置；开发态仓库根 .env.local 优先，保持开发行为不变
+function envLocalCandidates(): string[] {
+  const userData = path.join(app.getPath('userData'), '.env.local')
+  const appPath = path.join(app.getAppPath(), '.env.local')
+  const cwdPath = path.join(process.cwd(), '.env.local')
+  return app.isPackaged ? [userData, appPath, cwdPath] : [cwdPath, appPath, userData]
+}
+
 function loadLocalEnvironment() {
-  const file = [path.join(app.getAppPath(), '.env.local'), path.join(process.cwd(), '.env.local')].find(candidate => fs.existsSync(candidate))
+  const file = envLocalCandidates().find(candidate => fs.existsSync(candidate))
   if (!file) return
   for (const line of fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/)) {
     const match = line.match(/^([A-Z0-9_]+)=(.*)$/)
@@ -218,19 +229,19 @@ function loadLocalEnvironment() {
 }
 
 loadLocalEnvironment()
-const imageService = new BailianImageService(
+let imageService = new BailianImageService(
   process.env.BAILIAN_API_KEY || '',
   process.env.BAILIAN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
 )
-const volcImageService = new VolcImageService(
+let volcImageService = new VolcImageService(
   process.env.ARK_API_KEY || '',
   process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3'
 )
-const openaiImageService = new OpenAIImageService(
+let openaiImageService = new OpenAIImageService(
   process.env.OPENAI_IMAGE_API_KEY || '',
   process.env.IMAGE_PROXY_URL || ''
 )
-const linduoImageService = new LinduoImageService(
+let linduoImageService = new LinduoImageService(
   process.env.LINDUO_API_KEY || '',
   process.env.LINDUO_BASE_URL || 'https://api000.com/v1'
 )
@@ -238,30 +249,47 @@ const linduoImageService = new LinduoImageService(
 const linduoLoginService = new LinduoLoginService()
 // 零度API 聊天模型选用 + 用户授权 IPC 桥（M1，转发到 Fastify /api/linduo/{chat-models,grants,preferred-model}）
 const linduoChatModelService = new LinduoChatModelService()
-const ebayImageComplianceVisionService = new EbayImageComplianceVisionService(
+let ebayImageComplianceVisionService = new EbayImageComplianceVisionService(
   process.env.BAILIAN_API_KEY || '',
   process.env.BAILIAN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
   process.env.BAILIAN_VISION_MODEL || 'qwen3.6-flash'
 )
-const ebayImageGroundingService = new EbayImageGroundingService(
+let ebayImageGroundingService = new EbayImageGroundingService(
   process.env.BAILIAN_API_KEY || '',
   process.env.BAILIAN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
   process.env.BAILIAN_IMAGE_GROUNDING_MODEL || process.env.BAILIAN_VISION_MODEL || 'qwen3.6-flash'
 )
-const translationService = new BailianTranslationService(
-  process.env.BAILIAN_API_KEY || '',
-  process.env.BAILIAN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-)
+const translationService = new BailianTranslationService()
 const ebayService = new EbayService(
   process.env.EBAY_CLIENT_ID || '',
   process.env.EBAY_CLIENT_SECRET || '',
   process.env.EBAY_RUNAME || ''
 )
-const ebayOptimizationService = new EbayOptimizationService(
+let ebayOptimizationService = new EbayOptimizationService(
   process.env.DEEPSEEK_API_KEY || '',
   process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
   process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash'
 )
+// P2-27①：llm-keys:save 保存后热重建绑定该 Key 的服务实例（旧实例构造参数持有旧 Key 快照，此前需重启才生效）。
+// 所有 IPC handler 均在调用时读模块级变量，故 let 重赋值即可传播。
+function refreshLlmBoundServices(envName: string): void {
+  if (envName === 'BAILIAN_API_KEY') {
+    const key = process.env.BAILIAN_API_KEY || ''
+    const base = process.env.BAILIAN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+    imageService = new BailianImageService(key, base)
+    ebayImageComplianceVisionService = new EbayImageComplianceVisionService(key, base, process.env.BAILIAN_VISION_MODEL || 'qwen3.6-flash')
+    ebayImageGroundingService = new EbayImageGroundingService(key, base, process.env.BAILIAN_IMAGE_GROUNDING_MODEL || process.env.BAILIAN_VISION_MODEL || 'qwen3.6-flash')
+  } else if (envName === 'DEEPSEEK_API_KEY') {
+    ebayOptimizationService = new EbayOptimizationService(process.env.DEEPSEEK_API_KEY || '', process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com', process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash')
+  } else if (envName === 'ARK_API_KEY') {
+    volcImageService = new VolcImageService(process.env.ARK_API_KEY || '', process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3')
+  } else if (envName === 'OPENAI_IMAGE_API_KEY') {
+    openaiImageService = new OpenAIImageService(process.env.OPENAI_IMAGE_API_KEY || '', process.env.IMAGE_PROXY_URL || '')
+  } else if (envName === 'LINDUO_API_KEY') {
+    linduoImageService = new LinduoImageService(process.env.LINDUO_API_KEY || '', process.env.LINDUO_BASE_URL || 'https://api000.com/v1')
+  }
+}
+
 const aiEmployeeChatService = new AiEmployeeChatService()
 // 阶段 3.1：知识库服务已完全切到 MaxKB v2.10.5-lts CE
 // - MaxkbKnowledgeService 复用 KbListView/KbDocView/KbDocsView 接口供前端 KnowledgeHub / 守卫调度统一
@@ -328,6 +356,9 @@ function newEbayBrowserTab(storeId:string) {
   return workspace.newEbayTab(`ebay:${store.id}`,store.name)
 }
 
+/** 店铺浏览视图未打开 → 自动开 Seller Hub 后重试。用 code 判定，不要再用消息子串（抛出点文案有两种） */
+const isEbayStoreViewRequired=(error:unknown)=>error instanceof Error&&(error as Error&{code?:string}).code===EBAY_STORE_VIEW_REQUIRED
+
 async function openEbayProductTab(storeId:string,url:string,title:string) {
   const store=database?.getEbayStores().find(item=>item.id===storeId)
   if(!store)throw new Error('eBay 店铺不存在')
@@ -336,7 +367,7 @@ async function openEbayProductTab(storeId:string,url:string,title:string) {
   try {
     return await open()
   } catch(error) {
-    if(!(error instanceof Error)||!error.message.includes('请先打开当前eBay店铺'))throw error
+    if(!isEbayStoreViewRequired(error))throw error
     await openEbaySellerHub(storeId)
     return open()
   }
@@ -357,7 +388,7 @@ async function openEbayMarketResearch(storeId:string,request:EbayMarketResearchR
   const open=()=>workspace!.newEbayTab(`ebay:${store.id}`,'eBay 已成交市场研究',researchUrl.toString())
   try { return await open() }
   catch(error) {
-    if(!(error instanceof Error)||!error.message.includes('请先打开当前eBay店铺浏览器'))throw error
+    if(!isEbayStoreViewRequired(error))throw error
     await openEbaySellerHub(storeId)
     return open()
   }
@@ -394,7 +425,7 @@ async function syncEbayProductDetails(storeId:string,listingId:string) {
   let details
   try { details=await read() }
   catch(error) {
-    if(!(error instanceof Error)||!error.message.includes('请先打开当前eBay店铺浏览器'))throw error
+    if(!isEbayStoreViewRequired(error))throw error
     await openEbaySellerHub(storeId)
     details=await read()
   }
@@ -447,7 +478,7 @@ async function downloadEbayLocalProduct(storeId:string,listingId:string):Promise
   let liveDetails:EbayProductDetails
   try { liveDetails=await read() }
   catch(error) {
-    if(!(error instanceof Error)||!error.message.includes('请先打开当前eBay店铺'))throw error
+    if(!isEbayStoreViewRequired(error))throw error
     await openEbaySellerHub(storeId)
     liveDetails=await read()
   }
@@ -524,7 +555,7 @@ async function readEbayProductByUrl(storeId:string,rawUrl:string):Promise<EbayLo
   let details:EbayProductDetails
   try { details=await read() }
   catch(error) {
-    if(!(error instanceof Error)||!error.message.includes('请先打开当前eBay店铺'))throw error
+    if(!isEbayStoreViewRequired(error))throw error
     await openEbaySellerHub(storeId)
     details=await read()
   }
@@ -1359,7 +1390,12 @@ function scheduleComplianceSourceSync() {
 }
 
 const hasSingleInstanceLock = process.env.CODEX_UI_TEST==='1'||app.requestSingleInstanceLock()
-if (!hasSingleInstanceLock) app.quit()
+// 单实例冲突可观测化：此前静默 quit 会造成“点击图标无任何窗口、无日志”的假死现象，现统一记录退出原因到 userData/startup-guard.log
+const noteGuardExit = (reason: string) => {
+  console.error(`[instance-guard] ${reason}，本实例退出`)
+  try { fs.appendFileSync(path.join(app.getPath('userData'), 'startup-guard.log'), `[${new Date().toISOString()}] instance-guard exit: ${reason}\n`) } catch { /* 忽略日志写入失败 */ }
+}
+if (!hasSingleInstanceLock) { noteGuardExit('原生单实例锁已被其它实例持有'); app.quit() }
 
 // 原生单实例锁在部分 macOS 环境实测失效（曾出现双窗口并存），加固定端口硬锁兜底：
 // 端口被占 → 主实例已存在 → 通知其置前后本实例退出；验证场景（CODEX_UI_TEST / --user-data-dir）豁免
@@ -1376,7 +1412,7 @@ const instanceGuard: Promise<boolean> = skipInstanceGuard ? Promise.resolve(true
   })
   server.listen(SINGLE_INSTANCE_PORT, '127.0.0.1', () => resolve(true))
 })
-void instanceGuard.then(ok => { if (!ok) app.quit() })
+void instanceGuard.then(ok => { if (!ok) { noteGuardExit(`固定端口 ${SINGLE_INSTANCE_PORT} 被占用，判定主实例已在运行`); app.quit() } })
 
 let mediaProtocolReady=false
 function registerMediaProtocol() {
@@ -1405,19 +1441,27 @@ function registerMediaProtocol() {
           ?path.join(app.getPath('userData'),'watch-skill-results')
         :''
     if(!root)return new Response('Not found',{status:404})
+    const decoded=decodeURIComponent(url.pathname.slice(1))
+    // 约定（P2-27②）：ebay 主机存「相对 root」路径；local/watch 的历史持久化记录存绝对路径。
+    // 此处统一归一为相对再 resolve：绝对路径先剥 root 前缀，越权路径会被相对成 ../.. 而被下方前缀检查拦下。
     const filePath=url.hostname==='ebay'
-      ?path.resolve(root,decodeURIComponent(url.pathname.slice(1)))
-      :decodeURIComponent(url.pathname.slice(1))
+      ?path.resolve(root,decoded)
+      :path.resolve(root,path.isAbsolute(decoded)?path.relative(root,decoded):decoded)
     if(!filePath.startsWith(`${root}${path.sep}`)||!fs.existsSync(filePath))return new Response('Not found',{status:404})
     return net.fetch(pathToFileURL(filePath).toString())
   })
 }
+
+// 主窗口统一显示入口：createWindow 内赋值；修复 macOS 双击启动后窗口“已创建但未显示/未前置”需二次点击唤醒的问题
+let revealMainWindow: () => void = () => undefined
+let mainWindowRevealed = false
 
 function createWindow() {
   registerMediaProtocol()
   database ??= new AppDatabase()
   scheduleComplianceSourceSync()
   mainWindow = new BaseWindow({
+    show: false,
     width: 1440,
     height: 900,
     minWidth: 1100,
@@ -1430,7 +1474,7 @@ function createWindow() {
 
   const shell = new WebContentsView({
     webPreferences: {
-      preload: path.join(__dirname, '../preload/preload.js'),
+      preload: hotFile('main-dist', 'preload', 'preload.js') ?? path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true
@@ -1445,10 +1489,25 @@ function createWindow() {
   resizeShell()
   mainWindow.on('resize', resizeShell)
 
+  revealMainWindow = () => {
+    if (!mainWindow) return
+    resizeShell()
+    mainWindow.show()
+    mainWindow.restore()
+    mainWindow.focus()
+    mainWindow.moveTop()
+    if (!mainWindowRevealed) {
+      mainWindowRevealed = true
+      console.log('[boot] main window revealed')
+    }
+  }
+
   shellWebContents = shell.webContents
   const devUrl = process.env.VITE_DEV_SERVER_URL
   if (devUrl) void shell.webContents.loadURL(devUrl)
-  else void shell.webContents.loadFile(path.join(__dirname, '../../renderer/index.html'))
+  else void shell.webContents.loadFile(hotFile('renderer', 'index.html') ?? path.join(__dirname, '../../renderer/index.html'))
+  // 兜底：渲染加载事件延迟或未触发时，1.2s 后无条件显示窗口，避免“启动后无窗口”假死；reveal 幂等
+  setTimeout(() => revealMainWindow(), 1200).unref()
 
   shell.webContents.on('console-message', (_event, _level, message, line, sourceId) => {
     if (/\b(error|exception|failed)\b/i.test(message)) console.error(`[renderer:${line}] ${message} (${sourceId})`)
@@ -1460,7 +1519,9 @@ function createWindow() {
   // 原因：在 renderer 端 IEBrowserPanel 会被 React StrictMode 双调用 useEffect + App.tsx IIFE 路由 remount，
   // 模块级 flag 不安全。这里改在主进程主动开，不受 renderer 重挂载影响。
   // 限制为首次加载（once: true），用户手动 reload renderer 时不会重复开。
+  shell.webContents.once('dom-ready', () => revealMainWindow())
   shell.webContents.once('did-finish-load', () => {
+    revealMainWindow()
     void workspace?.openDefaultNavIfNeeded()
   })
 
@@ -1599,6 +1660,20 @@ ipcMain.handle('browser:supply:activate', async (_event, platformCode: '1688' | 
     ?? { platformCode, loginStatus:'UNKNOWN', message:'已取消过期的大健云仓登录检查', url:'', autoLoginAttempted:false }
 })
 ipcMain.handle('browser:open-tab', (_event, platform: Platform, url: string, title?: string) => workspace?.openTab(platform, url, title))
+// IE 浏览面板挂载时自愈调用：没有通用 web tab 就建默认 nav 站点，已有则补推一次 tab 快照
+ipcMain.handle('browser:ensure-default-nav', () => workspace?.openDefaultNavIfNeeded() ?? Promise.resolve(null))
+// ERP 通用采集注入器（crawl_rules 驱动）：渲染层 CollectWorkbench 通过下列通道驱动内嵌浏览器采集
+ipcMain.handle('erp:inject-collector', (_event, supplier: { id: string; code: string; name: string; domains: string[] }, crawlRules: Record<string, unknown>) => {
+  if (!workspace) throw new Error('采集浏览器尚未初始化')
+  return workspace.injectErpCollector(supplier, crawlRules)
+})
+ipcMain.handle('erp:drain-outbox', () => {
+  if (!workspace) return { active: false, supplierId: '', items: [] }
+  return workspace.drainErpOutbox()
+})
+ipcMain.handle('erp:sync-states', (_event, states: Array<{ id: string; state: string }>) => workspace?.syncErpCollectorStates(states))
+ipcMain.handle('erp:collector-state', () => workspace?.getErpCollectorState() ?? { active: false, supplier: null })
+ipcMain.handle('erp:stop-collector', () => workspace?.stopErpCollector())
 ipcMain.handle('system:open-vpn-panel', () => shell.openExternal('https://89.208.249.7:54321/5NEmm8ylBTB6cwij1Y/'))
 ipcMain.handle('system:open-external', (_event, url: string) => {
   const parsed = new URL(url)
@@ -1919,9 +1994,10 @@ const LLM_KEY_ENV_NAME: Record<string, string> = {
   openai: 'OPENAI_IMAGE_API_KEY',
   linduo: 'LINDUO_API_KEY'
 }
-// 与 loadLocalEnvironment 的查找顺序保持一致；两者都不存在时默认落到 app.getAppPath()/.env.local
+// 与 loadLocalEnvironment 的查找顺序保持一致；打包态回写 userData（asar 只读不可写），开发态优先仓库内既有文件
 function envLocalFilePath(): string {
-  const candidates = [path.join(app.getAppPath(), '.env.local'), path.join(process.cwd(), '.env.local')]
+  const candidates = envLocalCandidates()
+  if (app.isPackaged) return candidates[0]
   return candidates.find(candidate => fs.existsSync(candidate)) ?? candidates[0]
 }
 // 按行回写：仅替换 ^KEY= 行的值，保留其余行/注释/顺序与换行风格；缺失则在文件末尾追加；空值写 KEY=（视为清除）
@@ -1956,6 +2032,7 @@ ipcMain.handle('llm-keys:save', (_event, input: { id?: string; value?: string })
     const value = String(input?.value ?? '').trim()
     writeEnvLocalKey(envName, value)
     process.env[envName] = value
+    refreshLlmBoundServices(envName)
     return { ok: true }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : '保存失败' }
@@ -2481,12 +2558,67 @@ ipcMain.handle('selection:import', (_event, request: SelectionImportRequest) => 
 ipcMain.handle('selection:decide', (_event, id: string, decision: SelectionDecision) => database?.updateSelectionDecision(id, decision))
 ipcMain.handle('selection:categorize', (_event, id: string, category: string, subcategory: string, tertiaryCategory: string) => database?.updateSelectionCategory(id, category, subcategory, tertiaryCategory))
 ipcMain.handle('selection:return-to-candidates', (_event, id: string) => database?.returnSelectionToCandidates(id))
+ipcMain.handle('elimination:list', () => database?.listEliminatedProducts() ?? [])
+ipcMain.handle('elimination:eliminate', (_event, input: EliminateRequest) => database?.eliminateProduct(input))
+ipcMain.handle('elimination:reenable', (_event, id: string) => database?.reenableEliminated(id))
+ipcMain.handle('elimination:delete', (_event, ids: string[]) => database?.deleteEliminated(ids ?? []))
+ipcMain.handle('elimination:settings:get', (_event, key: string) => database?.getEliminationSetting(key) ?? '')
+ipcMain.handle('elimination:settings:set', (_event, key: string, value: string) => database?.setEliminationSetting(key, value))
 ipcMain.handle('comparison:list', () => database?.getComparisons() ?? [])
 ipcMain.handle('comparison:import', (_event, request: ComparisonImportRequest) => database?.importComparison(request))
 ipcMain.handle('comparison:update', (_event, request: ComparisonUpdateRequest) => database?.updateComparison(request))
 ipcMain.handle('comparison:promote', (_event, request: ComparisonPromotionRequest) => database?.promoteComparisonToWarehouse(request))
 ipcMain.handle('workflow:counts', () => database?.getWorkflowCounts() ?? { collected: 0, compared: 0, selected: 0, stocked: 0, listed: 0, purchasing: 0, reconciled: 0 })
 ipcMain.handle('warehouse:list', () => database?.getSupplyWarehouseProducts() ?? [])
+ipcMain.handle('warehouse:download', async (_event, warehouseProductId: string, accessToken: string) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  if (!workspace) throw new Error('应用内浏览器尚未初始化')
+  try {
+    return await new SupplyProductDownloadService(database, workspace).download(warehouseProductId, accessToken)
+  } catch (error) {
+    // IPC 不保留自定义 error.code：会话过期以消息码透传，渲染端刷新后重试一次
+    if ((error as { code?: string }).code === 'SERVER_SESSION_EXPIRED') throw new Error('SERVER_SESSION_EXPIRED')
+    throw error
+  }
+})
+ipcMain.handle('warehouse:download-list', () => database?.listSupplyDownloads() ?? [])
+ipcMain.handle('warehouse:open-download', async (_event, warehouseProductId: string) => {
+  const record = database?.listSupplyDownloads().find(item => item.warehouseProductId === warehouseProductId)
+  if (!record?.pageUrl) throw new Error('该商品还没有服务器详情页')
+  await shell.openExternal(record.pageUrl)
+  return true
+})
+ipcMain.handle('pallet:list', () => database?.listPalletItems() ?? [])
+ipcMain.handle('pallet:remove', (_event, ids: string[]) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  return database.removePalletItems(Array.isArray(ids) ? ids : [])
+})
+ipcMain.handle('inbound:list', () => database?.listInbound() ?? [])
+ipcMain.handle('erp:intake', async (_event, rows: InboundErpIntakeInput[], accessToken: string) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  await requireInboundEditPermission(accessToken)
+  return database.erpIntake(Array.isArray(rows) ? rows : [])
+})
+ipcMain.handle('inbound:reedit', async (_event, id: string, snapshot: InboundSnapshot, accessToken: string) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  await requireInboundEditPermission(accessToken)
+  return database.reeditInbound(id, snapshot)
+})
+ipcMain.handle('inbound:confirm', async (_event, id: string, accessToken: string) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  await requireInboundEditPermission(accessToken)
+  return database.confirmInbound(id)
+})
+ipcMain.handle('inbound:reject', async (_event, id: string, accessToken: string) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  await requireInboundEditPermission(accessToken)
+  return database.rejectInbound(id)
+})
+ipcMain.handle('inbound:return', async (_event, warehouseProductId: string, accessToken: string) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  await requireInboundEditPermission(accessToken)
+  return database.returnToInbound(warehouseProductId)
+})
 ipcMain.handle('marketplace-selection:list', (_event, marketplaceCode: MarketplacePlatformCode) => database?.getMarketplaceSelections(marketplaceCode) ?? [])
 ipcMain.handle('marketplace-selection:import', (_event, marketplaceCode: MarketplacePlatformCode, supplyProductId: string) => database?.importMarketplaceSelection(marketplaceCode, supplyProductId))
 ipcMain.handle('marketplace-media:list', (_event, marketplaceSelectionId: string) => database?.getMarketplaceMediaAssets(marketplaceSelectionId) ?? [])
@@ -2969,6 +3101,19 @@ ipcMain.handle('task:start', async (event, taskId: string) => {
 ipcMain.handle('task:preview', async (event, taskId: string) => {
   const task = tasks.get(taskId) ?? database?.getTask(taskId)
   if (!task) throw new Error('任务不存在，请重新创建')
+  // UI验收 mock：CODEX_UI_TEST 下关键词为 AC-UI-MOCK 的任务返回确定性预采集列表，不做真实网络采集（tools/verify-ai-collect-nav-ui.cjs）
+  if (process.env.CODEX_UI_TEST === '1' && task.keyword === 'AC-UI-MOCK') {
+    return {
+      task,
+      products: [
+        { productId: 'P-1', url: 'https://example.com/p/1', title: 'Mock 商品一 · 宠物美容刷套装', priceText: '¥19.9', originalPriceText: '¥25.9', imageUrl: '', brand: 'MockBrand', attributeCount: 3 },
+        { productId: 'P-2', url: 'https://example.com/p/2', title: 'Mock 商品二 · 不锈钢宠物碗', priceText: '¥29.9', originalPriceText: '¥39.9', imageUrl: '', brand: 'MockBrand', attributeCount: 2 }
+      ],
+      supplyProducts: [
+        { platformCode: '1688', productId: '699100100', url: 'https://detail.1688.com/offer/699100100.html', title: '1688 Mock 货源 · 阶梯价批发', imageUrl: '', priceText: '¥8.50', salesText: '月销 120', supplierName: 'Mock工厂', supplierBadges: [], categoryTopRank: null, returnRate: null, networkSalesCount: null, serviceRating: null, serviceDetails: {}, dataCompleteness: 80, score: 80, grade: 'A', dimensionScores: {}, recommendation: 'UI验收样本', riskFlags: [], selected: false }
+      ]
+    }
+  }
   return previewTask(task, progress => event.sender.send('task:progress', progress))
 })
 ipcMain.handle('task:confirm-preview', async (event, request: CollectionPreviewConfirmRequest) => {
@@ -3013,22 +3158,42 @@ function compareVersions(a: string, b: string): number {
   }
   return 0
 }
-ipcMain.handle('app:check-update', async () => {
+// 平台对应 feed：mac 读 latest-mac.yml、win 读 latest.yml（旧实现 mac 也读 latest.yml，win 断更时 mac 会误判）
+function updateFeedName(): string {
+  return process.platform === 'darwin' ? 'latest-mac.yml' : 'latest.yml'
+}
+
+async function readFeedVersion(): Promise<{ current: string; latest: string; isLatest: boolean; error: string }> {
   const current = app.getVersion()
   try {
-    const response = await net.fetch(`${UPDATE_BASE_URL}latest.yml`, { signal: AbortSignal.timeout(10000) })
+    const response = await net.fetch(`${UPDATE_BASE_URL}${updateFeedName()}`, { signal: AbortSignal.timeout(10000) })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const text = await response.text()
     const matched = text.match(/^version:\s*([0-9][^\s]*)/m)
     const latest = matched ? matched[1] : ''
     return { current, latest, isLatest: !latest || compareVersions(current, latest) >= 0, error: '' }
   } catch (error) {
-    return { current, latest: '', isLatest: true, error: error instanceof Error ? error.message : String(error) }
+    return { current, latest: '', isLatest: false, error: error instanceof Error ? error.message : String(error) }
   }
+}
+
+ipcMain.handle('app:check-update', async () => {
+  const result = await readFeedVersion()
+  if (result.error) return { ...result, isLatest: true } // 登录门禁语义：检查失败不拦截登录（SessionGate 依 error 展示失败态）
+  return result
 })
 ipcMain.handle('app:open-download', () => {
   void shell.openExternal(`${readServerUrl().replace(/\/+$/, '')}/download/`).catch(() => undefined)
   return true
+})
+// 登录页「检查更新」按钮：既回读 feed 版本，也真正驱动 autoUpdater 检查+自动下载（根治项 C）
+ipcMain.handle('app:check-update-now', async () => {
+  if (app.isPackaged) {
+    void autoUpdater.checkForUpdates().catch(error => {
+      sendUpdateStatus({ phase: 'error', version: app.getVersion(), message: error instanceof Error ? error.message : String(error) })
+    })
+  }
+  return readFeedVersion()
 })
 if (hasSingleInstanceLock) app.whenReady().then(async () => {
   session.defaultSession.setCertificateVerifyProc((request, callback) => {
@@ -3119,7 +3284,11 @@ function initAutoUpdate() {
     console.error('[updater] 自动更新失败：', error.message)
     sendUpdateStatus({ phase: 'error', version: pendingVersion || app.getVersion(), message: error.message })
   })
-  void autoUpdater.checkForUpdates().catch(() => undefined)
+  // 启动即查；失败（断网/源抖动）5 分钟后自动补查一次，避免「静默错过本轮更新窗口」（根治项 C）
+  const scheduleRetry = (delayMs: number) => setTimeout(() => { void autoUpdater.checkForUpdates().catch(() => undefined) }, delayMs)
+  void autoUpdater.checkForUpdates().then(result => {
+    if (!result || !result.updateInfo) scheduleRetry(5 * 60 * 1000)
+  }).catch(() => scheduleRetry(5 * 60 * 1000))
   setInterval(() => { void autoUpdater.checkForUpdates().catch(() => undefined) }, 4 * 60 * 60 * 1000)
 }
 // 渲染层悬浮提示/登录门禁点「重启安装」时触发（与弹窗的「立即重启安装」等价）
@@ -3155,4 +3324,5 @@ app.on('window-all-closed', () => {
 })
 app.on('activate', () => {
   if (!mainWindow) createWindow()
+  else if (!mainWindow.isVisible() || mainWindow.isMinimized()) revealMainWindow()
 })

@@ -4,7 +4,7 @@
  * 本模块只保留认证高级 API 与权限工具。
  */
 import type { AuthTokens, UserProfile } from '../shared/serverHttp'
-import { ApiError, apiFetch, clearSession, getTokens, saveProfile, saveTokens } from '../shared/serverHttp'
+import { ApiError, apiFetch, clearSession, getTokens, refreshSession, saveProfile, saveTokens } from '../shared/serverHttp'
 import type { DashboardSummary } from '../shared/dashboard'
 import type { LinduoChatModelView, LinduoMemberTierView, LinduoModelTierView, UserLinduoExceptionView } from '../shared/contracts'
 
@@ -221,4 +221,16 @@ export async function fetchLinduoPreferredModel(): Promise<{ modelId: string | n
 
 export async function setLinduoPreferredModel(modelId: string | null): Promise<{ modelId: string | null }> {
   return apiFetch<{ modelId: string | null }>('/api/linduo/preferred-model', { method: 'PUT', body: { modelId } })
+}
+
+/** 写操作会话过期重试一次（与 handleWarehouseDownload 同模式） */
+export async function runWithSessionRetry<T>(operation: (accessToken: string) => Promise<T>): Promise<T> {
+  try {
+    return await operation(getTokens()?.accessToken ?? '')
+  } catch (reason) {
+    if (!(reason instanceof Error) || reason.message !== 'SERVER_SESSION_EXPIRED') throw reason
+    const refreshed = await refreshSession(getTokens()?.accessToken ?? '')
+    if (!refreshed) throw new Error('登录会话已过期，请重新登录后重试')
+    return operation(getTokens()?.accessToken ?? '')
+  }
 }

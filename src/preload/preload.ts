@@ -1,5 +1,5 @@
-import { contextBridge, ipcRenderer } from 'electron'
-import type { BrowserBounds, BrowserState, BrowserTab, BrowserTranslationMode, BrowserTranslationStatus, BuiltInCollectorState, CandidateUpdateRequest, CandidateWorkspace, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, EbayAcceptanceBatch, EbayAcceptanceRunRequest, EbayBrowserPluginState, EbayCategoryWorkspace, EbayCollectionImportResult, EbayConfigurationStatus, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentOptimizationResult, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDeliveryLocationResult, EbayDirectoryProductSyncCheckpoint, EbayDirectoryProductSyncProgress, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReview, EbayImageCandidateReviewRequest, EbayImageGroundingPlan, EbayImageGroundingRequest, EbayImageRoleSuggestionRequest, EbayImageRoleSuggestionResult, EbayImageStage, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductMedia, EbayLocalProductMediaUploadInput, EbayLocalProductSnapshot, EbayLocalProductUpdateInput, EbayLoginResult, EbayMarketResearchDecisionRequest, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayOptimizationExportResult, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayReportImportResult, EbayStageFactCard, EbayStageGroundingRequest, EbayStageModelRecommendation, EbayStageStoryboardCard, EbayStageStoryboardRequest, EbayStore, EbaySyncResult, EbayTitleOptimizationRequest, EbayTitleOptimizationResult, EbayVideoStudioConfiguration, EbayVideoStudioProgress, EbayVideoStudioProject, EbayVideoStudioRequest, ImageGenerationRequest, ImageGenerationResult, ImageMarketingTranslationRequest, ImageMarketingTranslationResult, ImageModelConnection, ImportedProductSource, MarketplaceAccountProfile, MarketplaceCredentialInput, MarketplaceCredentialStatus, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, Platform, RealShiftRequest, RealShiftResult, SelectionDecision, SelectionImportRequest, SelectionTaskDraft, SupplyActivationResult, SupplyWarehouseProduct, TaskProgress, WorkflowCounts } from '../shared/contracts'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import type { BrowserBounds, BrowserState, BrowserTab, BrowserTranslationMode, BrowserTranslationStatus, BuiltInCollectorState, CandidateUpdateRequest, CandidateWorkspace, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, EbayAcceptanceBatch, EbayAcceptanceRunRequest, EbayBrowserPluginState, EbayCategoryWorkspace, EbayCollectionImportResult, EbayConfigurationStatus, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentOptimizationResult, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDeliveryLocationResult, EbayDirectoryProductSyncCheckpoint, EbayDirectoryProductSyncProgress, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReview, EbayImageCandidateReviewRequest, EbayImageGroundingPlan, EbayImageGroundingRequest, EbayImageRoleSuggestionRequest, EbayImageRoleSuggestionResult, EbayImageStage, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductMedia, EbayLocalProductMediaUploadInput, EbayLocalProductSnapshot, EbayLocalProductUpdateInput, EbayLoginResult, EbayMarketResearchDecisionRequest, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayOptimizationExportResult, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayReportImportResult, EbayStageFactCard, EbayStageGroundingRequest, EbayStageModelRecommendation, EbayStageStoryboardCard, EbayStageStoryboardRequest, EbayStore, EbaySyncResult, EbayTitleOptimizationRequest, EbayTitleOptimizationResult, EbayVideoStudioConfiguration, EbayVideoStudioProgress, EbayVideoStudioProject, EbayVideoStudioRequest, EliminatedProductRecord, EliminateRequest, ImageGenerationRequest, ImageGenerationResult, ImageMarketingTranslationRequest, ImageMarketingTranslationResult, ImageModelConnection, ImportedProductSource, InboundErpIntakeInput, InboundProcessingItem, InboundSnapshot, MarketplaceAccountProfile, MarketplaceCredentialInput, MarketplaceCredentialStatus, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, Platform, RealShiftRequest, RealShiftResult, SelectionDecision, SelectionImportRequest, SelectionTaskDraft, SupplyActivationResult, SupplyProductDownload, SupplyWarehouseProduct, TaskProgress, WorkflowCounts } from '../shared/contracts'
 import type { ComplianceBatchRecheckResult, EbayImageInspectionReport } from '../shared/contracts'
 import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
 import type { EbayLocalListingRequirements, EbayLocalRevisionPreparationResult } from '../shared/contracts'
@@ -14,6 +14,10 @@ import type { GuardianRetryRequest, GuardianRetryResult, GuardianRunEvent, Guard
 
 contextBridge.exposeInMainWorld('desktop', {
   platform: ipcRenderer.sendSync('app:platform') as string,
+  // Electron 32+ 移除了 File.path，渲染器取本地路径必须经 preload 调 webUtils
+  file: {
+    getPathForFile: (file: File): string => webUtils.getPathForFile(file)
+  },
   windowControls: {
     minimize: (): Promise<void> => ipcRenderer.invoke('window:minimize'),
     toggleMaximize: (): Promise<boolean> => ipcRenderer.invoke('window:maximize-toggle'),
@@ -50,6 +54,7 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   appInfo: {
     checkUpdate: (): Promise<{ current: string; latest: string; isLatest: boolean; error: string }> => ipcRenderer.invoke('app:check-update'),
+    checkUpdateNow: (): Promise<{ current: string; latest: string; isLatest: boolean; error: string }> => ipcRenderer.invoke('app:check-update-now'),
     openDownload: (): Promise<boolean> => ipcRenderer.invoke('app:open-download'),
     installUpdate: (): Promise<boolean> => ipcRenderer.invoke('app:install-update'),
     onUpdateStatus: (callback: (status: { phase: 'downloading' | 'downloaded' | 'error'; version: string; percent?: number; message?: string }) => void) => {
@@ -263,6 +268,7 @@ contextBridge.exposeInMainWorld('desktop', {
     getState: (platform: Platform) => ipcRenderer.invoke('browser:state:get', platform),
     activateSupply: (platformCode: '1688' | 'GIGACLOUD'): Promise<SupplyActivationResult> => ipcRenderer.invoke('browser:supply:activate', platformCode),
     openTab: (platform: Platform, url: string, title?: string) => ipcRenderer.invoke('browser:open-tab', platform, url, title),
+    ensureDefaultNav: () => ipcRenderer.invoke('browser:ensure-default-nav'),
     newTab: () => ipcRenderer.invoke('browser:new-tab'),
     switchTab: (tabId: string) => ipcRenderer.invoke('browser:switch-tab', tabId),
     closeTab: (tabId: string) => ipcRenderer.invoke('browser:close-tab', tabId),
@@ -291,6 +297,13 @@ contextBridge.exposeInMainWorld('desktop', {
       return () => ipcRenderer.removeListener('browser:state', listener)
     }
   },
+  erp: {
+    injectCollector: (supplier: { id: string; code: string; name: string; domains: string[] }, crawlRules: Record<string, unknown>): Promise<{ active: boolean; injectedViews: number }> => ipcRenderer.invoke('erp:inject-collector', supplier, crawlRules),
+    drainOutbox: (): Promise<{ active: boolean; supplierId: string; items: any[] }> => ipcRenderer.invoke('erp:drain-outbox'),
+    syncStates: (states: Array<{ id: string; state: string }>): Promise<void> => ipcRenderer.invoke('erp:sync-states', states),
+    collectorState: (): Promise<{ active: boolean; supplier: { id: string; code: string; name: string; domains: string[] } | null }> => ipcRenderer.invoke('erp:collector-state'),
+    stopCollector: (): Promise<void> => ipcRenderer.invoke('erp:stop-collector')
+  },
   tasks: {
     latest: () => ipcRenderer.invoke('task:latest'),
     create: (task: SelectionTaskDraft) => ipcRenderer.invoke('task:create', task),
@@ -315,6 +328,14 @@ contextBridge.exposeInMainWorld('desktop', {
     decide: (id: string, decision: SelectionDecision) => ipcRenderer.invoke('selection:decide', id, decision),
     categorize: (id: string, category: string, subcategory: string, tertiaryCategory: string) => ipcRenderer.invoke('selection:categorize', id, category, subcategory, tertiaryCategory),
     returnToCandidates: (id: string): Promise<void> => ipcRenderer.invoke('selection:return-to-candidates', id)
+  },
+  eliminations: {
+    list: (): Promise<EliminatedProductRecord[]> => ipcRenderer.invoke('elimination:list'),
+    eliminate: (input: EliminateRequest): Promise<EliminatedProductRecord> => ipcRenderer.invoke('elimination:eliminate', input),
+    reenable: (id: string): Promise<EliminatedProductRecord> => ipcRenderer.invoke('elimination:reenable', id),
+    delete: (ids: string[]): Promise<EliminatedProductRecord[]> => ipcRenderer.invoke('elimination:delete', ids),
+    getSetting: (key: string): Promise<string> => ipcRenderer.invoke('elimination:settings:get', key),
+    setSetting: (key: string, value: string): Promise<string> => ipcRenderer.invoke('elimination:settings:set', key, value)
   },
   comparisons: {
     list: () => ipcRenderer.invoke('comparison:list'),
@@ -347,7 +368,22 @@ contextBridge.exposeInMainWorld('desktop', {
     recheckProfiles: (platform='ALL',country='ALL'):Promise<ComplianceBatchRecheckResult> => ipcRenderer.invoke('compliance:profiles:recheck',platform,country)
   },
   warehouses: {
-    list: (): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:list')
+    list: (): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:list'),
+    download: (warehouseProductId: string, accessToken: string): Promise<SupplyProductDownload> => ipcRenderer.invoke('warehouse:download', warehouseProductId, accessToken),
+    downloads: (): Promise<SupplyProductDownload[]> => ipcRenderer.invoke('warehouse:download-list'),
+    openDownload: (warehouseProductId: string): Promise<boolean> => ipcRenderer.invoke('warehouse:open-download', warehouseProductId)
+  },
+  pallet: {
+    list: (): Promise<PalletWarehouseItem[]> => ipcRenderer.invoke('pallet:list'),
+    remove: (ids: string[]): Promise<PalletWarehouseItem[]> => ipcRenderer.invoke('pallet:remove', ids)
+  },
+  inbound: {
+    list: (): Promise<InboundProcessingItem[]> => ipcRenderer.invoke('inbound:list'),
+    erpIntake: (rows: InboundErpIntakeInput[], accessToken: string): Promise<InboundProcessingItem[]> => ipcRenderer.invoke('erp:intake', rows, accessToken),
+    reedit: (id: string, snapshot: InboundSnapshot, accessToken: string): Promise<InboundProcessingItem[]> => ipcRenderer.invoke('inbound:reedit', id, snapshot, accessToken),
+    confirm: (id: string, accessToken: string): Promise<InboundProcessingItem[]> => ipcRenderer.invoke('inbound:confirm', id, accessToken),
+    reject: (id: string, accessToken: string): Promise<InboundProcessingItem[]> => ipcRenderer.invoke('inbound:reject', id, accessToken),
+    return: (warehouseProductId: string, accessToken: string): Promise<InboundProcessingItem[]> => ipcRenderer.invoke('inbound:return', warehouseProductId, accessToken)
   },
   marketplaceSelections: {
     list: (marketplaceCode: MarketplacePlatformCode): Promise<MarketplaceSelectionProduct[]> => ipcRenderer.invoke('marketplace-selection:list', marketplaceCode),
