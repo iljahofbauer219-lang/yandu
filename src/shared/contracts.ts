@@ -1313,7 +1313,42 @@ export interface CollectorPluginImportResult {
   duplicates: CollectorDuplicateProduct[]
 }
 
-export type CollectorDuplicateStage = 'CANDIDATE' | 'SELECTION' | 'WAREHOUSE' | 'HISTORY'
+export type CollectorDuplicateStage = 'CANDIDATE' | 'SELECTION' | 'WAREHOUSE' | 'HISTORY' | 'ELIMINATED'
+
+// 淘汰产品收录追踪：origin=淘汰来源列表，status=ACTIVE 生效中 / REENABLED 已重新启用
+export type EliminatedOrigin = 'SELECTION' | 'CANDIDATE'
+export type EliminatedRecordStatus = 'ACTIVE' | 'REENABLED'
+
+export interface EliminatedProductRecord {
+  id: string
+  identityKey: string
+  platformCode: string
+  productId: string
+  sourceUrl: string
+  title: string
+  imageUrl: string
+  priceText: string
+  origin: EliminatedOrigin
+  originRecordId: string
+  reason: string
+  operator: string
+  status: EliminatedRecordStatus
+  eliminatedAt: string
+  reenabledAt: string | null
+}
+
+export interface EliminateRequest {
+  origin: EliminatedOrigin
+  recordId?: string
+  url?: string
+  platformCode?: string
+  productId?: string
+  title?: string
+  imageUrl?: string
+  priceText?: string
+  reason?: string
+  operator: string
+}
 
 export interface CollectorDuplicateProduct {
   platformCode: string
@@ -1746,6 +1781,75 @@ export interface MarketplaceSelectionProduct {
   updatedAt: string
 }
 
+/** 货盘仓库条目：由正式入库（SupplyWarehouseProduct）复制存放，原商品保留在正式入库 */
+export interface PalletWarehouseItem {
+  id: string
+  warehouseProductId: string
+  warehouseCode: SupplyWarehouseCode
+  itemCode: string
+  title: string
+  imageUrl: string
+  priceText: string
+  category: string
+  subcategory: string
+  tertiaryCategory: string
+  sourceUrl: string
+  storedAt: string
+}
+
+/** 入库处理：快照来源（选品审批 / 服务器采集池） */
+export type InboundOrigin = 'SELECTION' | 'ERP'
+export type InboundStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED'
+
+/** 入库处理：入库快照（编辑=覆盖快照；目标仓/货位=warehouseCode+三级类目） */
+export interface InboundSnapshot {
+  platformCode: string
+  warehouseCode: SupplyWarehouseCode
+  itemCode: string
+  title: string
+  imageUrl: string
+  priceText: string
+  category: string
+  subcategory: string
+  tertiaryCategory: string
+  sourceUrl: string
+  tags: string[]
+  collectedAt: string
+}
+
+/** 入库处理：待确认队列行（本地持久化，唯一闸口真源） */
+export interface InboundProcessingItem {
+  id: string
+  origin: InboundOrigin
+  sourceId: string
+  selectionId: string
+  status: InboundStatus
+  snapshot: InboundSnapshot
+  createdAt: string
+  updatedAt: string
+  confirmedAt: string | null
+}
+
+/** erp:intake 入参：服务器采集池快照 */
+export interface InboundErpIntakeInput {
+  sourceId: string
+  snapshot: InboundSnapshot
+}
+
+export type SupplyProductDownloadStatus = 'DOWNLOADED' | 'FAILED'
+
+/** 正式入库商品「下载产品」服务器端详情页档案：源页 HTML 原样 + 图片本地化，公开只读页 */
+export interface SupplyProductDownload {
+  warehouseProductId: string
+  pageId: string
+  pageUrl: string
+  imageCount: number
+  failedCount: number
+  status: SupplyProductDownloadStatus
+  error: string
+  downloadedAt: string
+}
+
 export type MarketplaceMediaAssetType = 'ORIGINAL' | 'AI_GENERATED' | 'REALSHIFT'
 
 export interface MarketplaceMediaAsset {
@@ -1862,7 +1966,7 @@ export interface ComparisonPromotionRequest {
 export interface ComparisonPromotionResult {
   comparison: ComparisonRecordView
   selection: SelectionCatalogItem
-  warehouseProduct: SupplyWarehouseProduct
+  inboundItemId: string
 }
 
 export interface ComparisonImportRequest {
