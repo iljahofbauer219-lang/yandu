@@ -120,14 +120,16 @@ export interface InboundProcessingItem {
 
 ### 4.3 IPC 通道（preload 暴露于 window.desktop.inbound）
 
-| 通道 | 语义 | 返回 |
-|---|---|---|
-| `inbound:list` | 全状态队列 | InboundProcessingItem[] |
-| `inbound:confirm(id)` | 双写正式入库+货盘存放 | InboundProcessingItem[] |
-| `inbound:reject(id)` | 置 REJECTED | InboundProcessingItem[] |
-| `inbound:reedit(id, snapshot)` | 覆盖快照回 PENDING | InboundProcessingItem[] |
-| `inbound:return(warehouseProductId)` | 单件退回入库处理 | InboundProcessingItem[] |
-| `erp:intake`（暴露为 inbound.erpIntake） | 服务器采集池同步 | InboundProcessingItem[] |
+| 通道 | 语义 | 入参 | 返回 |
+|---|---|---|---|
+| `inbound:list` | 全状态队列 | 无 | InboundProcessingItem[] |
+| `inbound:confirm(id)` | 双写正式入库+货盘存放 | id, accessToken | InboundProcessingItem[] |
+| `inbound:reject(id)` | 置 REJECTED | id, accessToken | InboundProcessingItem[] |
+| `inbound:reedit(id, snapshot)` | 覆盖快照回 PENDING | id, snapshot, accessToken | InboundProcessingItem[] |
+| `inbound:return(warehouseProductId)` | 单件退回入库处理 | warehouseProductId, accessToken | InboundProcessingItem[] |
+| `erp:intake`（暴露为 inbound.erpIntake） | 服务器采集池同步 | items, accessToken | InboundProcessingItem[] |
+
+写通道（confirm/reject/reedit/return/erpIntake）一律携带 accessToken，由主进程做权限强校验（见 §6）；读通道 `inbound:list` 为纯本地数据，不做服务器校验。
 
 移除：`inbound.upsert`（由 erp:intake 与内部 seeding 取代）、`inbound.patch`（由 reedit 取代）。`pallet:list` / `pallet:remove` 保留。confirm/return 成功后前端主动刷新 inbound:list、pallet:list、warehouses:list 三个列表。
 
@@ -143,21 +145,44 @@ export interface InboundProcessingItem {
 - 新增状态筛选 chips：待确认（默认）/ 已确认 / 已驳回。
 - 卡片：来源徽标（选品审批=teal / 服务器采集池=灰）、品名、SKU、来源平台、目标仓/货位（三级类目）、标签、快照时间；已驳回加驳回时间、已确认加确认时间。
 - 操作按状态：待确认＝重新编辑（内联表单：品名/价格/目标仓/三级类目/标签，保存调 reedit）+ 确认入库（primary）+ 驳回（danger，二次确认对话框）；已驳回＝重新编辑；已确认＝只读。
+- 所有写调用传 `getTokens()?.accessToken`，并经统一 helper 做 SERVER_SESSION_EXPIRED → refreshSession 重试一次；失败消息走 error 横幅。
 - 确认成功横幅：「已确认转入正式入库与货盘仓库」。
 
 ### 5.2 选品模块「正式入库」tab（App.tsx SupplyWarehouseWorkspace）
 
 - 删除「送入库处理 / 入库处理中 / 已正式入库」按钮及 `palletKeys`、`inboundPendingKeys`、`handleStorePallet` 全链路状态。
-- 新增「退回入库处理」按钮（canEdit 门控，二次确认）→ `inbound.return`；成功后刷新 warehouses/pallet/inbound 列表。
+- 新增「退回入库处理」按钮（canEdit 门控，二次确认）→ `inbound.return`（带 token + refresh 重试）；成功后刷新 warehouses/pallet/inbound 列表。
 
 ### 5.3 货盘仓库「全部产品 / 新品速递」卡
 
 - 操作行「原址 / 删除」旁新增「退回入库处理」（canEdit 门控，同一 IPC、二次确认）。
 - 卡脚注文案改「入库处理确认 · 正式入库并存放」。
 
-## 6. 权限
+## 6. 权限与验证逻辑
 
-不新增权限码。入库处理 tab、确认、驳回、退回统一沿用 `erp.warehouse.edit`（caps.canEdit）；无权限时入库处理 tab 显示现有空状态，正式入库/货盘仓库卡不显示退回按钮。
+不新增权限码；服务器路由不改。验证分三层，**主进程 IPC 强校验为权威层**（UI 隐藏不算验证）：
+
+### 6.1 权限码映射
+
+| 操作 | 权限 | 强制层 |
+|---|---|---|
+| 货盘仓库页进入 / `inbound:list` | 页面权限 `menu.warehouse.hub` | 渲染器路由门控 |
+| `erp:intake` 拉取服务器采集池 | `erp.warehouse.view`（服务器 `/api/erp/products` 路由既有 requirePermission） | 服务器路由 |
+| `erp:intake` 写本地队列、`inbound:reedit` / `confirm` / `reject` / `return` | `erp.warehouse.edit`（capabilities.canEdit；OWNER 直通） | 主进程 IPC 强校验 + 渲染器按钮门控 |
+
+### 6.2 主进程强校验机制（新增）
+
+- 写通道 IPC handler 执行前校验：以入参 accessToken 调服务器 `GET /api/erp/capabilities`（复用主进程既有服务器请求工具与 base url），结果按 token 指纹缓存 **TTL 60s**；缓存命中直接用，未命中/过期实时请求。
+- 判定：`canEdit === true` 放行；`canEdit === false` 或 403 → 抛语义化错误「无入库处理权限（需 erp.warehouse.edit）」；401 → 抛 `SERVER_SESSION_EXPIRED`；网络不可达/超时 → **fail closed**，抛「权限校验失败，请检查网络后重试」，拒绝写入。
+- 渲染器对写调用复用既有 refresh-once 模式（同 `handleWarehouseDownload`）：捕获 `SERVER_SESSION_EXPIRED` → `refreshSession` 成功则重试一次，失败提示重新登录。
+- 读通道与纯本地操作（list、页面渲染）不触发服务器校验，离线可读队列。
+- capabilities 缓存同时在登录成功/手动刷新主题级会话时清空，避免换账号后沿用旧权限。
+
+### 6.3 渲染器门控（沿用既有模式，补退回按钮）
+
+- 入库处理 tab：无 canEdit 维持现有「无入库处理权限」空状态，不发 erpIntake。
+- 正式入库卡 / 货盘仓库卡的「退回入库处理」按钮以 canEdit 门控，无权限不渲染。
+- 写操作失败（无权限/校验失败）走 error 横幅展示服务器语义消息；成功走 ok 横幅。
 
 ## 7. 验证计划
 
@@ -170,6 +195,13 @@ export interface InboundProcessingItem {
 5. 退回：正式入库卡「退回入库处理」→ 正式入库与货盘仓库同时消失、回待确认；再确认 → 双写恢复。
 6. 有 canEdit 进入入库处理 tab → 服务器采集池 COLLECTED 快照以「服务器采集池」徽标入队；确认双写。
 7. 重启应用 → 存量 APPROVED+已入库选品不重复补快照。
+
+权限验证路径：
+
+8. 无 `erp.warehouse.edit` 账号：入库处理 tab 空状态；正式入库/货盘仓库卡无退回按钮；绕过 UI 直调 `inbound:confirm` IPC → 主进程拒绝并返回「无入库处理权限（需 erp.warehouse.edit）」，队列与两表无变化。
+9. 会话过期：写调用首次返回 SERVER_SESSION_EXPIRED → 自动 refresh 重试一次成功，用户无感；refresh 失败提示重新登录。
+10. OWNER 账号：capabilities.canEdit 直通，确认/退回正常。
+11. 断网时点确认 → fail closed 报错「权限校验失败，请检查网络后重试」，不写库；恢复后重试成功。
 
 脚本与回归：
 
