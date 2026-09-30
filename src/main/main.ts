@@ -20,6 +20,7 @@ import { LinduoChatModelService } from './services/LinduoChatModelService'
 import { BailianTranslationService } from './services/BailianTranslationService'
 import { SupplyProductDownloadService } from './services/SupplyProductDownloadService'
 import { requireInboundEditPermission } from './services/InboundPermissionGuard'
+import { hasFreeSpaceForUpdate, UPDATE_REQUIRED_FREE_BYTES } from './updateFreeSpace'
 import { FeishuBotService } from './services/FeishuBotService'
 import { RealShiftService } from './services/RealShiftService'
 import { EbayService } from './services/EbayService'
@@ -3275,14 +3276,21 @@ function initAutoUpdate() {
       defaultId: 0
     }).then(({ response }) => {
       if (response === 0) {
+        if (!hasFreeSpaceForUpdate(app.getPath('cache'))) {
+          sendUpdateStatus({ phase: 'error', version: info.version, message: `磁盘空间不足：安装更新至少需要 ${Math.round(UPDATE_REQUIRED_FREE_BYTES / 1024 / 1024 / 1024)}GB 可用空间，请清理后重试` })
+          return
+        }
         updateInstallStarted = true
         autoUpdater.quitAndInstall()
       }
     })
   })
   autoUpdater.on('error', error => {
-    console.error('[updater] 自动更新失败：', error.message)
-    sendUpdateStatus({ phase: 'error', version: pendingVersion || app.getVersion(), message: error.message })
+    const message = /No space left on device/.test(error.message)
+      ? '磁盘空间不足，更新包解包中断；请清理磁盘空间后重试'
+      : error.message
+    console.error('[updater] 自动更新失败：', message)
+    sendUpdateStatus({ phase: 'error', version: pendingVersion || app.getVersion(), message })
   })
   // 启动即查；失败（断网/源抖动）5 分钟后自动补查一次，避免「静默错过本轮更新窗口」（根治项 C）
   const scheduleRetry = (delayMs: number) => setTimeout(() => { void autoUpdater.checkForUpdates().catch(() => undefined) }, delayMs)
@@ -3293,6 +3301,10 @@ function initAutoUpdate() {
 }
 // 渲染层悬浮提示/登录门禁点「重启安装」时触发（与弹窗的「立即重启安装」等价）
 ipcMain.handle('app:install-update', () => {
+  if (!hasFreeSpaceForUpdate(app.getPath('cache'))) {
+    sendUpdateStatus({ phase: 'error', version: updateDownloadedVersion || app.getVersion(), message: `磁盘空间不足：安装更新至少需要 ${Math.round(UPDATE_REQUIRED_FREE_BYTES / 1024 / 1024 / 1024)}GB 可用空间，请清理后重试` })
+    return false
+  }
   updateInstallStarted = true
   autoUpdater.quitAndInstall()
   return true
