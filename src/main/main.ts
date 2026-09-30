@@ -5,7 +5,7 @@ import path from 'node:path'
 import nodeNet from 'node:net'
 import { pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
 import { hotFile } from './hotPaths'
@@ -3238,6 +3238,38 @@ if (hasSingleInstanceLock) app.whenReady().then(async () => {
   })()
 })
 
+// ── mac 自托管安装：Squirrel 在应用进程内解包 2.2GB（数分钟），quitAndInstall 立即退出会杀死解包 ditto，
+// 留半成品并静默跳过安装；且 feed zip 为未签名产物，Squirrel 签名校验层亦会拒绝。改为 detached 脚本：
+// 等应用退出后解包 → 替换 bundle → 拉起新版（根治项 E）。
+function macUpdaterZipPath(): string | null {
+  // electron-updater 在 mac 的缓存目录 = ~/Library/Caches/<app.name>-updater（Electron 类型无 'cache' 路径名）
+  const base = path.join(app.getPath('home'), 'Library', 'Caches', `${app.name}-updater`)
+  const direct = path.join(base, 'update.zip')
+  if (fs.existsSync(direct)) return direct
+  const pendingDir = path.join(base, 'pending')
+  if (fs.existsSync(pendingDir)) {
+    const zip = fs.readdirSync(pendingDir).find(name => name.endsWith('.zip'))
+    if (zip) return path.join(pendingDir, zip)
+  }
+  return null
+}
+
+function startMacSelfInstall(): boolean {
+  const zipPath = macUpdaterZipPath()
+  if (!zipPath) return false
+  const execPath = app.getPath('exe')
+  const marker = `${path.sep}Contents${path.sep}MacOS${path.sep}`
+  const markerAt = execPath.lastIndexOf(marker)
+  if (markerAt < 0) return false
+  const appBundle = execPath.slice(0, markerAt)
+  const script = path.join(process.resourcesPath, 'mac-updater', 'install-update.sh')
+  if (!fs.existsSync(script)) return false
+  const child = spawn('bash', [script, zipPath, appBundle, String(process.pid)], { detached: true, stdio: 'ignore' })
+  child.unref()
+  console.log(`[updater] mac self-install spawned: zip=${zipPath} app=${appBundle}`)
+  return true
+}
+
 // 自动更新：更新源为阿里云 OSS（electron-builder.yml 的 publish.generic）；
 // 下载进度/失败原因通过 app:update-status 推给渲染层（右下角悬浮提示），避免静默失败无感知
 type AppUpdateStatus = { phase: 'downloading' | 'downloaded' | 'error'; version: string; percent?: number; message?: string }
@@ -3281,7 +3313,11 @@ function initAutoUpdate() {
           return
         }
         updateInstallStarted = true
-        autoUpdater.quitAndInstall()
+        if (process.platform === 'darwin' && startMacSelfInstall()) {
+          app.quit()
+        } else {
+          autoUpdater.quitAndInstall()
+        }
       }
     })
   })
@@ -3306,6 +3342,10 @@ ipcMain.handle('app:install-update', () => {
     return false
   }
   updateInstallStarted = true
+  if (process.platform === 'darwin' && startMacSelfInstall()) {
+    app.quit()
+    return true
+  }
   autoUpdater.quitAndInstall()
   return true
 })

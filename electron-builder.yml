@@ -20,9 +20,17 @@ files:
 
 afterPack: tools/fix-packaged-python-links.cjs
 
+# mac 自托管更新安装脚本（脱离 Squirrel 解包竞态），随包分发到 process.resourcesPath/mac-updater
+extraResources:
+  - from: resources/mac-updater
+    to: mac-updater
+
 # 本机 dev/构建产物目录不需要进包
 asar: true
 compression: normal
+
+# 全局 ASCII 产物名（含 zip）：中文文件名在 HTTP 分发/自动更新时有编码问题
+artifactName: YanduCrossBorder-${version}-${arch}.${ext}
 
 # 阿里云 OSS 公共读 Bucket 作为通用更新源（方案 A：安装包迁移 OSS）
 publish:
@@ -32,6 +40,10 @@ publish:
 mac:
   target:
     - target: dmg
+      arch: [x64]
+    # zip 是 macOS electron-updater 静默升级必需产物（generic 源不认 dmg 安装）；
+    # 缺 zip 时 Mac 端即使 feed 有新版本也无法自动安装——2026-09-29 根治项 B
+    - target: zip
       arch: [x64]
   icon: build/icon.icns
   category: public.app-category.business
