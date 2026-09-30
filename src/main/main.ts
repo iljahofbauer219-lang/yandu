@@ -3276,7 +3276,7 @@ function initAutoUpdate() {
       defaultId: 0
     }).then(({ response }) => {
       if (response === 0) {
-        if (!hasFreeSpaceForUpdate(app.getPath('cache'))) {
+        if (!hasFreeSpaceForUpdate(app.getPath('userData'))) {
           sendUpdateStatus({ phase: 'error', version: info.version, message: `磁盘空间不足：安装更新至少需要 ${Math.round(UPDATE_REQUIRED_FREE_BYTES / 1024 / 1024 / 1024)}GB 可用空间，请清理后重试` })
           return
         }
@@ -3301,7 +3301,7 @@ function initAutoUpdate() {
 }
 // 渲染层悬浮提示/登录门禁点「重启安装」时触发（与弹窗的「立即重启安装」等价）
 ipcMain.handle('app:install-update', () => {
-  if (!hasFreeSpaceForUpdate(app.getPath('cache'))) {
+  if (!hasFreeSpaceForUpdate(app.getPath('userData'))) {
     sendUpdateStatus({ phase: 'error', version: updateDownloadedVersion || app.getVersion(), message: `磁盘空间不足：安装更新至少需要 ${Math.round(UPDATE_REQUIRED_FREE_BYTES / 1024 / 1024 / 1024)}GB 可用空间，请清理后重试` })
     return false
   }
