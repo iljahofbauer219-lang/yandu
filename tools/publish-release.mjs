@@ -130,6 +130,9 @@ const targets = platform === 'all' ? ['mac', 'win'] : [platform]
     const zipName = `YanduCrossBorder-${version}-x64.zip`
     const zipPath = path.join(rel, zipName)
     if (fs.existsSync(signedApp) && fs.existsSync(zipPath)) {
+      // publish 走 electron-builder 直调，不经过 postdist:mac 的补签名；这里幂等补 ad-hoc 签名后再重打
+      console.log('[rezip] 补 ad-hoc 签名 …')
+      execFileSync('codesign', ['--force', '--deep', '--sign', '-', signedApp])
       console.log('[rezip] 以签名后 app 重打 mac zip …')
       execFileSync('ditto', ['-c', '-k', '--keepParent', signedApp, zipPath])
       fs.rmSync(path.join(rel, `${zipName}.blockmap`), { force: true })
