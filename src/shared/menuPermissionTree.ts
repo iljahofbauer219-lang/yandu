@@ -26,7 +26,7 @@ export const MENU_PERMISSION_TREE: MenuPermNode[] = [
     ]
   },
   { code: 'menu.advisor', label: 'AI参谋', cards: [{ code: 'menu.advisor.online', label: '在线参谋' }] },
-  { code: 'menu.warehouse', label: 'AI仓库', cards: [
+  { code: 'menu.warehouse', label: '货盘仓库', cards: [
     { code: 'menu.warehouse.hub', label: '货盘仓库' },
     { code: 'menu.warehouse.pool', label: '采集池' },
     { code: 'menu.warehouse.products', label: '产品库' },

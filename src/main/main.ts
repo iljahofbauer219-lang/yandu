@@ -1,4 +1,4 @@
-import { app, BaseWindow, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, session, shell, WebContentsView } from 'electron'
+import { app, BaseWindow, BrowserWindow, dialog, ipcMain, net, protocol, session, shell, WebContentsView } from 'electron'
 import iconv from 'iconv-lite'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -9,6 +9,7 @@ import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
 import { hotFile } from './hotPaths'
+import { decryptSecret, encryptSecret, secretStorageAvailable, warmSecretStorage } from './secureVault'
 import { BrowserWorkspace, EBAY_STORE_VIEW_REQUIRED } from './browser/BrowserWorkspace'
 import { AppDatabase } from './database/AppDatabase'
 import { BailianImageService } from './services/BailianImageService'
@@ -991,7 +992,7 @@ async function researchEbayMarket(request:EbayMarketResearchRequest):Promise<Eba
   const query=request.query.replace(/\s+/g,' ').trim()
   if(!query)throw new Error('请先填写能代表当前商品的核心商品词')
   const omkarSettings=readAmazonDataSource()
-  const omkarKey=omkarSettings.encryptedApiKey&&safeStorage.isEncryptionAvailable()?safeStorage.decryptString(Buffer.from(omkarSettings.encryptedApiKey,'base64')):''
+  const omkarKey=omkarSettings.encryptedApiKey&&secretStorageAvailable()?decryptSecret(omkarSettings.encryptedApiKey):''
   const marketWorkspace=workspace
   const readEvidence=async(searchQuery:string)=>{
     if(omkarKey){
@@ -1106,8 +1107,8 @@ async function ensureEbayStoreLogin(storeId:string) {
   const row=database.getMarketplaceCredential(accountId)
   let password=''
   if(row?.encrypted_password) {
-    if(!safeStorage.isEncryptionAvailable())throw new Error('当前系统无法解密eBay登录凭据')
-    password=safeStorage.decryptString(Buffer.from(row.encrypted_password,'base64'))
+    if(!secretStorageAvailable())throw new Error('当前系统无法解密eBay登录凭据')
+    password=decryptSecret(row.encrypted_password)
   }
   return workspace.ensureEbayLogin(accountId,row?.username||'',password,row?.automation_mode==='AUTO_FILL')
 }
@@ -1124,7 +1125,7 @@ async function syncEbayStoreCategories(storeId:string) {
 async function authorizeEbayStore(storeId:string) {
   if(!database)throw new Error('数据库尚未初始化')
   if(!ebayService.configuration().configured)throw new Error('请先在 .env.local 配置 EBAY_CLIENT_ID、EBAY_CLIENT_SECRET 和 EBAY_RUNAME')
-  if(!safeStorage.isEncryptionAvailable())throw new Error('当前系统安全存储不可用，不能保存 eBay 令牌')
+  if(!secretStorageAvailable())throw new Error('当前系统安全存储不可用，不能保存 eBay 令牌')
   const state=crypto.randomUUID()
   const authWindow=new BrowserWindow({width:920,height:760,title:'连接 eBay 正式店铺',webPreferences:{contextIsolation:true,nodeIntegration:false,sandbox:true}})
   const code=await new Promise<string>((resolve,reject)=>{
@@ -1148,20 +1149,20 @@ async function authorizeEbayStore(storeId:string) {
     void authWindow.loadURL(ebayService.authorizationUrl(state)).catch(reject)
   })
   const tokens=await ebayService.exchangeCode(code)
-  database.saveEbayAuthorization(storeId,{encryptedAccessToken:safeStorage.encryptString(tokens.accessToken).toString('base64'),encryptedRefreshToken:safeStorage.encryptString(tokens.refreshToken).toString('base64'),accessTokenExpiresAt:tokens.accessTokenExpiresAt,refreshTokenExpiresAt:tokens.refreshTokenExpiresAt})
+  database.saveEbayAuthorization(storeId,{encryptedAccessToken:encryptSecret(tokens.accessToken),encryptedRefreshToken:encryptSecret(tokens.refreshToken),accessTokenExpiresAt:tokens.accessTokenExpiresAt,refreshTokenExpiresAt:tokens.refreshTokenExpiresAt})
   return database.getEbayStores().find(store=>store.id===storeId)
 }
 
 async function ebayAccessToken(storeId:string) {
   if(!database)throw new Error('数据库尚未初始化')
-  if(!safeStorage.isEncryptionAvailable())throw new Error('当前系统安全存储不可用，不能读取 eBay 令牌')
+  if(!secretStorageAvailable())throw new Error('当前系统安全存储不可用，不能读取 eBay 令牌')
   const row=database.getEbayTokenRecord(storeId)
   if(!row?.encrypted_refresh_token)throw new Error('当前店铺尚未完成 eBay 正式环境授权')
-  if(row.encrypted_access_token&&Date.parse(row.access_token_expires_at)>Date.now()+60_000)return safeStorage.decryptString(Buffer.from(row.encrypted_access_token,'base64'))
+  if(row.encrypted_access_token&&Date.parse(row.access_token_expires_at)>Date.now()+60_000)return decryptSecret(row.encrypted_access_token)
   if(Date.parse(row.refresh_token_expires_at)<=Date.now())throw new Error('eBay 店铺授权已过期，请重新授权')
-  const refreshToken=safeStorage.decryptString(Buffer.from(row.encrypted_refresh_token,'base64'))
+  const refreshToken=decryptSecret(row.encrypted_refresh_token)
   const refreshed=await ebayService.refreshAccessToken(refreshToken)
-  database.updateEbayAccessToken(storeId,safeStorage.encryptString(refreshed.accessToken).toString('base64'),refreshed.accessTokenExpiresAt)
+  database.updateEbayAccessToken(storeId,encryptSecret(refreshed.accessToken),refreshed.accessTokenExpiresAt)
   return refreshed.accessToken
 }
 
@@ -1656,7 +1657,7 @@ ipcMain.handle('browser:supply:activate', async (_event, platformCode: '1688' | 
   const row=database?.getMarketplaceCredential('supply:GIGACLOUD:default')
   const allowAutoLogin=row?.automation_mode==='AUTO_FILL'
   let password=''
-  if(row?.encrypted_password&&safeStorage.isEncryptionAvailable())password=safeStorage.decryptString(Buffer.from(row.encrypted_password,'base64'))
+  if(row?.encrypted_password&&secretStorageAvailable())password=decryptSecret(row.encrypted_password)
   return (await workspace.ensureGigaCloudLogin(row?.username||'',password,allowAutoLogin,activationVersion))
     ?? { platformCode, loginStatus:'UNKNOWN', message:'已取消过期的大健云仓登录检查', url:'', autoLoginAttempted:false }
 })
@@ -1775,8 +1776,8 @@ ipcMain.handle('resource2skill:model-settings-save', (_event, input:{apiKey:stri
   const parsed=new URL(baseUrl)
   if(parsed.protocol!=='https:'||parsed.hostname!=='api000.com')throw new Error('当前仅允许 https://api000.com')
   if(!apiKey)throw new Error('请输入 Gemini API Key')
-  if(!safeStorage.isEncryptionAvailable())throw new Error('当前系统安全存储不可用')
-  fs.writeFileSync(resource2SkillSettingsPath(),JSON.stringify({encryptedGeminiKey:safeStorage.encryptString(apiKey).toString('base64'),baseUrl}),{mode:0o600})
+  if(!secretStorageAvailable())throw new Error('当前系统安全存储不可用')
+  fs.writeFileSync(resource2SkillSettingsPath(),JSON.stringify({encryptedGeminiKey:encryptSecret(apiKey),baseUrl}),{mode:0o600})
   return {configured:true,baseUrl}
 })
 ipcMain.handle('resource2skill:model-settings-clear', () => { try{fs.unlinkSync(resource2SkillSettingsPath())}catch{};return {configured:false} })
@@ -1797,11 +1798,11 @@ ipcMain.handle('resource2skill:official-analyze', async (_event, input:{url:stri
   if(url.protocol!=='https:'||!['youtube.com','www.youtube.com','youtu.be'].includes(url.hostname))throw new Error('请输入公开 YouTube HTTPS 链接')
   const settings=readResource2SkillSettings()
   if(!settings.encryptedGeminiKey)throw new Error('请先保存 Gemini API Key')
-  if(!safeStorage.isEncryptionAvailable())throw new Error('当前系统安全存储不可用')
+  if(!secretStorageAvailable())throw new Error('当前系统安全存储不可用')
   const allowed=['blender','excel','general','ppt','reaper','web']
   if(!allowed.includes(input.domain))throw new Error('请选择有效的 Resource2Skill 官方领域')
   const python=path.join(resource2SkillRoot(),'.venv','bin','python'),output=path.join(app.getPath('temp'),`resource2skill-${Date.now()}.md`)
-  const env={...process.env,GEMINI_API_KEY:safeStorage.decryptString(Buffer.from(settings.encryptedGeminiKey,'base64')),GEMINI_BASE_URL:settings.baseUrl}
+  const env={...process.env,GEMINI_API_KEY:decryptSecret(settings.encryptedGeminiKey),GEMINI_BASE_URL:settings.baseUrl}
   try {
     await execFileAsync(python,['cli.py','analyze','--domain',input.domain,'--video',url.toString(),'--model','gemini-2.5-flash','-o',output],{cwd:resource2SkillRoot(),env,timeout:30*60_000,maxBuffer:10*1024*1024})
     const analysis=fs.readFileSync(output,'utf8'),now=new Date().toISOString(),name=`youtube-${input.domain}-${Date.now()}`
@@ -1813,11 +1814,11 @@ ipcMain.handle('resource2skill:text-distill', async (_event, input:{reportPath:s
   const reportPath=path.resolve(String(input.reportPath||'')),settings=readResource2SkillSettings()
   if(!reportPath.startsWith(path.resolve(process.cwd())+path.sep)||!fs.existsSync(reportPath))throw new Error('报告文件不存在或不在项目目录内')
   if(!settings.encryptedGeminiKey)throw new Error('请先保存 Gemini API Key')
-  if(!safeStorage.isEncryptionAvailable())throw new Error('当前系统安全存储不可用')
+  if(!secretStorageAvailable())throw new Error('当前系统安全存储不可用')
   const allowed=['blender','excel','general','ppt','reaper','web']
   if(!allowed.includes(input.domain))throw new Error('请选择有效的 Resource2Skill 官方领域')
   const root=resource2SkillRoot(),python=path.join(root,'.venv','bin','python'),output=path.join(app.getPath('temp'),`resource2skill-text-${Date.now()}.md`)
-  const env={...process.env,GEMINI_API_KEY:safeStorage.decryptString(Buffer.from(settings.encryptedGeminiKey,'base64')),GEMINI_BASE_URL:settings.baseUrl}
+  const env={...process.env,GEMINI_API_KEY:decryptSecret(settings.encryptedGeminiKey),GEMINI_BASE_URL:settings.baseUrl}
   try {
     await execFileAsync(python,['text_distill.py','--domain',input.domain,'--input',reportPath,'--output',output,'--model','gemini-2.5-flash'],{cwd:root,env,timeout:30*60_000,maxBuffer:10*1024*1024})
     return {analysis:fs.readFileSync(output,'utf8'),domain:input.domain,sourceUrl:String(input.sourceUrl||''),reportPath}
@@ -1827,12 +1828,12 @@ ipcMain.handle('resource2skill:distill-watch', async (_event, input:{taskId:stri
   const task=readWatchSkillTasks().find(item=>item.id===String(input.taskId||'')),settings=readResource2SkillSettings()
   if(!task||task.status!=='COMPLETED'||!task.report.trim())throw new Error('请选择包含报告的 Watch Skill 完成记录')
   if(!settings.encryptedGeminiKey)throw new Error('请先保存 Gemini API Key')
-  if(!safeStorage.isEncryptionAvailable())throw new Error('当前系统安全存储不可用')
+  if(!secretStorageAvailable())throw new Error('当前系统安全存储不可用')
   const allowed=['blender','excel','general','ppt','reaper','web']
   if(!allowed.includes(input.domain))throw new Error('请选择有效的 Resource2Skill 官方领域')
   const root=resource2SkillRoot(),python=path.join(root,'.venv','bin','python')
   const reportPath=path.join(app.getPath('temp'),`watch-report-${Date.now()}.md`),output=path.join(app.getPath('temp'),`resource2skill-text-${Date.now()}.md`)
-  const env={...process.env,GEMINI_API_KEY:safeStorage.decryptString(Buffer.from(settings.encryptedGeminiKey,'base64')),GEMINI_BASE_URL:settings.baseUrl}
+  const env={...process.env,GEMINI_API_KEY:decryptSecret(settings.encryptedGeminiKey),GEMINI_BASE_URL:settings.baseUrl}
   try {
     fs.writeFileSync(reportPath,task.report,{mode:0o600})
     await execFileAsync(python,['text_distill.py','--domain',input.domain,'--input',reportPath,'--output',output,'--model','gemini-2.5-flash'],{cwd:root,env,timeout:30*60_000,maxBuffer:10*1024*1024})
@@ -1939,11 +1940,11 @@ ipcMain.handle('ai-employee:derive-amazon-keywords', (_event, intent) => aiEmplo
 ipcMain.handle('ai-employee:infer-evidence', (_event, input) => aiEmployeeChatService.inferDifferentiationAndCompliance(input))
 ipcMain.handle('amazon-data-source:get', () => publicAmazonDataSource())
 ipcMain.handle('amazon-data-source:save', (_event, input: { apiKey?: string; site: string; pages: number; maxSamples: number; cacheHours: number }) => {
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('当前系统安全存储不可用，不能保存 Amazon API Key')
+  if (!secretStorageAvailable()) throw new Error('当前系统安全存储不可用，不能保存 Amazon API Key')
   const current = readAmazonDataSource()
   const apiKey = String(input.apiKey || '').trim()
   const next: AmazonDataSourceSettings = {
-    encryptedApiKey: apiKey ? safeStorage.encryptString(apiKey).toString('base64') : current.encryptedApiKey,
+    encryptedApiKey: apiKey ? encryptSecret(apiKey) : current.encryptedApiKey,
     site: 'US',
     pages: Math.min(2, Math.max(1, Math.floor(Number(input.pages) || 1))),
     maxSamples: Math.min(48, Math.max(1, Math.floor(Number(input.maxSamples) || 24))),
@@ -1961,7 +1962,7 @@ ipcMain.handle('amazon-data-source:clear', () => {
 ipcMain.handle('amazon-data-source:test', async () => {
   const settings = readAmazonDataSource()
   if (!settings.encryptedApiKey) return { ok: false, message: '请先保存 API Key' }
-  const apiKey = safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(Buffer.from(settings.encryptedApiKey, 'base64')) : ''
+  const apiKey = secretStorageAvailable() ? decryptSecret(settings.encryptedApiKey) : ''
   try {
     const url = new URL(amazonScraperSearchEndpoint())
     url.searchParams.set('query', 'dog grooming brush')
@@ -2197,8 +2198,8 @@ ipcMain.handle('linduo-preferred:set', async (_event, accessToken: unknown, mode
 ipcMain.handle('amazon-data-source:search', async (_event, keyword: string): Promise<AmazonDataSourceSearchResult> => {
   const settings = readAmazonDataSource()
   if (!settings.encryptedApiKey) return { samples: null, error: 'Amazon API Key 未配置' }
-  if (!safeStorage.isEncryptionAvailable()) return { samples: null, error: '系统安全存储不可用' }
-  const apiKey = safeStorage.decryptString(Buffer.from(settings.encryptedApiKey, 'base64'))
+  if (!secretStorageAvailable()) return { samples: null, error: '系统安全存储不可用' }
+  const apiKey = decryptSecret(settings.encryptedApiKey)
   const term = String(keyword || '').trim()
   if (!term) return { samples: null, error: 'Amazon 检索词为空' }
   const cacheKey = `${settings.site}|${settings.pages}|${settings.maxSamples}|${term.toLowerCase()}`
@@ -2572,14 +2573,26 @@ ipcMain.handle('comparison:promote', (_event, request: ComparisonPromotionReques
 ipcMain.handle('workflow:counts', () => database?.getWorkflowCounts() ?? { collected: 0, compared: 0, selected: 0, stocked: 0, listed: 0, purchasing: 0, reconciled: 0 })
 ipcMain.handle('warehouse:list', () => database?.getSupplyWarehouseProducts() ?? [])
 ipcMain.handle('warehouse:list-pending-review', () => database?.listPendingReviewWarehouseProducts() ?? [])
+ipcMain.handle('warehouse:list-delisted', () => database?.listDelistedWarehouseProducts() ?? [])
 ipcMain.handle('warehouse:confirm-review', async (_event, id: string, accessToken: string) => {
   if (!database) throw new Error('数据库尚未初始化')
   await requireInboundEditPermission(accessToken)
   return database.confirmWarehouseReview(id)
 })
+ipcMain.handle('warehouse:delist', async (_event, id: string, reason: string, accessToken: string) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  await requireInboundEditPermission(accessToken)
+  return database.delistWarehouseProduct(id, reason)
+})
+ipcMain.handle('warehouse:restore', async (_event, id: string, accessToken: string) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  await requireInboundEditPermission(accessToken)
+  return database.restoreWarehouseProduct(id)
+})
 ipcMain.handle('warehouse:download', async (_event, warehouseProductId: string, accessToken: string) => {
   if (!database) throw new Error('数据库尚未初始化')
   if (!workspace) throw new Error('应用内浏览器尚未初始化')
+  await requireInboundEditPermission(accessToken)
   try {
     return await new SupplyProductDownloadService(database, workspace).download(warehouseProductId, accessToken)
   } catch (error) {
@@ -2641,8 +2654,8 @@ ipcMain.handle('ebay:stores:create', (_event, name:string, username:string, pass
   if(!name.trim())throw new Error('请输入 eBay 店铺名称')
   if(!username.trim())throw new Error('请输入 eBay 登录账号')
   if(!password)throw new Error('请输入 eBay 登录密码')
-  if(!safeStorage.isEncryptionAvailable())throw new Error('当前系统安全存储不可用，未保存店铺密码')
-  const encryptedPassword=safeStorage.encryptString(password).toString('base64')
+  if(!secretStorageAvailable())throw new Error('当前系统安全存储不可用，未保存店铺密码')
+  const encryptedPassword=encryptSecret(password)
   return database?.createEbayStore(name.trim(),username.trim(),encryptedPassword,marketplaceId||'EBAY_US')
 })
 ipcMain.handle('ebay:authorize', (_event, storeId:string) => authorizeEbayStore(storeId))
@@ -2976,8 +2989,8 @@ ipcMain.handle('marketplace:credential:status', (_event, accountId: string) => {
   return { accountId, username:row?.username || '', passwordSaved:Boolean(row?.encrypted_password), mode:row?.automation_mode || 'SESSION_ONLY', updatedAt:row?.updated_at }
 })
 ipcMain.handle('marketplace:credential:save', (_event, input: MarketplaceCredentialInput) => {
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('当前系统安全存储不可用，未保存密码')
-  const encryptedPassword = input.password ? safeStorage.encryptString(input.password).toString('base64') : ''
+  if (!secretStorageAvailable()) throw new Error('当前系统安全存储不可用，未保存密码')
+  const encryptedPassword = input.password ? encryptSecret(input.password) : ''
   const row = database?.saveMarketplaceCredential({ accountId:input.accountId, platformCode:input.platformCode, username:input.username.trim(), encryptedPassword, mode:input.mode })
   return { accountId:input.accountId, username:row?.username || '', passwordSaved:Boolean(row?.encrypted_password), mode:row?.automation_mode || 'SESSION_ONLY', updatedAt:row?.updated_at }
 })
@@ -2995,8 +3008,8 @@ ipcMain.handle('marketplace:credential:open-login', (_event, accountId: string, 
 ipcMain.handle('marketplace:credential:fill', async (_event, accountId: string, submit = false) => {
   const row = database?.getMarketplaceCredential(accountId)
   if (!row?.encrypted_password) throw new Error('当前账号未保存密码')
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('当前系统无法解密登录凭据')
-  const password = safeStorage.decryptString(Buffer.from(row.encrypted_password,'base64'))
+  if (!secretStorageAvailable()) throw new Error('当前系统无法解密登录凭据')
+  const password = decryptSecret(row.encrypted_password)
   return workspace?.fillActiveLogin(row.username,password,submit)
 })
 ipcMain.handle('image:models', async () => {
@@ -3212,6 +3225,7 @@ if (hasSingleInstanceLock) app.whenReady().then(async () => {
     callback(trusted ? 0 : -3)
   })
   if (!(await instanceGuard)) return
+  warmSecretStorage()
   const serverUrl = readServerUrl()
   if (isLocalServerUrl(serverUrl)) {
     serverProcessManager.start().catch(error => console.error('[server-manager] 本地服务自动拉起失败：', error))
