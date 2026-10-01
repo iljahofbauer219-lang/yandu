@@ -3359,10 +3359,12 @@ let serverShutdownDone = false
 app.on('will-quit', event => {
   if (serverShutdownDone) return
   event.preventDefault()
-  Promise.all([
+  const shutdown = Promise.all([
     serverProcessManager.stop().catch(error => console.error('[server-manager] 关闭本地服务失败：', error)),
     shutdownAdvisorRuntime().catch(error => console.error('[advisor] 关闭在线参谋运行时失败：', error))
-  ]).finally(() => {
+  ])
+  // 退出链挂死防护：本地服务/参谋运行时 stop 曾挂住导致 SIGTERM/osascript quit 30s+ 不退出（更新与换装被阻）；8s 强制继续退出流程
+  Promise.race([shutdown, new Promise(resolve => setTimeout(resolve, 8_000))]).finally(() => {
     serverShutdownDone = true
     // Windows 下更新包已下载完成时，退出即静默安装并启动新版（差量下载由 blockmap 自动生效）；
     // macOS 为 dmg 分发无法静默安装，仍走下载完成弹窗流程
