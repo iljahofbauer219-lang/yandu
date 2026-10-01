@@ -155,7 +155,7 @@ async function doRefreshShared(staleAccessToken: string): Promise<boolean> {
     if (getTokens()?.accessToken !== staleAccessToken) return true
     const tokens = getTokens()
     if (!tokens) return false
-    const response = await fetch(`${getServerBaseUrl()}/api/auth/refresh`, {
+    const response = await fetchWithTimeout(`${getServerBaseUrl()}/api/auth/refresh`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ refreshToken: tokens.refreshToken })
@@ -196,6 +196,19 @@ async function parseError(response: Response): Promise<ApiError> {
   )
 }
 
+/** 统一请求超时：服务器半死（TCP 通但不响应）时 15s 内失败，避免 UI 永久转圈（根治项 F） */
+const REQUEST_TIMEOUT_MS = 15_000
+
+function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  return fetch(url, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) }).catch(reason => {
+    const name = (reason as { name?: string })?.name
+    if (name === 'TimeoutError' || name === 'AbortError') {
+      throw new ApiError(0, 'SERVER_UNREACHABLE', '服务器无响应，请检查网络或稍后重试')
+    }
+    throw reason
+  })
+}
+
 export interface ApiFetchOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   body?: unknown
@@ -218,7 +231,7 @@ export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptio
       ? Object.entries(query).filter(([, value]) => value !== undefined && value !== '')
           .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`).join('&')
       : ''
-    return fetch(`${getServerBaseUrl()}${path}${search ? `?${search}` : ''}`, {
+    return fetchWithTimeout(`${getServerBaseUrl()}${path}${search ? `?${search}` : ''}`, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body)
