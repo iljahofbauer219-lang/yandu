@@ -7,6 +7,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { App } from './App'
+import { raceTimeout } from '../shared/raceTimeout'
 import { Button, Field, LoadingState, Notice } from './ui/primitives'
 import type { UserProfile } from './serverApi'
 import {
@@ -66,7 +67,7 @@ const SERVER_PRESETS = [
   { value: 'http://127.0.0.1:8787', label: '本地服务（127.0.0.1:8787）' }
 ]
 
-function LoginPage(props: { onLoggedIn: (profile: UserProfile) => void }) {
+function LoginPage(props: { onLoggedIn: (profile: UserProfile) => void; initialNotice?: string; onRetryRestore?: () => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState(getLastLoginPhone())
@@ -75,7 +76,7 @@ function LoginPage(props: { onLoggedIn: (profile: UserProfile) => void }) {
   const [showPassword, setShowPassword] = useState(false)
   const [serverUrl, setServerUrl] = useState(getServerBaseUrl())
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(props.initialNotice ?? '')
   const [notice, setNotice] = useState('')
   // 版本信息：登录页底部展示当前版本与更新状态（checking → ok / outdated / error）
   const [versionInfo, setVersionInfo] = useState<{ status: 'checking' } | { status: 'ok'; current: string } | { status: 'outdated'; current: string; latest: string } | { status: 'error'; current: string }>({ status: 'checking' })
@@ -205,6 +206,7 @@ function LoginPage(props: { onLoggedIn: (profile: UserProfile) => void }) {
         </button>
       } />
       {error && <Notice className="auth-error" tone="danger" role="alert">{error}</Notice>}
+      {error && props.onRetryRestore ? <button type="button" className="auth-retry-restore" onClick={props.onRetryRestore}>重试恢复会话</button> : null}
       {notice && <Notice className="auth-notice" tone="success" role="status" aria-live="polite">{notice}</Notice>}
       <Button className="auth-submit" variant="primary" type="submit" loading={submitting}>
         {mode === 'login' ? '登 录' : '提交注册申请'}
@@ -295,16 +297,23 @@ export function SessionGate() {
       .catch(() => undefined)
   }, [])
 
-  // 启动时校验并刷新会话（子帐号权限/店铺授权可能已被主帐号调整）
+  // 启动时校验并刷新会话（子帐号权限/店铺授权可能已被主帐号调整）；
+  // 服务器半死（TCP 通但不响应）时 fetch 永不 settle → 10s 竞态超时落登录页并提示重试（根治项 F）
+  const [restoreAttempt, setRestoreAttempt] = useState(0)
+  const [restoreNotice, setRestoreNotice] = useState('')
   useEffect(() => {
     if (state.kind !== 'booting') return
     let cancelled = false
-    void fetchProfile()
+    void raceTimeout(fetchProfile(), 10_000, 'SESSION_RESTORE_TIMEOUT')
       .then(profile => { if (!cancelled) setState({ kind: 'authed', profile }) })
-      .catch(() => { if (!cancelled) setState({ kind: 'guest' }) })
+      .catch(reason => {
+        if (cancelled) return
+        if (reason instanceof Error && reason.message === 'SESSION_RESTORE_TIMEOUT') setRestoreNotice('中央服务器 10 秒无响应，会话恢复超时；可直接登录或稍后重试')
+        setState({ kind: 'guest' })
+      })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [restoreAttempt, state.kind])
 
   // 服务端判定会话失效（刷新令牌被吊销/改密）→ 回登录页
   useEffect(() => {
@@ -332,7 +341,7 @@ export function SessionGate() {
     return <div className="auth-screen"><div className="auth-drag-strip" /><WindowTitleControls className="auth-win-controls" /><LoadingState className="auth-boot" label="正在恢复会话…" /></div>
   }
   if (state.kind === 'guest') {
-    return <LoginPage onLoggedIn={profile => setState({ kind: 'authed', profile })} />
+    return <LoginPage initialNotice={restoreNotice} onRetryRestore={restoreNotice ? () => { setRestoreNotice(''); setRestoreAttempt(attempt => attempt + 1); setState({ kind: 'booting' }) } : undefined} onLoggedIn={profile => setState({ kind: 'authed', profile })} />
   }
   if (state.profile.mustChangePassword) {
     return <ForceChangePassword profile={state.profile} onDone={() => setState({ kind: 'guest' })} />

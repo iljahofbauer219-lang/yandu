@@ -150,6 +150,7 @@
   border-color: #0abab5;
 }
 
+.auth-retry-restore { margin: -4px 0 10px; padding: 6px 14px; border: 1px solid var(--accent, #0d9488); color: var(--accent, #0d9488); background: transparent; border-radius: 999px; font: inherit; font-size: 12px; cursor: pointer; }
 .auth-error {
   margin: 0;
   font-size: 12px;
