@@ -33,6 +33,24 @@ export interface ProductLibraryItem {
 
 const STORAGE_KEY = 'aiEmployee.productLibrary'
 
+/**
+ * 商品库容量上限。
+ * 旧值 60 太小：超出的最旧条目被静默裁掉，用户看不到任何提示就"丢商品"。
+ * 提到 500 后正常用量碰不到上限；真碰到时由 addProductItem 返回 truncated 计数并 warn，不再静默。
+ */
+export const PRODUCT_LIBRARY_MAX = 500
+
+export interface ProductLibraryWriteResult {
+  /** 本次写入的条目 */
+  item: ProductLibraryItem
+  /** 因超出上限被裁掉的最旧条目数（0 = 未裁剪） */
+  truncated: number
+  /** 因去重（同 source + url）被替换掉的旧条目数 */
+  replaced: number
+  /** localStorage 写入失败原因；空串表示写入成功 */
+  quotaError: string
+}
+
 export function loadProductLibrary(): ProductLibraryItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -43,13 +61,23 @@ export function loadProductLibrary(): ProductLibraryItem[] {
   }
 }
 
-export function saveProductLibrary(items: ProductLibraryItem[]): void {
+/**
+ * 持久化商品库。返回写入失败原因（空串 = 成功）。
+ * 此前这里用一个空 catch 把配额超限/隐私模式写入失败整个吞掉，
+ * 界面照常提示"已加入商品库"，刷新后条目却没了 —— 现在至少留下可诊断的 warn 与返回值。
+ */
+export function saveProductLibrary(items: ProductLibraryItem[]): string {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-  } catch { /* ignore quota */ }
+    return ''
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    console.warn(`[product-library] 商品库写入失败（${items.length} 条未落盘）：${reason}`)
+    return reason
+  }
 }
 
-export function addProductItem(item: Omit<ProductLibraryItem, 'id' | 'createdAt'>): ProductLibraryItem {
+export function addProductItem(item: Omit<ProductLibraryItem, 'id' | 'createdAt'>): ProductLibraryWriteResult {
   const items = loadProductLibrary()
   const full: ProductLibraryItem = {
     ...item,
@@ -61,11 +89,16 @@ export function addProductItem(item: Omit<ProductLibraryItem, 'id' | 'createdAt'
   const filtered = dedupeKey
     ? items.filter(it => !it.url || `${it.source}::${it.url}` !== dedupeKey)
     : items
+  const replaced = items.length - filtered.length
   filtered.unshift(full)
-  // 最多保留 60 条
-  const trimmed = filtered.slice(0, 60)
-  saveProductLibrary(trimmed)
-  return full
+  // 超出上限时裁掉最旧：裁剪必须可观测（返回计数 + warn），不能像以前那样悄悄丢数据
+  const trimmed = filtered.slice(0, PRODUCT_LIBRARY_MAX)
+  const dropped = filtered.slice(PRODUCT_LIBRARY_MAX)
+  if (dropped.length) {
+    console.warn(`[product-library] 商品库已达上限 ${PRODUCT_LIBRARY_MAX} 条，裁掉最旧的 ${dropped.length} 条：${dropped.map(it => it.title).join('、')}`)
+  }
+  const quotaError = saveProductLibrary(trimmed)
+  return { item: full, truncated: dropped.length, replaced, quotaError }
 }
 
 export function removeProductItem(id: string): void {

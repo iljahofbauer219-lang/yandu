@@ -12,6 +12,7 @@ import { fetchAllLinduoChatModels, fetchLinduoMemberTier } from './serverApi'
 import { useSession } from './SessionGate'
 import { Button, EmptyState, LoadingState, Notice, StatusBadge } from './ui/primitives'
 import { MENU_PERMISSION_TREE, menuCheckState, summarizeMenuPermissions, toggleMenu, toggleMenuCard } from '../shared/menuPermissionTree'
+import { mergePermissionsForSubmit } from './memberPermissionMerge'
 
 type AdminTab = 'members' | 'review' | 'crawler' | 'org'
 
@@ -117,10 +118,15 @@ function MemberRow(props: {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
 
-  const modulePerms = member.roles.flatMap(r => {
+  // 成员当前全量权限 = 其所有已绑定角色权限点的并集（RoleView.permissions 来自 GET /api/roles，
+  // 页面加载时已取回；服务端无单成员详情端点，故用角色并集等价还原）
+  const allPerms = member.roles.flatMap(r => {
     const role = roles.find(rv => rv.id === r.id)
-    return role ? role.permissions.filter(p => p.startsWith('menu.')) : []
+    return role ? role.permissions : []
   }).filter((v, i, a) => a.indexOf(v) === i)
+
+  // UI 仅展示 menu.* 权限点（勾选树的可选集合）
+  const modulePerms = allPerms.filter(p => p.startsWith('menu.'))
 
   const startEdit = () => {
     setEditing(true)
@@ -139,7 +145,9 @@ function MemberRow(props: {
         await updateMember(member.id, { name: name.trim() })
       }
       if (permsChanged) {
-        await updateMemberPermissions(member.id, editPerms)
+        // PUT /permissions 是全量替换契约：必须把 UI 未展示的非 menu 权限（erp.* 等）
+        // 与编辑后的 menu 权限一并提交，否则保存菜单权限会静默清掉它们（plan #1）
+        await updateMemberPermissions(member.id, mergePermissionsForSubmit(allPerms, editPerms))
       }
       setEditing(false)
       setMessage('已保存')

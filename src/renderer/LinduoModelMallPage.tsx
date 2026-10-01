@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getTokens } from './serverApi'
+import { PanelCollapseButton, PanelExpandRail, usePanelCollapse } from './panel-collapse'
 import type { LinduoLoginStatus, LinduoModelPricing } from '../shared/contracts'
 import {
   LINDUO_MODELS,
@@ -27,6 +28,7 @@ import {
  */
 
 export function LinduoModelMallPage({ onBack, onOpenLlmKeys }: { onBack: () => void; onOpenLlmKeys: () => void }) {
+  const filterPanel = usePanelCollapse('linduo-mall-filter')
   const [vendorFilter, setVendorFilter] = useState<Set<LinduoVendor>>(new Set(VENDORS))
   const [capabilityFilter, setCapabilityFilter] = useState<Set<LinduoCapability>>(new Set(CAPABILITIES))
   const [keyword, setKeyword] = useState('')
@@ -170,8 +172,9 @@ export function LinduoModelMallPage({ onBack, onOpenLlmKeys }: { onBack: () => v
       </div>
     </div>
     {refreshError && <div className="linduo-mall-pricing-error" role="status">价格抓取失败：{refreshError}</div>}
-    <div className="linduo-mall-layout">
-      <aside className="linduo-mall-filter">
+    <div className={`linduo-mall-layout${filterPanel.collapsed?' side-collapsed':''}`}>
+      {filterPanel.collapsed?<PanelExpandRail panel={filterPanel} label="筛选面板"/>:<aside className="linduo-mall-filter collapsible-aside">
+        <PanelCollapseButton panel={filterPanel}/>
         <div className="linduo-mall-filter-section">
           <b>搜索</b>
           <input
@@ -218,7 +221,7 @@ export function LinduoModelMallPage({ onBack, onOpenLlmKeys }: { onBack: () => v
         <div className="linduo-mall-filter-hint">
           命中 {filtered.length} / {LINDUO_MODELS.length} 个模型
         </div>
-      </aside>
+      </aside>}
       <div className="linduo-mall-grid">
         {filtered.length === 0
           ? <div className="linduo-mall-empty">没有匹配的模型，请调整筛选条件</div>

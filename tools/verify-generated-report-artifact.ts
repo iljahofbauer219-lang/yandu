@@ -1,10 +1,12 @@
 import { promises as fsp } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { generatedMarkdownPathFromReply } from '../src/shared/reportArtifact'
 import { materializeGeneratedMarkdownReply } from '../src/main/services/generatedReportArtifact'
 
 async function main() {
-  const reportPath = path.join('/tmp', `yd-report-artifact-${process.pid}.md`)
+  // 临时目录口径全仓统一为 os.tmpdir()：硬编码 /tmp 在 Windows（%TEMP%）下白名单永远不匹配
+  const reportPath = path.join(os.tmpdir(), `yd-report-artifact-${process.pid}.md`)
   const markdown = '# Amazon 美国站选品分析报告\n\n| 指标 | 结果 |\n| --- | --- |\n| 平台 | Amazon 美国站 |\n\n这是用于验证历史报告恢复链路的完整 Markdown 正文。'.repeat(4)
   await fsp.writeFile(reportPath, markdown, 'utf8')
   try {

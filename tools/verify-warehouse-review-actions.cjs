@@ -28,6 +28,7 @@ const ARTIFACTS = path.resolve(__dirname, '../artifacts/warehouse-review-actions
 fs.mkdirSync(ARTIFACTS, { recursive: true })
 
 const FIXTURE_TITLE = 'FIXTURE Review Gamma Loft Bed 400001'
+const PENDING_TITLE = 'FIXTURE Review Pending Delta Bed 400002'
 
 const ownerProfile = {
   id: 'wr-ui-owner', email: 'owner@example.test', name: '老板', isOwner: true,
@@ -83,6 +84,28 @@ const ownerProfile = {
     await page.locator('.selection-module-nav.warehouse-flow-nav').getByRole('button', { name: '正式入库' }).click()
     await page.waitForTimeout(700)
 
+    // 待复核二级闸口：审批种子行先在此复核确认，再流入入库处理
+    const pendingSection = page.locator('.warehouse-pending-review')
+    assert('正式入库展示待复核区', await pendingSection.count() === 1)
+    const pendingCard = pendingSection.locator('article', { hasText: PENDING_TITLE })
+    assert('待复核卡展示种子商品', await pendingCard.count() === 1)
+    await pendingCard.getByRole('button', { name: '复核确认入库', exact: true }).click()
+    await page.waitForTimeout(800)
+    assert('复核后待复核区清空', await page.locator('.warehouse-pending-review').count() === 0)
+    await page.locator('.sidebar').getByRole('button', { name: '货盘仓库', exact: true }).click()
+    await page.waitForTimeout(800)
+    await page.locator('.selection-module-nav.warehouse-flow-nav').getByRole('button', { name: '入库处理', exact: true }).click()
+    await page.waitForTimeout(800)
+    const pendingInbound = page.locator('.product-card', { hasText: PENDING_TITLE })
+    assert('复核后流入入库处理待确认', await pendingInbound.count() === 1)
+    assert('入库处理来源徽标为选品审批', (await pendingInbound.innerText()).includes('选品审批'))
+    await page.locator('.sidebar').getByRole('button', { name: 'AI采集', exact: true }).click()
+    await page.waitForSelector('.ai-collect-grid', { timeout: 8000 })
+    await page.locator('.ai-collect-card', { hasText: '大健云仓' }).click()
+    await page.waitForTimeout(700)
+    await page.locator('.selection-module-nav.warehouse-flow-nav').getByRole('button', { name: '正式入库' }).click()
+    await page.waitForTimeout(700)
+
     const card = page.locator('.warehouse-product-grid article', { hasText: FIXTURE_TITLE })
     assert('正式入库展示种子商品卡', await card.count() === 1)
     const downloadButton = card.getByRole('button', { name: '下载产品', exact: true })
@@ -96,8 +119,9 @@ const ownerProfile = {
     const warehouseAfter = await page.evaluate(() => window.desktop.warehouses.list())
     assert('退回后正式入库列表为空（ARCHIVED）', Array.isArray(warehouseAfter) && warehouseAfter.length === 0)
     const inboundAfter = await page.evaluate(() => window.desktop.inbound.list())
-    assert('退回后入库队列含 1 条 PENDING 选品快照', inboundAfter.length === 1 && inboundAfter[0].status === 'PENDING' && inboundAfter[0].origin === 'SELECTION')
-    assert('快照标题继承正式入库', inboundAfter[0].snapshot.title === FIXTURE_TITLE)
+    const returnedRow = inboundAfter.filter(entry => entry.snapshot.title === FIXTURE_TITLE)
+    assert('退回后入库队列含该品 PENDING 选品快照', returnedRow.length === 1 && returnedRow[0].status === 'PENDING' && returnedRow[0].origin === 'SELECTION')
+    assert('快照标题继承正式入库', returnedRow.length === 1)
     const palletAfter = await page.evaluate(() => window.desktop.pallet.list())
     assert('退回后货盘存放已删除', palletAfter.length === 0)
 

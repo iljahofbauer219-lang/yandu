@@ -88,6 +88,9 @@ const insertPallet = db.prepare(`INSERT INTO pallet_warehouse_items (id, warehou
 
 if (seedMode === 'review' || seedMode === 'review-page') {
   insertWarehouse.run('wh-fixture-r1', 'GIGACLOUD', 'sel-fixture-r1', 'https://www.gigab2b.com/fixture/r1', '400001', 'FIXTURE Review Gamma Loft Bed 400001', fixtureImage('#dbeafe'), '$168.00', 'FIXTURE Seller', '家具', '卧室家具', '高架床', now, now)
+  // 待复核二级闸口种子：审批后第一级确认位（PENDING_REVIEW），供「复核确认入库」流转验收
+  insertWarehouse.run('wh-fixture-r2', 'GIGACLOUD', 'sel-fixture-r2', 'https://www.gigab2b.com/fixture/r2', '400002', 'FIXTURE Review Pending Delta Bed 400002', fixtureImage('#fecaca'), '$199.00', 'FIXTURE Seller', '家具', '卧室家具', '高架床', now, now)
+  db.prepare(`UPDATE supply_warehouse_products SET status = 'PENDING_REVIEW' WHERE id = 'wh-fixture-r2'`).run()
   if (seedMode === 'review-page') {
     // 预置服务器详情页档案：供「已生成服务器详情页」提示条与查看页面按钮验收
     db.prepare(`INSERT INTO supply_product_downloads (warehouse_product_id, page_id, page_url, image_count, failed_count, status, error, downloaded_at) VALUES (?, ?, ?, ?, 0, 'DOWNLOADED', '', ?)`)

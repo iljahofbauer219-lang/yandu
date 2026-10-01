@@ -156,7 +156,11 @@ async function createSession(request, reply) {
   const expiresAt = Date.parse(principal.expiresAt)
   sessions.set(id, { ...principal, workerOrigin, expiresAt })
   reply.writeHead(204, {
-    'set-cookie': `${cookieName}=${id}.${sign(id)}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${Math.max(1, Math.floor((expiresAt - Date.now()) / 1000))}`,
+    // SameSite=Lax：会话 cookie 授权的是每用户一个的隔离执行容器，必须杜绝跨站请求携带它。
+    // 桌面端走 Node fetch 手动附 Cookie 头（HarnessGatewayClient），不受 SameSite 约束；
+    // 浏览器侧的 harness Web UI 与 /api/ 同站（nginx /harness/ 与 /api/ 同一 host），Lax 照常发送。
+    // 不要改回 None —— 那会让任意第三方站点都能发起带此 cookie 的请求（CSRF）。
+    'set-cookie': `${cookieName}=${id}.${sign(id)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.max(1, Math.floor((expiresAt - Date.now()) / 1000))}`,
     'cache-control': 'no-store'
   })
   reply.end()

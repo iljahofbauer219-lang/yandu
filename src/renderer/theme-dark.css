@@ -6,6 +6,14 @@
 /* ---------- (a) 语义变量覆盖 ---------- */
 [data-theme="dark"] { --bg-app:#000; --bg-panel:rgba(255,255,255,.07); --bg-soft:rgba(255,255,255,.05); --bg-sidebar:rgba(255,255,255,.04); --text-primary:#f2f5f4; --text-secondary:#b7c0bc; --text-muted:#8a938f; --border-strong:rgba(255,255,255,.16); --border-soft:rgba(255,255,255,.10); --accent:#00e08a; --accent-soft:rgba(0,224,138,.12); --accent-contrast:#7cf0c4; --danger:#ff6b5b; --danger-bg:rgba(255,107,91,.12); --warn:#ffc45e; --ok:#00e08a; --card-blur:14px; --glow:0 0 18px rgba(0,224,138,.18); --shadow-card:0 8px 28px rgba(0,0,0,.5); color-scheme:dark; }
 
+/* ---------- (a2) 别名变量补齐 ----------
+   sample-library.css / linduoModelPickerModal.css / knowledge-hub.css 引用了下列从未在全局
+   变量表定义过的别名（--bg-primary、--bg-hover 等只在 .ebay-stage-panel 局部有定义，出了那棵子树就失效）。
+   浅色主题保持原样：这些调用点自带浅色 fallback，补浅色值反而会把 #475569/#64748b/#94a3b8 三档
+   压成同一档，故只在暗色按语义映射到既有 token —— 否则暗色下全部落到浅色 fallback（白底黑字盲区）。
+   同时补上 --border / --text-tertiary：本文件 (c) 段的 .review-perms 规则也引用了这两个未定义变量。 */
+[data-theme="dark"] { --fg-soft:var(--text-secondary); --fg-strong:var(--text-primary); --bg-card:var(--bg-panel); --bg-primary:var(--bg-panel); --bg-hover:rgba(255,255,255,.10); --border:var(--border-strong); --text-tertiary:var(--text-muted); }
+
 /* ---------- (b) 定点覆盖：应用壳 ---------- */
 :root[data-theme="dark"] { color:var(--text-primary); background:var(--bg-app); }
 [data-theme="dark"] body { background:var(--bg-app); color:var(--text-primary); }

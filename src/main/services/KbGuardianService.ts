@@ -397,7 +397,7 @@ export class KbGuardianService {
       let softSyncHandled = false  // 软同步成功且不需要回退时为 true（避免软+硬都走时重复 ++updated）
       // I.5 阶段新增：软/硬两路同步
       if (entry && effectiveSyncMode === 'soft') {
-        // soft：保留旧 docId，调用 MaxKB 替换文件 + 重解析
+        // soft：调用 MaxKB 替换文件 + 重解析；替换会换 docId，用返回的新 id 写回 hashes
         try {
           docId = await this.updateAndParse(skill.targetKbId, entry.docId, absPath)
           softSyncHandled = true
@@ -565,12 +565,15 @@ export class KbGuardianService {
     return ids[0]
   }
 
-  // I.5 阶段新增：软同步专用路径（保留 docId，调用 MaxKB 替换文件 + 重解析）
+  // I.5 阶段新增：软同步专用路径（调用 MaxKB 替换文件 + 重解析）
+  // 注意：MaxKB 的"替换"实现是删旧文档 + 传新文档，**docId 会变**。
+  // 必须把 updateDoc 返回的新 id 用于 parseDocs / waitParse 并返回给 processOneFile 写回 hashes，
+  // 否则 hashes 里留的是已删除的旧 id：waitParse 报"解析中文档丢失"，孤儿清理还会去删一个不存在的文档。
   private async updateAndParse(kbId: string, docId: string, absPath: string): Promise<string> {
-    await this.kb.updateDoc(kbId, docId, absPath)
-    await this.kb.parseDocs(kbId, [docId])
-    await this.waitParse(kbId, docId)
-    return docId
+    const newDocId = await this.kb.updateDoc(kbId, docId, absPath)
+    await this.kb.parseDocs(kbId, [newDocId])
+    await this.waitParse(kbId, newDocId)
+    return newDocId
   }
 
   // 轮询解析状态至 DONE；FAIL/CANCEL 抛错；5 分钟超时记失败不阻塞其余

@@ -2571,6 +2571,12 @@ ipcMain.handle('comparison:update', (_event, request: ComparisonUpdateRequest) =
 ipcMain.handle('comparison:promote', (_event, request: ComparisonPromotionRequest) => database?.promoteComparisonToWarehouse(request))
 ipcMain.handle('workflow:counts', () => database?.getWorkflowCounts() ?? { collected: 0, compared: 0, selected: 0, stocked: 0, listed: 0, purchasing: 0, reconciled: 0 })
 ipcMain.handle('warehouse:list', () => database?.getSupplyWarehouseProducts() ?? [])
+ipcMain.handle('warehouse:list-pending-review', () => database?.listPendingReviewWarehouseProducts() ?? [])
+ipcMain.handle('warehouse:confirm-review', async (_event, id: string, accessToken: string) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  await requireInboundEditPermission(accessToken)
+  return database.confirmWarehouseReview(id)
+})
 ipcMain.handle('warehouse:download', async (_event, warehouseProductId: string, accessToken: string) => {
   if (!database) throw new Error('数据库尚未初始化')
   if (!workspace) throw new Error('应用内浏览器尚未初始化')

@@ -1338,7 +1338,7 @@ export class AppDatabase {
       .forEach(item => {
         const warehoused = this.database.prepare(`SELECT 1 FROM supply_warehouse_products WHERE selection_id = ? LIMIT 1`).get(item.id)
         const queued = this.database.prepare(`SELECT 1 FROM inbound_processing_items WHERE origin = 'SELECTION' AND source_id = ? LIMIT 1`).get(item.id)
-        if (!warehoused && !queued) this.upsertInboundFromSelection(item)
+        if (!warehoused && !queued) this.upsertWarehousePendingReview(item)
       })
     this.migrateProductIntakeRegistry()
     const ebayStores=this.database.prepare(`SELECT id FROM ebay_stores`).all() as Array<{id:string}>
@@ -2557,10 +2557,10 @@ export class AppDatabase {
     comparison = this.updateComparison({id:comparison.id,decision:'RECOMMENDED'})
     const imported = this.importSelection({sourceArea:'MARKET',product:comparison.marketProduct,category:request.category,subcategory:request.subcategory,tertiaryCategory:request.tertiaryCategory,comparison})
     const selection = this.updateSelectionDecision(imported.id,'APPROVED')
-    const inboundItem = this.listInbound().find(item=>item.origin==='SELECTION'&&item.sourceId===selection.id)
-    if (!inboundItem) throw new Error('入库处理队列条目生成失败')
-    this.database.prepare(`INSERT INTO workflow_events (task_id, ozon_url, stage, action, detail, created_at) VALUES (?, ?, 'REVERSE_COMPARE', 'PROMOTE_TO_INBOUND', ?, ?)`).run(comparison.taskId,comparison.marketProduct.url,JSON.stringify({comparisonId:comparison.id,selectionId:selection.id,inboundItemId:inboundItem.id,supplierUrl:primary.url,estimatedMargin:comparison.estimatedMargin}),new Date().toISOString())
-    return {comparison:this.getComparisons().find(item=>item.id===comparison.id)!,selection,inboundItemId:inboundItem.id}
+    const pendingReview = this.listPendingReviewWarehouseProducts().find(item=>item.selectionId===selection.id)
+    if (!pendingReview) throw new Error('正式入库待复核条目生成失败')
+    this.database.prepare(`INSERT INTO workflow_events (task_id, ozon_url, stage, action, detail, created_at) VALUES (?, ?, 'REVERSE_COMPARE', 'PROMOTE_TO_PENDING_REVIEW', ?, ?)`).run(comparison.taskId,comparison.marketProduct.url,JSON.stringify({comparisonId:comparison.id,selectionId:selection.id,pendingReviewId:pendingReview.id,supplierUrl:primary.url,estimatedMargin:comparison.estimatedMargin}),new Date().toISOString())
+    return {comparison:this.getComparisons().find(item=>item.id===comparison.id)!,selection,pendingReviewId:pendingReview.id}
   }
 
   getSelectionCatalog(): SelectionCatalogItem[] {
@@ -2612,7 +2612,7 @@ export class AppDatabase {
     payload.updatedAt = new Date().toISOString()
     this.database.prepare(`UPDATE selection_records SET decision = ?, payload = ?, updated_at = ? WHERE id = ?`).run(decision, JSON.stringify(payload), payload.updatedAt, id)
     if (payload.sourceArea === 'SUPPLY' || payload.supplierUrl) {
-      if (decision === 'APPROVED') this.upsertInboundFromSelection(payload)
+      if (decision === 'APPROVED') this.upsertWarehousePendingReview(payload)
       else this.database.prepare(`UPDATE supply_warehouse_products SET status = 'ARCHIVED', updated_at = ? WHERE selection_id = ?`).run(payload.updatedAt, payload.id)
     }
     return this.getSelectionCatalog().find(item => item.id === id)!
@@ -2777,16 +2777,50 @@ export class AppDatabase {
     }
   }
 
-  /** 选品审批过闸：APPROVED 不落正式入库，落 SELECTION 待确认快照 */
-  private upsertInboundFromSelection(item: SelectionCatalogItem): InboundProcessingItem[] {
+  /** 选品审批过闸第一级：APPROVED 不落入库队列，先落正式入库表 PENDING_REVIEW 待复核行 */
+  private upsertWarehousePendingReview(item: SelectionCatalogItem): SupplyWarehouseProduct {
     const now = new Date().toISOString()
     const warehouseCode: SupplyWarehouseCode = item.platformCode === 'GIGACLOUD' ? 'GIGACLOUD' : '1688'
-    const snapshot: InboundSnapshot = {
-      platformCode: item.platformCode, warehouseCode, itemCode: item.productId, title: item.title, imageUrl: item.imageUrl, priceText: item.priceText,
-      category: item.category, subcategory: item.subcategory, tertiaryCategory: item.tertiaryCategory,
-      sourceUrl: item.supplierUrl || item.sourceUrl, tags: [], collectedAt: now
+    const sourceUrl = item.supplierUrl || item.sourceUrl
+    const existing = this.database.prepare(`SELECT id, status FROM supply_warehouse_products WHERE warehouse_code = ? AND source_url = ?`).get(warehouseCode, sourceUrl) as { id: string; status: string } | undefined
+    // 已 ACTIVE（曾确认入库）的存量行不降级回待复核
+    if (existing && existing.status === 'ACTIVE') return this.getSupplyWarehouseProductById(existing.id)!
+    const product: SupplyWarehouseProduct = {
+      id: existing?.id || crypto.randomUUID(), warehouseCode, selectionId: item.id, sourceUrl,
+      productId: item.productId, title: item.title, imageUrl: item.imageUrl, priceText: item.priceText,
+      supplierName: '', category: item.category, subcategory: item.subcategory, tertiaryCategory: item.tertiaryCategory,
+      status: 'PENDING_REVIEW', updatedAt: now
     }
-    return this.upsertInboundRow({ origin: 'SELECTION', sourceId: item.id, selectionId: item.id, snapshot, now })
+    this.database.prepare(`INSERT INTO supply_warehouse_products (id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, payload, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, 'PENDING_REVIEW', ?, ?, ?)
+      ON CONFLICT(warehouse_code, source_url) DO UPDATE SET selection_id=excluded.selection_id, product_id=excluded.product_id, title=excluded.title, image_url=excluded.image_url, price_text=excluded.price_text, category=excluded.category, subcategory=excluded.subcategory, tertiary_category=excluded.tertiary_category, status='PENDING_REVIEW', payload=excluded.payload, updated_at=excluded.updated_at`)
+      .run(product.id, warehouseCode, item.id, sourceUrl, product.productId, product.title, product.imageUrl, product.priceText, product.category, product.subcategory, product.tertiaryCategory, JSON.stringify(product), now, now)
+    return product
+  }
+
+  /** 正式入库待复核列表（审批后第一级确认位） */
+  listPendingReviewWarehouseProducts(): SupplyWarehouseProduct[] {
+    const rows = this.database.prepare(`SELECT id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, updated_at FROM supply_warehouse_products WHERE status = 'PENDING_REVIEW' ORDER BY updated_at DESC`).all() as unknown as Array<Record<string, unknown>>
+    return rows.map(row => ({ id: String(row.id), warehouseCode: row.warehouse_code as SupplyWarehouseProduct['warehouseCode'], selectionId: String(row.selection_id), sourceUrl: String(row.source_url), productId: String(row.product_id), title: String(row.title), imageUrl: String(row.image_url), priceText: String(row.price_text), supplierName: String(row.supplier_name), category: String(row.category), subcategory: String(row.subcategory), tertiaryCategory: String(row.tertiary_category), status: row.status as SupplyWarehouseProduct['status'], updatedAt: String(row.updated_at) }))
+  }
+
+  /** 待复核二次确认：写入入库处理待确认队列（origin=SELECTION），待复核行归档 */
+  confirmWarehouseReview(id: string): SupplyWarehouseProduct[] {
+    const row = this.database.prepare(`SELECT * FROM supply_warehouse_products WHERE id = ?`).get(id) as Record<string, unknown> | undefined
+    if (!row || String(row.status) !== 'PENDING_REVIEW') throw new Error('待复核商品不存在或已处理')
+    const now = new Date().toISOString()
+    const selectionId = String(row.selection_id || '')
+    const existingInbound = selectionId ? this.database.prepare(`SELECT snapshot_json FROM inbound_processing_items WHERE origin = 'SELECTION' AND source_id = ?`).get(selectionId) as { snapshot_json: string } | undefined : undefined
+    const inheritTags = existingInbound ? (JSON.parse(existingInbound.snapshot_json) as InboundSnapshot).tags : []
+    const snapshot: InboundSnapshot = {
+      platformCode: String(row.warehouse_code), warehouseCode: String(row.warehouse_code) as SupplyWarehouseCode, itemCode: String(row.product_id),
+      title: String(row.title), imageUrl: String(row.image_url), priceText: String(row.price_text),
+      category: String(row.category), subcategory: String(row.subcategory), tertiaryCategory: String(row.tertiary_category),
+      sourceUrl: String(row.source_url), tags: inheritTags, collectedAt: now
+    }
+    this.upsertInboundRow({ origin: 'SELECTION', sourceId: selectionId || id, selectionId, snapshot, now })
+    this.database.prepare(`UPDATE supply_warehouse_products SET status = 'ARCHIVED', updated_at = ? WHERE id = ?`).run(now, id)
+    return this.listPendingReviewWarehouseProducts()
   }
 
   /** 建/刷新队列行；CONFIRMED 行冻结不覆盖 */

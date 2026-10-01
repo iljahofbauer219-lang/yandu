@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { PanelCollapseButton, PanelExpandRail, usePanelCollapse } from './panel-collapse'
 
 /**
  * 阿里百炼（通义千问）模型广场：浏览 24 个百炼大模型。
@@ -82,6 +83,7 @@ const BAILIAN_MODELS: BailianModelEntry[] = [
 const CAPABILITIES: BailianCapability[] = ['CHAT', 'VISION', 'IMAGE', 'TRANSLATION', 'EMBEDDING', 'AUDIO', 'CODE', 'REASONING', 'OMNI']
 
 export function BailianModelMallPage({ onBack }: { onBack: () => void }) {
+  const filterPanel = usePanelCollapse('bailian-mall-filter')
   const [capabilityFilter, setCapabilityFilter] = useState<Set<BailianCapability>>(new Set(CAPABILITIES))
   const [keyword, setKeyword] = useState('')
   const [bailianConfigured, setBailianConfigured] = useState<boolean | null>(null)
@@ -144,8 +146,9 @@ export function BailianModelMallPage({ onBack }: { onBack: () => void }) {
         <button type="button" onClick={onBack}>返回 AI总部</button>
       </div>
     </div>
-    <div className="bailian-mall-layout">
-      <aside className="bailian-mall-filter">
+    <div className={`bailian-mall-layout${filterPanel.collapsed?' side-collapsed':''}`}>
+      {filterPanel.collapsed?<PanelExpandRail panel={filterPanel} label="筛选面板"/>:<aside className="bailian-mall-filter collapsible-aside">
+        <PanelCollapseButton panel={filterPanel}/>
         <div className="bailian-mall-filter-section">
           <b>搜索</b>
           <input
@@ -175,7 +178,7 @@ export function BailianModelMallPage({ onBack }: { onBack: () => void }) {
         <div className="bailian-mall-filter-hint">
           命中 {filtered.length} / {BAILIAN_MODELS.length} 个模型
         </div>
-      </aside>
+      </aside>}
       <div className="bailian-mall-grid">
         {filtered.length === 0
           ? <div className="bailian-mall-empty">没有匹配的模型，请调整筛选条件</div>

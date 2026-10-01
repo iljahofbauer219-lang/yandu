@@ -58,26 +58,46 @@ const TODO_STATUS_CLASS: Record<MyTodo['status'], string> = {
 }
 
 const ACTION_LABEL: Record<TeamActivity['action'], string> = {
-  created: '创建',
-  updated: '更新',
-  deleted: '删除',
-  enabled: '启用',
-  disabled: '禁用',
-  reset_pwd: '重置密码',
-  role_changed: '角色变更',
-  ai_quota_exceeded: 'AI 配额超限',
-  login: '登录',
-  logout: '登出'
+  'member.create': '新增成员',
+  'member.update': '更新成员',
+  'member.delete': '删除成员',
+  'member.approve': '通过注册申请',
+  'member.reject': '驳回注册申请',
+  'grant.update': '调整店铺授权',
+  'role.create': '新增角色',
+  'role.update': '更新角色',
+  'role.delete': '删除角色',
+  'store.create': '新增店铺',
+  'store.update': '更新店铺',
+  'store.delete': '删除店铺',
+  'auth.register': '注册',
+  'auth.login': '登录',
+  'auth.logout': '登出',
+  'auth.change-password': '修改密码',
+  'ai.quota.update': '调整 AI 配额',
+  'linduo.member.tier.set': '调整模型档位',
+  'linduo.tier.models.set': '调整档位模型',
+  'linduo.chat_model.toggle_enabled': '上下架模型'
 }
 
-const TARGET_TYPE_LABEL: Record<TeamActivity['targetType'], string> = {
+/** targetType 是审计日志里的自由字符串，未收录的值回退显示原值 */
+const TARGET_TYPE_LABEL: Record<string, string> = {
+  user: '成员',
+  User: '成员',
+  organization: '组织',
+  role: '角色',
+  store: '店铺',
   product: '产品',
   report: '报告',
   task: '任务',
-  user: '成员',
-  role: '角色',
   kb: '知识库',
-  session: '会话'
+  session: '会话',
+  media: '素材',
+  'product-page': '产品页',
+  ai: 'AI',
+  LinduoModelTier: '模型档位',
+  LinduoChatModel: '模型',
+  UserLinduoException: '模型例外'
 }
 
 function formatRelativeTime(at: number, now: number): string {
@@ -100,7 +120,6 @@ function kpiIcon(key: DashboardKpi['key']): string {
     case 'failedTasks': return '⚠️'
     case 'aiQuotaUsed': return '🤖'
     case 'activeMembers': return '👥'
-    case 'runningSkills': return '🛡️'
     default: return '·'
   }
 }
@@ -241,9 +260,9 @@ export default function Dashboard() {
                 <li key={activity.id} className="dashboard-activity-item">
                   <span className="activity-time">{formatClock(activity.at)}</span>
                   <span className="activity-member">{activity.memberName}</span>
-                  <span className="activity-action">{ACTION_LABEL[activity.action]}</span>
+                  <span className="activity-action">{ACTION_LABEL[activity.action] ?? activity.action}</span>
                   <span className="activity-target">
-                    {TARGET_TYPE_LABEL[activity.targetType]}: <b>{activity.targetLabel}</b>
+                    {TARGET_TYPE_LABEL[activity.targetType] ?? activity.targetType}: <b>{activity.targetLabel}</b>
                   </span>
                 </li>
               ))}
@@ -262,7 +281,7 @@ function KpiCard({ kpi }: { kpi: DashboardKpi }) {
       <div className="kpi-body">
         <div className="kpi-label">{kpi.label}</div>
         <div className="kpi-value-row">
-          <span className="kpi-value">{kpi.value}</span>
+          <span className="kpi-value">{kpi.value ?? '—'}</span>
           {kpi.suffix && <span className="kpi-suffix">{kpi.suffix}</span>}
         </div>
         {kpi.trend && kpi.trendValue !== undefined && kpi.trendValue > 0 && (

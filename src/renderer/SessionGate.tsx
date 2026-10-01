@@ -4,7 +4,7 @@
  * - mustChangePassword → 强制改密页（改密后服务端吊销全部令牌，回登录页）
  * - 监听 SESSION_EXPIRED_EVENT（apiFetch 刷新失败广播）自动退回登录页
  */
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { App } from './App'
 import { Button, Field, LoadingState, Notice } from './ui/primitives'
@@ -101,6 +101,23 @@ function LoginPage(props: { onLoggedIn: (profile: UserProfile) => void }) {
 
   const passwordRef = useRef<HTMLInputElement>(null)
 
+  // 手动「检查更新」（根治项 C）：回读 feed 版本并驱动主进程 autoUpdater 检查+自动下载；
+  // 检查中禁用防连点，失败落到 error 态后可再次点击重试
+  const [checkingNow, setCheckingNow] = useState(false)
+  const runCheckNow = useCallback(async () => {
+    setCheckingNow(true)
+    setVersionInfo({ status: 'checking' })
+    try {
+      const result = await window.desktop.appInfo.checkUpdateNow()
+      if (result.error) setVersionInfo({ status: 'error', current: result.current })
+      else setVersionInfo(result.isLatest ? { status: 'ok', current: result.current } : { status: 'outdated', current: result.current, latest: result.latest })
+    } catch {
+      setVersionInfo({ status: 'error', current: '' })
+    } finally {
+      setCheckingNow(false)
+    }
+  }, [])
+
   // 浏览器自动填充密码不会触发 React 的 onChange，监听原生 input 事件将 DOM 真实值同步进 state
   useEffect(() => {
     const el = passwordRef.current
@@ -193,6 +210,9 @@ function LoginPage(props: { onLoggedIn: (profile: UserProfile) => void }) {
         {mode === 'login' ? '登 录' : '提交注册申请'}
       </Button>
       {mode === 'register' && <p className="auth-hint">注册提交后需管理员审核通过方可登录。</p>}
+      <button type="button" className="auth-server-toggle" disabled={checkingNow || versionInfo.status === 'checking'} onClick={() => void runCheckNow()}>
+        {checkingNow || versionInfo.status === 'checking' ? '正在检查更新…' : '检查更新'}
+      </button>
       <button type="button" className="auth-server-toggle" onClick={() => setShowServer(value => !value)}>
         服务器：{serverUrl} {showServer ? '▴' : '▾'}
       </button>

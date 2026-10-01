@@ -14,10 +14,11 @@ export interface AiEmployeeChatModelProfile {
   name: string
   hint: string
   // provider 语义：
-  //   - maxkb：MaxKB v2.10.5-lts 智体（5 application 全部走 maxkbChat，优先路径）
-  //   - ragflow：RAGFlow 智能体（30 天兼容回退，2026-09-23 停服）
+  //   - maxkb：MaxKB v2.10.5-lts 智体（5 application 全部走 maxkbChat，唯一智能体路径）
   //   - bailian / deepseek：直连 OpenAI 兼容 chat/completions（用于视觉转写 / 长文回退）
-  provider: 'maxkb' | 'ragflow' | 'bailian' | 'deepseek'
+  // 注：RAGFlow 30 天兼容回退已于 2026-09-23 到期并整体删除，旧 modelId
+  //     （ragflow-agent / listing-agent）由主进程改路由到对应的 MaxKB 应用。
+  provider: 'maxkb' | 'bailian' | 'deepseek'
   supportsVision: boolean
   available: boolean
 }
@@ -31,7 +32,7 @@ export interface AiEmployeeAskRequest {
   // - true：主进程 chat() 入口在 user content 末尾追加 SAMPLE_LIBRARY_KB_REFERENCE_PROMPT
   // - false/缺省：不追加（默认行为）
   // - 优先对 MaxKB 智能体链路生效（amazon-skills-agent / maxkb-sourcing / maxkb-listing / maxkb-guardian）；
-  //   RAGFlow 30 天回退链路（ragflow-agent / listing-agent）也注入但即将停服；直连模型（百炼/DeepSeek）不注入
+  //   直连模型（百炼/DeepSeek）不注入
   useSampleLibrary?: boolean
   // 三件套护栏：渲染端复用的 requestId，用于 cancelAsk 命中 activeChats 中的 controller。
   // 缺省时主进程 fallback 生成；推荐渲染端在 send() 入口生成并在 cancelSend 中复用。

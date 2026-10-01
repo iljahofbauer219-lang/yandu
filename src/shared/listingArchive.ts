@@ -4,7 +4,20 @@
  */
 
 export const LISTING_ARCHIVE_KEY = 'yd.listingWorkbench.archive'
-export const LISTING_ARCHIVE_MAX = 20
+/**
+ * 归档批次数上限。
+ * 旧值 20 太小：第 21 批一到就把最旧的一批静默裁掉，用户完全看不到"归档被丢"。
+ * 提到 100 后正常用量碰不到上限；真碰到时 upsertBatch 会 warn，
+ * 需要计数的调用方改用 upsertBatchDetailed 拿 truncated。
+ */
+export const LISTING_ARCHIVE_MAX = 100
+
+export interface ListingArchiveUpsertResult {
+  /** 覆盖置顶并裁剪后的归档 */
+  batches: ListingBatchRecord[]
+  /** 本次因超出上限被裁掉的最旧批次数（0 = 未裁剪） */
+  truncated: number
+}
 
 export type ListingTaskStatus = 'pending' | 'running' | 'done' | 'failed' | 'interrupted'
 
@@ -28,9 +41,23 @@ export interface ListingBatchRecord {
   tasks: ListingTaskRecord[]
 }
 
-/** 归档写入：同批次按 id 覆盖置顶，超出上限裁掉最旧 */
+/** 归档写入：同批次按 id 覆盖置顶，超出上限裁掉最旧（裁剪会 warn，计数见 upsertBatchDetailed） */
 export function upsertBatch(archive: ListingBatchRecord[], batch: ListingBatchRecord): ListingBatchRecord[] {
-  return [batch, ...archive.filter(item => item.id !== batch.id)].slice(0, LISTING_ARCHIVE_MAX)
+  return upsertBatchDetailed(archive, batch).batches
+}
+
+/**
+ * 同 upsertBatch，但把「裁掉了几个最旧批次」显式返回。
+ * 归档是用户手工生成的 Listing 包，静默丢弃等于丢工作成果，故裁剪必须可观测。
+ */
+export function upsertBatchDetailed(archive: ListingBatchRecord[], batch: ListingBatchRecord): ListingArchiveUpsertResult {
+  const merged = [batch, ...archive.filter(item => item.id !== batch.id)]
+  const batches = merged.slice(0, LISTING_ARCHIVE_MAX)
+  const dropped = merged.slice(LISTING_ARCHIVE_MAX)
+  if (dropped.length) {
+    console.warn(`[listing-archive] 归档已达上限 ${LISTING_ARCHIVE_MAX} 批，裁掉最旧的 ${dropped.length} 批：${dropped.map(item => item.id).join('、')}`)
+  }
+  return { batches, truncated: dropped.length }
 }
 
 /** 恢复载入：未完成的在途状态一律转「已中断」，可单包重试 */

@@ -40,10 +40,33 @@ const NAME_TO_AGENT: Array<{ match: RegExp; agentKey: KbAgentKey }> = [
   { match: /运营/, agentKey: 'ops' }
 ]
 
+/** 解析"仍在进行"的分片状态词（parseProgress 用）；不在此表内的状态一律视为已终结 */
+const PENDING_PARSE_STATUS = /RUNNING|PROCESSING|WAIT|WAITING|PENDING|QUEUE|QUEUED|INIT|DOING|PARSING|EMBEDDING/i
+
 /** MaxKB v2.10.5-lts CE 不支持 KB CRUD —— 抛错统一文案，UI 层捕获后引导走 Web Console */
 export const ERR_KB_CREATE_UNSUPPORTED = 'MaxKB v2.10.5-lts CE 暂不支持 API 创建知识库；请在 MaxKB Web Console（http://114.55.149.192:8080/admin）手动创建后，将 KB ID 加入 .env.local 的 MAXKB_KNOWLEDGE_DATASETS'
 export const ERR_KB_DELETE_UNSUPPORTED = 'MaxKB v2.10.5-lts CE 暂不支持 API 删除知识库；请在 MaxKB Web Console 操作'
-export const ERR_KB_ENSURE_UNSUPPORTED = 'MaxKB v2.10.5-lts CE 暂不支持 API 按需创建智能体知识库；5 个 application 共享 .env.local 中声明的固定 KB'
+export const ERR_KB_DATASETS_UNCONFIGURED = '未配置 MAXKB_KNOWLEDGE_DATASETS：请在 MaxKB Web Console（http://114.55.149.192:8080/admin）创建知识库后，把 KB ID 以英文逗号分隔填入 .env.local 的该变量，然后重启应用'
+
+/** 智能体库未在 MAXKB_KNOWLEDGE_DATASETS 中声明时的可操作指引（含它必须匹配的库名规则） */
+function errAgentKbNotDeclared(agentKey: KbAgentKey): string {
+  const agent = KB_AGENTS.find(item => item.key === agentKey)
+  const rule = NAME_TO_AGENT.find(item => item.agentKey === agentKey)
+  return `MAXKB_KNOWLEDGE_DATASETS 已声明的知识库中没有「${agent?.name ?? agentKey}」对应的库`
+    + `（库名需匹配 ${rule ? String(rule.match) : '（无匹配规则）'}）。`
+    + '请在 MaxKB Web Console 创建该知识库并把 KB ID 加入 .env.local 的 MAXKB_KNOWLEDGE_DATASETS，然后重启应用'
+}
+
+/**
+ * 声明了库却一个都读不到时的指引。
+ * fetchDatasets() 对单库拉取失败只 console.warn 后跳过并返回空数组，
+ * 若不在此区分，鉴权/网络问题会被误报成「库名不匹配」，把人引到错误的修法上。
+ */
+function errKbUnreachable(declaredCount: number): string {
+  return `MAXKB_KNOWLEDGE_DATASETS 声明了 ${declaredCount} 个知识库，但一个都没能读取到。`
+    + '通常是 MAXKB_ADMIN_TOKEN 未配置或已失效，也可能是 MAXKB_BASE_URL 不可达。'
+    + '请在 .env.local 补齐后重启应用（主进程在启动时定格环境变量）'
+}
 
 export class MaxkbKnowledgeService {
   private categories: Record<string, KbCategoryNode[]> = {}
@@ -202,9 +225,28 @@ export class MaxkbKnowledgeService {
     throw new Error(ERR_KB_DELETE_UNSUPPORTED)
   }
 
+  /**
+   * 解析智能体对应的知识库。
+   *
+   * MaxKB v2.10.5-lts CE 的 admin API 不支持建库（POST/PUT/PATCH /workspace/default/knowledge 全部 405/404），
+   * 因此这里**不创建**，而是复用 list() 的同一套 NAME_TO_AGENT 名称归类，从 .env.local 的
+   * MAXKB_KNOWLEDGE_DATASETS 已声明的库里解析出该智能体的槽位 —— 与 KnowledgeHub 界面显示的归属完全一致。
+   * 解析不到时抛出可操作指引（缺哪个库、库名要匹配什么、去哪加配置），而不是笼统的"不支持"。
+   *
+   * 调用方（SampleLibraryKbIngestor.preview/ingest、SampleLibraryKbGuardianLauncher.ensure）
+   * 此前因这里无条件抛错而整条链路必然失败。
+   */
   async ensureAgentKb(agentKey: KbAgentKey): Promise<KbView> {
-    void agentKey
-    throw new Error(ERR_KB_ENSURE_UNSUPPORTED)
+    if (!KB_AGENTS.some(item => item.key === agentKey)) throw new Error(`未知的智能体键：${agentKey}`)
+    const declared = this.datasets()
+    if (!declared.length) throw new Error(ERR_KB_DATASETS_UNCONFIGURED)
+    const listView = await this.list()
+    const view = listView.agents.find(slot => slot.key === agentKey)?.kb ?? null
+    if (view) return view
+    // 声明了库却一个都没解析出来 → 问题在拉取环节（token/网络），不是命名不匹配，两种指引不能混
+    const resolvedCount = listView.agents.filter(slot => slot.kb).length + listView.customs.length
+    if (resolvedCount === 0) throw new Error(errKbUnreachable(declared.length))
+    throw new Error(errAgentKbNotDeclared(agentKey))
   }
 
   // ─── 文件管理：列表 / 上传 / 解析（v2 自动解析：noop）/ 停止（v2 noop）/ 删除 / 更新 ──
@@ -236,13 +278,27 @@ export class MaxkbKnowledgeService {
     return status.toUpperCase()
   }
 
+  /**
+   * status_meta.aggs → 解析进度百分比。
+   *
+   * aggs 是 MaxKB 对本文档各分片按状态聚合的计数（如 [{status:'SUCCESS',count:3},{status:'RUNNING',count:2}]）。
+   * 旧实现算出了 total 却恒返回 100，前端进度条在解析中途也显示"已完成"，与 run 字段自相矛盾。
+   *
+   * 口径：进度 = 已终结分片 / 全部分片。只有明确"仍在跑"的状态计入未完成，
+   * 无法识别的状态词一律当作已终结 —— 否则 MaxKB 换状态词表时全部就绪文档会永久停在 0%（比恒 100 更误导）。
+   */
   private parseProgress(statusMeta: Record<string, unknown> | undefined): number {
     if (!statusMeta) return 0
     const aggs = statusMeta.aggs as Array<{ count?: number; status?: string }> | undefined
     if (!Array.isArray(aggs) || !aggs.length) return 100
-    const total = aggs.reduce((sum, item) => sum + (item.count || 0), 0)
+    const countOf = (item: { count?: number }) => Number(item.count) > 0 ? Number(item.count) : 0
+    const total = aggs.reduce((sum, item) => sum + countOf(item), 0)
     if (!total) return 0
-    return 100
+    const pending = aggs
+      .filter(item => typeof item.status === 'string' && PENDING_PARSE_STATUS.test(item.status))
+      .reduce((sum, item) => sum + countOf(item), 0)
+    const percent = Math.round((total - pending) / total * 100)
+    return Math.min(100, Math.max(0, percent))
   }
 
   async uploadDocs(kbId: string, filePaths: string[], category?: string): Promise<string[]> {
@@ -278,11 +334,20 @@ export class MaxkbKnowledgeService {
     }
   }
 
-  /** 重新上传：先 DELETE 再上传（v2 不暴露 update_doc 等价 API） */
-  async updateDoc(kbId: string, docId: string, filePath: string): Promise<void> {
+  /**
+   * 重新上传：先 DELETE 再上传（v2 不暴露 update_doc 等价 API）。
+   *
+   * 返回**新的 docId**：删除后重传，MaxKB 一定会换 id。此前本方法返回 void、新 id 在函数内即被丢弃，
+   * 调用方（KbGuardianService.updateAndParse）只能把旧 id 写回 hashes，于是
+   * ① 后续 parseDocs / waitParse 盯着一个已删除的文档 → "解析中文档丢失"；
+   * ② 孤儿清理拿旧 id 去 DELETE 一个不存在的文档 → 每次都记一条无意义的失败。
+   * 调用方必须用返回值覆盖自己保存的 docId。
+   */
+  async updateDoc(kbId: string, docId: string, filePath: string): Promise<string> {
     await this.deleteDocs(kbId, [docId])
     const [newId] = await this.uploadDocs(kbId, [filePath])
     if (!newId) throw new Error('MaxKB 重新上传失败：未返回新 docId')
+    return newId
   }
 
   // ─── 多级分类：本地目录树 + 服务端 tags[] 同步（segment tag 模拟） ─────

@@ -49,7 +49,16 @@ describe('AiEmployeeChatService.listModels 岗位白名单', () => {
     const svc = new AiEmployeeChatService()
     const ids = svc.listModels().map(m => m.id)
     expect(ids).toContain('amazon-skills-agent')
-    expect(ids.length).toBeGreaterThanOrEqual(9)
+    // 目录 = 4 个 MaxKB 应用 + 2 个百炼 + 1 个 DeepSeek；RAGFlow 两个回退项已随 30 天窗口到期删除
+    expect(ids.length).toBeGreaterThanOrEqual(7)
+  })
+
+  it('RAGFlow 30 天回退（2026-09-23 到期）已从模型目录移除', () => {
+    const svc = new AiEmployeeChatService()
+    const models = svc.listModels()
+    expect(models.map(m => m.id)).not.toContain('ragflow-agent')
+    expect(models.map(m => m.id)).not.toContain('listing-agent')
+    expect(models.some(m => String(m.provider) === 'ragflow')).toBe(false)
   })
 
   it('选品调研员仅暴露 amazon-skills-agent', () => {

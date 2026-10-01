@@ -6,7 +6,7 @@
  * - 点击触发 onSelect(bestPractice)
  */
 
-import type { BestPractice } from '../shared/agentCategories'
+import { agentNameBySlug, type BestPractice } from '../shared/agentCategories'
 
 type Props = {
   items: BestPractice[]
@@ -29,7 +29,7 @@ export default function BestPracticeGrid({ items, onSelect }: Props) {
           <div className="best-practice-body">
             <b>{item.title}</b>
             <small>{item.description}</small>
-            <span className="best-practice-target">→ {item.targetAgent}</span>
+            <span className="best-practice-target">→ {agentNameBySlug(item.targetAgent)}</span>
           </div>
         </button>
       ))}

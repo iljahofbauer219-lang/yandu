@@ -73,7 +73,7 @@ export interface SceneEntry {
   description: string
   icon: string
   color: string
-  /** 跳转到对应员工（AgentProfile.name） */
+  /** 跳转到对应员工（AgentProfile.id 稳定 slug） */
   targetAgent: string
   /** 可选预填任务描述 */
   prefillQuery?: string
@@ -85,7 +85,7 @@ export interface BestPractice {
   title: string
   description: string
   icon: string
-  /** 案例跳转目标（agent name） */
+  /** 案例跳转目标（AgentProfile.id 稳定 slug） */
   targetAgent: string
   /** 可选预填任务 */
   prefillQuery?: string
@@ -323,7 +323,7 @@ export const SCENE_ENTRIES: SceneEntry[] = [
     description: '一键生成选品报告',
     icon: '🔍',
     color: '#0ea5e9',
-    targetAgent: '选品调研员'
+    targetAgent: 'researcher'
   },
   {
     id: 'scene-market',
@@ -331,7 +331,7 @@ export const SCENE_ENTRIES: SceneEntry[] = [
     description: '类目与竞品全景',
     icon: '📊',
     color: '#10b981',
-    targetAgent: '选品调研员'
+    targetAgent: 'researcher'
   },
   {
     id: 'scene-listing',
@@ -339,7 +339,7 @@ export const SCENE_ENTRIES: SceneEntry[] = [
     description: '六段长文 · 多语',
     icon: '✨',
     color: '#f59e0b',
-    targetAgent: 'Listing精造师'
+    targetAgent: 'listing'
   },
   {
     id: 'scene-image',
@@ -347,7 +347,7 @@ export const SCENE_ENTRIES: SceneEntry[] = [
     description: '主图与场景图',
     icon: '🖼',
     color: '#8b5cf6',
-    targetAgent: '图片设计师'
+    targetAgent: 'image-designer'
   },
   {
     id: 'scene-pricing',
@@ -355,7 +355,7 @@ export const SCENE_ENTRIES: SceneEntry[] = [
     description: '采购 · FBA · 利润',
     icon: '💰',
     color: '#f59e0b',
-    targetAgent: '产品定价员'
+    targetAgent: 'pricing'
   },
   {
     id: 'scene-fba',
@@ -363,7 +363,7 @@ export const SCENE_ENTRIES: SceneEntry[] = [
     description: '库存与补货',
     icon: '📦',
     color: '#10b981',
-    targetAgent: '物流精算师'
+    targetAgent: 'logistics'
   }
 ]
 
@@ -374,28 +374,28 @@ export const BEST_PRACTICES: BestPractice[] = [
     title: '宠物美容刷选品分析',
     description: '基于 Amazon 真实数据生成的选品报告样例',
     icon: '🐾',
-    targetAgent: '选品调研员'
+    targetAgent: 'researcher'
   },
   {
     id: 'bp-amazon-listing',
     title: 'Listing 六段长文样例',
     description: 'Amazon 美国站 Listing 多语版本',
     icon: '📝',
-    targetAgent: 'Listing精造师'
+    targetAgent: 'listing'
   },
   {
     id: 'bp-knowledge',
     title: '知识库增量更新',
     description: '守卫 24h 自动收集',
     icon: '🛡',
-    targetAgent: '知识库守卫'
+    targetAgent: 'guardian'
   },
   {
     id: 'bp-competitor',
     title: '竞品差异化分析',
     description: '5 个头部 ASIN 对比',
     icon: '🎯',
-    targetAgent: '竞品分析员'
+    targetAgent: 'competitor'
   }
 ]
 
@@ -406,7 +406,7 @@ export interface CrossborderDepartment {
   name: string
   /** 部门色条颜色 */
   color: string
-  /** 部门成员（AgentProfile.name） */
+  /** 部门成员（AgentProfile.id 稳定 slug） */
   agents: string[]
 }
 
@@ -415,13 +415,13 @@ export const CROSSBORDER_DEPARTMENTS: CrossborderDepartment[] = [
     id: 'cb-ops',
     name: '一、跨境营运部',
     color: '#0abab5',
-    agents: ['选品调研员', '竞品分析员', '产品定价员', '类目优选员']
+    agents: ['researcher', 'competitor', 'pricing', 'category']
   },
   {
     id: 'cb-product-optimization',
     name: '二、产品优化部',
     color: '#f59e0b',
-    agents: ['Listing精造师']
+    agents: ['listing']
   }
 ]
 
@@ -443,6 +443,20 @@ export function findAgentById(id: string): AgentProfile | undefined {
     if (agent) return agent
   }
   return undefined
+}
+
+/**
+ * 稳定 slug：中文岗位名或英文 id → 英文 id。
+ * 存储键 / 匹配键（localStorage、applicableAgents、targetAgent、部门成员）一律用 slug，
+ * 改中文岗位名不再产生孤儿配置（旧中文名键由消费方读时迁移）。
+ */
+export function agentSlug(nameOrId: string): string {
+  return findAgentById(nameOrId)?.id ?? findAgentByName(nameOrId)?.id ?? nameOrId
+}
+
+/** slug 反查中文岗位名（工作台 position props 与展示用） */
+export function agentNameBySlug(slug: string): string {
+  return findAgentById(slug)?.name ?? slug
 }
 
 /** 工具函数：找出 agent 归属的一级类目 */

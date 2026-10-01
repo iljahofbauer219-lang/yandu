@@ -591,7 +591,18 @@ function extractAmazonListingEvidence(doc: Document): AmazonListingEvidence | nu
   }
 }
 
-export const AMAZON_LISTING_EVIDENCE_SCRIPT = `(${extractAmazonListingEvidence.toString()})(document)`
+/**
+ * 主进程隐藏视图 executeJavaScript 注入串：序列化自 extractAmazonListingEvidence。
+ * 该函数体内引用了三个模块级 helper（重量/尺寸/尺码段解析），页面上下文没有模块作用域，
+ * 少注入任何一个都会抛 ReferenceError 并被调用方的 catch 静默吞掉——表现为详情页证据整条丢失且无告警。
+ * helper 均为纯函数、不引用模块级变量，故直接拼接其源码即可保持单一事实源。
+ */
+export const AMAZON_LISTING_EVIDENCE_SCRIPT = [
+  parseAmazonItemWeightGrams.toString(),
+  parseAmazonPackageDimensionsCm.toString(),
+  determineAmazonSizeTier.toString(),
+  `(${extractAmazonListingEvidence.toString()})(document)`
+].join('\n')
 
 /** FBA 履约费推算输入：仅需在阶段 4 填表前可追溯的重量 + 尺寸 + 售价线索。 */
 export interface EstimateFbaFulfillmentFeeInput {
@@ -1181,10 +1192,20 @@ export function sanitizeAmazonMarketClaims(content: string, audit?: AmazonSample
 
   const cellsOf = (line: string) => line.trim().slice(1, -1).split('|').map(cell => cell.trim())
   const rowOf = (cells: string[]) => `| ${cells.join(' | ')} |`
-
-  return lines.map(line => {
+  const isTableRow = (value: string) => value.startsWith('|') && value.endsWith('|')
+  const isDelimiterRow = (value: string) => isTableRow(value) && /^:?-{3,}:?$/.test(cellsOf(value)[0] || '')
+  // 表头行 = 「下一行是分隔行（| --- | --- |）」的表格行，按行号预判。
+  // 只靠 inTable 布尔量时，相邻两张表之间没有空行会把第二张表的表头当成数据行处理，
+  // 于是沿用上一张表算出的 restrictedColumns 去改新表的列 —— 两张表列义不同即串列。
+  const headerRowIndexes = new Set<number>()
+  lines.forEach((line, index) => {
     const trimmed = line.trim()
-    if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) {
+    if (isTableRow(trimmed) && !isDelimiterRow(trimmed) && isDelimiterRow((lines[index + 1] ?? '').trim())) headerRowIndexes.add(index)
+  })
+
+  return lines.map((line, index) => {
+    const trimmed = line.trim()
+    if (!isTableRow(trimmed)) {
       inTable = false
       restrictedColumns = []
       const hasUnsupportedNumber = /[$¥￥%]|\d/.test(trimmed
@@ -1201,21 +1222,22 @@ export function sanitizeAmazonMarketClaims(content: string, audit?: AmazonSample
     }
 
     const cells = cellsOf(trimmed)
-    if (/^:?-{3,}:?$/.test(cells[0] || '')) return line
-    if (!inTable) {
+    if (isDelimiterRow(trimmed)) return line
+    // 表头行（含无分隔行的畸形表首行）：重置状态并按本表表头重算受限列
+    if (headerRowIndexes.has(index) || !inTable) {
       inTable = true
-      restrictedColumns = cells.flatMap((cell, index) => marketMetric.test(cell) ? [index] : [])
+      restrictedColumns = cells.flatMap((cell, columnIndex) => marketMetric.test(cell) ? [columnIndex] : [])
       return line
     }
     const next = [...cells]
     const salesSignalRow = allowSalesSignal && /(?:DIRECT样本月销量|月购买信号)/i.test(next[0] || '') && next.some(cell => salesSignalText.test(cell))
     if (salesSignalRow) return rowOf(next)
-    restrictedColumns.forEach(index => {
-      if (index < next.length && !unknown.test(next[index])) next[index] = '待验证'
+    restrictedColumns.forEach(columnIndex => {
+      if (columnIndex < next.length && !unknown.test(next[columnIndex])) next[columnIndex] = '待验证'
     })
     const metricIndex = next.findIndex(cell => marketMetric.test(cell) || (/TOP\s*50/i.test(cell) && !/(?:非完整|不是|并非|不等同)/i.test(cell)))
     if (metricIndex >= 0 && !isMarketOperationalLine(trimmed)) {
-      for (let index = metricIndex + 1; index < next.length; index += 1) next[index] = '待验证'
+      for (let columnIndex = metricIndex + 1; columnIndex < next.length; columnIndex += 1) next[columnIndex] = '待验证'
     }
     return rowOf(next)
   }).join('\n')

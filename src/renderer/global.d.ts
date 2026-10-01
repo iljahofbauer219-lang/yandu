@@ -307,6 +307,8 @@ declare global {
       }
       warehouses: {
         list(): Promise<SupplyWarehouseProduct[]>
+        listPendingReview(): Promise<SupplyWarehouseProduct[]>
+        confirmReview(id: string, accessToken: string): Promise<SupplyWarehouseProduct[]>
         download(warehouseProductId: string, accessToken: string): Promise<SupplyProductDownload>
         downloads(): Promise<SupplyProductDownload[]>
         openDownload(warehouseProductId: string): Promise<boolean>

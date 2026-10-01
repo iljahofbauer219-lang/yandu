@@ -7,6 +7,7 @@ import { defaultLanguagesForSites, formatDraftAsMaterial, formatExtractedAsMater
 import type { ListingDraftEntry } from '../shared/listingBridge'
 import type { MarketplacePlatformCode, MarketplacePublishDraft } from '../shared/contracts'
 import './listing-workbench.css'
+import { PanelCollapseButton, PanelExpandRail, usePanelCollapse } from './panel-collapse'
 
 /** 示例素材（含品牌/型号/术语命中词，便于完整走六阶段流程） */
 const SAMPLE_MATERIAL = '商品名称：一键退毛自洁梳；品牌：PetPal；型号：PP-201；材质：ABS手柄+不锈钢针+TPU软垫；重量180g；包装尺寸22×10×5 cm；功能：双弹簧一键退毛按钮、一体成型不锈钢针头、圆头针尖、TPE防滑握柄；场景：家庭猫犬美容；认证：无。'
@@ -83,6 +84,7 @@ const STATUS_LABEL: Record<ListingTaskStatus, string> = {
 }
 
 export default function ListingWorkbench() {
+  const configPanel = usePanelCollapse('listing-config')
   // 进入时恢复最近批次（在途任务转「已中断」），实现刷新/重启无丢失
   const [initial] = useState(() => {
     const archive = loadArchive()
@@ -311,8 +313,9 @@ export default function ListingWorkbench() {
     && [...checkResults.values()].every(checks => checks.every(check => check.ok))
 
   return (
-    <div className="listing-workbench">
-      <aside className="listing-workbench-config">
+    <div className={`listing-workbench${configPanel.collapsed?' side-collapsed':''}`}>
+      {configPanel.collapsed?<PanelExpandRail panel={configPanel} label="Listing配置面板"/>:<aside className="listing-workbench-config collapsible-aside">
+        <PanelCollapseButton panel={configPanel}/>
         <section className="lw-config-block">
           <header>
             <b>中文商品素材</b>
@@ -385,7 +388,7 @@ export default function ListingWorkbench() {
           </div>
           <small>每包约 1-3 分钟，串行生成；逐包自动归档，刷新或重启后可恢复。</small>
         </footer>
-      </aside>
+      </aside>}
 
       <div className="listing-workbench-results">
         <header className="lw-results-header">

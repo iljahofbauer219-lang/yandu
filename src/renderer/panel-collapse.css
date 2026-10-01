@@ -1,0 +1,56 @@
+/* 全局侧面板收起/展开：面板内收起按钮、收起后展开轨、收起态 grid 覆写与过渡动画 */
+.workspace, .candidate-page, .image-studio, .image-editor, .ebay-browser-layout, .ebay-library-layout,
+.listing-workbench, .sample-library-grid, .linduo-mall-layout, .bailian-mall-layout, .support-workspace {
+  transition: grid-template-columns .25s ease;
+}
+
+/* 收起按钮：作为 aside 第一个子节点，auto  margin 靠右上且不占垂直空间；sticky 保证滚动时仍可见 */
+.panel-collapse-toggle {
+  position: sticky; top: 8px; z-index: 6;
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; flex: none;
+  margin: 0 0 -26px auto; padding: 0;
+  border: 1px solid transparent; border-radius: 8px;
+  background: transparent; color: var(--text-muted);
+  cursor: pointer;
+  transition: background .18s, color .18s, border-color .18s;
+}
+.panel-collapse-toggle:hover { color: var(--accent-contrast); background: var(--accent-soft); border-color: var(--border-soft); }
+.panel-collapse-toggle svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* 展开轨：收起后占据 32px 轨道，撑满容器高度 */
+.panel-expand-rail {
+  display: flex; align-items: flex-start; justify-content: center;
+  width: 32px; min-height: 0; padding: 10px 0;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: var(--panel); color: var(--text-muted);
+  cursor: pointer; box-shadow: var(--shadow-card);
+  transition: background .18s, color .18s, border-color .18s;
+}
+.panel-expand-rail:hover { color: var(--accent-contrast); background: var(--accent-soft); border-color: #a7deda; }
+.panel-expand-rail svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* 收起态 grid 覆写：左轨缩为展开轨；展开态沿用各文件现有列宽与媒体查询 */
+.workspace.side-collapsed, .candidate-page.side-collapsed, .image-studio.side-collapsed,
+.listing-workbench.side-collapsed, .sample-library-grid.side-collapsed,
+.linduo-mall-layout.side-collapsed, .bailian-mall-layout.side-collapsed { grid-template-columns: 32px minmax(0,1fr); }
+.ebay-browser-layout.side-collapsed, .ebay-library-layout.side-collapsed { display: grid; grid-template-columns: 32px minmax(0,1fr); }
+.support-workspace.side-collapsed { grid-template-columns: 32px minmax(0,1fr) 320px; }
+.image-editor.side-right-collapsed { grid-template-columns: minmax(0,1fr) 32px; }
+@media (max-width:1180px) { .support-workspace.side-collapsed { grid-template-columns: 32px minmax(0,1fr); } }
+@media (max-width:900px) {
+  .support-workspace.side-collapsed { grid-template-columns: 1fr; }
+  .support-workspace .panel-expand-rail { display: none; }
+}
+
+/* 面板展开淡入动画 */
+@keyframes panel-slide-in { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+@keyframes panel-slide-in-right { from { opacity: 0; transform: translateX(6px); } to { opacity: 1; transform: none; } }
+.collapsible-aside { animation: panel-slide-in .22s ease; }
+.collapsible-aside-right { animation: panel-slide-in-right .22s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace, .candidate-page, .image-studio, .image-editor, .ebay-browser-layout, .ebay-library-layout,
+  .listing-workbench, .sample-library-grid, .linduo-mall-layout, .bailian-mall-layout, .support-workspace { transition: none; }
+  .collapsible-aside, .collapsible-aside-right { animation: none; }
+}

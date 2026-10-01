@@ -17,10 +17,17 @@ export class BailianTranslationService {
   private requestQueue: Promise<void> = Promise.resolve()
   private lastRequestStartedAt = 0
 
-  constructor(private readonly apiKey: string, private readonly baseUrl: string) {}
+  // 懒读 env：llm-keys 页保存 Key 会同步 process.env，翻译立即生效，无需重启应用
+  private get apiKey(): string {
+    return String(process.env.BAILIAN_API_KEY || '').trim()
+  }
+
+  private get baseUrl(): string {
+    return String(process.env.BAILIAN_BASE_URL || '').trim() || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+  }
 
   async translateTexts(texts: string[],targetLanguage='Chinese',domain='跨境电商商品页面。保留品牌名、型号、SKU、货币符号、产品编号和平台专有名称。') {
-    if (!this.apiKey) throw new Error('未配置百炼 API Key')
+    if (!this.apiKey) throw Object.assign(new Error('未配置百炼 API Key（BAILIAN_KEY_MISSING）：请到 AI总部 → 大模型API Key 保存后重试'), { code: 'BAILIAN_KEY_MISSING' })
     const unique = [...new Set(texts.map(text => text.trim()).filter(Boolean))]
     const result = new Map<string, string>()
     const pending = unique.filter(text => {

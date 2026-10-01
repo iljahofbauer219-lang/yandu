@@ -99,9 +99,21 @@ export function findGlossaryToken(text: string): { index: number; token: string 
   return best
 }
 
+/**
+ * 证据等级字母的词边界守卫。
+ *
+ * 只有前后都不紧邻「词内字符」的 F/E/A/U 才是证据等级。旧写法只排除相邻 ASCII 字母，
+ * 于是正文里的孤立字母被误替换：「3F 仓」「F1 赛事」「A版标题」「U形瓶」「选A」全会中招
+ * （例如 A版标题 → 分析假设版标题）。这里把数字与中日韩表意文字也视为词内字符。
+ * 注意：与字母之间有空格时仍无法区分（「选 A 版」），故调用方必须只在证据等级列上使用。
+ */
+const EVIDENCE_WORD_CHAR = 'A-Za-z0-9\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF'
+const EVIDENCE_LETTER_RE = new RegExp(`(?<![${EVIDENCE_WORD_CHAR}])([FEAU])(?![${EVIDENCE_WORD_CHAR}])`, 'g')
+const FIRST_EVIDENCE_LETTER_RE = new RegExp(`(?<![${EVIDENCE_WORD_CHAR}])([FEAU])(?![${EVIDENCE_WORD_CHAR}])`)
+
 /** 提取文本中独立成词的证据等级字母（F/E/A/U，含 A/U 这类斜杠组合） */
 export function findEvidenceLetter(text: string): { index: number; letter: string } | null {
-  const m = /(?<![A-Za-z])([FEAU])(?![A-Za-z])/.exec(text)
+  const m = FIRST_EVIDENCE_LETTER_RE.exec(text)
   return m ? { index: m.index, letter: m[1] } : null
 }
 
@@ -119,7 +131,7 @@ export function stripAppendix(content: string): string {
 
 /** 将文本中独立成词的证据等级字母替换为中文（A/U → 分析假设/未知），其余内容原样 */
 export function convertEvidenceToChinese(text: string): string {
-  return text.replace(/(?<![A-Za-z])([FEAU])(?![A-Za-z])/g, letter => EVIDENCE_CN[letter])
+  return text.replace(EVIDENCE_LETTER_RE, letter => EVIDENCE_CN[letter] ?? letter)
 }
 
 // ─── H 阶段：报告样例库对齐兜底（ensureSampleLibraryAlignment）────────────

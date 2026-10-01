@@ -1,6 +1,6 @@
 /**
  * 知识库中心：两大类（智能体知识库 / 自定义知识库）+ 自研文件管理视图。
- * - 智能体区：每个 AI 员工固定卡位，未生成可一键生成专属库
+ * - 智能体区：每个 AI 员工固定卡位，未绑定时可一键解析 .env.local 已声明的专属库（CE 不支持建库）
  * - 自定义区：对话框创建、可删除（卡片内二次确认）
  * - 文件管理：上传 → 自动解析 → 状态轮询（RUNNING 每 3 秒刷新）
  */
@@ -97,7 +97,7 @@ export default function KnowledgeHub({ onOpenEmployee }: { onOpenEmployee?: () =
       await window.desktop.kb.ensureAgent(agentKey)
       await load()
     } catch (reason) {
-      setFailure(reason instanceof Error ? reason.message : '生成智能体知识库失败')
+      setFailure(reason instanceof Error ? reason.message : '解析智能体知识库失败')
     } finally {
       setBusy('')
     }
@@ -129,7 +129,7 @@ export default function KnowledgeHub({ onOpenEmployee }: { onOpenEmployee?: () =
         <GuardianSection state={guardian} onChanged={() => { void loadGuardian(); void load() }} />
         {tab !== 'custom' && (
           <section className="kb-hub-section">
-            <h2>智能体知识库<small>每个 AI 员工自动生成各自专属知识库</small></h2>
+            <h2>智能体知识库<small>每个 AI 员工一个专属库 · 需先在 .env.local 声明，再解析绑定</small></h2>
             <div className="kb-hub-grid">
               {agents.map(slot => (
                 <article className="kb-card" key={slot.key}>
@@ -154,8 +154,9 @@ export default function KnowledgeHub({ onOpenEmployee }: { onOpenEmployee?: () =
                     </>
                   ) : (
                     <footer className="kb-card-empty">
-                      <small>尚未生成专属知识库</small>
-                      <button type="button" className="kb-btn primary" disabled={busy === slot.key} onClick={() => void generate(slot.key)}>{busy === slot.key ? '生成中…' : '生成知识库'}</button>
+                      <small>尚未解析到专属知识库</small>
+                      {/* MaxKB CE 的 admin API 不支持建库：这里只是把 .env.local 已声明的库按名称归类到该智能体槽位 */}
+                      <button type="button" className="kb-btn primary" disabled={busy === slot.key} onClick={() => void generate(slot.key)}>{busy === slot.key ? '解析中…' : '解析已声明知识库'}</button>
                     </footer>
                   )}
                 </article>
@@ -291,7 +292,7 @@ function KbFilesView({ kb, onBack }: { kb: KbView; onBack: () => void }) {
 
   const upload = async (files: FileList | null) => {
     if (!files?.length) return
-    const paths = Array.from(files).map(file => (file as File & { path?: string }).path).filter((item): item is string => Boolean(item))
+    const paths = Array.from(files).map(file => window.desktop.file.getPathForFile(file)).filter(Boolean)
     if (fileRef.current) fileRef.current.value = ''
     if (!paths.length) return
     setBusy('upload')

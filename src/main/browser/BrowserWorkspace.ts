@@ -9,6 +9,18 @@ const GIGA_CATEGORY_PATHS = Object.fromEntries(gigaCatalog.flatMap(level1 => lev
   { id:level1.id, name:level1.name }, { id:level2.id, name:level2.name }, { id:level3.id, name:level3.name }
 ]]))))
 
+/**
+ * eBay 店铺浏览视图未打开的错误码。
+ * 调用方（main.ts）据此自动打开 Seller Hub 后重试。历史上这里靠消息子串匹配，
+ * 而两个抛出点的文案并不一致（「…店铺浏览器」vs「…店铺并完成登录」），导致部分重试路径永不触发。
+ * 改文案不会影响控制流，但新增抛出点必须带上这个 code。
+ */
+export const EBAY_STORE_VIEW_REQUIRED = 'EBAY_STORE_VIEW_REQUIRED'
+
+function ebayStoreViewError(message: string) {
+  return Object.assign(new Error(message), { code: EBAY_STORE_VIEW_REQUIRED })
+}
+
 interface DetailTab {
   id: string
   platform: Platform
@@ -26,6 +38,19 @@ interface BuiltInCollectorSnapshot {
   products: CollectorPluginProduct[]
   visibleUrls: string[]
   changes?: Array<{ selected: boolean; product: CollectorPluginProduct }>
+}
+
+/** 后台静默抓取供应商品详情页的结构化结果（正式入库「下载产品」落盘前数据） */
+export interface SupplyProductPageSnapshot {
+  html: string
+  extracted: {
+    title: string
+    price: string
+    specs: Array<{ key: string; value: string }>
+    images: string[]
+    descriptionText: string
+    finalUrl: string
+  }
 }
 
 const HOME: Record<Platform, string> = {
@@ -54,6 +79,10 @@ export class BrowserWorkspace {
   private credentialDomains: string[] = []
   private builtInCollectorActive = false
   private readonly builtInCollectorProducts = new Map<string, CollectorPluginProduct>()
+  private erpCollectorActive = false
+  private erpCollectorSupplier: { id: string; code: string; name: string; domains: string[] } | null = null
+  private erpCollectorRules: Record<string, any> = {}
+  private readonly erpCollectedStates = new Map<string, string>()
   private ebayPluginActive = false
   private readonly ebayPluginProducts = new Map<string,EbayCollectedProduct>()
   private gigaAutoLoginAttemptedAt = 0
@@ -226,6 +255,101 @@ export class BrowserWorkspace {
     await loginWindow.loadURL(url)
   }
 
+  /**
+   * 后台静默读取供应仓商品原网址详情页（正式入库「下载产品」使用）。
+   * 复用供应平台持久会话 partition（persist:supply:{code}:default），隐藏窗口加载，用户无感知；
+   * 命中登录失效/安全验证直接报错，由渲染端提示用户去 IE浏览/供应浏览器人工处理后重试。
+   */
+  async readSupplyProductPage(warehouseCode: '1688'|'GIGACLOUD', rawUrl: string): Promise<SupplyProductPageSnapshot> {
+    const parsed = new URL(rawUrl)
+    const host = parsed.hostname.toLowerCase()
+    const allowed = warehouseCode === 'GIGACLOUD'
+      ? host === 'gigab2b.com' || host.endsWith('.gigab2b.com')
+      : host === '1688.com' || host.endsWith('.1688.com')
+    if ((parsed.protocol !== 'https:' && parsed.protocol !== 'http:') || !allowed) {
+      throw new Error(warehouseCode === 'GIGACLOUD' ? '原网址不属于大健云仓，无法下载' : '原网址不属于1688，无法下载')
+    }
+    const name = warehouseCode === 'GIGACLOUD' ? '大健云仓' : '1688'
+    const window = new BrowserWindow({
+      show: false,
+      width: 1366,
+      height: 900,
+      title: `${name}商品下载`,
+      webPreferences: { partition: `persist:supply:${warehouseCode}:default`, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false }
+    })
+    try {
+      window.webContents.setUserAgent(window.webContents.getUserAgent().replace(/\sElectron\/[^\s]+/g, '').replace(/\scross-border-sourcing-desktop\/[^\s]+/g, ''))
+      window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+      await window.webContents.loadURL(parsed.toString())
+      await this.sleep(1500)
+      const issue = await window.webContents.executeJavaScript(String.raw`(() => {
+        const text=(document.body?.innerText||'').slice(0,12000), url=location.href
+        if (/punish|captcha|verify|安全验证|滑块|验证码|访问频繁|操作异常|请求过于频繁|cloud_ip_bl|too many requests/i.test(text+' '+url)) return 'VERIFY'
+        if (/route=account\/login|login\.1688\.com|account\/login|请登录|重新登录|登录已失效|sign in to continue/i.test(text+' '+url)) return 'LOGIN'
+        return ''
+      })()`) as string
+      if (issue === 'LOGIN') throw new Error(`${name}登录状态已失效，请先在 IE浏览 中登录${name}后重试`)
+      if (issue === 'VERIFY') throw new Error(`${name}要求安全验证，请先在 IE浏览 中打开该商品页人工完成验证后重试`)
+      for (let index = 0; index < 5; index += 1) {
+        await window.webContents.executeJavaScript('window.scrollBy(0, Math.max(900, window.innerHeight * 1.2))')
+        await this.sleep(350)
+      }
+      await window.webContents.executeJavaScript('window.scrollTo(0, 0)')
+      await this.sleep(400)
+      const html = await window.webContents.executeJavaScript('document.documentElement.outerHTML') as string
+      const extracted = await window.webContents.executeJavaScript(String.raw`(() => {
+        const bodyText = document.body?.innerText || ''
+        const hostScore = (u) => (/b2bfiles|gigab2b\.cn|gigab2b\.com|alicdn|cbu\d*|1688/i.test(u) ? 1 : 0)
+        const entries = []
+        const push = (u, w) => {
+          if (!u) return
+          try {
+            const abs = new URL(u, location.href).toString()
+            if (!/^https?:\/\//i.test(abs)) return
+            entries.push({ u: abs, w: w || 0 })
+          } catch (e) { /* 忽略无效图片地址 */ }
+        }
+        document.querySelectorAll('img').forEach(img => {
+          push(img.currentSrc || img.src, img.naturalWidth || 0)
+          const srcset = img.getAttribute('srcset') || ''
+          srcset.split(',').forEach(part => push(part.trim().split(/\s+/)[0], (img.naturalWidth || 0) + 1))
+        })
+        document.querySelectorAll('[style*="background"]').forEach(el => {
+          const match = /url\((['"]?)(.*?)\1\)/.exec(el.getAttribute('style') || '')
+          if (match) push(match[2], 500)
+        })
+        const seen = new Set()
+        const images = entries
+          .sort((a, b) => (hostScore(b.u) - hostScore(a.u)) || (b.w - a.w))
+          .filter(item => {
+            if (seen.has(item.u)) return false
+            seen.add(item.u)
+            return !/logo|icon|sprite|avatar|blank|loading|\.svg(\?|$)/i.test(item.u)
+          })
+          .slice(0, 24)
+          .map(item => item.u)
+        const pickText = (selector) => { const el = document.querySelector(selector); return el ? (el.textContent || '').trim().replace(/\s+/g, ' ') : '' }
+        const title = pickText('h1') || (document.title || '').trim()
+        const pricePattern = /(US\s?\$|\$|￥|¥|RMB)\s?\d[\d,]*(\.\d+)?(\s*[-–~]\s*(US\s?\$|\$|￥|¥)?\s?\d[\d,]*(\.\d+)?)?/i
+        const priceNode = document.querySelector('[class*="price" i],[id*="price" i]')
+        const priceMatch = pricePattern.exec((priceNode && priceNode.innerText) || '') || pricePattern.exec(bodyText)
+        const price = priceMatch ? priceMatch[0].replace(/\s+/g, ' ').trim() : ''
+        const specs = []
+        document.querySelectorAll('dl div, table tr, [class*="spec" i] li, [class*="attr" i] li, [class*="parameter" i] li, [class*="property" i] li').forEach(node => {
+          const line = (node.innerText || '').trim().replace(/\s+/g, ' ')
+          if (!line || line.length > 200) return
+          const kv = /^([^:：\t]{1,40})[:：\t]\s*(.{1,120})$/.exec(line)
+          if (kv && specs.length < 60 && !specs.some(item => item.key === kv[1].trim())) specs.push({ key: kv[1].trim(), value: kv[2].trim() })
+        })
+        return { title, price, specs, images, descriptionText: bodyText.trim().slice(0, 20000), finalUrl: location.href }
+      })()`) as SupplyProductPageSnapshot['extracted']
+      if (!extracted?.images?.length) throw new Error('原商品页没有识别到可下载图片，请确认商品页正常显示后重试')
+      return { html, extracted }
+    } finally {
+      if (!window.isDestroyed()) window.destroy()
+    }
+  }
+
   async activateMarketplace(platformCode: MarketplacePlatformCode, accountId: string, strategy: NetworkStrategy) {
     const profiles: Record<MarketplacePlatformCode, { title: string; url: string; domains: string[] }> = {
       OZON: { title: 'Ozon 市场', url: 'https://www.ozon.ru/', domains: ['ozon.ru'] },
@@ -358,6 +482,139 @@ export class BrowserWorkspace {
     await Promise.all(this.getGigaCloudViews().map(async view => {
       try { await view.webContents.executeJavaScript(`window.__crossBorderCollector?.stop?.()`) } catch { /* 页面已经离开 */ }
     }))
+  }
+
+  // ==================== ERP 通用采集注入器（crawl_rules 驱动，规格 §4.4 规则存库不写死） ====================
+
+  /** 匹配货盘域名的所有视图（主视图 + 详情标签页） */
+  private getErpViews(): WebContentsView[] {
+    const domains = this.erpCollectorSupplier?.domains ?? []
+    if (!domains.length) return []
+    return [...new Set([...this.views.values(), ...[...this.detailTabs.values()].map(tab => tab.view)])]
+      .filter(view => {
+        if (view.webContents.isDestroyed()) return false
+        try {
+          const host = new URL(view.webContents.getURL()).hostname
+          return domains.some(domain => host === domain || host.endsWith(`.${domain}`))
+        } catch { return false }
+      })
+  }
+
+  /** 注入 crawl_rules 驱动的采集器：详情页浮动“采集此产品” + 列表页勾选框，只写 window.__erpCollector.outbox */
+  async injectErpCollector(supplier: { id: string; code: string; name: string; domains: string[] }, crawlRules: Record<string, any>): Promise<{ active: boolean; injectedViews: number }> {
+    this.erpCollectorSupplier = supplier
+    this.erpCollectorRules = crawlRules ?? {}
+    this.erpCollectorActive = true
+    let injectedViews = 0
+    for (const view of this.getErpViews()) {
+      if (await this.injectErpCollectorInto(view)) injectedViews += 1
+    }
+    return { active: true, injectedViews }
+  }
+
+  private async injectErpCollectorInto(view: WebContentsView): Promise<boolean> {
+    if (view.webContents.isDestroyed()) return false
+    const rules = this.erpCollectorRules
+    const supplier = this.erpCollectorSupplier
+    const seeded = [...this.erpCollectedStates.entries()].map(([id, state]) => ({ id, state }))
+    try {
+      await view.webContents.executeJavaScript(String.raw`(() => {
+        const RULES = ${JSON.stringify(rules)};
+        const SUPPLIER = ${JSON.stringify(supplier)};
+        const SEEDED = ${JSON.stringify(seeded)};
+        window.__erpCollector?.stop?.();
+        const outbox = [];
+        const states = new Map(SEEDED.map(item => [item.id, item.state]));
+        const q = (sel, root) => { try { return (root||document).querySelector(sel) } catch { return null } };
+        const qa = (sel, root) => { try { return [...(root||document).querySelectorAll(sel)] } catch { return [] } };
+        const text = (node) => (node?.innerText||node?.textContent||'').replace(/\s+/g,' ').trim();
+        const pickText = (rule, root) => { if(!rule) return ''; const sel = typeof rule==='string'?rule:rule.selector; return sel?text(q(sel,root)):'' };
+        const num = (value) => { const m = String(value||'').match(/-?\d+(?:\.\d+)?/); return m ? Number(m[0]) : null };
+        const imgSrcs = (rule, root) => { if(!rule) return []; const sel = typeof rule==='string'?rule:rule.selector; return qa(sel,root).map(n=>n.currentSrc||n.src||n.getAttribute('data-src')||n.getAttribute('data-original')||'').filter(u=>/^https?:\/\//i.test(u)) };
+        const productIdFromUrl = (href) => { const rule = RULES.detail?.productId||RULES.list?.productId; const u=new URL(href,location.href); if(rule&&rule.pattern){ try{ const m=String(href).match(new RegExp(rule.pattern)); if(m) return m[1]||m[0] }catch{} } if(rule&&rule.param) return u.searchParams.get(rule.param)||''; return u.pathname };
+        const extractDetail = () => {
+          const d = RULES.detail||{}; const url = location.href;
+          const images = imgSrcs(d.images, null).map((sourceUrl,i)=>({ imageType: i===0?'MAIN':'DETAIL', sourceUrl, sortOrder:i }));
+          return { supplierId: SUPPLIER.id, sourceProductId: String(productIdFromUrl(url)||url), sourceUrl: url,
+            sourceSku: pickText(d.sku,null), titleOriginal: pickText(d.title,null), descriptionOriginal: pickText(d.description,null),
+            costPrice: num(pickText(d.price,null)), shippingCost: num(pickText(d.shipping,null)), stockQuantity: num(pickText(d.stock,null)),
+            currency: d.currency||'CNY', category: pickText(d.category,null), brand: pickText(d.brand,null),
+            images, crawlConfig: { capturedFrom:'DETAIL', supplierCode:SUPPLIER.code } };
+        };
+        const extractCard = (card) => {
+          const l = RULES.list||{}; const linkSel=l.link||'a'; const anchor=card.querySelector(linkSel)||card.querySelector('a');
+          const href = anchor?.href||location.href; const imageSel = typeof l.image==='string'?l.image:l.image?.selector;
+          const img = imageSel?q(imageSel,card):card.querySelector('img');
+          const src = img?(img.currentSrc||img.src||img.getAttribute('data-src')||''):'';
+          return { supplierId: SUPPLIER.id, sourceProductId: String(productIdFromUrl(href)||href), sourceUrl: new URL(href,location.href).href,
+            titleOriginal: pickText(l.title,card), costPrice: num(pickText(l.price,card)), currency: l.currency||'CNY',
+            images: /^https?:\/\//i.test(src)?[{ imageType:'MAIN', sourceUrl:src, sortOrder:0 }]:[],
+            crawlConfig: { capturedFrom:'LIST', supplierCode:SUPPLIER.code } };
+        };
+        const overlay=document.createElement('div');overlay.id='erp-collector-overlay';document.documentElement.appendChild(overlay);
+        const style=document.createElement('style');style.id='erp-collector-style';style.textContent='#erp-collector-overlay{position:fixed!important;z-index:2147483646!important;inset:0!important;width:0!important;height:0!important;overflow:visible!important;pointer-events:none!important}.erp-collect-btn{position:fixed!important;z-index:2147483647!important;right:24px!important;padding:14px 18px!important;border:2px solid #fff!important;border-radius:10px!important;color:#fff!important;background:#16b7ae!important;box-shadow:0 4px 14px rgba(9,120,113,.35)!important;font:700 14px/1 sans-serif!important;pointer-events:auto!important;cursor:pointer!important}.erp-collect-btn.is-done{background:#e79500!important}.erp-card-check{position:absolute!important;z-index:2147483647!important;width:22px!important;height:22px!important;pointer-events:auto!important;cursor:pointer!important}.erp-card-active{outline:3px solid #16b7ae!important;outline-offset:-3px!important;border-radius:10px!important}';document.documentElement.appendChild(style);
+        const mkBtn=(label,bottom)=>{const b=document.createElement('button');b.type='button';b.className='erp-collect-btn';b.style.bottom=bottom;b.textContent=label;overlay.appendChild(b);return b};
+        const entries=[];
+        const renderListMode=()=>{ const l=RULES.list||{}; if(!l.card) return; qa(l.card).forEach(card=>{ if(card.__erpBound) return; card.__erpBound=true; const check=document.createElement('input');check.type='checkbox';check.className='erp-card-check';const rect=card.getBoundingClientRect();check.style.top=(rect.top+scrollY+6)+'px';check.style.left=(rect.left+scrollX+6)+'px';check.addEventListener('change',()=>{card.classList.toggle('erp-card-active',check.checked);updateBatchCount()});document.body.appendChild(check);entries.push({card,check}); }); };
+        const detailBtn = RULES.detail?mkBtn('\ud83e\udd16 \u91c7\u96c6\u6b64\u4ea7\u54c1','24px'):null;
+        const batchBtn = (RULES.list&&RULES.list.card)?mkBtn('\u91c7\u96c6\u9009\u4e2d(0)','76px'):null;
+        if(batchBtn) batchBtn.hidden=true;
+        if(detailBtn) detailBtn.addEventListener('click',(e)=>{e.preventDefault();e.stopPropagation();outbox.push(extractDetail());detailBtn.textContent='\u2713 \u5df2\u52a0\u5165\u91c7\u96c6';detailBtn.classList.add('is-done');setTimeout(()=>{detailBtn.textContent='\ud83e\udd16 \u91c7\u96c6\u6b64\u4ea7\u54c1';detailBtn.classList.remove('is-done')},1600)});
+        const updateBatchCount=()=>{ if(batchBtn) batchBtn.textContent='\u91c7\u96c6\u9009\u4e2d('+entries.filter(en=>en.check.checked).length+')' };
+        if(batchBtn) batchBtn.addEventListener('click',(e)=>{e.preventDefault();e.stopPropagation();const chosen=entries.filter(en=>en.check.checked);chosen.forEach(en=>outbox.push(extractCard(en.card)));batchBtn.textContent='\u2713 \u5df2\u52a0\u5165 '+chosen.length+' \u4ef6';setTimeout(updateBatchCount,1600)});
+        const scan=()=>{ const hasCards=(RULES.list&&RULES.list.card)?qa(RULES.list.card).length>0:false; if(hasCards){renderListMode();if(batchBtn)batchBtn.hidden=false;updateBatchCount()} const p=RULES.detail?.productId?.pattern; let urlIsDetail=false; if(p){try{urlIsDetail=new RegExp(p).test(location.href)}catch{}} const showDetail=Boolean(RULES.detail)&&(urlIsDetail||!hasCards); if(detailBtn)detailBtn.hidden=!showDetail; };
+        let scanTimer=0;const observer=new MutationObserver(()=>{clearTimeout(scanTimer);scanTimer=setTimeout(scan,250)});observer.observe(document.body||document.documentElement,{childList:true,subtree:true});const interval=setInterval(scan,1200);scan();
+        window.__erpCollector={ outbox, push:item=>outbox.push(item), snapshot:()=>({ supplierId:SUPPLIER.id, pending:outbox.length }), drain:()=>outbox.splice(0), syncStates:pairs=>{(pairs||[]).forEach(p=>states.set(p.id,p.state))}, stop:()=>{observer.disconnect();clearInterval(interval);clearTimeout(scanTimer);entries.forEach(en=>en.check.remove());detailBtn?.remove();batchBtn?.remove();overlay.remove();style.remove();delete window.__erpCollector} };
+        return true;
+      })()`)
+      return true
+    } catch { return false }
+  }
+
+  /** 主进程轮询：读取并清空所有 ERP 视图 outbox（渲染层据此调 POST /api/erp/collect）；同时对新页面补注入 */
+  async drainErpOutbox(): Promise<{ active: boolean; supplierId: string; items: any[] }> {
+    if (!this.erpCollectorActive || !this.erpCollectorSupplier) return { active: false, supplierId: '', items: [] }
+    const items: any[] = []
+    const views = this.getErpViews()
+    for (const view of views) {
+      if (view.webContents.isDestroyed()) continue
+      try {
+        const drained = await view.webContents.executeJavaScript(`window.__erpCollector?.drain?.() || []`)
+        if (Array.isArray(drained)) items.push(...drained)
+      } catch { /* 页面切换时等待下一次轮询 */ }
+    }
+    for (const view of views) {
+      if (view.webContents.isDestroyed()) continue
+      try {
+        const present = await view.webContents.executeJavaScript(`Boolean(window.__erpCollector)`)
+        if (!present) await this.injectErpCollectorInto(view)
+      } catch { /* 忽略不可注入页面 */ }
+    }
+    return { active: true, supplierId: this.erpCollectorSupplier.id, items }
+  }
+
+  /** 采集结果回写注入 UI（已采集/已更新/失败），按 sourceProductId 标记状态 */
+  async syncErpCollectorStates(states: Array<{ id: string; state: string }>): Promise<void> {
+    for (const entry of states) this.erpCollectedStates.set(entry.id, entry.state)
+    await Promise.all(this.getErpViews().map(async view => {
+      if (view.webContents.isDestroyed()) return
+      try { await view.webContents.executeJavaScript(`window.__erpCollector?.syncStates?.(${JSON.stringify(states)})`) } catch { /* 页面已切换 */ }
+    }))
+  }
+
+  getErpCollectorState(): { active: boolean; supplier: { id: string; code: string; name: string; domains: string[] } | null } {
+    return { active: this.erpCollectorActive, supplier: this.erpCollectorSupplier }
+  }
+
+  async stopErpCollector(): Promise<void> {
+    this.erpCollectorActive = false
+    await Promise.all(this.getErpViews().map(async view => {
+      if (view.webContents.isDestroyed()) return
+      try { await view.webContents.executeJavaScript(`window.__erpCollector?.stop?.()`) } catch { /* 页面已关闭 */ }
+    }))
+    this.erpCollectorSupplier = null
+    this.erpCollectorRules = {}
+    this.erpCollectedStates.clear()
   }
 
   private isEbayView(view: WebContentsView) {
@@ -647,7 +904,7 @@ export class BrowserWorkspace {
   async newEbayTab(accountId:string,title:string,targetUrl='https://www.ebay.com/') {
     if(this.visibleTabCount()>=8)throw new Error('最多同时打开8个浏览标签，请先关闭不需要的标签')
     const base=this.detailTabs.get(`login-${accountId}`)
-    if(!base||base.view.webContents.isDestroyed())throw new Error('请先打开当前eBay店铺浏览器')
+    if(!base||base.view.webContents.isDestroyed())throw ebayStoreViewError('请先打开当前eBay店铺浏览器')
     const domains=['ebay.com']
     const target=new URL(targetUrl)
     if(target.protocol!=='https:'||!domains.some(domain=>target.hostname===domain||target.hostname.endsWith(`.${domain}`)))throw new Error('原商品链接不属于 eBay，已阻止打开')
@@ -675,7 +932,7 @@ export class BrowserWorkspace {
 
   async readEbayProductDetails(accountId:string,title:string,targetUrl:string):Promise<EbayProductDetails> {
     const base=this.detailTabs.get(`login-${accountId}`)
-    if(!base||base.view.webContents.isDestroyed())throw new Error('请先打开当前eBay店铺并完成登录')
+    if(!base||base.view.webContents.isDestroyed())throw ebayStoreViewError('请先打开当前eBay店铺并完成登录')
     const target=new URL(targetUrl)
     if(target.protocol!=='https:'||!(target.hostname==='ebay.com'||target.hostname.endsWith('.ebay.com')))throw new Error('原商品链接不属于 eBay，已阻止读取')
     const view=new WebContentsView({webPreferences:{partition:`persist:login:${accountId}`,nodeIntegration:false,contextIsolation:true,sandbox:true}})
@@ -1348,7 +1605,7 @@ export class BrowserWorkspace {
 
   async readEbayStoreCategories(accountId:string):Promise<EbayStoreCategory[]> {
     const base=this.detailTabs.get(`login-${accountId}`)
-    if(!base||base.view.webContents.isDestroyed())throw new Error('请先打开当前eBay店铺并完成登录')
+    if(!base||base.view.webContents.isDestroyed())throw ebayStoreViewError('请先打开当前eBay店铺并完成登录')
     const view=new WebContentsView({webPreferences:{partition:`persist:login:${accountId}`,nodeIntegration:false,contextIsolation:true,sandbox:true}})
     view.setBackgroundColor('#ffffff')
     view.webContents.setUserAgent(base.view.webContents.getUserAgent())
@@ -1448,7 +1705,7 @@ export class BrowserWorkspace {
 
   async readEbayDirectoryProducts(accountId:string,categories:EbayStoreCategory[],options:{publicStoreUrl?:string;sellerId?:string;loginUsername?:string;listingUrls?:string[];waitIfPaused?:()=>Promise<void>;onProgress?:(input:{stage:'STORE'|'CATEGORY'|'PAGE';message:string;categoryId:string;categoryName:string;categoryIndex:number;categoryCount:number;expected:number;found:number})=>void|Promise<void>;onCategoryComplete?:(scan:EbayDirectoryProductScanCategory,products:EbayCollectedProduct[],storeUrl:string)=>void|Promise<void>}={}):Promise<{products:EbayCollectedProduct[];categories:EbayDirectoryProductScanCategory[];errors:string[];storeUrl:string;sellerId:string}> {
     const base=this.detailTabs.get(`login-${accountId}`)
-    if(!base||base.view.webContents.isDestroyed())throw new Error('请先打开当前eBay店铺并完成登录')
+    if(!base||base.view.webContents.isDestroyed())throw ebayStoreViewError('请先打开当前eBay店铺并完成登录')
     if(!categories.length)throw new Error('请选择至少一个有商品的店铺目录')
     let identity={storeUrl:'',sellerId:''}
     for(const tab of this.detailTabs.values()) {
@@ -1787,19 +2044,36 @@ export class BrowserWorkspace {
   }
 
   // 冷启动时如果还没有 IEBrowserPanel 使用的通用 web tab（无 scopeId），自动打开默认 nav 站点。
-  // 调用于 main.ts createWindow 末尾的 shell 'did-finish-load' 回调。
+  // 调用点：
+  //   1. main.ts createWindow 末尾的 shell 'did-finish-load' 回调（冷启动）
+  //   2. IPC 'browser:ensure-default-nav'（IEBrowserPanel 每次挂载时自愈调用，
+  //      覆盖 tab 被 activateMarketplace/activateSupplyPlatform 的 closeDetailTabs 清空后的场景）
   // 特点：
   //   - 查 detailTabs 中所有 platform==='web' && !scopeId 的 tab（与 IEBrowserPanel 的 onTabs filter 一致）
   //   - 已有就不动（remount/重启 electron 但 tab 仍在）→ 实现 IE 浏览页的“保留原状”语义
   //   - 没有就开一个，导航到默认 IP 站点
-  //   - 仅在冷启动到 mainWindow ready 期间调一次，避免被 IEBrowserPanel 误触发
-  async openDefaultNavIfNeeded(url = 'http://114.55.149.192/nav/') {
+  // 并发去重：React StrictMode 双 mount 会并发调两次，共享同一个 in-flight Promise 防重复建 tab。
+  private defaultNavOpenPromise: Promise<string | null> | null = null
+  openDefaultNavIfNeeded(url = 'http://114.55.149.192/nav/'): Promise<string | null> {
+    if (this.defaultNavOpenPromise) return this.defaultNavOpenPromise
+    this.defaultNavOpenPromise = this.doOpenDefaultNavIfNeeded(url).finally(() => {
+      this.defaultNavOpenPromise = null
+    })
+    return this.defaultNavOpenPromise
+  }
+
+  private async doOpenDefaultNavIfNeeded(url: string): Promise<string | null> {
     const genericWebTabs = [...this.detailTabs.values()].filter(tab => tab.platform === 'web' && !tab.scopeId)
-    if (genericWebTabs.length > 0) return
+    if (genericWebTabs.length > 0) {
+      // 已有 tab：补推一次快照，让刚挂载订阅的面板立即拿到 tab 列表
+      this.emitTabs()
+      return genericWebTabs[0].id
+    }
     try {
-      await this.openTab('web', url, '跨境导航')
+      return await this.openTab('web', url, '跨境导航')
     } catch (reason) {
       console.warn('[BrowserWorkspace] 自动打开默认 nav 站点失败：', reason instanceof Error ? reason.message : String(reason))
+      return null
     }
   }
 

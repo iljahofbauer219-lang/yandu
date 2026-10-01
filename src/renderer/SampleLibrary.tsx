@@ -31,6 +31,7 @@ import {
   type SampleMeta
 } from '../shared/sampleLibrary'
 import './sample-library.css'
+import { PanelCollapseButton, PanelExpandRail, usePanelCollapse } from './panel-collapse'
 
 type RenderTab = 'markdown' | 'docx'
 
@@ -60,6 +61,7 @@ type GuardianStatus =
   | { phase: 'error'; message: string }
 
 export default function SampleLibrary({ onBackToHub }: { onBackToHub?: () => void }) {
+  const listPanel = usePanelCollapse('sample-list')
   const library: SampleMeta[] = useMemo(() => loadSampleLibrary(), [])
   const [activeLetter, setActiveLetter] = useState<SampleLetter>('A')
   const [activeTab, setActiveTab] = useState<RenderTab>('markdown')
@@ -523,9 +525,10 @@ export default function SampleLibrary({ onBackToHub }: { onBackToHub?: () => voi
         </div>
       )}
 
-      <div className="sample-library-grid">
+      <div className={`sample-library-grid${listPanel.collapsed?' side-collapsed':''}`}>
         {/* ── 左侧 4 样例卡片 ── */}
-        <aside className="sample-library-list" aria-label="样例列表">
+        {listPanel.collapsed?<PanelExpandRail panel={listPanel} label="样例列表"/>:<aside className="sample-library-list collapsible-aside" aria-label="样例列表">
+          <PanelCollapseButton panel={listPanel}/>
           {library.map(meta => {
             const token = SAMPLE_DECISION_TOKENS[meta.decision]
             const isActive = meta.letter === activeLetter
@@ -572,7 +575,7 @@ export default function SampleLibrary({ onBackToHub }: { onBackToHub?: () => voi
               </button>
             )
           })}
-        </aside>
+        </aside>}
 
         {/* ── 右侧渲染区 ── */}
         <main className="sample-library-detail" aria-label="样例详情">

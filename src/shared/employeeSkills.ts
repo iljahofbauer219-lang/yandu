@@ -8,13 +8,14 @@
  *
  * 持久化：
  * - 全局：localStorage 'aiEmployee.skills.global'
- * - 员工级：localStorage 'aiEmployee.skills.<position>'
+ * - 员工级：localStorage 'aiEmployee.skills.<agentSlug>'（稳定英文 slug；旧中文岗位名键读时迁移）
  * - 模型已切换：localStorage 'yd.aiEmployee.chatModel'（已存在）
  *
  * 阶段说明：
  * - P1-A：定义数据结构 + SkillSelector 弹窗 + 工作台内嵌配置
  * - 后续阶段：把 useSampleLibrary 等已有开关迁移到本系统统一管理
  */
+import { agentSlug } from './agentCategories'
 
 /** 技能值类型 */
 export type SkillValue = boolean | number | string
@@ -35,7 +36,7 @@ export interface SkillDefinition {
   defaultValue: SkillValue
   /** select 类型的选项（仅 valueType='select' 时使用） */
   options?: Array<{ value: string; label: string }>
-  /** 适用于哪些员工（空数组 = 全部） */
+  /** 适用于哪些员工（AgentProfile.id 稳定 slug；空数组 = 全部） */
   applicableAgents?: string[]
   /** 状态徽标 */
   status?: 'live' | 'beta'
@@ -46,11 +47,11 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
   {
     id: 'sample-library-kb',
     name: '报告样例库 KB 引用',
-    description: '选品/Listing 报告生成时引用 4 份样例与决策门禁，仅 30 天兼容回退 RAGFlow 链路生效',
+    description: '选品/Listing 报告生成时引用 4 份样例与决策门禁，对 MaxKB 智能体链路生效',
     group: 'kb-reference',
     valueType: 'boolean',
     defaultValue: true,
-    applicableAgents: ['选品调研员', 'Listing精造师'],
+    applicableAgents: ['researcher', 'listing'],
     status: 'live'
   },
 
@@ -94,7 +95,7 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
     group: 'analyst-tools',
     valueType: 'boolean',
     defaultValue: true,
-    applicableAgents: ['选品调研员'],
+    applicableAgents: ['researcher'],
     status: 'live'
   },
   {
@@ -104,7 +105,7 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
     group: 'analyst-tools',
     valueType: 'boolean',
     defaultValue: false,
-    applicableAgents: ['选品调研员'],
+    applicableAgents: ['researcher'],
     status: 'beta'
   },
 
@@ -116,7 +117,7 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
     group: 'listing-tools',
     valueType: 'boolean',
     defaultValue: true,
-    applicableAgents: ['Listing精造师'],
+    applicableAgents: ['listing'],
     status: 'live'
   },
   {
@@ -126,7 +127,7 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
     group: 'listing-tools',
     valueType: 'boolean',
     defaultValue: true,
-    applicableAgents: ['Listing精造师'],
+    applicableAgents: ['listing'],
     status: 'beta'
   },
 
@@ -138,7 +139,7 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
     group: 'guardian-tools',
     valueType: 'boolean',
     defaultValue: true,
-    applicableAgents: ['知识库守卫'],
+    applicableAgents: ['guardian'],
     status: 'live'
   }
 ]
@@ -151,6 +152,12 @@ export type GlobalSkillConfig = Record<string, SkillValue>
 
 // ─── 存储读写 ─────────────────────────────────────
 const GLOBAL_KEY = 'aiEmployee.skills.global'
+const AGENT_KEY_PREFIX = 'aiEmployee.skills.'
+
+/** 员工级存储键一律用稳定 slug：改中文岗位名不再 orphan 既有配置 */
+function agentSkillsKey(agentNameOrSlug: string): string {
+  return `${AGENT_KEY_PREFIX}${agentSlug(agentNameOrSlug)}`
+}
 
 export function loadGlobalSkills(): GlobalSkillConfig {
   try {
@@ -169,8 +176,21 @@ export function saveGlobalSkills(config: GlobalSkillConfig): void {
 }
 
 export function loadAgentSkills(agentName: string): Record<string, SkillValue> {
+  const key = agentSkillsKey(agentName)
   try {
-    const raw = localStorage.getItem(`aiEmployee.skills.${agentName}`)
+    let raw = localStorage.getItem(key)
+    // 旧键迁移：历史以中文岗位名存键，读时搬到 slug 键并删旧键（仅当两者不同且新键尚不存在）
+    const legacyKey = `${AGENT_KEY_PREFIX}${agentName}`
+    if (raw === null && legacyKey !== key) {
+      const legacy = localStorage.getItem(legacyKey)
+      if (legacy !== null) {
+        raw = legacy
+        try {
+          localStorage.setItem(key, legacy)
+          localStorage.removeItem(legacyKey)
+        } catch { /* ignore quota */ }
+      }
+    }
     const parsed = raw ? JSON.parse(raw) : {}
     return parsed && typeof parsed === 'object' ? (parsed as Record<string, SkillValue>) : {}
   } catch {
@@ -180,7 +200,7 @@ export function loadAgentSkills(agentName: string): Record<string, SkillValue> {
 
 export function saveAgentSkills(agentName: string, config: Record<string, SkillValue>): void {
   try {
-    localStorage.setItem(`aiEmployee.skills.${agentName}`, JSON.stringify(config))
+    localStorage.setItem(agentSkillsKey(agentName), JSON.stringify(config))
   } catch { /* ignore quota */ }
 }
 
@@ -196,9 +216,10 @@ export function resolveSkillValue(
   return SKILL_DEFINITIONS.find(s => s.id === skillId)?.defaultValue ?? false
 }
 
-/** 列出适用于某员工的技能（applicableAgents 为空 = 全部适用） */
+/** 列出适用于某员工的技能（applicableAgents 存稳定 slug，空 = 全部适用；入参中文名/slug 均可） */
 export function getApplicableSkills(agentName: string): SkillDefinition[] {
-  return SKILL_DEFINITIONS.filter(s => !s.applicableAgents || s.applicableAgents.length === 0 || s.applicableAgents.includes(agentName))
+  const slug = agentSlug(agentName)
+  return SKILL_DEFINITIONS.filter(s => !s.applicableAgents || s.applicableAgents.length === 0 || s.applicableAgents.includes(slug))
 }
 
 /** 按 group 归组 */

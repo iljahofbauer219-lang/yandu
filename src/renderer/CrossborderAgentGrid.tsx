@@ -10,7 +10,7 @@
 
 import {
   CROSSBORDER_DEPARTMENTS,
-  findAgentByName,
+  findAgentById,
   readinessLabel,
   type AgentProfile
 } from '../shared/agentCategories'
@@ -34,8 +34,8 @@ export default function CrossborderAgentGrid({ onSelect }: Props) {
             <small>{dept.agents.length} 个智体</small>
           </div>
           <div className="crossborder-agent-grid" role="list" aria-label={dept.name}>
-            {dept.agents.map(name => {
-              const agent = findAgentByName(name)
+            {dept.agents.map(slug => {
+              const agent = findAgentById(slug)
               if (!agent) return null
               const live = agent.readiness === 'live'
               return (

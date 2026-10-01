@@ -13,6 +13,12 @@ export interface SelectionReportEnrichment {
 }
 
 const MAX_ITEMS_PER_KIND = 4
+/**
+ * listingInsights 的上限是 5 条，比通用的 MAX_ITEMS_PER_KIND（4 条）多 1 条。
+ * 它按「每个已采集详情页 ASIN 恰好一条」归纳，卡 4 条会在 ASIN 多于 4 个时静默丢掉一条页面要素。
+ * 旧代码把 `+ 1` 直接写在循环判断里、而注释与提示词都写「4 条」，读数与实现长期不符，故在此显式命名。
+ */
+const MAX_LISTING_INSIGHTS = MAX_ITEMS_PER_KIND + 1
 const MAX_ITEM_LENGTH = 180
 const DECISION_TERMS = /建议入场|有条件谨慎入场|不建议入场|数据不足，不能判定/i
 const UNSAFE_MARKDOWN = /(?:^|\s)#{1,6}\s|\||```|<\/?(?:table|script|style)/i
@@ -44,7 +50,7 @@ function listingInsights(value: unknown, allowedAsins: readonly string[]): Selec
     if (!allowed.has(asin) || seen.has(asin) || !observation || !learning) continue
     seen.add(asin)
     result.push({ asin, observation, learning })
-    if (result.length >= MAX_ITEMS_PER_KIND + 1) break
+    if (result.length >= MAX_LISTING_INSIGHTS) break
   }
   return result
 }
@@ -102,7 +108,7 @@ export function selectionReportEnrichmentPrompt(payload: SelectionReportPayload)
     '不得把未知信息补成事实；不得写“建议入场”“有条件谨慎入场”“不建议入场”“数据不足，不能判定”。',
     '只返回合法 JSON：{"hypotheses":["不超过4条，每条180字内"],"validationTasks":["不超过4条，每条180字内"],"listingInsights":[{"asin":"只可使用允许ASIN","observation":"不超过180字","learning":"不超过180字"}],"improvementInsights":[{"direction":"外观/结构改良或规格/SKU拓展","proposal":"不超过180字","asins":["只可使用允许ASIN"]}]}。',
     'hypotheses 必须是待验证的竞争/差异化假设；validationTasks 必须是可执行的补数或核验动作。',
-    `listingInsights 只可使用以下允许 ASIN：${allowedAsins.join('、') || '无'}。observation 只能概括该 ASIN 已采集的卖点、徽标、变体或促销；learning 是待验证的借鉴方向。不得引入未出现的新页面事实。`,
+    `listingInsights 最多 ${MAX_LISTING_INSIGHTS} 条（每个 ASIN 一条），只可使用以下允许 ASIN：${allowedAsins.join('、') || '无'}。observation 只能概括该 ASIN 已采集的卖点、徽标、变体或促销；learning 是待验证的借鉴方向。不得引入未出现的新页面事实。`,
     'improvementInsights 只能给“外观/结构改良”或“规格/SKU拓展”提出待验证方案，asins 必须来自允许 ASIN；不得输出成本、销量、利润、合规结论或预期效果事实。',
     `【只读事实包】\n${JSON.stringify(payload)}`
   ].join('\n')

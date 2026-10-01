@@ -9,6 +9,7 @@
 // - 翻译范围 = 任何网页（不限制域名）
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import type { BrowserState, BrowserTab, BrowserTranslationMode, EbayCollectedProduct } from '../shared/contracts'
+import { describeTranslateError } from './translateError'
 
 const initialAddress = ''
 
@@ -50,6 +51,10 @@ export function IEBrowserPanel() {
 
   useEffect(() => {
     const unsubscribe = window.desktop.browser.onTabs((next) => setTabs(next.filter((tab) => tab.platform === 'web' && !tab.scopeId)))
+    // 自愈：订阅完成后请主进程确保通用 web tab 存在（没有则建默认 nav 站点，已有则补推一次快照）。
+    // 覆盖冷启动钩子失效、切到 eBay/1688 栏目被 closeDetailTabs 清空等场景；
+    // 主进程 openDefaultNavIfNeeded 幂等 + 并发去重，StrictMode 双 mount 不会重复建 tab。
+    void window.desktop.browser.ensureDefaultNav()
     return () => {
       if (typeof unsubscribe === 'function') unsubscribe()
     }
@@ -93,7 +98,9 @@ export function IEBrowserPanel() {
     update()
     // 通知 BrowserWorkspace：用户进入 web 浏览器区域，触发 attachView。
     // 必须在 update() 之后调用，否则 attachView 拿不到有效 bounds。
-    void window.desktop.browser.show('web')
+    // 冷启动瞬间 tab 可能尚未建成，get('web') 会抛“通用网页标签不存在”——
+    // 此处容忍失败，ensureDefaultNav 建成 tab 后 tabs.length 变化会重跑本 effect 再 show。
+    void window.desktop.browser.show('web').catch(() => undefined)
     const observer = new ResizeObserver(update)
     if (slotRef.current) observer.observe(slotRef.current)
     window.addEventListener('resize', update)
@@ -183,7 +190,7 @@ export function IEBrowserPanel() {
       setTranslationActive(true)
       setTranslationMode(mode)
     } catch (reason) {
-      if (!silent) window.alert(`网页翻译失败：${reason instanceof Error ? reason.message : String(reason)}`)
+      if (!silent) window.alert(describeTranslateError(reason))
     } finally {
       translationRunningRef.current = false
       if (!silent) setTranslating(false)

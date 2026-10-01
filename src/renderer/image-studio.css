@@ -394,3 +394,4 @@
 .ie-browser-page .ebay-address-bar .browser-translation.address-extra-btn .translation-trigger { min-width:92px; height:30px; }
 /* 地址栏内 trigger 的下拉菜单位置：原 top:39px 针对 heading 高度，表单内 trigger 在 43px 高度的下边缘，top 调到 33px */
 .ie-browser-page .ebay-address-bar .translation-menu { top:33px; right:14px; }
+.warehouse-download-note{display:block;margin-top:8px;color:#0a6d68;font-size:11px;line-height:1.5}.warehouse-download-note.error{color:#b42318}.warehouse-download-note button{padding:0;border:0;background:none;color:#0a6d68;font-size:11px;text-decoration:underline;cursor:pointer}

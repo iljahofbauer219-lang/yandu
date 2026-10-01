@@ -1761,7 +1761,7 @@ export interface SupplyWarehouseProduct {
   category: string
   subcategory: string
   tertiaryCategory: string
-  status: 'ACTIVE' | 'ARCHIVED'
+  status: 'ACTIVE' | 'ARCHIVED' | 'PENDING_REVIEW'
   updatedAt: string
 }
 
@@ -1966,7 +1966,7 @@ export interface ComparisonPromotionRequest {
 export interface ComparisonPromotionResult {
   comparison: ComparisonRecordView
   selection: SelectionCatalogItem
-  inboundItemId: string
+  pendingReviewId: string
 }
 
 export interface ComparisonImportRequest {

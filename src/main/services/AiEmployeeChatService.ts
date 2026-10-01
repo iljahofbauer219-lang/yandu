@@ -2,7 +2,8 @@
  * AI员工对话服务：附件上传（图片/文档）+ 大模型选择路由。
  * - 选品 / Listing / 守卫：统一走 MaxKB 5 application（maxkbChat 直连）
  * - 直连模型（百炼 / DeepSeek）：OpenAI 兼容 chat/completions，失败或缺 key 时回退 MaxKB
- * - 30 天回退（2026-09-23 停服）：RAGFlow 智能体链路仍保留为 ragflow-agent / listing-agent 可选项
+ * - RAGFlow 30 天兼容回退已于 2026-09-23 到期，链路整体删除；旧 modelId
+ *   （ragflow-agent / listing-agent）改路由到对应的 MaxKB 应用，避免渲染层历史调用落到未知模型
  * - 不支持视觉的目标模型：图片先经百炼视觉模型转成中文描述再并入文本
  */
 import { dialog, nativeImage } from 'electron'
@@ -14,12 +15,11 @@ import { materializeGeneratedMarkdownReply } from './generatedReportArtifact'
 import type { AiEmployeeAskRequest, AiEmployeeAttachment, AiEmployeeChatModelProfile, AiEmployeePickResult } from '../../shared/aiEmployee'
 import type { AmazonSearchIntent, AmazonListingEvidence, AmazonReviewEvidence } from '../../shared/amazonScraper'
 import { SAMPLE_LIBRARY_KB_REFERENCE_PROMPT } from '../../shared/sampleLibraryKbIngest'
+import { agentSlug } from '../../shared/agentCategories'
 import type { ExecutionEvent, ExecutionStepType, ExecutionEventHandler } from '../../shared/executionEvent'
 // 供既有引用（main.ts / preload / ExecutionPanel）继续使用原模块路径
 export type { ExecutionEvent, ExecutionStepType, ExecutionEventHandler }
 
-const RAGFLOW_AGENT_DEFAULT_ID = '8563cdb690e611f1b36bf39ef484774d'
-const RAGFLOW_LISTING_AGENT_ID = 'a80d0348932d11f1b36bf39ef484774d'
 // MaxKB v2.10.5-lts CE application 路由表（5 个 application）
 // 启用 Maxkb 智体调用 secret_key 直接 Bearer，不再依赖 /chat/api/auth/anonymous
 const MAXKB_AMAZON_SKILLS_APPLICATION_ID = '01a005f0-a471-7403-9d78-8702d5765816'
@@ -48,17 +48,6 @@ const LISTING_TIMEOUT_MS = 360_000
 const VISION_TIMEOUT_MS = 60_000
 
 const MIME_BY_EXTENSION: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }
-
-function ragflowAgentBaseUrl() {
-  try {
-    const base = new URL(readServerUrl())
-    base.port = '8090'
-    base.pathname = '/'
-    return base.toString().replace(/\/+$/, '')
-  } catch {
-    return null
-  }
-}
 
 function maxkbBaseUrl(): string {
   const explicit = String(process.env.MAXKB_BASE_URL || '').trim()
@@ -202,16 +191,17 @@ export class AiEmployeeChatService {
 
   // ─── 模型目录（v1 静态注册表） ─────────────────────────────────────────────
   // 按岗位白名单过滤：每个工作台只暴露一个对应模型（其余的 9 个去杂隐藏）。
-  // - 选品调研员 → 选品调研员Agent（父智能体，已配置）
-  // - Listing精造师 → Listing 精造师（MaxKB）子智能体（待日后配置父智能体后改）
-  // - 知识库守卫 → 通义千问 3.6 Flash 直连（待日后配置父智能体后改）
+  // 键为 AgentProfile.id 稳定 slug（条目32：中文岗位名不做匹配键，改名不再孤儿化白名单）；
+  // - researcher(选品调研员) → 选品调研员Agent（父智能体，已配置）
+  // - listing(Listing精造师) → Listing 精造师（MaxKB）子智能体（待日后配置父智能体后改）
+  // - guardian(知识库守卫) → 通义千问 3.6 Flash 直连（待日后配置父智能体后改）
   // - 竞品分析员/产品定价员/类目优选员：ready:false 不在白名单 → 返回 []
-  // 注意：自动回退链（父智能体 → 子智能体 → RAGFlow）仍由 chat() 内部完成，
+  // 注意：自动回退链（父智能体 → 子智能体）仍由 chat() 内部完成，
   // 不在 UI 暴露（符合「简洁」诉求）。
   private static readonly POSITION_MODEL_WHITELIST: Record<string, readonly string[]> = {
-    '选品调研员': ['amazon-skills-agent'],
-    'Listing精造师': ['maxkb-listing'],
-    '知识库守卫': ['qwen3.6-flash']
+    researcher: ['amazon-skills-agent'],
+    listing: ['maxkb-listing'],
+    guardian: ['qwen3.6-flash']
   }
 
   listModels(position?: string): AiEmployeeChatModelProfile[] {
@@ -227,14 +217,12 @@ export class AiEmployeeChatService {
       { id: 'maxkb-sourcing', name: '选品调研员（MaxKB）', hint: '选品评估 · 含跨境运营知识库', provider: 'maxkb', supportsVision: false, available: hasMaxkbSourcing },
       { id: 'maxkb-listing', name: 'Listing 精造师（MaxKB）', hint: '多平台 Listing 文案 · 六段长文', provider: 'maxkb', supportsVision: false, available: hasMaxkbListing },
       { id: 'maxkb-guardian', name: '知识库守卫（MaxKB）', hint: 'KB 状态监控 · 补充 · 重平衡', provider: 'maxkb', supportsVision: false, available: hasMaxkbGuardian },
-      { id: 'ragflow-agent', name: '选品调研员（RAGFlow·30天回退）', hint: '30天兼容回退 · 2026-09-23 停服', provider: 'ragflow', supportsVision: false, available: Boolean(process.env.RAGFLOW_FALLBACK_ENABLED === 'true' && process.env.RAGFLOW_API_KEY) },
-      { id: 'listing-agent', name: 'Listing精造师（RAGFlow·30天回退）', hint: '30天兼容回退 · 2026-09-23 停服', provider: 'ragflow', supportsVision: false, available: Boolean(process.env.RAGFLOW_FALLBACK_ENABLED === 'true' && process.env.RAGFLOW_API_KEY) },
       { id: 'qwen3.6-flash', name: '通义千问 3.6 Flash', hint: '直连 · 支持图片理解', provider: 'bailian', supportsVision: true, available: hasBailian },
       { id: 'qwen-plus', name: '通义千问 Plus', hint: '直连 · 长文本', provider: 'bailian', supportsVision: false, available: hasBailian },
       { id: 'deepseek-chat', name: 'DeepSeek Chat', hint: '直连 · 推理强', provider: 'deepseek', supportsVision: false, available: hasDeepseek }
     ]
     if (!position) return all
-    const whitelist = AiEmployeeChatService.POSITION_MODEL_WHITELIST[position]
+    const whitelist = AiEmployeeChatService.POSITION_MODEL_WHITELIST[agentSlug(position)]
     if (!whitelist || whitelist.length === 0) return []
     return all.filter(model => whitelist.includes(model.id))
   }
@@ -383,7 +371,7 @@ export class AiEmployeeChatService {
       ? `【附件《${item.name}》内容${item.truncated ? '（已截断）' : ''}】\n${item.text}`
       : `【附件《${item.name}》未提取到文本】`)
     const modelId = (request.modelId || '').trim()
-    // I.4 阶段新增：报告样例库 KB 引用提示词注入（仅 RAGFlow 智能体链路生效；直连模型不注入）
+    // I.4 阶段新增：报告样例库 KB 引用提示词注入（MaxKB 智能体链路生效；直连模型不注入）
     const withKbReference = (content: string) => request.useSampleLibrary
       ? `${content}\n\n${SAMPLE_LIBRARY_KB_REFERENCE_PROMPT}`
       : content
@@ -395,7 +383,7 @@ export class AiEmployeeChatService {
 
     try {
       // 默认（空 / amazon-skills-agent）路径：优先调选品调研员Agent（高级父智能体，六部分 11 表），
-      // 失败回退到 Amazon-Skills 子智能体（01a0050-...），最后回退 RAGFlow 30 天窗。
+      // 失败回退到 Amazon-Skills 子智能体（01a005f0-...）；两级都失败即抛错，不再有三级的 RAGFlow 回退。
       if (!modelId || modelId === 'amazon-skills-agent') {
         emit({ type: 'analyzing', label: '解析图片与路由' })
         const descriptionBlocks = await this.describeImages(images)
@@ -408,7 +396,7 @@ export class AiEmployeeChatService {
           return result
         }
         catch (parentError) {
-          // 回退1：Amazon-Skills 子智能体（手动备用通道）
+          // 回退：Amazon-Skills 子智能体（手动备用通道）
           try {
             emit({ type: 'reasoning', label: 'Amazon-Skills 备用通道' })
             const result = await this.maxkbChat(request, content, MAXKB_AMAZON_SKILLS_APPLICATION_ID, CHAT_TIMEOUT_MS, undefined, upstreamController.signal)
@@ -417,24 +405,22 @@ export class AiEmployeeChatService {
             return result
           }
           catch (subError) {
-            // 回退2：RAGFlow 30天回退（2026-09-23 停服）
-            if (process.env.RAGFLOW_FALLBACK_ENABLED === 'true') {
-              const fallback = await this.ragflowChat(request, content, CHAT_TIMEOUT_MS, upstreamController.signal)
-              const result = { ok: true as const, content: `⚠️ MaxKB 选品调研员暂不可用，已切换 RAGFlow 30天回退分析通道。\n\n${fallback.content}` }
-              finish('success')
-              return result
-            }
             throw subError instanceof Error ? subError : new Error(parentError instanceof Error ? parentError.message : '选品调研员调用失败')
           }
         }
       }
 
       // MaxKB 多应用路由（v2.10.5-lts 阶段 1.4 启用）
+      // ragflow-agent / listing-agent 是 RAGFlow 30 天回退窗口（2026-09-23 到期）遗留的旧 modelId：
+      // 渲染层的历史 localStorage 选项与 ListingWorkbench 仍会带着它们进来，
+      // 这里改路由到对应的 MaxKB 应用，而不是让它落到「未知模型」兜底。
       const maxkbRoute: Record<string, { appId: string; label: string; timeoutMs: number; tokenEnv: string }> = {
         'maxkb-sourcing': { appId: MAXKB_SOURCING_APPLICATION_ID, label: '选品调研员（MaxKB）推理', timeoutMs: CHAT_TIMEOUT_MS, tokenEnv: 'MAXKB_SOURCING_TOKEN' },
         'maxkb-listing': { appId: MAXKB_LISTING_APPLICATION_ID, label: 'Listing 精造师（MaxKB）推理', timeoutMs: LISTING_TIMEOUT_MS, tokenEnv: 'MAXKB_LISTING_TOKEN' },
         'maxkb-guardian': { appId: MAXKB_GUARDIAN_APPLICATION_ID, label: '知识库守卫（MaxKB）推理', timeoutMs: CHAT_TIMEOUT_MS, tokenEnv: 'MAXKB_GUARDIAN_TOKEN' },
-        'maxkb-default': { appId: MAXKB_DEFAULT_APPLICATION_ID, label: 'MaxKB 智体推理', timeoutMs: CHAT_TIMEOUT_MS, tokenEnv: 'MAXKB_DEFAULT_TOKEN' }
+        'maxkb-default': { appId: MAXKB_DEFAULT_APPLICATION_ID, label: 'MaxKB 智体推理', timeoutMs: CHAT_TIMEOUT_MS, tokenEnv: 'MAXKB_DEFAULT_TOKEN' },
+        'ragflow-agent': { appId: MAXKB_SOURCING_APPLICATION_ID, label: '选品调研员（MaxKB）推理', timeoutMs: CHAT_TIMEOUT_MS, tokenEnv: 'MAXKB_SOURCING_TOKEN' },
+        'listing-agent': { appId: MAXKB_LISTING_APPLICATION_ID, label: 'Listing 精造师（MaxKB）推理', timeoutMs: LISTING_TIMEOUT_MS, tokenEnv: 'MAXKB_LISTING_TOKEN' }
       }
       const route = maxkbRoute[modelId]
       if (route) {
@@ -448,43 +434,20 @@ export class AiEmployeeChatService {
         return result
       }
 
-      if (modelId === 'ragflow-agent') {
-        if (process.env.RAGFLOW_FALLBACK_ENABLED !== 'true') throw new Error('RAGFlow 已超出 30 天回退窗口（2026-09-23 停服）')
-        emit({ type: 'analyzing', label: '解析图片与路由' })
-        const descriptionBlocks = await this.describeImages(images)
-        const content = withKbReference([request.query, ...docBlocks, ...descriptionBlocks].join('\n\n'))
-        emit({ type: 'reasoning', label: 'RAGFlow 智能体推理（30天回退）' })
-        const result = await this.ragflowChat(request, content, CHAT_TIMEOUT_MS, upstreamController.signal)
-        finish('success')
-        return result
-      }
-
-      // Listing精造师：固定路由到 Listing 智能体，长文生成放宽超时
-      if (modelId === 'listing-agent') {
-        if (process.env.RAGFLOW_FALLBACK_ENABLED !== 'true') throw new Error('RAGFlow 已超出 30 天回退窗口（2026-09-23 停服）')
-        emit({ type: 'analyzing', label: '解析图片与路由' })
-        const descriptionBlocks = await this.describeImages(images)
-        const content = withKbReference([request.query, ...docBlocks, ...descriptionBlocks].join('\n\n'))
-        emit({ type: 'reasoning', label: 'Listing 精造师推理（30天回退）' })
-        const result = await this.ragflowChat({ ...request, agentId: RAGFLOW_LISTING_AGENT_ID }, content, LISTING_TIMEOUT_MS, upstreamController.signal)
-        emit({ type: 'finalizing', label: '六段长文后处理' })
-        finish('success')
-        return result
-      }
-
       const profile = this.listModels().find(item => item.id === modelId)
 
+      // 兜底通道：所选模型不可用时改走 MaxKB 默认应用（RAGFlow 回退已随 30 天窗口到期一并删除）
       const fallback = async (): Promise<{ ok: true; content: string }> => {
         emit({ type: 'analyzing', label: '回退路由' })
         const descriptionBlocks = await this.describeImages(images)
         const content = withKbReference([request.query, ...docBlocks, ...descriptionBlocks].join('\n\n'))
-        emit({ type: 'reasoning', label: 'RAGFlow 回退推理' })
-        const result = await this.ragflowChat(request, content, CHAT_TIMEOUT_MS, upstreamController.signal)
+        emit({ type: 'reasoning', label: 'MaxKB 默认应用回退推理' })
+        const result = await this.maxkbChat(request, content, MAXKB_DEFAULT_APPLICATION_ID, CHAT_TIMEOUT_MS, 'MAXKB_DEFAULT_TOKEN', upstreamController.signal)
         return { ok: true, content: `⚠️ 所选模型不可用，已切换默认模型。\n\n${result.content}` }
       }
 
       // 未知 modelId 或所选模型不可用 → 视同 available=false，走回退路径（不抛错、不尝试直连）
-      if (!profile || profile.provider === 'ragflow' || !profile.available) {
+      if (!profile || !profile.available) {
         const result = await fallback()
         finish('success')
         return result
@@ -631,44 +594,6 @@ export class AiEmployeeChatService {
       }
       if (!answer.trim()) throw new Error('MaxKB 选品调研员未返回内容')
       return { ok: true, content: (await materializeGeneratedMarkdownReply(answer)).content }
-    } finally {
-      clearTimeout(timer)
-      if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort)
-    }
-  }
-
-  // ─── RAGFlow 智能体（fetch 逻辑与原 main.ts 逐字一致） ─────────────────────
-  private async ragflowChat(request: AiEmployeeAskRequest, content: string, timeoutMs = CHAT_TIMEOUT_MS, externalSignal?: AbortSignal): Promise<{ ok: true; content: string }> {
-    // RAGFlow API Key 外置到 .env.local（RAGFLOW_API_KEY）：不能在模块顶层读 process.env（import 早于 loadLocalEnvironment），只能在此方法内懒读取
-    const base = ragflowAgentBaseUrl()
-    if (!base) throw new Error('服务器地址无效，请检查配置')
-    const apiKey = String(process.env.RAGFLOW_API_KEY || '').trim()
-    if (!apiKey) throw new Error('未配置 RAGFLOW_API_KEY：请在「大模型API Key」页设置')
-    const agentId = request.agentId || RAGFLOW_AGENT_DEFAULT_ID
-    const messages: Array<{ role: string; content: string }> = [
-      ...(request.history || []).filter(item => item.role === 'user' || item.role === 'assistant').slice(-10).map(item => ({ role: item.role, content: item.content })),
-      { role: 'user', content }
-    ]
-    const controller = new AbortController()
-    // 六部分选品报告包含多张竞品与利润表，完整生成可超过 120 秒。
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
-    const onExternalAbort = () => controller.abort()
-    if (externalSignal) externalSignal.addEventListener('abort', onExternalAbort)
-    try {
-      const response = await fetch(`${base}/api/v1/agents/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ agent_id: agentId, messages, 'openai-compatible': true, stream: false }),
-        signal: controller.signal
-      })
-      const body = await response.json().catch(() => ({ message: '响应解析失败' }))
-      if (!response.ok) throw new Error(body?.message || `分析请求失败（${response.status}）`)
-      const reply = body?.choices?.[0]?.message?.content
-      if (!reply) throw new Error('智能体未返回内容')
-      return { ok: true, content: (await materializeGeneratedMarkdownReply(reply)).content }
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') throw new Error(`分析超时（${Math.round(timeoutMs / 1000)}秒），请稍后重试`)
-      throw error instanceof Error ? error : new Error('分析请求失败')
     } finally {
       clearTimeout(timer)
       if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort)

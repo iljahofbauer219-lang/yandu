@@ -369,6 +369,8 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   warehouses: {
     list: (): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:list'),
+    listPendingReview: (): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:list-pending-review'),
+    confirmReview: (id: string, accessToken: string): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:confirm-review', id, accessToken),
     download: (warehouseProductId: string, accessToken: string): Promise<SupplyProductDownload> => ipcRenderer.invoke('warehouse:download', warehouseProductId, accessToken),
     downloads: (): Promise<SupplyProductDownload[]> => ipcRenderer.invoke('warehouse:download-list'),
     openDownload: (warehouseProductId: string): Promise<boolean> => ipcRenderer.invoke('warehouse:open-download', warehouseProductId)

@@ -26,7 +26,14 @@ export const MENU_PERMISSION_TREE: MenuPermNode[] = [
     ]
   },
   { code: 'menu.advisor', label: 'AI参谋', cards: [{ code: 'menu.advisor.online', label: '在线参谋' }] },
-  { code: 'menu.warehouse', label: 'AI仓库', cards: [] },
+  { code: 'menu.warehouse', label: 'AI仓库', cards: [
+    { code: 'menu.warehouse.hub', label: '货盘仓库' },
+    { code: 'menu.warehouse.pool', label: '采集池' },
+    { code: 'menu.warehouse.products', label: '产品库' },
+    { code: 'menu.warehouse.changes', label: '待确认变更' },
+    { code: 'menu.warehouse.patrol', label: '巡盘日志' },
+    { code: 'menu.warehouse.pricing', label: '定价规则' }
+  ] },
   {
     code: 'menu.collect', label: 'AI采集', cards: [
       { code: 'menu.collect.gigacloud', label: '大健云仓' },
@@ -42,6 +49,11 @@ export const MENU_PERMISSION_TREE: MenuPermNode[] = [
     ]
   },
   { code: 'menu.video', label: 'AI视频', cards: [] },
+  // AI任务：服务端顶级权限码（permissions.ts 中与 menu.hq 平级，并非 AI总部子卡）。
+  // 曾误挂在 menu.hq.cards 下，导致勾选「AI任务」经 toggleMenuCard 连带授予 menu.hq（AI总部整栏）。
+  // 独立成栏后勾选只影响自身；AI任务卡片仍渲染在 AI总部页内（App.tsx），存量经旧树授权的用户
+  // 因勾选时已被连带写入 menu.hq 而不丢访问，OPERATOR 预置也已显式补 menu.hq。
+  { code: 'menu.tasks', label: 'AI任务', cards: [] },
   { code: 'menu.employee', label: 'AI员工', cards: [] },
   {
     code: 'menu.planet', label: 'AI星球', cards: [
@@ -57,8 +69,7 @@ export const MENU_PERMISSION_TREE: MenuPermNode[] = [
       { code: 'menu.hq.vpn', label: '翻墙管理' },
       { code: 'menu.hq.crossborder', label: '跨境导航' },
       { code: 'menu.hq.crawler', label: '文章抓取' },
-      { code: 'menu.hq.admin', label: '系统管理' },
-      { code: 'menu.tasks', label: 'AI任务' }
+      { code: 'menu.hq.admin', label: '系统管理' }
     ]
   }
 ]

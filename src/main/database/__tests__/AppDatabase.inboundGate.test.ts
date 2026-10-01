@@ -79,21 +79,39 @@ describe('入库闸口流转', () => {
     })
   }
 
-  it('选品审批通过不再直写正式入库，而是落 PENDING 选品快照', () => {
-    seedSelection('sel-1', 'PENDING')
-    db.updateSelectionDecision('sel-1', 'APPROVED')
+  function approve(id: string) {
+    seedSelection(id, 'PENDING')
+    db.updateSelectionDecision(id, 'APPROVED')
+  }
+
+  function reviewThenQueueId(id: string): string {
+    const pending = db.listPendingReviewWarehouseProducts().find(item => item.selectionId === id)!
+    db.confirmWarehouseReview(pending.id)
+    return db.listInbound().find(item => item.sourceId === id)!.id
+  }
+
+  it('选品审批通过落正式入库待复核行，不直接进入库队列', () => {
+    approve('sel-1')
     expect(db.getSupplyWarehouseProducts().filter(item => item.selectionId === 'sel-1')).toHaveLength(0)
-    const queue = db.listInbound().filter(item => item.sourceId === 'sel-1')
-    expect(queue).toHaveLength(1)
-    expect(queue[0]).toMatchObject({ origin: 'SELECTION', sourceId: 'sel-1', selectionId: 'sel-1', status: 'PENDING' })
-    expect(queue[0].snapshot.title).toBe('闸口床 sel-1')
-    expect(queue[0].snapshot.warehouseCode).toBe('GIGACLOUD')
+    const pending = db.listPendingReviewWarehouseProducts().filter(item => item.selectionId === 'sel-1')
+    expect(pending).toHaveLength(1)
+    expect(pending[0]).toMatchObject({ warehouseCode: 'GIGACLOUD', status: 'PENDING_REVIEW', selectionId: 'sel-1' })
+    expect(db.listInbound().filter(item => item.sourceId === 'sel-1')).toHaveLength(0)
+  })
+
+  it('复核确认后待复核行归档并落入入库处理待确认', () => {
+    approve('sel-1b')
+    const pendingId = db.listPendingReviewWarehouseProducts().find(item => item.selectionId === 'sel-1b')!.id
+    db.confirmWarehouseReview(pendingId)
+    expect(db.listPendingReviewWarehouseProducts().filter(item => item.selectionId === 'sel-1b')).toHaveLength(0)
+    const queued = db.listInbound().find(item => item.sourceId === 'sel-1b')!
+    expect(queued).toMatchObject({ origin: 'SELECTION', status: 'PENDING' })
+    expect(queued.snapshot.title).toBe('闸口床 sel-1b')
   })
 
   it('确认入库双写正式入库与货盘存放，队列置 CONFIRMED', () => {
-    seedSelection('sel-2', 'PENDING')
-    db.updateSelectionDecision('sel-2', 'APPROVED')
-    const queueId = db.listInbound().find(item => item.sourceId === 'sel-2')!.id
+    approve('sel-2')
+    const queueId = reviewThenQueueId('sel-2')
     db.confirmInbound(queueId)
     const warehouse = db.getSupplyWarehouseProducts().filter(item => item.selectionId === 'sel-2')
     expect(warehouse).toHaveLength(1)
@@ -105,17 +123,16 @@ describe('入库闸口流转', () => {
   })
 
   it('已确认快照冻结：reedit 抛错', () => {
-    seedSelection('sel-3', 'PENDING')
-    db.updateSelectionDecision('sel-3', 'APPROVED')
-    const item = db.listInbound().find(entry => entry.sourceId === 'sel-3')!
+    approve('sel-3')
+    const queueId = reviewThenQueueId('sel-3')
+    const item = db.listInbound().find(entry => entry.id === queueId)!
     db.confirmInbound(item.id)
     expect(() => db.reeditInbound(item.id, { ...item.snapshot, title: '改' })).toThrow('已确认商品请从正式入库退回后再修改')
   })
 
   it('退回入库处理：正式入库归档、货盘删除、队列回 PENDING', () => {
-    seedSelection('sel-4', 'PENDING')
-    db.updateSelectionDecision('sel-4', 'APPROVED')
-    db.confirmInbound(db.listInbound().find(entry => entry.sourceId === 'sel-4')!.id)
+    approve('sel-4')
+    db.confirmInbound(reviewThenQueueId('sel-4'))
     const warehouseId = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-4')!.id
     db.returnToInbound(warehouseId)
     expect(db.getSupplyWarehouseProducts().filter(item => item.selectionId === 'sel-4')).toHaveLength(0)
@@ -126,9 +143,9 @@ describe('入库闸口流转', () => {
   })
 
   it('驳回不写任何库，重新编辑回 PENDING', () => {
-    seedSelection('sel-5', 'PENDING')
-    db.updateSelectionDecision('sel-5', 'APPROVED')
-    const item = db.listInbound().find(entry => entry.sourceId === 'sel-5')!
+    approve('sel-5')
+    const queueId = reviewThenQueueId('sel-5')
+    const item = db.listInbound().find(entry => entry.id === queueId)!
     db.rejectInbound(item.id)
     expect(db.getSupplyWarehouseProducts().filter(entry => entry.selectionId === 'sel-5')).toHaveLength(0)
     expect(db.listInbound().find(entry => entry.sourceId === 'sel-5')!.status).toBe('REJECTED')
@@ -143,5 +160,6 @@ describe('入库闸口流转', () => {
     db.importWarehouseForTest('wh-6', 'sel-6')
     const reopened = new AppDatabase()
     expect(reopened.listInbound().filter(entry => entry.sourceId === 'sel-6')).toHaveLength(0)
+    expect(reopened.listPendingReviewWarehouseProducts().filter(entry => entry.selectionId === 'sel-6')).toHaveLength(0)
   })
 })

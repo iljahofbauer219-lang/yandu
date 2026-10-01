@@ -8,7 +8,6 @@ export type DashboardKpiKey =
   | 'failedTasks'        // 失败任务
   | 'aiQuotaUsed'        // AI 用量百分比
   | 'activeMembers'      // 在岗成员
-  | 'runningSkills'      // 运行中技能（KB Guardian）
 
 /** KPI 趋势（与昨日对比） */
 export type DashboardTrend = 'up' | 'down' | 'flat'
@@ -16,7 +15,8 @@ export type DashboardTrend = 'up' | 'down' | 'flat'
 export interface DashboardKpi {
   key: DashboardKpiKey
   label: string
-  value: number
+  /** null = 服务端无真实数据源（不再以假 0 充数） */
+  value: number | null
   /** 副标题/单位（如 "68%" / "23 件"） */
   suffix?: string
   /** 与昨日对比的趋势 */
@@ -45,21 +45,41 @@ export interface MyTodo {
   link: string
 }
 
-/** 团队动作类型（来自审计日志） */
-export type TeamAction =
-  | 'created'
-  | 'updated'
-  | 'deleted'
-  | 'enabled'
-  | 'disabled'
-  | 'reset_pwd'
-  | 'role_changed'
-  | 'ai_quota_exceeded'
-  | 'login'
-  | 'logout'
+/**
+ * 团队动作类型（来自审计日志的 action 字面量）。
+ * 必须与 server/src/modules/dashboard/teamActivity.ts 的 TEAM_ACTIVITY_ACTIONS 完全一致
+ * （server 不 import src/shared，只能手工镜像；漂移由 __tests__/dashboardTeamActions.test.ts 守卫）。
+ */
+export const TEAM_ACTIVITY_ACTIONS = [
+  'member.create',
+  'member.update',
+  'member.delete',
+  'member.approve',
+  'member.reject',
+  'grant.update',
+  'role.create',
+  'role.update',
+  'role.delete',
+  'store.create',
+  'store.update',
+  'store.delete',
+  'auth.register',
+  'auth.login',
+  'auth.logout',
+  'auth.change-password',
+  'ai.quota.update',
+  'linduo.member.tier.set',
+  'linduo.tier.models.set',
+  'linduo.chat_model.toggle_enabled'
+] as const
 
-/** 团队动态目标类型 */
-export type TeamTargetType = 'product' | 'report' | 'task' | 'user' | 'role' | 'kb' | 'session'
+export type TeamAction = typeof TEAM_ACTIVITY_ACTIONS[number]
+
+/**
+ * 团队动态目标类型：审计日志的 targetType 是自由字符串（user / role / store / organization /
+ * LinduoModelTier / ErpProduct …），不做闭合联合，前端按映射表取名并对未知值回退原值。
+ */
+export type TeamTargetType = string
 
 export interface TeamActivity {
   id: string

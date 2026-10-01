@@ -498,19 +498,62 @@ function unsupportedComplianceLine(line: string): boolean {
   return dedicatedRow && cells.some(cell => COMPLIANCE_TERM.test(cell)) && cells.some(cell => COMPLIANCE_COST_OR_TIME.test(cell))
 }
 
-function markdownScenarioValues(content: string, label: RegExp): number[] | null {
+/** 表格行标签归一化：剥掉 Markdown 强调符、空白与常见标点，只留可比较的关键词（大小写不敏感） */
+function normalizeRowLabel(value: string): string {
+  return value
+    .replace(/[*_`]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/[（）()【】\[\]{}：:、，,。.；;！!？?\-—─+/\\|]/g, '')
+    .toLowerCase()
+}
+
+/**
+ * 单位经济表的 10 个行名匹配器（关键词/前缀匹配，不再要求逐字等于模板）。
+ *
+ * 旧写法是精确行名正则（如 `采购\+包装\+质检成本`）：模型只要把行名改写成「采购与包装成本」，
+ * 该行就定位不到 → rows.every 为 false → 整张三情景复算门禁被**静默跳过**，
+ * 报告里的总成本/毛利润/贡献利润算错也不会有任何提示。
+ * 注意匹配器之间必须互斥（如「贡献毛利率」同时含「毛利率」，故毛利润行显式排除「贡献」）。
+ */
+const SCENARIO_ROW_MATCHERS: ReadonlyArray<{ name: string; matches: (label: string) => boolean }> = [
+  { name: '实收销售收入', matches: label => label.includes('实收') || label.includes('销售收入') },
+  { name: '采购+包装+质检成本', matches: label => label.includes('采购') && (label.includes('成本') || label.includes('包装') || label.includes('质检')) },
+  { name: '国内物流+头程+关税清关', matches: label => !label.includes('fba') && (label.includes('头程') || label.includes('国内物流')) },
+  { name: 'FBA入仓+仓储+履约', matches: label => label.includes('fba') },
+  { name: '平台佣金/交易费', matches: label => label.includes('佣金') || label.includes('交易费') },
+  { name: '广告/优惠券', matches: label => label.includes('广告') || label.includes('优惠券') },
+  { name: '退货/残损/售后', matches: label => label.includes('退货') || label.includes('残损') || label.includes('售后') },
+  { name: '单件综合总成本', matches: label => label.includes('总成本') },
+  { name: '毛利润/毛利率', matches: label => !label.includes('贡献') && (label.includes('毛利润') || label.includes('毛利率')) },
+  { name: '贡献利润/贡献毛利率', matches: label => label.includes('贡献') }
+]
+
+/**
+ * 定位三情景单位经济表里的一行并取出「悲观/基准/乐观」三列金额。
+ * - found=false：整行都定位不到（行名被改写）→ 调用方必须显式告警，不得静默跳过复算
+ * - found=true 但 values=null：行在、但单元格不是金额（如「待验证」）→ 数据本就不可复算，属正常跳过
+ */
+function findScenarioRow(content: string, matches: (label: string) => boolean): { found: boolean; values: number[] | null } {
   const line = content.split(/\n+/).find(item => {
     const cells = item.split('|').map(cell => cell.trim()).filter(Boolean)
-    return cells.length >= 4 && label.test(cells[0])
+    return cells.length >= 4 && matches(normalizeRowLabel(cells[0] ?? ''))
   })
-  if (!line) return null
+  if (!line) return { found: false, values: null }
   const cells = line.split('|').map(cell => cell.trim()).filter(Boolean)
   const values = cells.slice(1, 4).map(cell => {
     const match = cell.replace(/,/g, '').match(/(-?)\s*\$\s*(-?\d+(?:\.\d+)?)|(-?\d+(?:\.\d+)?)\s*(?:USD|美元)/i)
     if (!match) return Number.NaN
     return match[3] ? Number(match[3]) : Number(`${match[1] || ''}${match[2]}`)
   })
-  return values.every(Number.isFinite) ? values : null
+  return { found: true, values: values.every(Number.isFinite) ? values : null }
+}
+
+/**
+ * 报告是否含「三情景单位经济表」。靠表头里的 悲观/基准/乐观 三列判定 —— 行名被整体改写时仍能识别，
+ * 这样才分得清「本报告没有这张表」（正常，不复算）与「有表但行名对不上」（必须告警）。
+ */
+function hasScenarioTable(content: string): boolean {
+  return content.split(/\n+/).some(line => line.includes('|') && /悲观/.test(line) && /基准/.test(line) && /乐观/.test(line))
 }
 
 /**
@@ -541,28 +584,33 @@ export function validateSelectionReportEvidence(content: string, info: Extracted
     issues.push(`缺少包装尺寸或毛重，报告不得声称已完成 FBA 计算器模拟：${unsupportedFeeSimulation.slice(0, 100)}`)
   }
 
-  const revenue = markdownScenarioValues(content, /实收销售收入/)
-  const purchase = markdownScenarioValues(content, /采购\+包装\+质检成本/)
-  const inbound = markdownScenarioValues(content, /国内物流\+头程\+关税清关/)
-  const fba = markdownScenarioValues(content, /FBA入仓\+仓储\+履约/i)
-  const commission = markdownScenarioValues(content, /平台佣金\/交易费/)
-  const advertising = markdownScenarioValues(content, /广告\/优惠券/)
-  const returns = markdownScenarioValues(content, /退货\/残损\/售后/)
-  const total = markdownScenarioValues(content, /单件综合总成本/)
-  const gross = markdownScenarioValues(content, /毛利润\/毛利率/)
-  const contribution = markdownScenarioValues(content, /贡献利润\/贡献毛利率/)
-  const rows = [revenue, purchase, inbound, fba, commission, advertising, returns, total, gross, contribution]
-  if (rows.every((row): row is number[] => Boolean(row))) {
+  const scenarioRows = SCENARIO_ROW_MATCHERS.map(row => ({ name: row.name, ...findScenarioRow(content, row.matches) }))
+  // 行名被改写导致定位不到 → 显式告警，不再静默跳过复算门禁
+  const unlocatedRows = scenarioRows.filter(row => !row.found).map(row => row.name)
+  if (scenarioRows.every(row => Boolean(row.values))) {
+    const byName = new Map(scenarioRows.map(row => [row.name, row.values as number[]]))
+    const revenue = byName.get('实收销售收入')!
+    const purchase = byName.get('采购+包装+质检成本')!
+    const inbound = byName.get('国内物流+头程+关税清关')!
+    const fba = byName.get('FBA入仓+仓储+履约')!
+    const commission = byName.get('平台佣金/交易费')!
+    const advertising = byName.get('广告/优惠券')!
+    const returns = byName.get('退货/残损/售后')!
+    const total = byName.get('单件综合总成本')!
+    const gross = byName.get('毛利润/毛利率')!
+    const contribution = byName.get('贡献利润/贡献毛利率')!
     const tolerance = 0.08
     for (let index = 0; index < 3; index += 1) {
-      const expectedTotal = purchase![index] + inbound![index] + fba![index] + commission![index] + advertising![index] + returns![index]
-      const expectedGross = revenue![index] - purchase![index] - inbound![index]
-      const expectedContribution = revenue![index] - total![index]
+      const expectedTotal = purchase[index] + inbound[index] + fba[index] + commission[index] + advertising[index] + returns[index]
+      const expectedGross = revenue[index] - purchase[index] - inbound[index]
+      const expectedContribution = revenue[index] - total[index]
       const scenario = ['悲观', '基准', '乐观'][index]
-      if (Math.abs(total![index] - expectedTotal) > tolerance) issues.push(`${scenario}情景单件综合总成本计算错误：应为 $${expectedTotal.toFixed(2)}，报告为 $${total![index].toFixed(2)}`)
-      if (Math.abs(gross![index] - expectedGross) > tolerance) issues.push(`${scenario}情景毛利润计算错误：应按收入减采购及头程为 $${expectedGross.toFixed(2)}，报告为 $${gross![index].toFixed(2)}`)
-      if (Math.abs(contribution![index] - expectedContribution) > tolerance) issues.push(`${scenario}情景贡献利润计算错误：广告已含在综合总成本中，不得重复扣除；应为 $${expectedContribution.toFixed(2)}，报告为 $${contribution![index].toFixed(2)}`)
+      if (Math.abs(total[index] - expectedTotal) > tolerance) issues.push(`${scenario}情景单件综合总成本计算错误：应为 $${expectedTotal.toFixed(2)}，报告为 $${total[index].toFixed(2)}`)
+      if (Math.abs(gross[index] - expectedGross) > tolerance) issues.push(`${scenario}情景毛利润计算错误：应按收入减采购及头程为 $${expectedGross.toFixed(2)}，报告为 $${gross[index].toFixed(2)}`)
+      if (Math.abs(contribution[index] - expectedContribution) > tolerance) issues.push(`${scenario}情景贡献利润计算错误：广告已含在综合总成本中，不得重复扣除；应为 $${expectedContribution.toFixed(2)}，报告为 $${contribution[index].toFixed(2)}`)
     }
+  } else if (unlocatedRows.length && hasScenarioTable(content)) {
+    issues.push(`单位经济复算被跳过：报告含三情景表，但「${unlocatedRows.join('、')}」这些行名定位不到（可能被改写），总成本/毛利润/贡献利润未经系统复算，必须改回模板行名`)
   }
   return [...new Set(issues)]
 }

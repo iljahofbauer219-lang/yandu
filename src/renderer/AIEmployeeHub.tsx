@@ -20,6 +20,7 @@ import ProductLibrary from './ProductLibrary'
 import {
   BEST_PRACTICES,
   SCENE_ENTRIES,
+  agentNameBySlug,
   type BestPractice,
   type SceneEntry
 } from '../shared/agentCategories'
@@ -45,23 +46,23 @@ export default function AIEmployeeHub({ onEnterAgent }: Props) {
       return
     }
     // Hub 输入框发送：直接交给 App.tsx 路由决定目标员工（默认走选品调研员）
-    onEnterAgent('选品调研员', text)
+    onEnterAgent(agentNameBySlug('researcher'), text)
   }
 
-  // 场景入口 → 跳到对应员工
+  // 场景入口 → 跳到对应员工（targetAgent 为稳定 slug，进工作台仍传中文 position）
   const handleSceneSelect = (scene: SceneEntry) => {
-    onEnterAgent(scene.targetAgent, scene.prefillQuery)
+    onEnterAgent(agentNameBySlug(scene.targetAgent), scene.prefillQuery)
   }
 
   // 最佳实践 → 跳到对应员工
   const handleBestPracticeSelect = (item: BestPractice) => {
-    onEnterAgent(item.targetAgent, item.prefillQuery)
+    onEnterAgent(agentNameBySlug(item.targetAgent), item.prefillQuery)
   }
 
   // 商品库选中 → 跳到选品调研员并预填分析请求
   const handleProductSelect = (item: ProductLibraryItem) => {
     setShowProductModal(false)
-    onEnterAgent('选品调研员', `请基于已选商品「${item.title}」分析跨境市场机会…`)
+    onEnterAgent(agentNameBySlug('researcher'), `请基于已选商品「${item.title}」分析跨境市场机会…`)
   }
 
   return (

@@ -497,38 +497,40 @@
   background: #fafcfb;
 }
 
-/* ---- 暗色主题适配 ---- */
-.theme-dark .crawler-page { background: #14201f; color: #e3eaea; }
-.theme-dark .crawler-header,
-.theme-dark .crawler-toolbar,
-.theme-dark .crawler-import-config {
+/* ---- 暗色主题适配 ----
+   锚点是应用真实的主题根选择器 [data-theme="dark"]（index.html 引导脚本与 App.tsx 写到 <html> 上）。
+   原先写成 .theme-dark，而全站没有任何代码添加该类，整段规则等于死代码 → 抓取页在暗色下仍是白底。 */
+[data-theme="dark"] .crawler-page { background: #14201f; color: #e3eaea; }
+[data-theme="dark"] .crawler-header,
+[data-theme="dark"] .crawler-toolbar,
+[data-theme="dark"] .crawler-import-config {
   background: rgba(20, 32, 31, 0.92);
   border-color: #283634;
 }
-.theme-dark .crawler-back,
-.theme-dark .crawler-toolbar button,
-.theme-dark .crawler-drawer-header button,
-.theme-dark .crawler-import-config select,
-.theme-dark .crawler-import-config input,
-.theme-dark .crawler-article-card button,
-.theme-dark .crawler-extract-form input {
+[data-theme="dark"] .crawler-back,
+[data-theme="dark"] .crawler-toolbar button,
+[data-theme="dark"] .crawler-drawer-header button,
+[data-theme="dark"] .crawler-import-config select,
+[data-theme="dark"] .crawler-import-config input,
+[data-theme="dark"] .crawler-article-card button,
+[data-theme="dark"] .crawler-extract-form input {
   background: #1c2a28;
   border-color: #283634;
   color: #d8e2e1;
 }
-.theme-dark .crawler-viewer,
-.theme-dark .crawler-drawer,
-.theme-dark .crawler-article-card {
+[data-theme="dark"] .crawler-viewer,
+[data-theme="dark"] .crawler-drawer,
+[data-theme="dark"] .crawler-article-card {
   background: #1c2a28;
   border-color: #283634;
 }
-.theme-dark .crawler-article-card header b { color: #e3eaea; }
-.theme-dark .crawler-article-meta,
-.theme-dark .crawler-state-msg,
-.theme-dark .crawler-drawer-header h3 small,
-.theme-dark .crawler-empty,
-.theme-dark .crawler-header p,
-.theme-dark .crawler-header h2 small { color: #8a9795; }
-.theme-dark .crawler-drawer-header h3 { color: #e3eaea; }
-.theme-dark .crawler-preview-modal { background: #1c2a28; color: #e3eaea; }
-.theme-dark .crawler-preview-body { background: #14201f; color: #d8e2e1; }
+[data-theme="dark"] .crawler-article-card header b { color: #e3eaea; }
+[data-theme="dark"] .crawler-article-meta,
+[data-theme="dark"] .crawler-state-msg,
+[data-theme="dark"] .crawler-drawer-header h3 small,
+[data-theme="dark"] .crawler-empty,
+[data-theme="dark"] .crawler-header p,
+[data-theme="dark"] .crawler-header h2 small { color: #8a9795; }
+[data-theme="dark"] .crawler-drawer-header h3 { color: #e3eaea; }
+[data-theme="dark"] .crawler-preview-modal { background: #1c2a28; color: #e3eaea; }
+[data-theme="dark"] .crawler-preview-body { background: #14201f; color: #d8e2e1; }
