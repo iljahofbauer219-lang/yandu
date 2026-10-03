@@ -94,7 +94,7 @@ function json(body) {
 
     // ── B 候选页方法 Tab 精确过滤 ──
     console.log('方法 Tab 过滤与统一展示')
-    await flowNav.getByRole('button', { name: '采集侯选' }).click()
+    await flowNav.getByRole('button', { name: '采集候选' }).click()
     await page.waitForSelector('.candidate-catalog-main', { timeout: 8000 })
     await page.waitForTimeout(500)
     assert('全部商品 5 卡', await candidateCards.count() === 5)

@@ -66,7 +66,7 @@ function json(body) {
     await page.waitForSelector('.ai-collect-grid', { timeout: 8000 })
     await page.locator('.ai-collect-card', { hasText: '大健云仓' }).click()
     await page.waitForTimeout(800)
-    await flowNav.getByRole('button', { name: '采集侯选' }).click()
+    await flowNav.getByRole('button', { name: '采集候选' }).click()
     await page.waitForSelector('.candidate-catalog-main .candidate-product-card', { timeout: 8000 })
     await page.waitForTimeout(400)
 

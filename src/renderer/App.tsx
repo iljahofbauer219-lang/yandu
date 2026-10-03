@@ -1464,7 +1464,7 @@ export function App() {
     } catch (reason) { setError(reason instanceof Error ? reason.message : '候选商品操作失败') }
   }
 
-  // 采集侯选淘汰：原因对话框 → 写入淘汰记录（主进程内部完成候选软删）→ 刷新候选工作台
+  // 采集候选淘汰：原因对话框 → 写入淘汰记录（主进程内部完成候选软删）→ 刷新候选工作台
   const [eliminateCandidate, setEliminateCandidate] = useState<CollectedSupplyProduct | null>(null)
   const confirmEliminateCandidate = async (reason: string) => {
     const product = eliminateCandidate
@@ -1792,7 +1792,7 @@ export function App() {
       {page==='compliance-knowledge'&&pageAllowed('compliance-knowledge')&&<ComplianceKnowledgePage/>}
       {page==='ops-knowledge'&&pageAllowed('ops-knowledge')&&<KnowledgeHub onOpenEmployee={()=>setPage('ai-employee')}/>}
       {page==='system-admin'&&pageAllowed('system-admin')&&<SystemAdmin/>}
-      {inSelectionModule && <>{page!=='warehouse-dashboard'&&<div className="selection-module-nav warehouse-flow-nav"><button className={page==='tasks'?'active':''} onClick={()=>setPage('tasks')}><span>AI采集</span></button><button className={page==='ozon'?'active':''} onClick={()=>setPage('ozon')}><span>采集侯选</span></button><button className={page==='comparison'?'active':''} onClick={()=>setPage('comparison')}><span>优选产品</span>{activeSelectionItems.length>0&&<em>{activeSelectionItems.length}</em>}</button>{activeWarehouse!=='GIGACLOUD'&&<button className={page==='sourcing'?'active':''} onClick={()=>setPage('sourcing')}><span>AI比价</span>{warehouseComparisons.length>0&&<em>{warehouseComparisons.length}</em>}</button>}{page==='eliminated'&&<button className="active" onClick={()=>setPage('eliminated')}><span>淘汰产品</span></button>}<button className={page==='review'?'active':''} onClick={()=>setPage('review')}><span>正式入库</span>{warehouseCount(activeWarehouse)>0&&<em>{warehouseCount(activeWarehouse)}</em>}</button></div>}</>}
+      {inSelectionModule && <>{page!=='warehouse-dashboard'&&<div className="selection-module-nav warehouse-flow-nav"><button className={page==='tasks'?'active':''} onClick={()=>setPage('tasks')}><span>AI采集</span></button><button className={page==='ozon'?'active':''} onClick={()=>setPage('ozon')}><span>采集候选</span></button><button className={page==='comparison'?'active':''} onClick={()=>setPage('comparison')}><span>优选产品</span>{activeSelectionItems.length>0&&<em>{activeSelectionItems.length}</em>}</button>{activeWarehouse!=='GIGACLOUD'&&<button className={page==='sourcing'?'active':''} onClick={()=>setPage('sourcing')}><span>AI比价</span>{warehouseComparisons.length>0&&<em>{warehouseComparisons.length}</em>}</button>}{page==='eliminated'&&<button className="active" onClick={()=>setPage('eliminated')}><span>淘汰产品</span></button>}<button className={page==='review'?'active':''} onClick={()=>setPage('review')}><span>正式入库</span>{warehouseCount(activeWarehouse)>0&&<em>{warehouseCount(activeWarehouse)}</em>}</button></div>}</>}
       {page==='warehouse-dashboard'&&<section className="warehouse-dashboard">
         <div className="warehouse-dashboard-heading"><div><small>WAREHOUSE OVERVIEW</small><h2>供应仓库总览</h2><p>本页只读取本地业务数据，不连接或登录任何供应平台。</p></div><span>本地数据</span></div>
         <div className="warehouse-dashboard-metrics">
@@ -1865,7 +1865,7 @@ export function App() {
             </details>
 
             {allPreviewItems.length>0&&<section className="collection-preview-card">
-              <div className="collection-preview-title"><span className="ai-collect-bar"/><b>预采集产品</b><small>确认前不会进入采集侯选</small><em className="collection-preview-count">已选 {previewSelectedCount} / {allPreviewItems.length}</em><button type="button" className={previewOnlySelected?'active':''} onClick={()=>setPreviewOnlySelected(value=>!value)}>仅看已选</button></div>
+              <div className="collection-preview-title"><span className="ai-collect-bar"/><b>预采集产品</b><small>确认前不会进入采集候选</small><em className="collection-preview-count">已选 {previewSelectedCount} / {allPreviewItems.length}</em><button type="button" className={previewOnlySelected?'active':''} onClick={()=>setPreviewOnlySelected(value=>!value)}>仅看已选</button></div>
               <div className="collection-preview-tools"><input value={previewQuery} onChange={event=>setPreviewQuery(event.target.value)} placeholder="筛选标题、商品ID或供应商"/>{!pluginPreviewItems.length&&<><button type="button" onClick={()=>setPreviewSelectedUrls(new Set(regularPreviewItems.map(item=>item.url)))}>全选</button><button type="button" onClick={()=>setPreviewSelectedUrls(new Set())}>清空</button></>}</div>
               <div className="collection-preview-list">{visiblePreviewItems.map(item=><div key={item.url} className={`collection-preview-row${item.source==='PLUGIN'||previewSelectedUrls.has(item.url)?' selected':''}`}>
                 <label className="row-check" title={item.source==='PLUGIN'?'移除':'选择'}><input type="checkbox" checked={item.source==='PLUGIN'||previewSelectedUrls.has(item.url)} onChange={()=>togglePreviewItem(item.url,item.source)}/></label>

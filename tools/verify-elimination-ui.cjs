@@ -1,7 +1,7 @@
 /**
  * 淘汰产品机制 端到端 UI 验收（真实 Electron 渲染进程 + Playwright + node:sqlite 种子）。
  * 覆盖：优选页黄框统一入口、卡片按钮精简（无待复核）、淘汰原因对话框、淘汰记录归集页、
- * 重新启用回滚决策、采集侯选淘汰、预检查过滤开关持久化。
+ * 重新启用回滚决策、采集候选淘汰、预检查过滤开关持久化。
  *
  * 运行：node tools/verify-elimination-ui.cjs
  */
@@ -129,17 +129,17 @@ async function mockAuth(page) {
 
     // 淘汰产品归集页（入口仅在采集侧二级导航）
     console.log('淘汰产品页 · 归集 / 重新启用 / 开关')
-    await topNav('采集侯选').click()
+    await topNav('采集候选').click()
     await page.waitForSelector('.candidate-page', { timeout: 8000 })
-    assert('采集侯选页顶部导航不展示「淘汰产品」Tab', (await topNav('淘汰产品').count()) === 0)
-    assert('采集侯选页含页内「淘汰产品」入口', await page.locator('.eliminated-entry-link').isVisible())
+    assert('采集候选页顶部导航不展示「淘汰产品」Tab', (await topNav('淘汰产品').count()) === 0)
+    assert('采集候选页含页内「淘汰产品」入口', await page.locator('.eliminated-entry-link').isVisible())
     await page.screenshot({ path: path.join(ARTIFACTS, 'elimination-06-ozon-entry.png') })
     await page.locator('.eliminated-entry-link').click()
     await page.waitForSelector('.eliminated-page', { timeout: 8000 })
     await page.waitForTimeout(400)
     const rowText = await page.locator('.eliminated-row').first().innerText()
     assert('归集页展示淘汰记录（标题/URL/原因/操作人）', rowText.includes('淘汰验证商品A') && rowText.includes('https://elim.example/sel1') && rowText.includes('利润不足，验收淘汰') && rowText.includes('老板'))
-    assert('页头说明点明采集侯选为主、优选同样支持', (await page.locator('.eliminated-heading p').innerText()).includes('采集侯选'))
+    assert('页头说明点明采集候选为主、优选同样支持', (await page.locator('.eliminated-heading p').innerText()).includes('采集候选'))
     assert('列表行展示 ACTIVE 状态标签', rowText.includes('淘汰生效 ACTIVE'))
     assert('顶部导航存在「淘汰产品」Tab', await topNav('淘汰产品').isVisible())
     await page.screenshot({ path: path.join(ARTIFACTS, 'elimination-02-list.png') })
@@ -158,9 +158,9 @@ async function mockAuth(page) {
     await page.waitForTimeout(400)
     assert('重新启用后优选决策回滚为待复核', (await page.locator('.selection-stats button', { hasText: '待复核' }).locator('b').innerText()) === '1')
 
-    // 采集侯选淘汰
-    console.log('采集侯选 · 删除改淘汰')
-    await topNav('采集侯选').click()
+    // 采集候选淘汰
+    console.log('采集候选 · 删除改淘汰')
+    await topNav('采集候选').click()
     await page.waitForSelector('.candidate-page', { timeout: 8000 })
     await page.waitForTimeout(500)
     const card = page.locator('.supply-source-card', { hasText: '淘汰验证候选B' }).first()
@@ -195,7 +195,7 @@ async function mockAuth(page) {
     await page.waitForSelector('.ai-collect-page', { timeout: 8000 })
     await page.locator('.ai-collect-card', { hasText: '大健云仓' }).first().click()
     await page.waitForSelector('.workspace', { timeout: 8000 })
-    await topNav('采集侯选').click()
+    await topNav('采集候选').click()
     await page.waitForSelector('.candidate-page', { timeout: 8000 })
     await page.locator('.eliminated-entry-link').click()
     await page.waitForSelector('.eliminated-page', { timeout: 8000 })

@@ -21,3 +21,8 @@ output/resource2skill-input/
 output/playwright/resource2skill/
 output/playwright/watch-skill/
 release/
+
+# 运行时与临时产物
+artifacts/
+.tmp-ui-verify/
+server/data/

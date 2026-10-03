@@ -109,7 +109,7 @@ const MEASURE_FN = (kind) => {
 
     // ── 采集候选 Tab 度量 ──
     console.log('采集候选卡片度量')
-    await flowNav.getByRole('button', { name: '采集侯选' }).click()
+    await flowNav.getByRole('button', { name: '采集候选' }).click()
     await page.waitForSelector('.candidate-catalog-main .candidate-product-card', { timeout: 8000 })
     await page.waitForTimeout(500)
     const candidateMetrics = await page.evaluate(MEASURE_FN, 'candidate')
@@ -166,7 +166,7 @@ const MEASURE_FN = (kind) => {
       await flowNav.getByRole('button', { name: /优选产品/ }).click()
       await page.waitForTimeout(400)
       const sAudit = await page.evaluate(AUDIT_FN, 'selection')
-      await flowNav.getByRole('button', { name: '采集侯选' }).click()
+      await flowNav.getByRole('button', { name: '采集候选' }).click()
       await page.waitForTimeout(400)
       const cAudit = await page.evaluate(AUDIT_FN, 'candidate')
       console.log(`  audit selection@${vp.width} =`, JSON.stringify(sAudit), ` candidate@${vp.width} =`, JSON.stringify(cAudit))

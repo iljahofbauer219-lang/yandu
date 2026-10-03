@@ -83,7 +83,7 @@ function json(body) {
 
     // ── 采集候选页：同口径排除 ──
     console.log('1688 采集候选同口径')
-    await flowNav.getByRole('button', { name: '采集侯选' }).click()
+    await flowNav.getByRole('button', { name: '采集候选' }).click()
     await page.waitForSelector('.candidate-catalog-main', { timeout: 8000 })
     await page.waitForTimeout(500)
     const candText = await page.locator('.candidate-catalog-main').innerText()
