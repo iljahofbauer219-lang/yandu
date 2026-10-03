@@ -320,7 +320,8 @@ contextBridge.exposeInMainWorld('desktop', {
     list: (): Promise<CandidateWorkspace> => ipcRenderer.invoke('candidate:list'),
     delete: (request: CandidateUpdateRequest): Promise<CandidateWorkspace> => ipcRenderer.invoke('candidate:delete', request),
     restore: (request: CandidateUpdateRequest): Promise<CandidateWorkspace> => ipcRenderer.invoke('candidate:restore', request),
-    purge: (request: CandidateUpdateRequest): Promise<CandidateWorkspace> => ipcRenderer.invoke('candidate:purge', request)
+    purge: (request: CandidateUpdateRequest): Promise<CandidateWorkspace> => ipcRenderer.invoke('candidate:purge', request),
+    reread: (request: { platformCode: string; url: string }): Promise<CandidateWorkspace> => ipcRenderer.invoke('candidate:reread', request)
   },
   selections: {
     list: () => ipcRenderer.invoke('selection:list'),
@@ -370,14 +371,21 @@ contextBridge.exposeInMainWorld('desktop', {
   warehouses: {
     list: (): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:list'),
     listPendingReview: (): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:list-pending-review'),
+    listDelisted: (): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:list-delisted'),
     confirmReview: (id: string, accessToken: string): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:confirm-review', id, accessToken),
+    delist: (id: string, reason: string, accessToken: string): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:delist', id, reason, accessToken),
+    restore: (id: string, accessToken: string): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:restore', id, accessToken),
+    setRegion: (id: string, region: string, accessToken: string): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:set-region', id, region, accessToken),
+    copyPallet: (id: string, accessToken: string): Promise<InboundProcessingItem[]> => ipcRenderer.invoke('warehouse:copy-pallet', id, accessToken),
+    deleteProduct: (id: string, accessToken: string): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:delete-product', id, accessToken),
+    returnPreferred: (id: string, accessToken: string): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:return-preferred', id, accessToken),
     download: (warehouseProductId: string, accessToken: string): Promise<SupplyProductDownload> => ipcRenderer.invoke('warehouse:download', warehouseProductId, accessToken),
     downloads: (): Promise<SupplyProductDownload[]> => ipcRenderer.invoke('warehouse:download-list'),
     openDownload: (warehouseProductId: string): Promise<boolean> => ipcRenderer.invoke('warehouse:open-download', warehouseProductId)
   },
   pallet: {
     list: (): Promise<PalletWarehouseItem[]> => ipcRenderer.invoke('pallet:list'),
-    remove: (ids: string[]): Promise<PalletWarehouseItem[]> => ipcRenderer.invoke('pallet:remove', ids)
+    remove: (ids: string[], accessToken: string): Promise<PalletWarehouseItem[]> => ipcRenderer.invoke('pallet:remove', ids, accessToken)
   },
   inbound: {
     list: (): Promise<InboundProcessingItem[]> => ipcRenderer.invoke('inbound:list'),

@@ -72,6 +72,7 @@ if (stderr.trim()) console.error(stderr.trim())
 
 console.log('[verify] 启动应用…')
 const { buildApp } = await import('../src/app.js')
+const { createSecondOrg } = await import('./lib/verify-org.js')
 const { prisma } = await import('../src/lib/prisma.js')
 const { OssMediaStorage } = await import('../src/lib/media/storage.js')
 const app = await buildApp()
@@ -119,7 +120,7 @@ const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, .
 // ---------- 验收场景 ----------
 try {
   console.log('\n[1] local 驱动上传与公共签名下载闭环')
-  const registerA = await api('POST', '/api/auth/register', { orgName: '媒体组织A', name: '老板A', email: 'owner-media-a@test.com', password: 'pass1234' })
+  const registerA = await api('POST', '/api/auth/register', { orgName: '媒体组织A', name: '老板A', email: '13900000021', password: 'pass1234' })
   const tokenA: string = registerA.data?.tokens?.accessToken ?? ''
   const orgAId: string = registerA.data?.user?.org?.id ?? ''
   check('注册组织A → 200', registerA.status === 200 && Boolean(tokenA) && Boolean(orgAId), registerA.data)
@@ -197,8 +198,8 @@ try {
 
   const roles = await api('GET', '/api/roles', undefined, tokenA)
   const publisherRoleId = roles.data?.find((role: any) => role.name === '发布员')?.id
-  await api('POST', '/api/members', { email: 'pub-media@test.com', name: '发布小B', password: 'pass1234', roleIds: [publisherRoleId], storeIds: [] }, tokenA)
-  const pubToken: string = (await api('POST', '/api/auth/login', { email: 'pub-media@test.com', password: 'pass1234' })).data?.tokens?.accessToken ?? ''
+  await api('POST', '/api/members', { email: '13900000022', name: '发布小B', password: 'pass1234', roleIds: [publisherRoleId], storeIds: [] }, tokenA)
+  const pubToken: string = (await api('POST', '/api/auth/login', { email: '13900000022', password: 'pass1234' })).data?.tokens?.accessToken ?? ''
 
   const pubUpload = await api('POST', '/api/media/uploads', { fileName: 'a.png', contentType: 'image/png', dataBase64: PNG_BYTES.toString('base64') }, pubToken)
   check('发布员（无 product.edit）上传 → 403', pubUpload.status === 403, pubUpload.data)
@@ -209,8 +210,9 @@ try {
   const pubSignDownload = await api('POST', '/api/media/sign-download', { key }, pubToken)
   check('发布员 sign-download（登录即可）→ 200', pubSignDownload.status === 200, pubSignDownload.data)
 
-  const registerB = await api('POST', '/api/auth/register', { orgName: '媒体组织B', name: '老板B', email: 'owner-media-b@test.com', password: 'pass1234' })
-  const tokenB: string = registerB.data?.tokens?.accessToken ?? ''
+  // register 端点在库中已有组织时只建 PENDING 用户且不返回 tokens，造不出独立组织 → 直接建库
+  const orgB = await createSecondOrg(app, { orgName: '媒体组织B', phone: '13900000023' })
+  const tokenB: string = orgB.token
   const crossSign = await api('POST', '/api/media/sign-download', { key }, tokenB)
   check('组织B 对组织A 的 key sign-download → 403', crossSign.status === 403, crossSign.data)
   const crossDelete = await api('DELETE', `/api/media/objects?key=${encodeURIComponent(key)}`, undefined, tokenB)

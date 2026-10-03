@@ -43,8 +43,8 @@
 .ai-collect-card-countries { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-content: center; gap: 6px; }
 .ai-collect-tab-wrap { position: relative; display: inline-flex; align-items: center; }
 .ai-collect-tab-menu { position: absolute; top: calc(100% + 6px); left: 0; min-width: 136px; display: flex; flex-direction: column; gap: 2px; padding: 6px; background: var(--bg-panel, #fff); border: 1px solid var(--border-soft); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, .12); z-index: 40; }
-.ai-collect-tab-menu button { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px; border: none; border-radius: 7px; background: none; color: var(--text-primary); font-size: 12.5px; cursor: pointer; text-align: left; }
-.ai-collect-tab-menu button:hover { background: var(--bg-soft, #f1f2f4); }
+.ai-collect-tabs .ai-collect-tab-menu button { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px; min-height: 0; flex-basis: auto; border: none; border-radius: 7px; background: transparent; color: var(--text-primary, #1f2430); font-size: 12.5px; cursor: pointer; text-align: left; }
+.ai-collect-tabs .ai-collect-tab-menu button:hover { background: var(--bg-soft, #f1f2f4); color: var(--text-primary, #1f2430); }
 .ai-collect-tab-menu button.active { color: var(--ac-accent, #ff6a00); font-weight: 600; }
 .ai-collect-tab-menu button em { font-style: normal; font-size: 11px; color: var(--text-muted); }
 .ai-collect-country-chip { padding: 2px 8px; border-radius: 8px; border: 1px solid rgba(255,106,0,.25); background: rgba(255,106,0,.06); color: var(--ac-accent, #ff6a00); font-size: 11px; cursor: pointer; }

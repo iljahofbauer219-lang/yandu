@@ -56,6 +56,12 @@
 .eliminate-dialog label { display:block; margin-top:14px; color:var(--text-secondary); font-size:11px; font-weight:600; }
 .eliminate-dialog textarea { width:100%; min-height:84px; margin-top:6px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg-soft); color:var(--text-primary); font-size:12px; line-height:18px; resize:vertical; outline:none; }
 .eliminate-dialog textarea:focus { border-color:var(--tiffany); }
+.eliminate-reason-group { margin-top:14px; }
+.eliminate-reason-label { display:block; color:var(--text-secondary); font-size:11px; font-weight:600; }
+.eliminate-reason-options { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:8px; }
+.eliminate-reason-chip { padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:var(--bg-soft); color:var(--text-secondary); font-size:12px; font-weight:600; cursor:pointer; }
+.eliminate-reason-chip:hover { border-color:var(--tiffany); color:#086a66; }
+.eliminate-reason-chip.active { border-color:var(--tiffany); background:rgb(8 145 178 / 12%); color:#086a66; }
 .eliminate-dialog-error { margin:10px 0 0; color:var(--danger); font-size:11px; }
 .eliminate-dialog footer { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
 .eliminate-dialog footer button { padding:8px 16px; border:1px solid var(--line); border-radius:10px; background:var(--panel); color:var(--text-secondary); font-size:12px; font-weight:600; cursor:pointer; }

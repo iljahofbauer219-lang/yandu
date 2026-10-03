@@ -1030,7 +1030,7 @@ export class ComplianceRepository {
       const gateStatus: ComplianceCheckResult['gateStatus'] = findings.length ? 'BLOCKED' : 'PASSED'
       const checkedAt = new Date().toISOString()
       const id = randomUUID()
-      const ruleSetVersion = 'EBAY-DETAIL-PAGE-2026.07.21'
+      const ruleSetVersion = 'EBAY-DETAIL-PAGE-2026.07.22'
       const inputFingerprint = complianceCheckFingerprint(request)
       const result: ComplianceCheckResult = { id, productId: request.productId, gateStatus, checkedAt, ruleSetVersion, inputFingerprint, findings }
       await repo.db.complianceCheckRun.create({

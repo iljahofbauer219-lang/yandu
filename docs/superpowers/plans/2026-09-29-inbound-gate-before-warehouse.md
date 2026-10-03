@@ -120,8 +120,8 @@ vi.mock('electron', async () => {
 })
 
 async function seedLegacyInboundTable() {
-  const { default: Database } = await import('better-sqlite3')
-  const db = new Database(path.join(ctx.dir, 'sourcing-data.sqlite'))
+  const { DatabaseSync } = await import('node:sqlite')
+  const db = new DatabaseSync(path.join(ctx.dir, 'sourcing-data.sqlite'))
   db.exec(`
     CREATE TABLE inbound_processing_items (
       id TEXT PRIMARY KEY,

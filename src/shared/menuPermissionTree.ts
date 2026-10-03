@@ -39,7 +39,21 @@ export const MENU_PERMISSION_TREE: MenuPermNode[] = [
       { code: 'menu.collect.gigacloud', label: '大健云仓' },
       { code: 'menu.collect.1688', label: '1688' },
       { code: 'menu.collect.aliexpress', label: 'AliExpress' },
-      { code: 'menu.collect.ozon', label: 'Ozon' }
+      { code: 'menu.collect.ozon', label: 'Ozon' },
+      { code: 'menu.collect.qufenxiao', label: '趣分销' },
+      { code: 'menu.collect.kjds', label: '越域网' },
+      { code: 'menu.collect.kjdseu', label: '越域网(欧洲)' },
+      { code: 'menu.collect.kjdsau', label: '越域网(澳洲)' },
+      { code: 'menu.collect.kjdscn', label: '越域网(国内)' },
+      { code: 'menu.collect.bigbuy', label: 'BigBuy' },
+      { code: 'menu.collect.saleyeena', label: '赛盈(北美)' },
+      { code: 'menu.collect.saleyeeeu', label: '赛盈(欧洲)' },
+      { code: 'menu.collect.saleyeeas', label: '赛盈(亚洲)' },
+      { code: 'menu.collect.saleyeeoce', label: '赛盈(澳洲)' },
+      { code: 'menu.collect.saleyeelatam', label: '赛盈(拉美)' },
+      { code: 'menu.collect.saleyeeme', label: '赛盈(中东)' },
+      { code: 'menu.collect.yimai', label: '亿迈' },
+      { code: 'menu.collect.haibei', label: '海贝' }
     ]
   },
   {

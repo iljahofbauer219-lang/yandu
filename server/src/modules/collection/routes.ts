@@ -157,6 +157,18 @@ const selectionDecisionSchema = z.object({
   decision: z.enum(['PENDING', 'APPROVED', 'REJECTED'])
 })
 
+const eliminationCreateSchema = z.object({
+  origin: z.enum(['SELECTION', 'CANDIDATE']),
+  recordId: z.string().optional(),
+  url: z.string().optional(),
+  platformCode: z.string().optional(),
+  productId: z.string().optional(),
+  title: z.string().optional(),
+  imageUrl: z.string().optional(),
+  priceText: z.string().optional(),
+  reason: z.string().optional()
+})
+
 const selectionCategorySchema = z.object({
   category: z.string().default(''),
   subcategory: z.string().default(''),
@@ -343,6 +355,51 @@ export async function collectionRoutes(app: FastifyInstance) {
     await repoOf(request.currentUser.orgId).returnSelectionToCandidates(id)
     await audit(request, 'collection.selection.return', 'SELECTION', id, {})
     return { ok: true }
+  })
+
+  // ---------------- 淘汰产品收录追踪 ----------------
+
+app.get('/eliminations', async request => {
+    return repoOf(request.currentUser.orgId).listEliminatedProducts()
+  })
+
+app.post('/eliminations', { preHandler: [app.requirePermission('collection.run')] }, async request => {
+    const body = eliminationCreateSchema.parse(request.body)
+    const operator = `${request.currentUser.name}（${request.currentUser.email}）`
+    const result = await repoOf(request.currentUser.orgId).eliminateProduct({ ...body, operator })
+    await audit(request, 'collection.elimination.create', 'ELIMINATION', result.id, { origin: body.origin, url: body.url ?? '', reason: body.reason ?? '' })
+    return result
+  })
+
+app.post('/eliminations/batch-delete', { preHandler: [app.requirePermission('collection.run')] }, async request => {
+    const body = z.object({ ids: z.array(z.string()).min(1) }).parse(request.body)
+    const result = await repoOf(request.currentUser.orgId).deleteEliminated(body.ids)
+    await audit(request, 'collection.elimination.batch-delete', 'ELIMINATION', body.ids.join(','), { count: body.ids.length })
+    return result
+  })
+
+app.post('/eliminations/:id/reenable', { preHandler: [app.requirePermission('collection.run')] }, async request => {
+    const { id } = request.params as { id: string }
+    const result = await repoOf(request.currentUser.orgId).reenableEliminated(id)
+    await audit(request, 'collection.elimination.reenable', 'ELIMINATION', id, {})
+    return result
+  })
+
+app.delete('/eliminations/:id', { preHandler: [app.requirePermission('collection.run')] }, async request => {
+    const { id } = request.params as { id: string }
+    const result = await repoOf(request.currentUser.orgId).deleteEliminated([id])
+    await audit(request, 'collection.elimination.delete', 'ELIMINATION', id, {})
+    return result
+  })
+
+app.get('/eliminations/settings', async request => {
+    const { key } = request.query as { key?: string }
+    return { value: await repoOf(request.currentUser.orgId).getEliminationSetting(key || 'filter_on_precheck') }
+  })
+
+app.put('/eliminations/settings', { preHandler: [app.requirePermission('collection.run')] }, async request => {
+    const body = z.object({ key: z.string().min(1), value: z.string() }).parse(request.body)
+    return { value: await repoOf(request.currentUser.orgId).setEliminationSetting(body.key, body.value) }
   })
 
   // ---------------- 工作流计数 ----------------

@@ -183,6 +183,7 @@ if (stderr.trim()) console.error(stderr.trim())
 
 console.log('[verify] 启动应用…')
 const { buildApp } = await import('../src/app.js')
+const { createSecondOrg } = await import('./lib/verify-org.js')
 const app = await buildApp()
 await app.listen({ port: 0, host: '127.0.0.1' })
 const address = app.server.address()
@@ -228,26 +229,27 @@ const lastMockRequest = (method: string, pathPrefix: string) =>
 // ---------- 验收 ----------
 try {
   console.log('\n[1] 账号环境：组织A（主帐号 + 运营/发布员/只读）与组织B')
-  const registerA = await api('POST', '/api/auth/register', { orgName: 'AI网关组织A', name: '老板A', email: 'ai-owner-a@test.com', password: 'pass1234' })
+  const registerA = await api('POST', '/api/auth/register', { orgName: 'AI网关组织A', name: '老板A', email: '13900000001', password: 'pass1234' })
   const ownerToken: string = registerA.data?.tokens?.accessToken ?? ''
   const ownerId: string = registerA.data?.user?.id ?? ''
   check('注册组织A → 200', registerA.status === 200 && Boolean(ownerToken), registerA.data)
 
   const roles = await api('GET', '/api/roles', undefined, ownerToken)
   const roleIdOf = (name: string) => roles.data?.find((role: any) => role.name === name)?.id
-  const opCreate = await api('POST', '/api/members', { email: 'ai-op@test.com', name: '运营小A', password: 'pass1234', roleIds: [roleIdOf('运营')], storeIds: [] }, ownerToken)
-  const pubCreate = await api('POST', '/api/members', { email: 'ai-pub@test.com', name: '发布小B', password: 'pass1234', roleIds: [roleIdOf('发布员')], storeIds: [] }, ownerToken)
-  const viewCreate = await api('POST', '/api/members', { email: 'ai-view@test.com', name: '只读小C', password: 'pass1234', roleIds: [roleIdOf('只读')], storeIds: [] }, ownerToken)
+  const opCreate = await api('POST', '/api/members', { email: '13900000002', name: '运营小A', password: 'pass1234', roleIds: [roleIdOf('运营')], storeIds: [] }, ownerToken)
+  const pubCreate = await api('POST', '/api/members', { email: '13900000003', name: '发布小B', password: 'pass1234', roleIds: [roleIdOf('发布员')], storeIds: [] }, ownerToken)
+  const viewCreate = await api('POST', '/api/members', { email: '13900000004', name: '只读小C', password: 'pass1234', roleIds: [roleIdOf('只读')], storeIds: [] }, ownerToken)
   const opId: string = opCreate.data?.id ?? ''
   const pubId: string = pubCreate.data?.id ?? ''
-  const opToken: string = (await api('POST', '/api/auth/login', { email: 'ai-op@test.com', password: 'pass1234' })).data?.tokens?.accessToken ?? ''
-  const pubToken: string = (await api('POST', '/api/auth/login', { email: 'ai-pub@test.com', password: 'pass1234' })).data?.tokens?.accessToken ?? ''
-  const viewToken: string = (await api('POST', '/api/auth/login', { email: 'ai-view@test.com', password: 'pass1234' })).data?.tokens?.accessToken ?? ''
+  const opToken: string = (await api('POST', '/api/auth/login', { email: '13900000002', password: 'pass1234' })).data?.tokens?.accessToken ?? ''
+  const pubToken: string = (await api('POST', '/api/auth/login', { email: '13900000003', password: 'pass1234' })).data?.tokens?.accessToken ?? ''
+  const viewToken: string = (await api('POST', '/api/auth/login', { email: '13900000004', password: 'pass1234' })).data?.tokens?.accessToken ?? ''
   check('运营/发布员/只读创建并登录成功', Boolean(opId) && Boolean(pubId) && Boolean(viewCreate.data?.id) && Boolean(opToken) && Boolean(pubToken) && Boolean(viewToken))
 
-  const registerB = await api('POST', '/api/auth/register', { orgName: 'AI网关组织B', name: '老板B', email: 'ai-owner-b@test.com', password: 'pass1234' })
-  const ownerBToken: string = registerB.data?.tokens?.accessToken ?? ''
-  check('注册组织B → 200', registerB.status === 200 && Boolean(ownerBToken), registerB.data)
+  // register 端点在库中已有组织时只建 PENDING 用户且不返回 tokens，造不出独立组织 → 直接建库
+  const orgB = await createSecondOrg(app, { orgName: 'AI网关组织B', phone: '13900000005' })
+  const ownerBToken: string = orgB.token
+  check('建立独立组织B → 拿到 token', Boolean(ownerBToken), orgB)
 
   console.log('\n[2] 模型目录聚合 GET /api/ai/models')
   const models401 = await api('GET', '/api/ai/models')

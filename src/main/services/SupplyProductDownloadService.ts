@@ -16,10 +16,12 @@ const EXTENSION_BY_MIME: Record<string, string> = {
   'image/png': 'png',
   'image/webp': 'webp',
   'image/gif': 'gif',
-  'image/avif': 'avif'
+  'image/avif': 'avif',
+  'video/mp4': 'mp4'
 }
 
 interface ImageEntry {
+  kind: 'img' | 'desc' | 'video'
   index: number
   remoteUrl: string
   file: string
@@ -33,48 +35,57 @@ export class SupplyProductDownloadService {
   constructor(private readonly database: AppDatabase, private readonly workspace: BrowserWorkspace) {}
 
   async download(warehouseProductId: string, accessToken: string): Promise<SupplyProductDownload> {
-    const product = this.database.getSupplyWarehouseProductById(warehouseProductId)
-    if (!product) throw new Error('正式入库商品不存在或已归档')
+    const product = this.database.getDownloadableSupplyWarehouseProductById(warehouseProductId)
+    if (!product) throw new Error('商品不存在、已归档或已下架')
     if (!product.sourceUrl) throw new Error('该商品缺少原网址，无法下载')
     if (!accessToken) throw new Error('登录状态缺失，请重新登录后重试')
     const snapshot = await this.workspace.readSupplyProductPage(product.warehouseCode, product.sourceUrl)
 
     const capturedAt = new Date().toISOString()
-    const images: ImageEntry[] = snapshot.extracted.images.map((remoteUrl, index) => ({
-      index, remoteUrl, file: '', contentType: '', buffer: null, status: 'FAILED', error: ''
-    }))
+    const extracted = snapshot.extracted
+    const galleryUrls = extracted.images
+    const descUrls = (extracted.descriptionImages ?? []).filter(url => !galleryUrls.includes(url))
+    const videoUrls = extracted.videos ?? []
+    const assets: ImageEntry[] = [
+      ...galleryUrls.map((remoteUrl, index) => ({ kind: 'img' as const, index, remoteUrl, file: '', contentType: '', buffer: null, status: 'FAILED' as const, error: '' })),
+      ...descUrls.map((remoteUrl, index) => ({ kind: 'desc' as const, index, remoteUrl, file: '', contentType: '', buffer: null, status: 'FAILED' as const, error: '' })),
+      ...videoUrls.map((remoteUrl, index) => ({ kind: 'video' as const, index, remoteUrl, file: '', contentType: '', buffer: null, status: 'FAILED' as const, error: '' }))
+    ]
     const failures: string[] = []
     let cursor = 0
     const downloadNext = async () => {
-      while (cursor < images.length) {
-        const entry = images[cursor]
+      while (cursor < assets.length) {
+        const entry = assets[cursor]
         cursor += 1
         try {
           const response = await fetch(entry.remoteUrl, {
-            signal: AbortSignal.timeout(15_000),
-            headers: { 'User-Agent': 'Mozilla/5.0', Referer: snapshot.extracted.finalUrl || product.sourceUrl }
+            signal: AbortSignal.timeout(entry.kind === 'video' ? 120_000 : 15_000),
+            headers: { 'User-Agent': 'Mozilla/5.0', Referer: extracted.finalUrl || product.sourceUrl }
           })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
           const buffer = Buffer.from(await response.arrayBuffer())
-          if (!buffer.length) throw new Error('图片内容为空')
+          if (!buffer.length) throw new Error('内容为空')
           const mimeType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()
           const extension = EXTENSION_BY_MIME[mimeType]
-          if (!extension) throw new Error(`不支持的图片类型：${mimeType || '未知'}`)
-          entry.file = `${String(entry.index + 1).padStart(2, '0')}.${extension}`
+          if (!extension) throw new Error(`不支持的类型：${mimeType || '未知'}`)
+          if (entry.kind === 'video' && extension !== 'mp4') throw new Error(`仅支持 mp4 视频：${mimeType}`)
+          const seq = String(entry.index + 1).padStart(2, '0')
+          entry.file = entry.kind === 'img' ? `${seq}.${extension}` : entry.kind === 'desc' ? `d-${seq}.${extension}` : `v-${seq}.${extension}`
           entry.contentType = mimeType
           entry.buffer = buffer
           entry.status = 'DOWNLOADED'
         } catch (error) {
           entry.error = error instanceof Error ? error.message : '未知错误'
-          failures.push(`第 ${entry.index + 1} 张：${entry.error}`)
+          failures.push(`${entry.kind === 'img' ? '第 ' + (entry.index + 1) + ' 张' : entry.kind === 'desc' ? '描述图 ' + (entry.index + 1) : '视频 ' + (entry.index + 1)}：${entry.error}`)
         }
       }
     }
-    await Promise.all(Array.from({ length: Math.min(6, images.length) }, () => downloadNext()))
+    await Promise.all(Array.from({ length: Math.min(6, assets.length) }, () => downloadNext()))
 
-    const uploaded = images.filter(item => item.status === 'DOWNLOADED')
-    const failedCount = images.length - uploaded.length
-    if (!uploaded.length) {
+    const uploaded = assets.filter(item => item.status === 'DOWNLOADED')
+    const uploadedGallery = uploaded.filter(item => item.kind === 'img')
+    const failedCount = assets.length - uploaded.length
+    if (!uploadedGallery.length) {
       const record: SupplyProductDownload = {
         warehouseProductId,
         pageId: '',
@@ -91,7 +102,7 @@ export class SupplyProductDownloadService {
 
     // html 重写：成功图片的 remoteUrl（含 &amp; 转义形式）→ assets/nn.ext；失败图片保留源站直链
     let html = snapshot.html
-    for (const entry of uploaded) {
+    for (const entry of uploaded.filter(item => item.kind !== 'video')) {
       const local = `assets/${entry.file}`
       html = html.split(entry.remoteUrl.replaceAll('&', '&amp;')).join(local)
       html = html.split(entry.remoteUrl).join(local)
@@ -109,13 +120,30 @@ export class SupplyProductDownloadService {
         warehouseProductId: product.id,
         warehouseCode: product.warehouseCode,
         sourceUrl: product.sourceUrl,
-        finalUrl: snapshot.extracted.finalUrl,
-        title: snapshot.extracted.title || product.title,
-        price: snapshot.extracted.price || product.priceText,
-        specs: snapshot.extracted.specs,
-        descriptionText: snapshot.extracted.descriptionText,
+        finalUrl: extracted.finalUrl,
+        title: extracted.title || product.title,
+        price: extracted.price || product.priceText,
+        specs: extracted.specs,
+        descriptionText: extracted.descriptionText,
         html,
-        images: uploaded.map(entry => ({ name: entry.file, contentType: entry.contentType, dataBase64: (entry.buffer ?? Buffer.alloc(0)).toString('base64') }))
+        images: uploadedGallery.map(entry => ({ name: entry.file, contentType: entry.contentType, dataBase64: (entry.buffer ?? Buffer.alloc(0)).toString('base64') })),
+        descriptionImages: uploaded.filter(item => item.kind === 'desc').map(entry => ({ name: entry.file, contentType: entry.contentType, dataBase64: (entry.buffer ?? Buffer.alloc(0)).toString('base64') })),
+        videos: uploaded.filter(item => item.kind === 'video').map(entry => ({ name: entry.file, contentType: entry.contentType, dataBase64: (entry.buffer ?? Buffer.alloc(0)).toString('base64') })),
+        category: extracted.category ?? '',
+        itemCode: extracted.itemCode ?? '',
+        firstStockAt: extracted.firstStockAt ?? '',
+        returnRate: extracted.returnRate ?? '',
+        sellableInventory: extracted.sellableInventory ?? '',
+        unitPrice: extracted.unitPrice ?? '',
+        packingFee: extracted.packingFee ?? '',
+        freightFee: extracted.freightFee ?? '',
+        shippingFee: extracted.shippingFee ?? '',
+        estimatedTotal: extracted.estimatedTotal ?? '',
+        dropshipLeadTime: extracted.dropshipLeadTime ?? '',
+        gigaIndex: extracted.gigaIndex ?? '',
+        materialPackUrl: extracted.materialPackUrl ?? '',
+        materialPackDownloads: extracted.materialPackDownloads ?? '',
+        files: extracted.files ?? []
       })
     })
     if (response.status === 401) {
@@ -133,7 +161,7 @@ export class SupplyProductDownloadService {
       warehouseProductId,
       pageId: result.pageId,
       pageUrl: `${serverUrl}${result.url}`,
-      imageCount: uploaded.length,
+      imageCount: uploadedGallery.length,
       failedCount,
       status: 'DOWNLOADED',
       error: failedCount ? `部分图片失败：${failures.slice(0, 3).join('；')}` : '',

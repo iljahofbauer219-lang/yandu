@@ -69,6 +69,7 @@ if (stderr.trim()) console.error(stderr.trim())
 
 console.log('[verify] 启动应用…')
 const { buildApp } = await import('../src/app.js')
+const { createSecondOrg } = await import('./lib/verify-org.js')
 const app = await buildApp()
 await app.listen({ port: 0, host: '127.0.0.1' })
 const address = app.server.address()
@@ -170,7 +171,7 @@ function makeListing(storeId: string, listingId: string, overrides: Record<strin
 // ---------- 验收场景 ----------
 try {
   console.log('\n[1] 组织与角色搭建')
-  const registerA = await api('POST', '/api/auth/register', { orgName: '全流程组织A', name: '老板A', email: 'ff-owner-a@test.com', password: 'pass1234' })
+  const registerA = await api('POST', '/api/auth/register', { orgName: '全流程组织A', name: '老板A', email: '13900000017', password: 'pass1234' })
   const ownerToken: string = registerA.data?.tokens?.accessToken ?? ''
   const orgAId: string = registerA.data?.user?.org?.id ?? ''
   check('注册组织A → 200', registerA.status === 200 && Boolean(orgAId), registerA.data)
@@ -184,17 +185,18 @@ try {
   const roles = await api('GET', '/api/roles', undefined, ownerToken)
   const operatorRoleId = roles.data?.find((role: any) => role.name === '运营')?.id
   const publisherRoleId = roles.data?.find((role: any) => role.name === '发布员')?.id
-  const opCreate = await api('POST', '/api/members', { email: 'ff-op@test.com', name: '运营小A', password: 'pass1234', roleIds: [operatorRoleId], storeIds: [store1Id] }, ownerToken)
-  const pubCreate = await api('POST', '/api/members', { email: 'ff-pub@test.com', name: '发布小B', password: 'pass1234', roleIds: [publisherRoleId], storeIds: [store2Id] }, ownerToken)
+  const opCreate = await api('POST', '/api/members', { email: '13900000018', name: '运营小A', password: 'pass1234', roleIds: [operatorRoleId], storeIds: [store1Id] }, ownerToken)
+  const pubCreate = await api('POST', '/api/members', { email: '13900000019', name: '发布小B', password: 'pass1234', roleIds: [publisherRoleId], storeIds: [store2Id] }, ownerToken)
   const opId: string = opCreate.data?.id ?? ''
   const pubId: string = pubCreate.data?.id ?? ''
-  const opToken: string = (await api('POST', '/api/auth/login', { email: 'ff-op@test.com', password: 'pass1234' })).data?.tokens?.accessToken ?? ''
-  const pubToken: string = (await api('POST', '/api/auth/login', { email: 'ff-pub@test.com', password: 'pass1234' })).data?.tokens?.accessToken ?? ''
+  const opToken: string = (await api('POST', '/api/auth/login', { email: '13900000018', password: 'pass1234' })).data?.tokens?.accessToken ?? ''
+  const pubToken: string = (await api('POST', '/api/auth/login', { email: '13900000019', password: 'pass1234' })).data?.tokens?.accessToken ?? ''
   check('运营（授权一店）与发布员（授权二店）登录成功', Boolean(opId) && Boolean(pubId) && Boolean(opToken) && Boolean(pubToken), { opId, pubId })
 
-  const registerB = await api('POST', '/api/auth/register', { orgName: '竞争组织B', name: '老板B', email: 'ff-owner-b@test.com', password: 'pass1234' })
-  const ownerBToken: string = registerB.data?.tokens?.accessToken ?? ''
-  check('注册组织B → 200', registerB.status === 200 && Boolean(ownerBToken), registerB.data)
+  // register 端点在库中已有组织时只建 PENDING 用户且不返回 tokens，造不出独立组织 → 直接建库
+  const orgB = await createSecondOrg(app, { orgName: '竞争组织B', phone: '13900000020' })
+  const ownerBToken: string = orgB.token
+  check('建立独立组织B → 拿到 token', Boolean(ownerBToken), orgB)
 
   console.log('\n[2] 采集主线（运营）：任务 → 候选 → 比价 → 晋级优品仓库')
   const task = await api('POST', '/api/collection/tasks', makeTaskDraft(), opToken)

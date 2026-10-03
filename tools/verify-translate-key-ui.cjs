@@ -42,7 +42,7 @@ async function mockAuth(page) {
 
 // 进入采集工作台（tasks 页，含浏览器工作区与翻译入口）
 async function openCollectWorkspace(page) {
-  await page.locator('.sidebar').getByRole('button', { name: 'AI采集', exact: true }).click()
+  await page.locator('.sidebar').getByRole('button', { name: '货盘采集', exact: true }).click()
   await page.waitForSelector('.ai-collect-page', { timeout: 8000 })
   await page.locator('.ai-collect-card', { hasText: '大健云仓' }).first().click()
   await page.waitForSelector('.workspace', { timeout: 8000 })

@@ -2,6 +2,7 @@ import { buildApp } from './app.js'
 import { config } from './config.js'
 import { prisma } from './lib/prisma.js'
 import { startLinduoPricingScheduler, stopLinduoPricingScheduler } from './modules/linduo/pricing-scheduler.js'
+import { startErpPatrolScheduler, stopErpPatrolScheduler } from './modules/erp/scheduler.js'
 import { syncLinduoChatModels, ensureOwnerLinduoExceptions } from './modules/linduo/chat-models-sync.js'
 import { seedDefaultLinduoTiers, assignOwnerLinduoTiers } from './modules/linduo/tier-seed.js'
 
@@ -16,6 +17,9 @@ try {
 
 // 零度API 价格抓取调度器（每日 06:00 + 启动 30s 后首次）
 startLinduoPricingScheduler()
+
+// ERP 巡盘调度器（每 erpPatrolIntervalMs 巡盘 + 每日早 8 点汇总；gated by ERP_PATROL_ENABLED）
+startErpPatrolScheduler()
 
 // Linduo 聊天模型同步 + Tier seed + OWNER 对齐 (M1/R-2)
 // 顺序意义：
@@ -45,6 +49,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, async () => {
     app.log.info(`收到 ${signal}，正在关闭…`)
     stopLinduoPricingScheduler()
+    stopErpPatrolScheduler()
     await app.close()
     await prisma.$disconnect()
     process.exit(0)

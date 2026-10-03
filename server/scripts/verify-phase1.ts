@@ -117,18 +117,18 @@ async function login(email: string, password: string) {
 // ---------- 验收场景 ----------
 try {
   console.log('\n[1] 注册与登录')
-  const badRegister = await api('POST', '/api/auth/register', { orgName: '砚都跨境', name: '老板', email: 'owner@test.com', password: 'short' })
+  const badRegister = await api('POST', '/api/auth/register', { orgName: '砚都跨境', name: '老板', email: '13900000024', password: 'short' })
   check('弱密码注册 → 400', badRegister.status === 400, badRegister.data)
 
-  const register = await api('POST', '/api/auth/register', { orgName: '砚都跨境', name: '老板', email: 'owner@test.com', password: 'pass1234' })
+  const register = await api('POST', '/api/auth/register', { orgName: '砚都跨境', name: '老板', email: '13900000024', password: 'pass1234' })
   check('注册组织+主帐号 → 200', register.status === 200, register.data)
   const ownerToken: string = register.data?.tokens?.accessToken ?? ''
   check('注册返回访问令牌', typeof ownerToken === 'string' && ownerToken.length > 20)
 
-  const dupRegister = await api('POST', '/api/auth/register', { orgName: '另一个组织', name: '别人', email: 'owner@test.com', password: 'pass1234' })
+  const dupRegister = await api('POST', '/api/auth/register', { orgName: '另一个组织', name: '别人', email: '13900000024', password: 'pass1234' })
   check('重复邮箱注册 → 409', dupRegister.status === 409, dupRegister.data)
 
-  const ownerLogin = await login('owner@test.com', 'pass1234')
+  const ownerLogin = await login('13900000024', 'pass1234')
   check('主帐号登录 → 200', ownerLogin.status === 200, ownerLogin.data)
   const ownerRefresh: string = ownerLogin.data?.tokens?.refreshToken ?? ''
 
@@ -139,7 +139,7 @@ try {
   const noToken = await api('GET', '/api/auth/me')
   check('未登录访问 → 401', noToken.status === 401)
 
-  const badLogin = await login('owner@test.com', 'wrong-pass1')
+  const badLogin = await login('13900000024', 'wrong-pass1')
   check('错误密码登录 → 401', badLogin.status === 401)
 
   console.log('\n[2] 店铺管理')
@@ -153,9 +153,9 @@ try {
 
   console.log('\n[3] 预置角色与子帐号创建')
   const roles = await api('GET', '/api/roles', undefined, ownerToken)
-  check('预置角色 = 4（主帐号/运营/发布员/只读）',
-    roles.status === 200 && roles.data?.length === 4 &&
-    ['主帐号', '运营', '发布员', '只读'].every(name => roles.data.some((r: any) => r.name === name)),
+  check('预置角色 = 5（主帐号/运营/采集专员/发布员/只读）',
+    roles.status === 200 && roles.data?.length === 5 &&
+    ['主帐号', '运营', '采集专员', '发布员', '只读'].every(name => roles.data.some((r: any) => r.name === name)),
     roles.data)
   const roleIdByName = (name: string) => roles.data.find((r: any) => r.name === name)?.id as string
   const ownerRoleId = roleIdByName('主帐号')
@@ -163,28 +163,28 @@ try {
   const permCatalog = await api('GET', '/api/roles/permissions', undefined, ownerToken)
   check('权限点目录 ≥ 10 项', permCatalog.status === 200 && permCatalog.data?.length >= 10, permCatalog.data)
 
-  const opCreate = await api('POST', '/api/members', { email: 'op@test.com', name: '运营A', password: 'pass1234', roleIds: [roleIdByName('运营')], storeIds: [s1] }, ownerToken)
+  const opCreate = await api('POST', '/api/members', { email: '13900000025', name: '运营A', password: 'pass1234', roleIds: [roleIdByName('运营')], storeIds: [s1] }, ownerToken)
   check('创建运营子帐号（授权美国主店）→ 200', opCreate.status === 200, opCreate.data)
   const opId: string = opCreate.data?.id
 
-  const pubCreate = await api('POST', '/api/members', { email: 'pub@test.com', name: '发布员B', password: 'pass1234', roleIds: [roleIdByName('发布员')], storeIds: [s2] }, ownerToken)
+  const pubCreate = await api('POST', '/api/members', { email: '13900000026', name: '发布员B', password: 'pass1234', roleIds: [roleIdByName('发布员')], storeIds: [s2] }, ownerToken)
   check('创建发布员子帐号（授权英国店）→ 200', pubCreate.status === 200, pubCreate.data)
 
-  const viewerCreate = await api('POST', '/api/members', { email: 'viewer@test.com', name: '只读C', password: 'pass1234', roleIds: [roleIdByName('只读')], storeIds: [] }, ownerToken)
+  const viewerCreate = await api('POST', '/api/members', { email: '13900000027', name: '只读C', password: 'pass1234', roleIds: [roleIdByName('只读')], storeIds: [] }, ownerToken)
   check('创建只读子帐号（不授权店铺）→ 200', viewerCreate.status === 200, viewerCreate.data)
   const viewerId: string = viewerCreate.data?.id
 
-  const ownerRoleAssign = await api('POST', '/api/members', { email: 'fake@test.com', name: '假冒', password: 'pass1234', roleIds: [ownerRoleId], storeIds: [] }, ownerToken)
+  const ownerRoleAssign = await api('POST', '/api/members', { email: '13900000028', name: '假冒', password: 'pass1234', roleIds: [ownerRoleId], storeIds: [] }, ownerToken)
   check('禁止分配主帐号角色 → 400', ownerRoleAssign.status === 400, ownerRoleAssign.data)
 
-  const crossStoreAssign = await api('POST', '/api/members', { email: 'cross@test.com', name: '越权', password: 'pass1234', roleIds: [roleIdByName('运营')], storeIds: ['not-exist-store'] }, ownerToken)
+  const crossStoreAssign = await api('POST', '/api/members', { email: '13900000029', name: '越权', password: 'pass1234', roleIds: [roleIdByName('运营')], storeIds: ['not-exist-store'] }, ownerToken)
   check('授权不存在的店铺 → 400', crossStoreAssign.status === 400, crossStoreAssign.data)
 
   const members = await api('GET', '/api/members', undefined, ownerToken)
   check('成员列表 = 4（1 主 + 3 子）', members.status === 200 && members.data?.length === 4, members.data?.length)
 
   console.log('\n[4] 数据隔离：子帐号仅见授权店铺')
-  const opLogin = await login('op@test.com', 'pass1234')
+  const opLogin = await login('13900000025', 'pass1234')
   const opToken: string = opLogin.data?.tokens?.accessToken ?? ''
   const opRefresh: string = opLogin.data?.tokens?.refreshToken ?? ''
   check('运营A 登录 → 200', opLogin.status === 200, opLogin.data)
@@ -193,12 +193,12 @@ try {
   const opStores = await api('GET', '/api/stores', undefined, opToken)
   check('运营A 店铺列表 = [美国主店]', opStores.status === 200 && opStores.data?.length === 1 && opStores.data[0]?.id === s1, opStores.data)
 
-  const pubLogin = await login('pub@test.com', 'pass1234')
+  const pubLogin = await login('13900000026', 'pass1234')
   const pubToken: string = pubLogin.data?.tokens?.accessToken ?? ''
   const pubStores = await api('GET', '/api/stores', undefined, pubToken)
   check('发布员B 店铺列表 = [英国店]', pubStores.status === 200 && pubStores.data?.length === 1 && pubStores.data[0]?.id === s2, pubStores.data)
 
-  const viewerLogin = await login('viewer@test.com', 'pass1234')
+  const viewerLogin = await login('13900000027', 'pass1234')
   const viewerToken: string = viewerLogin.data?.tokens?.accessToken ?? ''
   const viewerStores = await api('GET', '/api/stores', undefined, viewerToken)
   check('只读C 店铺列表 = []', viewerStores.status === 200 && Array.isArray(viewerStores.data) && viewerStores.data.length === 0, viewerStores.data)
@@ -220,7 +220,8 @@ try {
   check('伪造令牌 → 401', fakeToken.status === 401)
 
   console.log('\n[6] 自定义角色')
-  const customRole = await api('POST', '/api/roles', { name: '采集专员', permissions: ['collection.run'] }, ownerToken)
+  // 名称不能与预置角色重名：COLLECTOR 预置角色已占用「采集专员」，撞 @@unique([orgId,name]) 会得 ROLE_NAME_TAKEN
+  const customRole = await api('POST', '/api/roles', { name: '临时采集角色', permissions: ['collection.run'] }, ownerToken)
   check('创建自定义角色 → 200', customRole.status === 200 && customRole.data?.isSystem === false, customRole.data)
   const customRoleId: string = customRole.data?.id
   const customRoleEdit = await api('PATCH', `/api/roles/${customRoleId}`, { permissions: ['collection.run', 'product.edit'] }, ownerToken)
@@ -251,32 +252,35 @@ try {
   check('运营A 修改密码 → 200', changePw.status === 200, changePw.data)
   const oldRefreshAfterPw = await api('POST', '/api/auth/refresh', { refreshToken: refreshed.data?.tokens?.refreshToken ?? '' })
   check('改密后旧刷新令牌失效 → 401', oldRefreshAfterPw.status === 401, oldRefreshAfterPw.data)
-  const opRelogin = await login('op@test.com', 'newpass123')
+  const opRelogin = await login('13900000025', 'newpass123')
   check('新密码登录 → 200 且需改密标记已清除', opRelogin.status === 200 && opRelogin.data?.user?.mustChangePassword === false, opRelogin.data)
 
   const ownerRefreshReuse = await api('POST', '/api/auth/refresh', { refreshToken: ownerRefresh })
   check('主帐号刷新令牌可用 → 200', ownerRefreshReuse.status === 200, ownerRefreshReuse.data)
 
   console.log('\n[9] 禁用与恢复')
-  const disableViewer = await api('DELETE', `/api/members/${viewerId}`, undefined, ownerToken)
-  check('禁用只读C → 200', disableViewer.status === 200, disableViewer.data)
+  // DELETE /api/members/:id 是**物理删除**（members/routes.ts:258 注释与实现均如此），
+  // 禁用/恢复走 PATCH status，审计记为 member.update；此处曾误用 DELETE 当禁用，导致后续恢复与登录全崩。
+  const disableViewer = await api('PATCH', `/api/members/${viewerId}`, { status: 'DISABLED' }, ownerToken)
+  check('禁用只读C → 200 且状态为 DISABLED', disableViewer.status === 200 && disableViewer.data?.status === 'DISABLED', disableViewer.data)
   const viewerAfterDisable = await api('GET', '/api/stores', undefined, viewerToken)
   check('被禁用子帐号访问 → 401', viewerAfterDisable.status === 401, viewerAfterDisable.data)
-  const viewerLoginDisabled = await login('viewer@test.com', 'pass1234')
-  check('被禁用子帐号登录 → 403', viewerLoginDisabled.status === 403, viewerLoginDisabled.data)
+  const viewerLoginDisabled = await login('13900000027', 'pass1234')
+  check('被禁用子帐号登录 → 403 ACCOUNT_DISABLED',
+    viewerLoginDisabled.status === 403 && viewerLoginDisabled.data?.error === 'ACCOUNT_DISABLED', viewerLoginDisabled.data)
   const enableViewer = await api('PATCH', `/api/members/${viewerId}`, { status: 'ACTIVE' }, ownerToken)
   check('恢复只读C → 200', enableViewer.status === 200 && enableViewer.data?.status === 'ACTIVE', enableViewer.data)
-  const viewerRelogin = await login('viewer@test.com', 'pass1234')
+  const viewerRelogin = await login('13900000027', 'pass1234')
   check('恢复后重新登录 → 200', viewerRelogin.status === 200, viewerRelogin.data)
 
-  const disableOwner = await api('DELETE', `/api/members/${me.data?.id}`, undefined, ownerToken)
-  check('不能禁用主帐号 → 400', disableOwner.status === 400, disableOwner.data)
+  const deleteOwner = await api('DELETE', `/api/members/${me.data?.id}`, undefined, ownerToken)
+  check('不能删除主帐号 → 400', deleteOwner.status === 400, deleteOwner.data)
 
   console.log('\n[10] 审计日志')
   const audit = await api('GET', '/api/audit-logs?limit=200', undefined, ownerToken)
   const actions: string[] = audit.data?.items?.map((item: any) => item.action) ?? []
   check('审计日志可查（主帐号）', audit.status === 200 && audit.data.items.length > 0, audit.data)
-  for (const expected of ['auth.register', 'auth.login', 'store.create', 'member.create', 'grant.update', 'member.disable', 'auth.change-password', 'role.create']) {
+  for (const expected of ['auth.register', 'auth.login', 'store.create', 'member.create', 'grant.update', 'member.update', 'auth.change-password', 'role.create']) {
     check(`审计包含 ${expected}`, actions.includes(expected), actions)
   }
   const auditFiltered = await api('GET', '/api/audit-logs?action=member.create', undefined, ownerToken)

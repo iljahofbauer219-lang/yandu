@@ -1,0 +1,28 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ERP 敏感字段投影（规格 §2.2） > 运营响应 JSON 快照：剥离 6 个敏感字段 1`] = `
+[
+  "costPrice",
+  "id",
+  "orgId",
+  "status",
+  "titleOriginal",
+]
+`;
+
+exports[`ERP 敏感字段投影（规格 §2.2） > 采集响应 JSON 快照：保留全部字段 1`] = `
+[
+  "collectedBy",
+  "costPrice",
+  "crawlConfig",
+  "id",
+  "orgId",
+  "sourceProductId",
+  "sourceSku",
+  "sourceUrl",
+  "status",
+  "supplier",
+  "supplierId",
+  "titleOriginal",
+]
+`;

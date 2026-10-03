@@ -170,7 +170,7 @@ export interface EbayMarketResearchSnapshot {
   condition: string
   query: string
   periodDays: number
-  source: 'EBAY_PRODUCT_RESEARCH' | 'EBAY_SOLD_SEARCH'
+  source: 'EBAY_PRODUCT_RESEARCH' | 'EBAY_SOLD_SEARCH' | 'OMKAR_EBAY_SCRAPER'
   sourceUrl: string
   fetchedAt: string
   captureMode?: 'MANUAL_RESEARCH_PAGE' | 'AUTOMATIC'

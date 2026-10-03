@@ -42,7 +42,7 @@ export async function seedDefaultLinduoTiers(): Promise<{ orgCount: number; tier
  * 为单个组织种子三组 + 回填用户等级。注册新组织 / 启动兜底都走这里。
  *
  * - 三组按 (orgId, key) upsert；
- * - 进阶组 13 个默认授权只在「首次建 tier」时灌入（避免覆盖管理员手工调整）；
+ * - 进阶组 9 个默认授权只在「首次建 tier」时灌入（避免覆盖管理员手工调整）；
  * - 全开组每次启动「补缺不删」同步全部启用模型；
  * - OWNER 每次强制进全开组（spec §12，幂等）；
  * - 非 OWNER 仅在组织「首次种子」时回填 null → 进阶组（尊重管理员后续改「无组」）。
@@ -135,7 +135,7 @@ async function syncFullGrants(tierId: string, orgId: string): Promise<number> {
   return missing.length
 }
 
-/** 进阶组默认 13 授权灌入（仅首次建 tier 时调用，且只灌当前 enabled 的）。返回灌入数。 */
+/** 进阶组默认 9 授权灌入（仅首次建 tier 时调用，且只灌当前 enabled 的）。返回灌入数。 */
 async function seedAdvancedGrants(tierId: string, orgId: string): Promise<number> {
   const models = await prisma.linduoChatModel.findMany({
     where: { modelId: { in: [...ADVANCED_DEFAULT_MODEL_IDS] }, enabled: true },

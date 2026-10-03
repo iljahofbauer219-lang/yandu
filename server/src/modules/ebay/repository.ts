@@ -992,7 +992,9 @@ export class EbayRepository {
       if (input.media.length) {
         await repo.db.ebayLocalProductMedia.createMany({
           data: input.media.map(media => ({
-            id: media.id,
+            // id 是代理键：逻辑媒体 id 会被下一版快照继承复用，直接当主键会撞 P2002 使整次编辑失败
+            id: randomUUID(),
+            mediaKey: media.id,
             orgId: repo.orgId,
             snapshotId,
             mediaType: media.mediaType,
@@ -1253,7 +1255,8 @@ export class EbayRepository {
   // ---------------------------------------------------------------- 市场研究
 
   private normalizeEbayMarketResearchSnapshot(snapshot: EbayMarketResearchSnapshot): EbayMarketResearchSnapshot | undefined {
-    if (!['EBAY_PRODUCT_RESEARCH', 'EBAY_SOLD_SEARCH'].includes(snapshot.source)) return undefined
+    // 与 src/shared/contracts.ts 的 EbayMarketResearchSnapshot.source 手工镜像（server 不 import shared）
+    if (!['EBAY_PRODUCT_RESEARCH', 'EBAY_SOLD_SEARCH', 'OMKAR_EBAY_SCRAPER'].includes(snapshot.source)) return undefined
     if (snapshot.captureMode && !['MANUAL_RESEARCH_PAGE', 'AUTOMATIC'].includes(snapshot.captureMode)) return undefined
     const valid = snapshot.samples.filter(item => !/^(shop on ebay|sign in|register|see all|view item|research)$/i.test(item.title.trim()))
     const unique = new Map<string, EbayMarketResearchSnapshot['samples'][number]>()

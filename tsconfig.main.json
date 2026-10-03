@@ -11,5 +11,8 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src/main/**/*.ts", "src/preload/**/*.ts", "src/shared/**/*.ts"]
+  "include": ["src/main/**/*.ts", "src/preload/**/*.ts", "src/shared/**/*.ts"],
+  // src/shared 下的测试由根 tsconfig.json 负责类型检查；它们会跨包 import server 侧常量做防漂移校验，
+  // 与本文件的 rootDir: src 冲突，故在此排除。src/main 下的测试仍由本文件检查。
+  "exclude": ["src/shared/__tests__/**"]
 }

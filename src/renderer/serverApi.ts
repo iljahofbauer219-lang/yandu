@@ -223,12 +223,16 @@ export async function setLinduoPreferredModel(modelId: string | null): Promise<{
   return apiFetch<{ modelId: string | null }>('/api/linduo/preferred-model', { method: 'PUT', body: { modelId } })
 }
 
-/** 写操作会话过期重试一次（与 handleWarehouseDownload 同模式） */
+function isServerSessionExpired(reason: unknown): reason is Error {
+  return reason instanceof Error && /\bSERVER_SESSION_EXPIRED$/.test(reason.message.trim())
+}
+
+/** 写操作会话过期时刷新并重试一次 */
 export async function runWithSessionRetry<T>(operation: (accessToken: string) => Promise<T>): Promise<T> {
   try {
     return await operation(getTokens()?.accessToken ?? '')
   } catch (reason) {
-    if (!(reason instanceof Error) || reason.message !== 'SERVER_SESSION_EXPIRED') throw reason
+    if (!isServerSessionExpired(reason)) throw reason
     const refreshed = await refreshSession(getTokens()?.accessToken ?? '')
     if (!refreshed) throw new Error('登录会话已过期，请重新登录后重试')
     return operation(getTokens()?.accessToken ?? '')

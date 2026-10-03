@@ -261,6 +261,7 @@ declare global {
         delete(request: CandidateUpdateRequest): Promise<CandidateWorkspace>
         restore(request: CandidateUpdateRequest): Promise<CandidateWorkspace>
         purge(request: CandidateUpdateRequest): Promise<CandidateWorkspace>
+        reread(request: { platformCode: string; url: string }): Promise<CandidateWorkspace>
       }
       selections: {
         list(): Promise<SelectionCatalogItem[]>
@@ -308,14 +309,21 @@ declare global {
       warehouses: {
         list(): Promise<SupplyWarehouseProduct[]>
         listPendingReview(): Promise<SupplyWarehouseProduct[]>
+        listDelisted(): Promise<SupplyWarehouseProduct[]>
         confirmReview(id: string, accessToken: string): Promise<SupplyWarehouseProduct[]>
+        delist(id: string, reason: string, accessToken: string): Promise<SupplyWarehouseProduct[]>
+        restore(id: string, accessToken: string): Promise<SupplyWarehouseProduct[]>
+        setRegion(id: string, region: string, accessToken: string): Promise<SupplyWarehouseProduct[]>
+        copyPallet(id: string, accessToken: string): Promise<InboundProcessingItem[]>
+        deleteProduct(id: string, accessToken: string): Promise<SupplyWarehouseProduct[]>
+        returnPreferred(id: string, accessToken: string): Promise<SupplyWarehouseProduct[]>
         download(warehouseProductId: string, accessToken: string): Promise<SupplyProductDownload>
         downloads(): Promise<SupplyProductDownload[]>
         openDownload(warehouseProductId: string): Promise<boolean>
       }
       pallet: {
         list(): Promise<PalletWarehouseItem[]>
-        remove(ids: string[]): Promise<PalletWarehouseItem[]>
+        remove(ids: string[], accessToken: string): Promise<PalletWarehouseItem[]>
       }
       inbound: {
         list(): Promise<InboundProcessingItem[]>

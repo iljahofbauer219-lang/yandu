@@ -6,7 +6,8 @@
  * - POST /api/linduo/logout             清除登录态
  * - POST /api/linduo/pricing/refresh    立即触发一次抓取
  *
- * 权限：所有路由登录即可（ai.use）。登录/刷新稍高（member.manage）。
+ * 权限：所有路由登录即可（ai.use），含登录与刷新（与下方各路由 preHandler 实际门控一致；
+ * 历史上此处误写「登录/刷新稍高（member.manage）」，实际从未要求 member.manage）。
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
@@ -86,7 +87,7 @@ export async function linduoPricingRoutes(app: FastifyInstance) {
     return { ok: true, expiresAt: result.expiresAt }
   })
 
-  // 立即抓取：稍高权限（ai.use 即可，但需要登录态存在）
+  // 立即抓取：ai.use 即可（与文件头权限说明一致；另需登录态存在，否则回退兜底并报 ok:false）
   app.post('/pricing/refresh', { preHandler: [app.requirePermission('ai.use')] }, async (request: FastifyRequest, reply: FastifyReply) => {
     const startedAt = Date.now()
     let credentials: { username: string; password: string } | undefined = undefined
@@ -96,12 +97,26 @@ export async function linduoPricingRoutes(app: FastifyInstance) {
     }
     try {
       const result = await scrapeAndPersist({ credentials })
+      // 抓取失败回退兜底常量时不得再报 ok:true（plan frosty-wood-gudgeon #26）：
+      // ok:false + reason，前端（LinduoModelMallPage / LlmApiKeysPage）已按 result.error 展示失败
+      if (result.fromFallback) {
+        const reason = result.reason ?? '抓取失败，已回退兜底价格'
+        return {
+          ok: false,
+          count: result.items.length,
+          refreshedAt: new Date().toISOString(),
+          durationMs: Date.now() - startedAt,
+          fromFallback: true,
+          reason,
+          error: reason
+        }
+      }
       return {
         ok: true,
         count: result.items.length,
         refreshedAt: new Date().toISOString(),
         durationMs: Date.now() - startedAt,
-        fromFallback: result.fromFallback
+        fromFallback: false
       }
     } catch (err) {
       return reply.status(500).send({

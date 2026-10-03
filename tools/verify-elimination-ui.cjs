@@ -94,7 +94,7 @@ async function mockAuth(page) {
 
     // 进入选品模块：AI采集顶页 → 大健云仓卡片 → tasks → 顶部导航
     console.log('优选产品 · 按钮与淘汰流程')
-    await page.locator('.sidebar').getByRole('button', { name: 'AI采集', exact: true }).click()
+    await page.locator('.sidebar').getByRole('button', { name: '货盘采集', exact: true }).click()
     await page.waitForSelector('.ai-collect-page', { timeout: 8000 })
     await page.locator('.ai-collect-card', { hasText: '大健云仓' }).first().click()
     await page.waitForSelector('.workspace', { timeout: 8000 })
@@ -191,7 +191,7 @@ async function mockAuth(page) {
     await page.reload()
     await page.waitForTimeout(1200)
     // 刷新后 React 路由重置：重新导航回淘汰产品页
-    await page.locator('.sidebar').getByRole('button', { name: 'AI采集', exact: true }).click()
+    await page.locator('.sidebar').getByRole('button', { name: '货盘采集', exact: true }).click()
     await page.waitForSelector('.ai-collect-page', { timeout: 8000 })
     await page.locator('.ai-collect-card', { hasText: '大健云仓' }).first().click()
     await page.waitForSelector('.workspace', { timeout: 8000 })

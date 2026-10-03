@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto'
 
 /**
@@ -5,17 +6,28 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:
  *
  * - Key 派生：若主密钥不是 32 字节，则用 scrypt(passphrase, salt) 派生 32 字节；
  *   32 字节随机主密钥用 base64 编码存放于 .env.local (LINDUO_PRICING_AES_KEY)。
+ * - KDF 盐从 env LINDUO_PRICING_SALT 读取；生产环境缺失即抛错（禁止内置默认盐）。
  * - 密文格式：base64(iv(12) || tag(16) || ciphertext)
  */
 
 const ALGO = 'aes-256-gcm'
 const IV_LENGTH = 12
-const SALT = 'yandu-linduo-pricing-salt-v1'
+
+const IS_PRODUCTION = process.env.NODE_ENV === 'production'
+/** 开发兜底盐（历史密文兼容）；生产必须用 LINDUO_PRICING_SALT 覆盖 */
+const DEV_SALT = 'yandu-linduo-pricing-salt-v1'
+const SALT = process.env.LINDUO_PRICING_SALT?.trim() || (IS_PRODUCTION ? '' : DEV_SALT)
+if (!SALT) {
+  throw new Error('[crypto] 生产环境必须设置 LINDUO_PRICING_SALT（scrypt KDF 盐），禁止使用内置默认值')
+}
 
 /** 解出 32 字节主密钥；支持原文或 base64 编码的随机串 */
 function resolveKey(raw: string): Buffer {
   const trimmed = (raw || '').trim()
   if (!trimmed) {
+    if (IS_PRODUCTION) {
+      throw new Error('[crypto] 生产环境必须设置 LINDUO_PRICING_AES_KEY（AES-256-GCM 主密钥），禁止使用内置开发口令')
+    }
     // 开发兜底：使用项目名派生一个稳定但弱的密钥；生产必须显式配置
     return scryptSync('yandu-crossborder-default-aes', SALT, 32)
   }

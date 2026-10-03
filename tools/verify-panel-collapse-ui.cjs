@@ -94,7 +94,7 @@ function json(body) {
 
     // ── 区域 2：AI采集 · 采集工作台（独立状态，默认展开） ──
     console.log('AI采集 · 采集工作台')
-    await page.locator('.sidebar').getByRole('button', { name: 'AI采集', exact: true }).click()
+    await page.locator('.sidebar').getByRole('button', { name: '货盘采集', exact: true }).click()
     await page.waitForSelector('.ai-collect-page', { timeout: 8000 })
     await page.locator('.ai-collect-card').first().click()
     await page.waitForSelector('.workspace', { timeout: 8000 })

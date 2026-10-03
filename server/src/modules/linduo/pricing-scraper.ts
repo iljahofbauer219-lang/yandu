@@ -64,6 +64,8 @@ interface ScrapeResult {
   items: LinduoModelPricing[]
   fromFallback: boolean
   loggedInJustNow: boolean
+  /** fromFallback=true 时的失败原因（登录态缺失/页面为空/抓取异常），供 refresh 端点回传 ok:false + reason */
+  reason?: string
 }
 
 interface ScrapeOptions {
@@ -92,6 +94,8 @@ async function loginAndSaveCookies(
     })
     const page = await ctx.newPage()
     await page.goto(LOGIN_URL(), { waitUntil: 'domcontentloaded', timeout: 30_000 })
+    // 记录登录页 URL：成功判定要求「URL 发生变化」且「不含 /login」双条件
+    const loginPageUrl = page.url()
     // 自适应 selector：尝试常见写法
     const userSel = 'input[name="username"], input[type="email"], input[placeholder*="账号"], input[placeholder*="邮箱"]'
     const passSel = 'input[name="password"], input[type="password"]'
@@ -103,8 +107,10 @@ async function loginAndSaveCookies(
     const submitSel = 'button[type="submit"], button:has-text("登录"), button:has-text("Login")'
     await page.click(submitSel).catch(() => undefined)
     await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => undefined)
-    // 校验：当前 URL 不再是 /login
-    if (page.url().includes('/login')) {
+    // 登录成功判定（plan frosty-wood-gudgeon #26）：URL 已跳离登录页 *且* 不再含 /login。
+    // 只判「不含 /login」会把「点击后原地报错、URL 未变（如 SPA 弹错误提示）」误判为成功。
+    const afterLoginUrl = page.url()
+    if (afterLoginUrl.includes('/login') || afterLoginUrl === loginPageUrl) {
       throw new Error('登录失败：仍在登录页（用户名/密码错误，或页面需要二次验证）')
     }
     const cookies = await ctx.cookies(config.linduoPricingBaseUrl)
@@ -293,6 +299,9 @@ async function persistFallback(): Promise<number> {
         billingType: item.billingType,
         pricePerUnit: item.pricePerUnit,
         unitLabel: item.unitLabel,
+        // 兜底覆盖同样要刷新 fetchedAt（plan frosty-wood-gudgeon #26）：
+        // 否则 GET /pricing 的 refreshedAt（取首行 fetchedAt）会停留在旧时间，误导前端「最近抓取时间」
+        fetchedAt: new Date(item.fetchedAt),
         stale: true
       }
     })
@@ -306,7 +315,13 @@ export async function markAllStale(): Promise<number> {
   return result.count
 }
 
-/** 公开入口：抓取并持久化。失败时回退到兜底常量。 */
+/**
+ * 公开入口：抓取并持久化。
+ * 失败不再「吞一切回退 fallback 装成功」（plan frosty-wood-gudgeon #26）：
+ * - 定时/自动路径仍回退兜底常量保证卡片有数据，但必须携带 fromFallback=true + reason，
+ *   由调用方（pricing-routes refresh）回传 ok:false + reason；
+ * - 用户显式提交 credentials 的主动刷新，抓取失败直接抛错，不回退（让真实错误浮出）。
+ */
 export async function scrapeAndPersist(options: ScrapeOptions = {}): Promise<ScrapeResult> {
   let cookies: Array<Record<string, unknown>> = []
   let loggedInJustNow = false
@@ -346,16 +361,26 @@ export async function scrapeAndPersist(options: ScrapeOptions = {}): Promise<Scr
   }
 
   if (cookies.length === 0) {
-    // 没有任何 cookie：回退到兜底
+    // 没有任何 cookie：回退到兜底，但带上 reason（调用方不得再报 ok:true）
     await persistFallback()
-    return { items: fallbackPricingList(), fromFallback: true, loggedInJustNow: false }
+    return {
+      items: fallbackPricingList(),
+      fromFallback: true,
+      loggedInJustNow: false,
+      reason: '无可用登录态（未保存 cookie），请先在模型商城完成零度API 登录'
+    }
   }
 
   try {
     const items = await scrapePricingPage(cookies)
     if (items.length === 0) {
       await persistFallback()
-      return { items: fallbackPricingList(), fromFallback: true, loggedInJustNow }
+      return {
+        items: fallbackPricingList(),
+        fromFallback: true,
+        loggedInJustNow,
+        reason: '抓取结果为空（页面结构可能已变化，需检查 parsePriceCard selector）'
+      }
     }
     await persistPricings(items)
     return { items, fromFallback: false, loggedInJustNow }
@@ -380,9 +405,15 @@ export async function scrapeAndPersist(options: ScrapeOptions = {}): Promise<Scr
         }
       }
     }
-    console.error('[linduo-pricing] 抓取失败，回退到兜底常量：', err instanceof Error ? err.message : err)
+    const reason = err instanceof Error ? err.message : String(err)
+    // 用户显式提交凭据的主动刷新：不吞错回退，直接把真实失败抛给路由（ok:false + error）
+    if (options.credentials) {
+      console.error('[linduo-pricing] 显式凭据抓取失败，不回退兜底：', reason)
+      throw err
+    }
+    console.error('[linduo-pricing] 抓取失败，回退到兜底常量：', reason)
     await persistFallback()
-    return { items: fallbackPricingList(), fromFallback: true, loggedInJustNow }
+    return { items: fallbackPricingList(), fromFallback: true, loggedInJustNow, reason: `抓取失败：${reason}` }
   }
 }
 

@@ -71,7 +71,7 @@ function json(body) {
 
     // ── AI采集 hub：大健云仓卡片候选计数已排除已优选（3-1=2） ──
     console.log('AI采集 hub 计数')
-    await page.locator('.sidebar').getByRole('button', { name: 'AI采集', exact: true }).click()
+    await page.locator('.sidebar').getByRole('button', { name: '货盘采集', exact: true }).click()
     await page.waitForSelector('.ai-collect-grid', { timeout: 8000 })
     const gigaCard = page.locator('.ai-collect-card', { hasText: '大健云仓' })
     assert('大健云仓卡片候选计数为 2（排除已优选）', (await gigaCard.locator('.ai-collect-card-count').innerText()).includes('2'))

@@ -20,16 +20,22 @@
 - [src/renderer/ebay-local-listing-validation.css](file://src/renderer/ebay-local-listing-validation.css)
 - [src/renderer/ebay-video-studio.css](file://src/renderer/ebay-video-studio.css)
 - [src/renderer/image-studio.css](file://src/renderer/image-studio.css)
+- [src/renderer/panel-collapse.css](file://src/renderer/panel-collapse.css)
+- [src/renderer/ui/phase4.css](file://src/renderer/ui/phase4.css)
+- [src/renderer/erp/PalletWarehousePage.tsx](file://src/renderer/erp/PalletWarehousePage.tsx)
+- [src/renderer/erp/warehouseCatalogData.ts](file://src/renderer/erp/warehouseCatalogData.ts)
+- [src/renderer/erp/erpApi.ts](file://src/renderer/erp/erpApi.ts)
 - [browser-extension/content-script.css](file://browser-extension/content-script.css)
 - [browser-extension/popup.css](file://browser-extension/popup.css)
 </cite>
 
 ## 更新摘要
 **所做更改**   
-- 更新了全局样式清理部分，反映CSS架构优化工作（移除未使用的.brand和.brand-mark类规则）
-- 增强了主题系统与品牌样式的管理说明
-- 更新了样式维护最佳实践内容
-- 强化了登录页面专用样式的设计规范
+- 新增托盘仓库（Pallet Warehouse）模块的UI组件与样式系统文档，包括入库处理、产品目录树、三级类目图标网格等核心功能
+- 扩展了仓库管理界面的布局系统与响应式设计规范
+- 新增了ERP能力集成与权限控制的样式支持
+- 完善了候选商品卡片、批量操作、状态徽章等通用组件的样式规范
+- 更新了Phase 4业务工作区一致性样式的设计原则
 
 ## 目录
 1. [简介](#简介)
@@ -46,10 +52,13 @@
 ## 简介
 本文件为砚都跨境项目的UI组件库与样式系统提供系统化文档，覆盖CSS架构设计、样式组织规范、主题系统与变量管理、响应式与移动端适配、跨浏览器兼容策略、可复用组件设计原则与命名约定、无障碍访问（a11y）、国际化（i18n）适配、样式测试策略以及使用示例与设计规范。目标是帮助开发者快速理解并高效扩展该项目的样式体系与组件库。
 
+**最新更新**：本次更新重点新增了托盘仓库管理系统的完整UI组件库文档，包括入库处理流程、产品目录树导航、三级类目图标展示、ERP能力集成等核心功能模块的样式实现。
+
 ## 项目结构
 本项目采用Electron + Vite的前端工程化方案，样式资源集中在渲染进程与浏览器插件两个子系统中：
 - 渲染进程样式位于 src/renderer，包含全局样式、业务模块样式与可读性增强样式。
 - 浏览器插件样式位于 browser-extension，包含内容脚本与弹出窗口的样式。
+- ERP业务模块样式位于 src/renderer/erp，专门处理仓库管理与入库流程相关样式。
 
 ```mermaid
 graph TB
@@ -70,6 +79,13 @@ R_ebay_local_price["ebay-local-listing-pricing.css"]
 R_ebay_local_val["ebay-local-listing-validation.css"]
 R_ebay_video["ebay-video-studio.css"]
 R_image_studio["image-studio.css"]
+R_panel_collapse["panel-collapse.css"]
+R_phase4["ui/phase4.css"]
+end
+subgraph "ERP业务模块"
+E_pallet["erp/PalletWarehousePage.tsx"]
+E_catalog["erp/warehouseCatalogData.ts"]
+E_api["erp/erpApi.ts"]
 end
 subgraph "浏览器插件"
 B_content["content-script.css"]
@@ -90,6 +106,10 @@ R_app --> R_ebay_local_price
 R_app --> R_ebay_local_val
 R_app --> R_ebay_video
 R_app --> R_image_studio
+R_app --> R_panel_collapse
+R_app --> R_phase4
+E_pallet --> E_catalog
+E_pallet --> E_api
 B_content -.-> R_styles
 B_popup -.-> R_styles
 ```
@@ -101,6 +121,11 @@ B_popup -.-> R_styles
 - [src/renderer/ui-readability.css](file://src/renderer/ui-readability.css)
 - [src/renderer/theme-dark.css](file://src/renderer/theme-dark.css)
 - [src/renderer/login.css](file://src/renderer/login.css)
+- [src/renderer/panel-collapse.css](file://src/renderer/panel-collapse.css)
+- [src/renderer/ui/phase4.css](file://src/renderer/ui/phase4.css)
+- [src/renderer/erp/PalletWarehousePage.tsx](file://src/renderer/erp/PalletWarehousePage.tsx)
+- [src/renderer/erp/warehouseCatalogData.ts](file://src/renderer/erp/warehouseCatalogData.ts)
+- [src/renderer/erp/erpApi.ts](file://src/renderer/erp/erpApi.ts)
 - [browser-extension/content-script.css](file://browser-extension/content-script.css)
 - [browser-extension/popup.css](file://browser-extension/popup.css)
 
@@ -111,7 +136,7 @@ B_popup -.-> R_styles
 - [src/renderer/App.tsx](file://src/renderer/App.tsx)
 
 ## 核心组件
-基于仓库中的样式文件，可将UI组件库划分为以下核心样式域：
+基于仓库中的样式文件和新增的ERP模块，可将UI组件库划分为以下核心样式域：
 - 全局基础样式与主题变量：styles.css
 - 可读性与无障碍增强：ui-readability.css
 - 深色主题支持：theme-dark.css
@@ -119,9 +144,12 @@ B_popup -.-> R_styles
 - 合规审查相关样式：compliance-gate.css、compliance-phase3.css、compliance-stage8.css、compliance-v2-review.css
 - eBay业务模块样式：ebay-acceptance-readable.css、ebay-collection.css、ebay-local-listing-pricing.css、ebay-local-listing-validation.css、ebay-video-studio.css
 - 图像工作室样式：image-studio.css
+- 面板折叠与布局控制：panel-collapse.css
+- Phase 4业务工作区一致性：ui/phase4.css
+- **新增** 托盘仓库管理系统：PalletWarehousePage.tsx及相关样式
 - 浏览器插件样式：content-script.css、popup.css
 
-这些样式域通过入口文件按需加载，形成"全局基础 + 业务模块"的模块化组合。
+这些样式域通过入口文件按需加载，形成"全局基础 + 业务模块 + ERP专用"的模块化组合。
 
 章节来源
 - [src/renderer/styles.css](file://src/renderer/styles.css)
@@ -138,15 +166,19 @@ B_popup -.-> R_styles
 - [src/renderer/ebay-local-listing-validation.css](file://src/renderer/ebay-local-listing-validation.css)
 - [src/renderer/ebay-video-studio.css](file://src/renderer/ebay-video-studio.css)
 - [src/renderer/image-studio.css](file://src/renderer/image-studio.css)
+- [src/renderer/panel-collapse.css](file://src/renderer/panel-collapse.css)
+- [src/renderer/ui/phase4.css](file://src/renderer/ui/phase4.css)
+- [src/renderer/erp/PalletWarehousePage.tsx](file://src/renderer/erp/PalletWarehousePage.tsx)
 - [browser-extension/content-script.css](file://browser-extension/content-script.css)
 - [browser-extension/popup.css](file://browser-extension/popup.css)
 
 ## 架构总览
-整体样式架构遵循"分层+分域"的组织方式：
+整体样式架构遵循"分层+分域+业务专用"的组织方式：
 - 基础层：全局变量、重置、排版、颜色、间距等基础样式。
 - 主题层：主题变量、暗色模式、品牌色、语义色等。
 - 组件层：可复用UI组件样式（按钮、表单、卡片、表格、弹窗等）。
 - 业务层：eBay相关页面与功能模块的样式。
+- **新增** ERP业务层：托盘仓库管理、入库处理、产品目录等专用样式。
 - 增强层：可读性、无障碍、打印与导出优化。
 - 插件层：浏览器插件的内容脚本与弹出窗口样式。
 
@@ -160,8 +192,11 @@ B --> F["认证样式 login.css"]
 B --> G["合规样式 compliance-*.css"]
 B --> H["eBay样式 ebay-*.css"]
 B --> I["图像工作室 image-studio.css"]
-J["浏览器插件 content-script.css"] -.-> C
-K["浏览器插件 popup.css"] -.-> C
+B --> J["面板折叠 panel-collapse.css"]
+B --> K["Phase 4一致性 ui/phase4.css"]
+L["ERP模块 PalletWarehousePage.tsx"] --> M["仓库管理样式"]
+N["浏览器插件 content-script.css"] -.-> C
+O["浏览器插件 popup.css"] -.-> C
 ```
 
 图表来源
@@ -172,7 +207,9 @@ K["浏览器插件 popup.css"] -.-> C
 - [src/renderer/theme-dark.css](file://src/renderer/theme-dark.css)
 - [src/renderer/login.css](file://src/renderer/login.css)
 - [src/renderer/compliance-gate.css](file://src/renderer/compliance-gate.css)
-- [src/renderer/ebay-collection.css](file://src/renderer/ebay-collection.css)
+- [src/renderer/panel-collapse.css](file://src/renderer/panel-collapse.css)
+- [src/renderer/ui/phase4.css](file://src/renderer/ui/phase4.css)
+- [src/renderer/erp/PalletWarehousePage.tsx](file://src/renderer/erp/PalletWarehousePage.tsx)
 - [browser-extension/content-script.css](file://browser-extension/content-script.css)
 - [browser-extension/popup.css](file://browser-extension/popup.css)
 
@@ -299,6 +336,86 @@ K["浏览器插件 popup.css"] -.-> C
 章节来源
 - [src/renderer/image-studio.css](file://src/renderer/image-studio.css)
 
+### 面板折叠与布局控制系统
+- 目标：提供可折叠侧边栏和响应式布局控制，支持产品目录等复杂界面的展开收起功能。
+- 涉及文件：panel-collapse.css
+- **新增功能**：
+  - 支持candidate-page、image-studio、workspace等容器的折叠状态管理
+  - 提供side-collapsed类的响应式布局适配
+  - 集成PanelCollapseButton和PanelExpandRail组件的样式支持
+- 建议实现：
+  - 使用CSS Grid和Flexbox实现灵活的布局切换
+  - 提供平滑的过渡动画效果
+  - 支持移动端的手势操作和触摸反馈
+
+章节来源
+- [src/renderer/panel-collapse.css](file://src/renderer/panel-collapse.css)
+
+### Phase 4业务工作区一致性样式
+- 目标：统一catalog-manager、catalog-panel、warehouse-dashboard等业务工作区的视觉一致性。
+- 涉及文件：ui/phase4.css
+- **核心特性**：
+  - 统一的文本颜色和字体大小规范
+  - 标准化的按钮、输入框最小高度（36px）
+  - 一致的焦点环和阴影效果
+  - 响应式布局适配（1180px断点）
+- 建议实现：
+  - 使用CSS变量统一管理品牌色和边框色
+  - 提供无障碍访问的焦点可见样式
+  - 支持不同屏幕尺寸的自适应布局
+
+章节来源
+- [src/renderer/ui/phase4.css](file://src/renderer/ui/phase4.css)
+
+### **新增** 托盘仓库管理系统样式
+- 目标：为托盘仓库（Pallet Warehouse）提供完整的UI组件和样式支持，包括入库处理、产品目录、三级类目等功能。
+- 涉及文件：PalletWarehousePage.tsx及相关样式
+- **核心功能模块**：
+
+#### 入库处理流程
+- 待确认队列管理：支持选品审批和服务器采集池双通道入库
+- 权限控制：基于ERP能力的权限验证和状态展示
+- 批量操作：支持批量确认、驳回和编辑功能
+- 状态徽章：区分选品审批和服务器采集池来源
+
+#### 产品目录树导航
+- 三级类目结构：一级类目 → 二级类目 → 三级类目图标网格
+- 动态计数：实时显示各分类下的商品数量
+- 图标展示：支持PNG图片和emoji图标的混合展示
+- 悬浮面板：三级类目的浮动展示和选择交互
+
+#### 候选商品卡片系统
+- 供应源卡片：统一的供应商信息展示格式
+- 批量管理模式：支持多选、全选和批量删除
+- 状态标识：已删除、促销、评分等不同状态的视觉标识
+- 操作按钮：原址查看、退回入库处理、删除等操作
+
+#### ERP能力集成
+- 能力获取：异步加载ERP系统的能力配置
+- 权限验证：基于canEdit权限的控制逻辑
+- 数据同步：与服务器采集池的数据同步机制
+- 错误处理：网络请求失败和权限不足的用户反馈
+
+**样式特点**：
+- 使用warehouse-flow-nav作为顶部导航样式
+- candidate-page和candidate-catalog-main作为主布局容器
+- supply-source-card作为商品卡片的统一样式
+- inbound-origin-badge用于区分数据来源
+- erp-banner系列用于ERP相关的提示信息
+
+**最佳实践**：
+- 使用语义化的类名（如inbound-*、supply-source-*、erp-*）
+- 保持与全局主题一致的视觉风格
+- 提供完整的无障碍访问支持
+- 支持响应式布局和移动端适配
+
+章节来源
+- [src/renderer/erp/PalletWarehousePage.tsx](file://src/renderer/erp/PalletWarehousePage.tsx)
+- [src/renderer/styles.css:151-158](file://src/renderer/styles.css#L151-L158)
+- [src/renderer/styles.css:219-232](file://src/renderer/styles.css#L219-L232)
+- [src/renderer/styles.css:665-667](file://src/renderer/styles.css#L665-L667)
+- [src/renderer/styles.css:768](file://src/renderer/styles.css#L768)
+
 ### 浏览器插件样式
 - 目标：为浏览器插件的内容脚本与弹出窗口提供独立且一致的样式。
 - 涉及文件：
@@ -327,6 +444,9 @@ participant L as "login.css"
 participant C as "compliance-*.css"
 participant E as "ebay-*.css"
 participant I as "image-studio.css"
+participant P as "panel-collapse.css"
+participant PH4 as "ui/phase4.css"
+participant ER as "ERP模块"
 M->>A : 初始化应用
 A->>S : 加载全局样式
 A->>U : 加载可读性增强
@@ -335,6 +455,11 @@ A->>L : 加载认证样式
 A->>C : 加载合规样式
 A->>E : 加载eBay业务样式
 A->>I : 加载图像工作室样式
+A->>P : 加载面板折叠样式
+A->>PH4 : 加载Phase 4一致性样式
+ER->>S : 使用全局样式
+ER->>P : 使用面板折叠功能
+ER->>PH4 : 使用业务工作区样式
 ```
 
 图表来源
@@ -345,8 +470,9 @@ A->>I : 加载图像工作室样式
 - [src/renderer/theme-dark.css](file://src/renderer/theme-dark.css)
 - [src/renderer/login.css](file://src/renderer/login.css)
 - [src/renderer/compliance-gate.css](file://src/renderer/compliance-gate.css)
-- [src/renderer/ebay-collection.css](file://src/renderer/ebay-collection.css)
-- [src/renderer/image-studio.css](file://src/renderer/image-studio.css)
+- [src/renderer/panel-collapse.css](file://src/renderer/panel-collapse.css)
+- [src/renderer/ui/phase4.css](file://src/renderer/ui/phase4.css)
+- [src/renderer/erp/PalletWarehousePage.tsx](file://src/renderer/erp/PalletWarehousePage.tsx)
 
 章节来源
 - [src/renderer/main.tsx](file://src/renderer/main.tsx)
@@ -359,6 +485,11 @@ A->>I : 加载图像工作室样式
 - 媒体查询与断点：集中管理断点，减少重复代码。
 - 插件样式隔离：内容脚本样式尽量局部作用域，避免全局污染。
 - **图像工作室性能优化**：针对图像编辑场景的特殊优化，包括Canvas绘制优化、内存管理和渲染性能调优。
+- **托盘仓库性能优化**：
+  - 三级类目图标懒加载：仅在需要时加载PNG图标资源
+  - 虚拟滚动支持：大数据量商品列表的性能优化
+  - 状态缓存：避免重复的API调用和状态计算
+  - 样式预编译：使用构建工具优化CSS输出
 - **CSS清理优化**：定期清理未使用的CSS规则，减少样式表体积，提升加载性能。
 
 [本节为通用指导，不直接分析具体文件]
@@ -372,17 +503,30 @@ A->>I : 加载图像工作室样式
 - **图像工作室相关问题**：检查Canvas性能、内存泄漏和图像加载问题。
 - **认证样式问题**：检查auth-前缀样式是否正确应用，避免与全局样式冲突。
 - **主题兼容性问题**：验证深色主题下各组件的视觉效果和可访问性。
+- **托盘仓库相关问题**：
+  - 检查ERP能力获取失败的错误处理
+  - 验证权限控制逻辑的正确性
+  - 确认三级类目图标资源的正确加载
+  - 检查入库处理流程的状态同步
+  - 验证批量操作的选中状态管理
 
 章节来源
 - [src/renderer/styles.css](file://src/renderer/styles.css)
 - [src/renderer/ui-readability.css](file://src/renderer/ui-readability.css)
 - [src/renderer/theme-dark.css](file://src/renderer/theme-dark.css)
 - [src/renderer/login.css](file://src/renderer/login.css)
+- [src/renderer/panel-collapse.css](file://src/renderer/panel-collapse.css)
+- [src/renderer/ui/phase4.css](file://src/renderer/ui/phase4.css)
+- [src/renderer/erp/PalletWarehousePage.tsx](file://src/renderer/erp/PalletWarehousePage.tsx)
 - [browser-extension/content-script.css](file://browser-extension/content-script.css)
 - [browser-extension/popup.css](file://browser-extension/popup.css)
 
 ## 结论
-本样式系统以分层与分域为核心，结合主题变量与模块化加载，实现了可扩展、易维护的UI组件库基础。通过可读性与无障碍增强、响应式设计与插件样式隔离，保障了多端与多环境的用户体验。最近的CSS架构优化工作进一步提升了代码质量和可维护性，移除了未使用的样式规则，保持了代码库的精简和高效。图像工作室样式的重大更新和深色主题的完善实施，显著改善了用户的视觉体验和操作效率。建议在后续迭代中持续完善组件库文档与测试策略，进一步提升开发效率与质量。
+本样式系统以分层与分域为核心，结合主题变量与模块化加载，实现了可扩展、易维护的UI组件库基础。通过可读性与无障碍增强、响应式设计与插件样式隔离，保障了多端与多环境的用户体验。最近的CSS架构优化工作进一步提升了代码质量和可维护性，移除了未使用的样式规则，保持了代码库的精简和高效。
+
+**重要更新**：本次新增的托盘仓库管理系统为项目的仓储物流功能提供了完整的UI解决方案，包括入库处理流程、产品目录导航、三级类目展示等核心功能。Phase 4业务工作区一致性样式的引入，确保了各个业务模块的视觉统一性。图像工作室样式的重大更新和深色主题的完善实施，显著改善了用户的视觉体验和操作效率。
+
+建议在后续迭代中持续完善组件库文档与测试策略，进一步提升开发效率与质量。特别关注托盘仓库系统的性能优化和无障碍访问支持，确保为用户提供流畅、易用的仓储管理体验。
 
 [本节为总结性内容，不直接分析具体文件]
 
@@ -402,6 +546,11 @@ A->>I : 加载图像工作室样式
 - 断点管理：集中定义断点，避免碎片化。
 - 弹性布局：使用Flexbox与Grid，提高布局灵活性。
 - 图片与媒体：根据视口与设备像素比进行适配。
+- **托盘仓库响应式适配**：
+  - 三级类目图标网格的自适应列数
+  - 产品卡片在小屏幕下的堆叠布局
+  - 入库处理表格的横向滚动支持
+  - 移动端的手势操作优化
 
 [本节为通用指导，不直接分析具体文件]
 
@@ -421,11 +570,16 @@ A->>I : 加载图像工作室样式
 [本节为通用指导，不直接分析具体文件]
 
 ### 命名约定与最佳实践
-- 类名前缀：按模块或组件划分前缀，避免冲突（如 auth-、ebay-、compliance-）。
+- 类名前缀：按模块或组件划分前缀，避免冲突（如 auth-、ebay-、compliance-、inbound-、supply-source-、erp-）。
 - BEM方法：块-元素-修饰符，提升可读性。
 - 语义化：类名反映用途而非样式细节。
 - 注释规范：关键样式添加说明，便于协作与维护。
 - **样式隔离**：使用模块化的命名空间，避免全局样式污染。
+- **托盘仓库命名规范**：
+  - inbound-*：入库处理相关样式
+  - supply-source-*：供应源卡片样式
+  - pallet-*：货盘仓库专用样式
+  - warehouse-*：仓库管理通用样式
 
 [本节为通用指导，不直接分析具体文件]
 
@@ -433,6 +587,11 @@ A->>I : 加载图像工作室样式
 - 文本外置：所有用户可见文本通过i18n键值管理。
 - 布局适配：考虑不同语言长度变化对布局的影响。
 - 日期与数字：根据区域设置格式化显示。
+- **托盘仓库国际化支持**：
+  - 入库状态的多语言显示
+  - 供应商名称的动态翻译
+  - 类目名称的区域化适配
+  - 错误消息的本地化处理
 
 [本节为通用指导，不直接分析具体文件]
 
@@ -441,6 +600,11 @@ A->>I : 加载图像工作室样式
 - 视觉回归：使用截图对比工具检测样式变更。
 - 无障碍测试：自动化扫描与人工复核结合。
 - **主题测试**：验证浅色和深色主题下的视觉效果一致性。
+- **托盘仓库专项测试**：
+  - 入库流程的状态转换测试
+  - 三级类目图标的加载性能测试
+  - 批量操作的功能完整性测试
+  - 权限控制的安全验证测试
 
 [本节为通用指导，不直接分析具体文件]
 
@@ -450,5 +614,10 @@ A->>I : 加载图像工作室样式
 - 列表与表格：支持排序、筛选、分页与空态展示。
 - 弹窗与抽屉：统一遮罩、关闭方式与键盘交互。
 - **认证组件**：提供统一的登录、注册和账户管理界面样式。
+- **托盘仓库组件规范**：
+  - 入库处理卡片：统一的待确认商品展示格式
+  - 产品目录树：三级类目的层级结构和交互规范
+  - 供应源卡片：供应商信息的标准化展示
+  - 状态徽章：不同来源和状态的视觉标识系统
 
 [本节为通用指导，不直接分析具体文件]

@@ -1,5 +1,6 @@
 import { BaseWindow, BrowserWindow, WebContents, WebContentsView } from 'electron'
 import { AMAZON_LISTING_EVIDENCE_SCRIPT, AMAZON_REVIEW_EVIDENCE_SCRIPT, AMAZON_SAMPLES_SCRIPT, type AmazonListingEvidence, type AmazonMarketSample, type AmazonReviewEvidence } from '../../shared/amazonScraper'
+import { matchSellableInventoryText } from '../../shared/sellableInventory'
 import type { BrowserBounds, BrowserState, BrowserTab, BuiltInCollectorState, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, EbayBrowserPluginState, EbayCategorySpecificRequirement, EbayCollectedProduct, EbayDeliveryLocationResult, EbayDirectoryProductScanCategory, EbayLoginResult, EbayMarketResearchFilter, EbayMarketResearchMetric, EbayMarketResearchSample, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayProductDetails, EbaySellerHubAcceptanceSnapshot, EbayStoreCategory, MarketplacePlatformCode, NetworkStrategy, Platform, SelectionTask, SupplyActivationResult } from '../../shared/contracts'
 import gigaCatalog from '../../renderer/gigaCatalog.json'
 import type { EbayLocalListingRequirements, EbayLocalProduct, EbayLocalRevisionPreparationResult } from '../../shared/contracts'
@@ -50,6 +51,23 @@ export interface SupplyProductPageSnapshot {
     images: string[]
     descriptionText: string
     finalUrl: string
+    category?: string
+    itemCode?: string
+    firstStockAt?: string
+    returnRate?: string
+    sellableInventory?: string
+    unitPrice?: string
+    packingFee?: string
+    freightFee?: string
+    shippingFee?: string
+    estimatedTotal?: string
+    dropshipLeadTime?: string
+    gigaIndex?: string
+    materialPackUrl?: string
+    materialPackDownloads?: string
+    videos?: string[]
+    files?: Array<{ name: string; url: string }>
+    descriptionImages?: string[]
   }
 }
 
@@ -319,15 +337,16 @@ export class BrowserWorkspace {
           if (match) push(match[2], 500)
         })
         const seen = new Set()
-        const images = entries
+        const deduped = entries
           .sort((a, b) => (hostScore(b.u) - hostScore(a.u)) || (b.w - a.w))
           .filter(item => {
             if (seen.has(item.u)) return false
             seen.add(item.u)
             return !/logo|icon|sprite|avatar|blank|loading|\.svg(\?|$)/i.test(item.u)
           })
-          .slice(0, 24)
-          .map(item => item.u)
+        // 主图仅取大图（naturalWidth≥300），缩略图不进下载页画廊；全被过滤时回退原序列
+        const largeOnly = deduped.filter(item => item.w >= 300)
+        const images = (largeOnly.length ? largeOnly : deduped).slice(0, 24).map(item => item.u)
         const pickText = (selector) => { const el = document.querySelector(selector); return el ? (el.textContent || '').trim().replace(/\s+/g, ' ') : '' }
         const title = pickText('h1') || (document.title || '').trim()
         const pricePattern = /(US\s?\$|\$|￥|¥|RMB)\s?\d[\d,]*(\.\d+)?(\s*[-–~]\s*(US\s?\$|\$|￥|¥)?\s?\d[\d,]*(\.\d+)?)?/i
@@ -341,7 +360,34 @@ export class BrowserWorkspace {
           const kv = /^([^:：\t]{1,40})[:：\t]\s*(.{1,120})$/.exec(line)
           if (kv && specs.length < 60 && !specs.some(item => item.key === kv[1].trim())) specs.push({ key: kv[1].trim(), value: kv[2].trim() })
         })
-        return { title, price, specs, images, descriptionText: bodyText.trim().slice(0, 20000), finalUrl: location.href }
+        // gigab2b 17 要素补充提取（缺字段返回空串，服务端优雅降级）
+        const flat = bodyText.replace(/\s+/g, ' ')
+        const grab = (re) => { const m = re.exec(flat); return m && m[1] ? m[1].trim() : '' }
+        const crumbNode = document.querySelector('[class*="breadcrumb" i],[class*="crumb" i],[class*="category-path" i]')
+        const category = crumbNode ? (crumbNode.innerText || '').replace(/\s+/g, ' ').split(/[>/›]+/).map(s => s.trim()).filter(Boolean).join(' / ') : ''
+        const itemCode = grab(/Item\s*Code[:：]\s*([A-Z0-9-]+)/i)
+        const firstStockAt = grab(/首次到库时间[:：]\s*(\d{4}-\d{2}-\d{2})/)
+        const returnRate = grab(/退返品率[:：]\s*(\S+)/)
+        const matchStockFn = ${matchSellableInventoryText.toString()};
+        const stockHit = matchStockFn(flat)
+        const sellableInventory = stockHit && stockHit.sellableInventory !== null ? String(stockHit.sellableInventory) : ''
+        const unitPrice = grab(/单价\(件\)\s*((?:US\s?\$|\$)\s?[\d,.]+)/)
+        const packingFee = grab(/打包费\s*((?:US\s?\$|\$)\s?[\d,.]+(?:\s*\/件)?)/)
+        const freightFee = grab(/运费\s*((?:US\s?\$|\$)\s?[\d,.]+(?:\s*\/件)?)/)
+        const shippingFee = grab(/(?<!预估)物流费\s*[:：]?\s*((?:US\s?\$|\$)\s?[\d,.]+(?:\s*\/件)?)/)
+        const estimatedTotal = grab(/预估总额\s*\(含物流费\)\s*((?:US\s?\$|\$)\s?[\d,.]+(?:\s*\/件)?)/)
+        const dropshipLeadTime = grab(/一件代发发货时效\s*(\d+\s*-\s*\d+\s*个工作日)/)
+        const gigaIndex = grab(/GIGA\s*Index[:：]\s*([\d.]+)/i)
+        const materialAnchor = [...document.querySelectorAll('a[href]')].find(a => /下载素材包/.test(a.textContent || ''))
+        const materialPackUrl = materialAnchor ? materialAnchor.href : ''
+        const materialPackDownloads = grab(/下载次数[:：]\s*([\d,]+)/)
+        const videos = [...document.querySelectorAll('video source, video')].map(v => v.src || v.currentSrc || '').filter(u => /^https?:\/\//i.test(u)).slice(0, 8)
+        const files = [...document.querySelectorAll('a[href]')].map(a => ({ name: (a.textContent || '').trim(), url: a.href })).filter(f => f.name && !/下载素材包/.test(f.name) && /\.(pdf|txt|zip|rar|xlsx?|docx?)$/i.test((f.url.split('?')[0]) || '')).slice(0, 20)
+        const descHead = [...document.querySelectorAll('h1,h2,h3,h4,b,strong,div,span')].find(n => n.children.length === 0 && (n.textContent || '').trim() === '图文描述')
+        const descRoot = descHead ? (descHead.closest('section,div') || descHead.parentElement) : null
+        const descriptionText = descRoot ? (descRoot.innerText || '').trim().slice(0, 20000) : bodyText.trim().slice(0, 20000)
+        const descriptionImages = descRoot ? [...descRoot.querySelectorAll('img')].map(img => img.currentSrc || img.src).filter(u => /^https?:\/\//i.test(u)).slice(0, 40) : []
+        return { title, price, specs, images, descriptionText, finalUrl: location.href, category, itemCode, firstStockAt, returnRate, sellableInventory, unitPrice, packingFee, freightFee, shippingFee, estimatedTotal, dropshipLeadTime, gigaIndex, materialPackUrl, materialPackDownloads, videos, files, descriptionImages }
       })()`) as SupplyProductPageSnapshot['extracted']
       if (!extracted?.images?.length) throw new Error('原商品页没有识别到可下载图片，请确认商品页正常显示后重试')
       return { html, extracted }
@@ -349,6 +395,103 @@ export class BrowserWorkspace {
       if (!window.isDestroyed()) window.destroy()
     }
   }
+
+  private async extractGigaFacts(wc: WebContents): Promise<Partial<CollectedSupplyProduct>> {
+      const issue = await wc.executeJavaScript(String.raw`(() => {
+        const text=(document.body?.innerText||'').slice(0,12000), url=location.href
+        if (/punish|captcha|verify|安全验证|滑块|验证码|访问频繁|操作异常|请求过于频繁|cloud_ip_bl|too many requests/i.test(text+' '+url)) return 'VERIFY'
+        if (/route=account\/login|login\.1688\.com|account\/login|请登录|重新登录|登录已失效|sign in to continue/i.test(text+' '+url)) return 'LOGIN'
+        return ''
+      })()`) as string
+      if (issue === 'LOGIN') throw new Error(`${name}登录状态已失效，请先在 IE浏览 中登录${name}后重试`)
+      if (issue === 'VERIFY') throw new Error(`${name}要求安全验证，请先在 IE浏览 中打开该商品页人工完成验证后重试`)
+      for (let index = 0; index < 5; index += 1) {
+        await wc.executeJavaScript('window.scrollBy(0, Math.max(900, window.innerHeight * 1.2))')
+        await this.sleep(350)
+      }
+      return await wc.executeJavaScript(String.raw`(() => {
+        const text=(document.body?.innerText||'').replace(/\s+/g,' ');
+        const knownCategoryPaths=${JSON.stringify(GIGA_CATEGORY_PATHS)};
+        const categoryIdsOf=raw=>{try{const parsed=new URL(raw,location.href);return (parsed.searchParams.get('path')||parsed.searchParams.get('category_path')||parsed.searchParams.get('product_category_id')||parsed.searchParams.get('category_id')||parsed.searchParams.get('categoryId')||'').split(/[_>,\-]+/).filter(value=>/^\d+$/.test(value));}catch{return [];}};
+        const anchors=[...document.querySelectorAll('a[href]')].map(node=>({node,ids:categoryIdsOf(node.href||'')})).filter(item=>item.ids.length);
+        const namesById=new Map(anchors.map(item=>[item.ids[item.ids.length-1],(item.node.textContent||'').replace(/\s+/g,' ').trim()]));
+        const rawIds=categoryIdsOf(location.href).slice(0,3);
+        const knownPath=[...rawIds].reverse().map(id=>knownCategoryPaths[id]).find(Boolean);
+        let pathIds=knownPath?knownPath.map(item=>item.id):rawIds;
+        let capturedFrom=anchors.length?'BREADCRUMB':'PAGE_CONTEXT';
+        // 详情页 URL 常无类目参数：回退到面包屑文本名称三元组反查目录
+        let nameMatched=null;
+        if(!pathIds.length){
+          const crumb=(document.querySelector('[class*="breadcrumb" i],[class*="crumb" i],[class*="category-path" i],[class*="position" i]')?.innerText||'').replace(/\s+/g,' ');
+          const seq=crumb.split(/[>/›]+/).map(value=>value.trim()).filter(Boolean).join('>');
+          if(seq){
+            const entries=Object.entries(knownCategoryPaths);
+            const hit3=entries.find(([,p])=>seq.includes(p[0].name+'>'+p[1].name+'>'+p[2].name));
+            const hit2=hit3?null:entries.find(([,p])=>seq.includes(p[0].name+'>'+p[1].name));
+            const hit=hit3||hit2;
+            if(hit){nameMatched=hit[1];pathIds=hit3?hit[1].map(item=>item.id):hit[1].slice(0,2).map(item=>item.id);capturedFrom='BREADCRUMB';}
+          }
+        }
+        const level=index=>pathIds[index]?{id:pathIds[index],name:nameMatched?.[index]?.name||knownPath?.[index]?.name||namesById.get(pathIds[index])||''}:undefined;
+        const priceText=text.match(/\$\s*[\d,.]+(?:\s*-\s*\$?\s*[\d,.]+)?(?:\s*\/件)?/)?.[0]||'';
+        // 可售库存：文本双形态（标签在前/数字在前）+ DOM 标签配对 + 节点自含三通道；0 是合法值不得吞掉
+        const matchStock=${matchSellableInventoryText.toString()};
+        let hit=matchStock(text);
+        let stockText=hit?hit.stockText:'';
+        let sellableInventory=hit?hit.sellableInventory:null;
+        if(sellableInventory===null){
+          const label=[...document.querySelectorAll('dt,th,label,[class*="label" i],[class*="key" i]')].find(node=>/可售库存|Available\s*Stock/i.test(node.textContent||''));
+          const valueNode=label?.nextElementSibling||label?.parentElement?.querySelector('dd,td,[class*="value" i]');
+          hit=matchStock((valueNode?.textContent||'')+' '+(label?.textContent||''));
+          if(hit){sellableInventory=hit.sellableInventory;stockText=hit.stockText;}
+        }
+        if(sellableInventory===null){
+          const stockNode=[...document.querySelectorAll('div,span,dd,td,p,b,strong,em')].find(n=>{const t=(n.textContent||'').trim();return t.length<=40&&/可售库存|Available\s*Stock/i.test(t);});
+          hit=stockNode?matchStock(stockNode.textContent||''):null;
+          if(hit){sellableInventory=hit.sellableInventory;stockText=hit.stockText;}
+        }
+        const shippingFeeText=text.match(/(?:Shipping(?:\s*Fee)?|物流费)\s*[:：]?\s*((?:US)?\$\s*[\d,.]+(?:\s*-\s*(?:US)?\$?\s*[\d,.]+)?(?:\s*\/件)?)/i)?.[1]||'';
+        const promotionText=text.match(/\d+(?:\.\d+)?%\s*OFF/i)?.[0]||'';
+        const gigaIndex=Number(text.match(/GIGA Index:\s*([\d.]+)/i)?.[1]||0)||null;
+        const sourceCategory=pathIds.length?{platformCode:'GIGACLOUD',catalogVersion:${JSON.stringify(GIGA_CATALOG_VERSION)},level1:level(0),level2:level(1),level3:level(2),pathIds,pathNames:pathIds.map((id,index)=>nameMatched?.[index]?.name||knownPath?.[index]?.name||namesById.get(id)||'').filter(Boolean),capturedFrom,status:knownPath||nameMatched&&pathIds.length>=3?'EXACT':pathIds.length>=3?'EXACT':'PARTIAL',capturedAt:new Date().toISOString()}:undefined;
+        return {priceText,salesText:stockText,shippingFeeText,sellableInventory,promotionText,gigaIndex,sourceCategory};
+      })()`) as Partial<CollectedSupplyProduct>
+  }
+
+  // 采集候选「重读数据」：用供应站会话隐藏窗口重抓单个商品详情页的事实字段
+  // （价格/可售库存/物流费/折扣/GIGA Index/原始类目），登录失效抛引导性错误供渲染器提示。
+  async rereadSupplyCandidate(rawUrl: string): Promise<Partial<CollectedSupplyProduct>> {
+    const parsed = new URL(rawUrl)
+    const host = parsed.hostname.toLowerCase()
+    if ((parsed.protocol !== 'https:' && parsed.protocol !== 'http:') || !(host === 'gigab2b.com' || host.endsWith('.gigab2b.com'))) {
+      throw new Error('仅大健云仓候选支持重读数据')
+    }
+    const liveView = this.supplyViews.get('GIGACLOUD')
+    const liveWc = liveView && !liveView.webContents.isDestroyed() ? liveView.webContents : null
+    if (liveWc) {
+      // 优先在运行中的采集视图内提取：登录态存于运行视图的会话存储/内存令牌，新开窗口必然丢失
+      if (liveWc.getURL() !== parsed.toString()) await liveWc.loadURL(parsed.toString())
+      await this.sleep(1500)
+      return await this.extractGigaFacts(liveWc)
+    }
+    const window = new BrowserWindow({
+      show: false,
+      width: 1366,
+      height: 900,
+      title: '重读候选商品',
+      webPreferences: { partition: 'persist:supply:GIGACLOUD:default', nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false }
+    })
+    window.webContents.setUserAgent(window.webContents.getUserAgent().replace(/\sElectron\/[^\s]+/g, '').replace(/\scross-border-sourcing-desktop\/[^\s]+/g, ''))
+    window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    await window.webContents.loadURL(parsed.toString())
+    await this.sleep(1500)
+    try {
+      return await this.extractGigaFacts(window.webContents)
+    } finally {
+      if (!window.isDestroyed()) window.destroy()
+    }
+  }
+
 
   async activateMarketplace(platformCode: MarketplacePlatformCode, accountId: string, strategy: NetworkStrategy) {
     const profiles: Record<MarketplacePlatformCode, { title: string; url: string; domains: string[] }> = {

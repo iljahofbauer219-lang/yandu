@@ -7,7 +7,7 @@ function normalizedText(value: string | undefined) {
 
 export function complianceCheckFingerprint(request: ComplianceCheckRequest) {
   const payload = JSON.stringify({
-    policyVersion: request.platform === 'EBAY' ? 'EBAY-DETAIL-PAGE-2026.07.21' : 'COMPLIANCE-V1',
+    policyVersion: request.platform === 'EBAY' ? 'EBAY-DETAIL-PAGE-2026.07.22' : 'COMPLIANCE-V1',
     productId: request.productId,
     platform: request.platform,
     marketplaceSite: request.marketplaceSite,

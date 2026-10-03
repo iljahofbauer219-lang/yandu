@@ -62,7 +62,7 @@ function json(body) {
     await page.waitForTimeout(1200)
 
     const flowNav = page.locator('.selection-module-nav.warehouse-flow-nav')
-    await page.locator('.sidebar').getByRole('button', { name: 'AI采集', exact: true }).click()
+    await page.locator('.sidebar').getByRole('button', { name: '货盘采集', exact: true }).click()
     await page.waitForSelector('.ai-collect-grid', { timeout: 8000 })
     await page.locator('.ai-collect-card', { hasText: '大健云仓' }).click()
     await page.waitForTimeout(800)

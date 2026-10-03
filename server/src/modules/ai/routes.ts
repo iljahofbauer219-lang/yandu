@@ -6,7 +6,7 @@
  * - POST /api/ai/text/command      DeepSeek 智能指令解析，权限 ai.use，配额 text.command
  * - POST /api/ai/text/chat         通用 chat 代理（grounding/视觉检查/标题优化等复合 AI），权限 ai.use，配额 text.chat
  * - POST /api/ai/videos/generate   方舟视频任务提交，权限 ai.use，配额 video.generate
- * - GET  /api/ai/videos/:taskId    方舟视频任务状态查询（不计用量），权限 ai.use
+ * - GET  /api/ai/videos/:taskId    方舟视频任务状态查询（不计用量），权限 ai.use；按审计归属校验，非本组织任务一律 404
  * - GET  /api/ai/usage             本月用量明细+聚合（report.view:all 全员 / report.view:self 仅本人）
  * - GET  /api/ai/quotas            组织全员配额一览，权限 member.manage
  * - PUT  /api/ai/quotas/:userId    设置成员月度配额（null=不限，0=禁止），权限 member.manage
@@ -19,7 +19,7 @@ import { writeAudit } from '../../lib/audit.js'
 import { httpError } from '../../lib/errors.js'
 import { prisma } from '../../lib/prisma.js'
 import { findImageModel, imageModelsOf, VIDEO_MODEL_CATALOG, TRANSLATE_MODEL } from './catalog.js'
-import { assertQuota, monthKeyOf, quotaStatusOf, recordUsage, startOfMonthUtc } from './gateway.js'
+import { assertQuota, monthKeyOf, quotaStatusOf, recordUsage, releaseQuota, startOfMonthUtc } from './gateway.js'
 import {
   bailianAvailableModelIds,
   chatCompletion,
@@ -163,10 +163,16 @@ export async function aiRoutes(app: FastifyInstance) {
     const profile = findImageModel(body.model)
     if (!profile) throw httpError(400, 'UNKNOWN_MODEL', `未知的生图模型：${body.model}`)
     const { orgId, id: userId } = request.currentUser
-    await assertQuota(prisma, orgId, userId, 'image.generate', body.count)
-    const result = await generateImage(profile, body)
+    const reservation = await assertQuota(prisma, orgId, userId, 'image.generate', body.count)
+    let result: Awaited<ReturnType<typeof generateImage>>
+    try {
+      result = await generateImage(profile, body)
+    } catch (error) {
+      await releaseQuota(prisma, reservation) // 生成失败释放预占，避免白扣配额
+      throw error
+    }
     const units = Math.max(1, result.imageUrls.length)
-    await recordUsage(prisma, { orgId, userId, provider: result.provider, model: result.model, purpose: 'image.generate', units })
+    await recordUsage(prisma, { orgId, userId, provider: result.provider, model: result.model, purpose: 'image.generate', units }, reservation)
     await writeAudit(prisma, {
       orgId,
       userId,
@@ -184,9 +190,15 @@ export async function aiRoutes(app: FastifyInstance) {
     const { orgId, id: userId } = request.currentUser
     const estimatedUnits = new Set(body.texts.map(text => text.trim()).filter(Boolean)).size
     if (estimatedUnits === 0) throw httpError(400, 'EMPTY_TEXTS', '没有可翻译的文本')
-    await assertQuota(prisma, orgId, userId, 'text.translate', estimatedUnits)
-    const result = await translateTexts(body.texts)
-    await recordUsage(prisma, { orgId, userId, provider: 'bailian', model: result.model, purpose: 'text.translate', units: result.units })
+    const reservation = await assertQuota(prisma, orgId, userId, 'text.translate', estimatedUnits)
+    let result: Awaited<ReturnType<typeof translateTexts>>
+    try {
+      result = await translateTexts(body.texts)
+    } catch (error) {
+      await releaseQuota(prisma, reservation) // 生成失败释放预占，避免白扣配额
+      throw error
+    }
+    await recordUsage(prisma, { orgId, userId, provider: 'bailian', model: result.model, purpose: 'text.translate', units: result.units }, reservation)
     await writeAudit(prisma, {
       orgId,
       userId,
@@ -201,9 +213,15 @@ export async function aiRoutes(app: FastifyInstance) {
   app.post('/text/command', { preHandler: [app.requirePermission('ai.use')] }, async request => {
     const body = commandSchema.parse(request.body)
     const { orgId, id: userId } = request.currentUser
-    await assertQuota(prisma, orgId, userId, 'text.command', 1)
-    const result = await understandCommand(body.text)
-    await recordUsage(prisma, { orgId, userId, provider: 'deepseek', model: result.model, purpose: 'text.command', units: 1 })
+    const reservation = await assertQuota(prisma, orgId, userId, 'text.command', 1)
+    let result: Awaited<ReturnType<typeof understandCommand>>
+    try {
+      result = await understandCommand(body.text)
+    } catch (error) {
+      await releaseQuota(prisma, reservation) // 生成失败释放预占，避免白扣配额
+      throw error
+    }
+    await recordUsage(prisma, { orgId, userId, provider: 'deepseek', model: result.model, purpose: 'text.command', units: 1 }, reservation)
     await writeAudit(prisma, {
       orgId,
       userId,
@@ -218,9 +236,15 @@ export async function aiRoutes(app: FastifyInstance) {
   app.post('/text/chat', { preHandler: [app.requirePermission('ai.use')] }, async request => {
     const body = chatSchema.parse(request.body)
     const { orgId, id: userId } = request.currentUser
-    await assertQuota(prisma, orgId, userId, 'text.chat', 1)
-    const result = await chatCompletion(body)
-    await recordUsage(prisma, { orgId, userId, provider: result.provider, model: result.model, purpose: 'text.chat', units: 1 })
+    const reservation = await assertQuota(prisma, orgId, userId, 'text.chat', 1)
+    let result: Awaited<ReturnType<typeof chatCompletion>>
+    try {
+      result = await chatCompletion(body)
+    } catch (error) {
+      await releaseQuota(prisma, reservation) // 生成失败释放预占，避免白扣配额
+      throw error
+    }
+    await recordUsage(prisma, { orgId, userId, provider: result.provider, model: result.model, purpose: 'text.chat', units: 1 }, reservation)
     await writeAudit(prisma, {
       orgId,
       userId,
@@ -235,9 +259,15 @@ export async function aiRoutes(app: FastifyInstance) {
   app.post('/videos/generate', { preHandler: [app.requirePermission('ai.use')] }, async request => {
     const body = videoGenerateSchema.parse(request.body)
     const { orgId, id: userId } = request.currentUser
-    await assertQuota(prisma, orgId, userId, 'video.generate', 1)
-    const result = await createVideoTask(body)
-    await recordUsage(prisma, { orgId, userId, provider: 'ark', model: result.model, purpose: 'video.generate', units: 1 })
+    const reservation = await assertQuota(prisma, orgId, userId, 'video.generate', 1)
+    let result: Awaited<ReturnType<typeof createVideoTask>>
+    try {
+      result = await createVideoTask(body)
+    } catch (error) {
+      await releaseQuota(prisma, reservation) // 提交失败释放预占，避免白扣配额
+      throw error
+    }
+    await recordUsage(prisma, { orgId, userId, provider: 'ark', model: result.model, purpose: 'video.generate', units: 1 }, reservation)
     await writeAudit(prisma, {
       orgId,
       userId,
@@ -252,6 +282,14 @@ export async function aiRoutes(app: FastifyInstance) {
 
   app.get('/videos/:taskId', { preHandler: [app.requirePermission('ai.use')] }, async request => {
     const { taskId } = z.object({ taskId: z.string().min(1).max(200) }).parse(request.params)
+    // 归属校验（plan frosty-wood-gudgeon #4）：方舟任务不落本地任务表，
+    // 提交请求写入的审计行（ai.video.generate，targetId=taskId）是唯一携带 org/user 的归属凭据。
+    // 本组织查不到归属记录一律按 404 处理，避免持 ai.use 即可探测/读取他人组织的任务产物。
+    const owned = await prisma.auditLog.findFirst({
+      where: { orgId: request.currentUser.orgId, action: 'ai.video.generate', targetType: 'ai', targetId: taskId },
+      select: { id: true }
+    })
+    if (!owned) throw httpError(404, 'TASK_NOT_FOUND', '视频任务不存在')
     return getVideoTask(taskId)
   })
 

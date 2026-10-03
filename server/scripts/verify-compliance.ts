@@ -63,6 +63,7 @@ if (stderr.trim()) console.error(stderr.trim())
 
 console.log('[verify] 启动应用…')
 const { buildApp } = await import('../src/app.js')
+const { createSecondOrg } = await import('./lib/verify-org.js')
 const { prisma } = await import('../src/lib/prisma.js')
 const app = await buildApp()
 await app.listen({ port: 0, host: '127.0.0.1' })
@@ -106,7 +107,7 @@ async function registerOrg(orgName: string, email: string) {
 // ---------- 验收场景 ----------
 try {
   console.log('\n[1] 注册触发组织级种子')
-  const register = await registerOrg('砚都跨境', 'owner-a@test.com')
+  const register = await registerOrg('砚都跨境', '13900000010')
   check('注册组织A → 200', register.status === 200, register.data)
   const ownerToken: string = register.data?.tokens?.accessToken ?? ''
   const orgId: string = register.data?.user?.org?.id ?? ''
@@ -133,7 +134,7 @@ try {
     title: 'Wireless Bluetooth Headphones', imageUrl: 'https://i.ebayimg.com/images/g/abc/s-l500.jpg'
   }, ownerToken)
   check('eBay 资料齐全 → PASSED', ebayOk.status === 200 && ebayOk.data?.gateStatus === 'PASSED' && ebayOk.data?.findings?.length === 0, ebayOk.data)
-  check('eBay 检查使用详情页规则集常量', ebayOk.data?.ruleSetVersion === 'EBAY-DETAIL-PAGE-2026.07.21', ebayOk.data?.ruleSetVersion)
+  check('eBay 检查使用详情页规则集常量', ebayOk.data?.ruleSetVersion === 'EBAY-DETAIL-PAGE-2026.07.22', ebayOk.data?.ruleSetVersion)
 
   const ws1 = await api('GET', '/api/compliance/workspace', undefined, ownerToken)
   const ebayPermits = (ws1.data?.permits ?? []).filter((item: any) => item.productId === 'p-ebay-1')
@@ -252,8 +253,8 @@ try {
   console.log('\n[6] 权限与跨组织隔离')
   const roles = await api('GET', '/api/roles', undefined, ownerToken)
   const viewerRoleId = roles.data?.find((role: any) => role.name === '只读')?.id
-  await api('POST', '/api/members', { email: 'viewer-a@test.com', name: '只读', password: 'pass1234', roleIds: [viewerRoleId], storeIds: [] }, ownerToken)
-  const viewerLogin = await api('POST', '/api/auth/login', { email: 'viewer-a@test.com', password: 'pass1234' })
+  await api('POST', '/api/members', { email: '13900000011', name: '只读', password: 'pass1234', roleIds: [viewerRoleId], storeIds: [] }, ownerToken)
+  const viewerLogin = await api('POST', '/api/auth/login', { email: '13900000011', password: 'pass1234' })
   const viewerToken: string = viewerLogin.data?.tokens?.accessToken ?? ''
   const viewerCheck = await api('POST', '/api/compliance/checks', {
     productId: 'p-x', platform: 'OZON', marketplaceSite: 'ALL', country: 'ALL', title: 't', imageUrl: 'u', categoryName: 'c'
@@ -262,9 +263,10 @@ try {
   const viewerWs = await api('GET', '/api/compliance/workspace', undefined, viewerToken)
   check('只读子帐号可查看知识工作区 → 200', viewerWs.status === 200 && viewerWs.data?.rules?.length === 12, viewerWs.data?.rules?.length)
 
-  const registerB = await registerOrg('竞争对手', 'owner-b@test.com')
-  check('注册组织B → 200', registerB.status === 200, registerB.data)
-  const ownerBToken: string = registerB.data?.tokens?.accessToken ?? ''
+  // registerOrg 走 HTTP register，库中已有组织时只建 PENDING 用户、不返回 tokens → 直接建库
+  const orgB = await createSecondOrg(app, { orgName: '竞争对手', phone: '13900000012' })
+  check('建立独立组织B → 拿到 token', Boolean(orgB.token), orgB)
+  const ownerBToken: string = orgB.token
   const wsB = await api('GET', '/api/compliance/workspace', undefined, ownerBToken)
   check('组织B 拥有独立种子（规则 11）且无任何检查记录',
     wsB.status === 200 && wsB.data?.rules?.length === 11 && (wsB.data?.permits ?? []).length === 0,

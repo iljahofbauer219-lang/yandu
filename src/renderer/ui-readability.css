@@ -140,12 +140,6 @@ form label{font-size:12px;line-height:17px}
 .warehouse-source-tabs>button{min-height:82px;padding:14px}
 .warehouse-source-tabs b{font-size:14px}
 .warehouse-source-tabs small,.warehouse-toolbar span,.warehouse-toolbar input{font-size:12px}
-.warehouse-product-grid{grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
-.warehouse-product-grid>article>div{padding:14px}
-.warehouse-product-grid small,.warehouse-product-grid p,.warehouse-product-grid>article>div>span{font-size:11px;line-height:16px}
-.warehouse-product-grid b{height:42px;font-size:14px;line-height:21px}
-.warehouse-product-grid strong{font-size:18px}
-.warehouse-product-grid>article>div>div button{font-size:12px}
 
 /* eBay platform shell */
 .ebay-store-bar{min-height:82px;height:auto;gap:12px;padding:10px 20px}

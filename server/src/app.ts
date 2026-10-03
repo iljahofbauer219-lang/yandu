@@ -9,8 +9,10 @@ import { auditRoutes } from './modules/audit/routes.js'
 import { authRoutes } from './modules/auth/routes.js'
 import { collectionRoutes } from './modules/collection/routes.js'
 import { complianceRoutes } from './modules/compliance/routes.js'
+import { erpRoutes } from './modules/erp/routes.js'
 import { ebayRoutes } from './modules/ebay/routes.js'
 import { mediaPublicRoutes, mediaRoutes } from './modules/media/routes.js'
+import { productPagePublicRoutes, productPageRoutes } from './modules/product-pages/routes.js'
 import { memberRoutes } from './modules/members/routes.js'
 import { roleRoutes } from './modules/roles/routes.js'
 import { storeRoutes } from './modules/stores/routes.js'
@@ -63,8 +65,10 @@ export async function buildApp() {
   await app.register(dashboardRoutes, { prefix: '/api/dashboard' })
   await app.register(collectionRoutes, { prefix: '/api/collection' })
   await app.register(complianceRoutes, { prefix: '/api/compliance' })
+  await app.register(erpRoutes, { prefix: '/api/erp' })
   await app.register(ebayRoutes, { prefix: '/api/ebay' })
   await app.register(mediaRoutes, { prefix: '/api/media' })
+  await app.register(productPageRoutes, { prefix: '/api/product-pages' })
   await app.register(aiRoutes, { prefix: '/api/ai' })
   await app.register(codexHarnessRoutes, { prefix: '/api/codex-harness' })
   // 零度API 价格抓取路由（DB 持久化 + 用户名密码自动登录）
@@ -75,6 +79,8 @@ export async function buildApp() {
   await app.register(linduoChatRoutes, { prefix: '/api/linduo' })
   // 公共下载路由（local 驱动，HMAC 签名即授权；OSS 驱动下返回 404）
   await app.register(mediaPublicRoutes)
+  // 产品详情页公共只读路由（无需登录）
+  await app.register(productPagePublicRoutes)
 
   return app
 }

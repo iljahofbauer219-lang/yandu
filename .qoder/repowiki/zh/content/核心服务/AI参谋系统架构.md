@@ -18,16 +18,22 @@
 - [src/shared/contracts.ts](file://src/shared/contracts.ts)
 - [src/renderer/App.tsx](file://src/renderer/App.tsx)
 - [src/renderer/OnlineAdvisorExperience.tsx](file://src/renderer/OnlineAdvisorExperience.tsx)
+- [src/shared/menuPermissionTree.ts](file://src/shared/menuPermissionTree.ts)
+- [server/src/modules/rbac/permissions.ts](file://server/src/modules/rbac/permissions.ts)
+- [server/src/plugins/auth.ts](file://server/src/plugins/auth.ts)
+- [server/scripts/migrate-menu-permissions.ts](file://server/scripts/migrate-menu-permissions.ts)
+- [src/renderer/serverApi.ts](file://src/renderer/serverApi.ts)
+- [src/renderer/SessionGate.tsx](file://src/renderer/SessionGate.tsx)
 </cite>
 
 ## 更新摘要
 **所做更改**
-- 新增Linduo模型HTTP/SSE管道集成章节，替代直接Codex调用
-- 更新AI参谋运行时组件分析，包含Linduo流式聊天、SSE事件解析和信号处理
-- 增强服务器端路由和服务层，支持认证、授权和流式响应
-- 更新架构图表以反映新的Linduo模型请求路由流程
-- 新增错误处理和超时控制机制说明
-- 增强文档处理能力，支持Linduo模型的专用消息格式
+- 新增权限处理逻辑增强章节，详细说明两级菜单权限系统和默认导航修复
+- 更新AI参谋运行时组件分析，包含权限检查与菜单访问控制
+- 增强服务器端权限验证机制，支持RBAC角色权限管理
+- 更新架构图表以反映新的权限处理流程
+- 新增权限迁移和同步机制说明
+- 增强文档处理能力，支持权限相关的文档提取和分析
 
 ## 目录
 1. [简介](#简介)
@@ -72,9 +78,12 @@ App["应用入口<br/>app.ts"]
 Config["配置中心<br/>config.ts"]
 ChatRoutes["聊天路由<br/>chat-routes.ts"]
 ChatService["聊天服务<br/>chat-service.ts"]
+AuthPlugin["认证插件<br/>auth.ts"]
+Permissions["权限管理<br/>permissions.ts"]
 end
 subgraph "共享契约"
 Contracts["类型契约<br/>advisor.ts, contracts.ts"]
+MenuPerm["菜单权限树<br/>menuPermissionTree.ts"]
 end
 Renderer --> Main
 Renderer --> App
@@ -86,7 +95,9 @@ Advisor --> AttachmentService
 Advisor --> MultimodalVision
 LinduoClient --> ChatRoutes
 ChatRoutes --> ChatService
+AuthPlugin --> Permissions
 Renderer -.-> Contracts
+Renderer -.-> MenuPerm
 Main -.-> Contracts
 App -.-> Contracts
 ```
@@ -103,6 +114,9 @@ App -.-> Contracts
 - [server/src/app.ts:21-70](file://server/src/app.ts#L21-L70)
 - [server/src/config.ts:9-37](file://server/src/config.ts#L9-L37)
 - [src/shared/advisor.ts:118-123](file://src/shared/advisor.ts#L118-L123)
+- [src/shared/menuPermissionTree.ts:16-64](file://src/shared/menuPermissionTree.ts#L16-L64)
+- [server/src/modules/rbac/permissions.ts:1-48](file://server/src/modules/rbac/permissions.ts#L1-L48)
+- [server/src/plugins/auth.ts:33-76](file://server/src/plugins/auth.ts#L33-L76)
 
 章节来源
 - [package.json:1-50](file://package.json#L1-L50)
@@ -120,6 +134,7 @@ App -.-> Contracts
 - Linduo聊天服务：**新增**专门的聊天服务，处理OpenAI兼容协议的流式响应。
 - 配置中心：集中读取环境变量，暴露端口、数据库、媒体存储、AI 网关密钥等配置项。
 - 共享契约：定义平台、市场账户、eBay 商品详情、优化草稿、发布任务、视频工作室、内容优化、标题审计等类型。
+- **权限管理系统**：**新增**两级菜单权限系统和RBAC角色权限管理，支持菜单访问控制和默认导航修复。
 
 章节来源
 - [src/main/main.ts:102-118](file://src/main/main.ts#L102-L118)
@@ -132,6 +147,8 @@ App -.-> Contracts
 - [server/src/app.ts:21-70](file://server/src/app.ts#L21-L70)
 - [server/src/config.ts:9-37](file://server/src/config.ts#L9-L37)
 - [src/shared/contracts.ts:73-180](file://src/shared/contracts.ts#L73-L180)
+- [src/shared/menuPermissionTree.ts:16-64](file://src/shared/menuPermissionTree.ts#L16-L64)
+- [server/src/modules/rbac/permissions.ts:1-48](file://server/src/modules/rbac/permissions.ts#L1-L48)
 
 ## 架构总览
 系统由三层组成：
@@ -147,10 +164,16 @@ participant Advisor as "AI参谋(AdvisorRuntime.ts)"
 participant LinduoClient as "Linduo客户端(linduoServerClient.ts)"
 participant ChatRoutes as "聊天路由(chat-routes.ts)"
 participant ChatService as "聊天服务(chat-service.ts)"
+participant Auth as "认证(auth.ts)"
+participant Perm as "权限(permissions.ts)"
 participant Server as "后端(app.ts)"
 participant DB as "数据库"
 UI->>Main : IPC 调用(如打开eBay店铺/下载商品图片)
 Main->>Server : HTTP 请求(认证/数据/媒体/AI路由)
+Server->>Auth : JWT验证
+Auth->>Perm : 权限检查
+Perm-->>Auth : 权限结果
+Auth-->>Server : 用户上下文
 Server-->>DB : 读写数据/迁移/导入
 Main->>Advisor : 启动/发送消息/审批/停止
 Advisor->>LinduoClient : 发起Linduo聊天请求
@@ -176,6 +199,8 @@ end
 - [src/main/advisor/linduoServerClient.ts:165-213](file://src/main/advisor/linduoServerClient.ts#L165-L213)
 - [server/src/modules/linduo/chat-routes.ts:55-142](file://server/src/modules/linduo/chat-routes.ts#L55-L142)
 - [server/src/modules/linduo/chat-service.ts:49-197](file://server/src/modules/linduo/chat-service.ts#L49-L197)
+- [server/src/plugins/auth.ts:33-76](file://server/src/plugins/auth.ts#L33-L76)
+- [server/src/modules/rbac/permissions.ts:106-111](file://server/src/modules/rbac/permissions.ts#L106-L111)
 - [server/src/app.ts:21-70](file://server/src/app.ts#L21-L70)
 
 ## 详细组件分析
@@ -541,10 +566,56 @@ Public --> Ready["应用就绪"]
   - 错误提示：加载失败、网络异常、功能不可用时的降级与提示。
   - **新增**：处理threadReset事件，向用户展示一次性提示说明上下文已重置。
   - **新增**：处理Linduo模型的专用事件类型（linduo_delta、linduo_done、linduo_error）。
+  - **新增**：两级菜单权限检查和默认导航修复，确保用户登录后能正确显示可访问的菜单项。
 
 **章节来源**
 - [src/renderer/App.tsx:30-45](file://src/renderer/App.tsx#L30-L45)
 - [src/renderer/App.tsx:609-732](file://src/renderer/App.tsx#L609-L732)
+- [src/renderer/App.tsx:622-657](file://src/renderer/App.tsx#L622-L657)
+
+### 权限管理系统（新增）
+- 职责：
+  - **新增**两级菜单权限系统：一级=侧边栏菜单，二级=栏目内卡片。
+  - **新增**RBAC角色权限管理：支持OWNER、OPERATOR、PUBLISHER、VIEWER四种预设角色。
+  - **新增**菜单访问控制：基于用户权限动态显示可访问的菜单项。
+  - **新增**默认导航修复：当默认首页不可访问时，自动回退到第一个可访问的一级菜单。
+  - **新增**权限迁移脚本：支持旧权限码到新权限码的迁移。
+- 关键功能：
+  - hasMenuAccess：检查用户是否有权限访问某个菜单节点。
+  - menuCheckState：计算菜单节点的勾选状态（none/some/all）。
+  - toggleMenu/toggleMenuCard：处理菜单勾选操作。
+  - summarizeMenuPermissions：生成用户权限摘要。
+  - hasPermission：检查用户是否拥有特定权限。
+  - requirePermission：服务端权限验证中间件。
+
+```mermaid
+flowchart TD
+UserLogin["用户登录"] --> LoadProfile["加载用户档案"]
+LoadProfile --> CheckDefault{"检查默认首页权限"}
+CheckDefault --> |无权限| FindFirst["查找第一个可访问菜单"]
+CheckDefault --> |有权限| ShowDashboard["显示团队工作台"]
+FindFirst --> RenderNav["渲染导航菜单"]
+RenderNav --> ApplyPerms["应用权限过滤"]
+ApplyPerms --> VisibleMenu["显示可见菜单"]
+VisibleMenu --> UserAction["用户操作"]
+UserAction --> PagePerm{"检查页面权限"}
+PagePerm --> |允许| Navigate["导航到页面"]
+PagePerm --> |拒绝| ShowError["显示无权限提示"]
+```
+
+**图表来源**
+- [src/shared/menuPermissionTree.ts:16-64](file://src/shared/menuPermissionTree.ts#L16-L64)
+- [src/shared/menuPermissionTree.ts:78-81](file://src/shared/menuPermissionTree.ts#L78-L81)
+- [src/renderer/App.tsx:622-657](file://src/renderer/App.tsx#L622-L657)
+- [server/src/modules/rbac/permissions.ts:106-111](file://server/src/modules/rbac/permissions.ts#L106-L111)
+- [server/src/plugins/auth.ts:70-75](file://server/src/plugins/auth.ts#L70-L75)
+
+**章节来源**
+- [src/shared/menuPermissionTree.ts:1-116](file://src/shared/menuPermissionTree.ts#L1-L116)
+- [server/src/modules/rbac/permissions.ts:1-114](file://server/src/modules/rbac/permissions.ts#L1-L114)
+- [server/src/plugins/auth.ts:33-76](file://server/src/plugins/auth.ts#L33-L76)
+- [server/scripts/migrate-menu-permissions.ts:1-75](file://server/scripts/migrate-menu-permissions.ts#L1-L75)
+- [src/renderer/App.tsx:622-657](file://src/renderer/App.tsx#L622-L657)
 
 ### Linduo模型HTTP/SSE管道（新增）
 - 职责：
@@ -629,9 +700,11 @@ NextChunk --> ParseEvents
   - 媒体存储（本地/OSS）。
   - 各模块路由（认证、成员、角色、商店、审计、仪表板、采集、合规、eBay、媒体、AI、Codex Harness）。
   - **新增**：Linduo聊天路由和服务（chat-routes、chat-service）。
+  - **新增**：权限管理系统（permissions、auth插件）。
 - 渲染层依赖：
   - React、Vite、样式与组件库。
   - IPC 与 HTTP 客户端。
+  - **新增**：权限检查工具（hasPermission、hasMenuAccess）。
 
 ```mermaid
 graph LR
@@ -653,6 +726,9 @@ Server --> Media["媒体存储"]
 Advisor --> AppServer["Codex app-server"]
 Advisor -.-> ProviderSwitch["智能provider切换"]
 ProviderSwitch -.-> BranchManagement["分支管理"]
+Server -.-> Auth["认证系统"]
+Auth -.-> Permissions["权限管理"]
+Renderer -.-> MenuPerm["菜单权限树"]
 ```
 
 **图表来源**
@@ -665,6 +741,9 @@ ProviderSwitch -.-> BranchManagement["分支管理"]
 - [src/main/advisor/AttachmentService.ts:356-423](file://src/main/advisor/AttachmentService.ts#L356-L423)
 - [src/main/advisor/MultimodalVision.ts:19-33](file://src/main/advisor/MultimodalVision.ts#L19-L33)
 - [server/src/app.ts:21-70](file://server/src/app.ts#L21-L70)
+- [server/src/plugins/auth.ts:33-76](file://server/src/plugins/auth.ts#L33-L76)
+- [server/src/modules/rbac/permissions.ts:106-111](file://server/src/modules/rbac/permissions.ts#L106-L111)
+- [src/shared/menuPermissionTree.ts:16-64](file://src/shared/menuPermissionTree.ts#L16-L64)
 
 **章节来源**
 - [src/main/main.ts:102-118](file://src/main/main.ts#L102-L118)
@@ -685,6 +764,8 @@ ProviderSwitch -.-> BranchManagement["分支管理"]
 - **新增**：Linduo HTTP请求使用AbortSignal合并，支持120秒超时控制。
 - **新增**：SSE流式响应避免内存累积，实时处理数据块。
 - **新增**：服务器端禁用代理缓冲，确保事件实时到达客户端。
+- **新增**：权限检查采用前端缓存，减少重复的权限验证请求。
+- **新增**：菜单权限树静态加载，避免运行时权限计算开销。
 
 [本节为通用指导，无需特定文件引用]
 
@@ -732,6 +813,16 @@ ProviderSwitch -.-> BranchManagement["分支管理"]
   - 原因：Codex vision-sidecar不可用，或图像处理超时。
   - 处理：检查外部进程状态，重试或降级到本地分析。
   - 影响：图像分析结果可能不完整，但不影响主要功能。
+- **新增**：权限相关问题：
+  - 症状：菜单项不显示或页面无法访问。
+  - 原因：用户缺少相应权限或权限配置不正确。
+  - 处理：检查用户角色和权限分配，验证权限树配置。
+  - 影响：用户只能看到和操作被授权的菜单和功能。
+- **新增**：默认导航问题：
+  - 症状：登录后显示空白页面或错误的默认页面。
+  - 原因：dashboard.view权限缺失或菜单权限配置错误。
+  - 处理：检查用户权限，验证aiModuleNav配置，确保canMenu函数正常工作。
+  - 影响：用户登录后应自动跳转到第一个可访问的菜单项。
 
 **章节来源**
 - [server/src/app.ts:31-51](file://server/src/app.ts#L31-L51)
@@ -743,9 +834,11 @@ ProviderSwitch -.-> BranchManagement["分支管理"]
 - [src/main/advisor/SessionStore.ts:124-138](file://src/main/advisor/SessionStore.ts#L124-L138)
 - [src/main/advisor/AttachmentService.ts:356-423](file://src/main/advisor/AttachmentService.ts#L356-L423)
 - [src/main/advisor/MultimodalVision.ts:98-146](file://src/main/advisor/MultimodalVision.ts#L98-L146)
+- [src/shared/menuPermissionTree.ts:78-81](file://src/shared/menuPermissionTree.ts#L78-L81)
+- [src/renderer/App.tsx:622-657](file://src/renderer/App.tsx#L622-L657)
 
 ## 结论
-本系统以 Electron 主进程为核心，结合 React 渲染层与 Fastify 后端服务，构建了完整的跨境电商选品与素材工作流。AI参谋运行时提供了安全的自动化执行与审批机制，**新增的Linduo模型HTTP/SSE管道集成显著提升了系统的灵活性和可扩展性**。通过绕过Codex app-server直接调用后端服务，实现了更高效的模型请求处理。SSE流式响应、信号处理、错误分类和认证授权机制确保了系统的稳定性和安全性。**新增的智能模型提供商切换、自动分叉机制、ModelProfile-based effort参数处理、增强的文档处理能力和多模态视觉分析进一步提升了系统的健壮性和用户体验**。后端服务统一了鉴权、错误处理与模块化路由。通过共享契约确保前后端类型一致，提升了可维护性与扩展性。建议在生产环境中启用 OSS 媒体存储、替换开发密钥、完善监控与日志，以提升稳定性与性能。
+本系统以 Electron 主进程为核心，结合 React 渲染层与 Fastify 后端服务，构建了完整的跨境电商选品与素材工作流。AI参谋运行时提供了安全的自动化执行与审批机制，**新增的Linduo模型HTTP/SSE管道集成显著提升了系统的灵活性和可扩展性**。通过绕过Codex app-server直接调用后端服务，实现了更高效的模型请求处理。SSE流式响应、信号处理、错误分类和认证授权机制确保了系统的稳定性和安全性。**新增的智能模型提供商切换、自动分叉机制、ModelProfile-based effort参数处理、增强的文档处理能力和多模态视觉分析进一步提升了系统的健壮性和用户体验**。后端服务统一了鉴权、错误处理与模块化路由。**新增的两级菜单权限系统和RBAC角色权限管理，配合默认导航修复，确保了用户只能访问被授权的功能，提升了系统的安全性和用户体验**。通过共享契约确保前后端类型一致，提升了可维护性与扩展性。建议在生产环境中启用 OSS 媒体存储、替换开发密钥、完善监控与日志，以提升稳定性与性能。
 
 [本节为总结，无需特定文件引用]
 

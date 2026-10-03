@@ -11,6 +11,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "migrate:menu-perms": "tsx --env-file=.env scripts/migrate-menu-permissions.ts",
+    "migrate:erp-roles": "tsx --env-file=.env scripts/migrate-erp-roles.ts",
     "db:dev": "tsx scripts/dev-db.ts",
     "verify": "tsx scripts/verify-phase1.ts",
     "verify:compliance": "tsx scripts/verify-compliance.ts",
@@ -20,7 +21,16 @@
     "verify:import": "tsx scripts/verify-import.ts",
     "verify:media": "tsx scripts/verify-media.ts",
     "verify:full-flow": "tsx scripts/verify-full-flow.ts",
-    "verify:ai": "tsx scripts/verify-ai.ts"
+    "verify:ai": "tsx scripts/verify-ai.ts",
+    "verify:product-pages": "tsx scripts/verify-product-pages.ts",
+    "verify:dashboard": "tsx scripts/verify-dashboard.ts",
+    "verify:erp-p0": "tsx scripts/verify-erp-p0.ts",
+    "verify:erp-p1": "tsx scripts/verify-erp-p1.ts",
+    "verify:erp-p2": "tsx scripts/verify-erp-p2.ts",
+    "verify:erp-p3": "tsx scripts/verify-erp-p3.ts",
+    "verify:erp-p4": "tsx scripts/verify-erp-p4.ts",
+    "verify:erp-p5": "tsx scripts/verify-erp-p5.ts",
+    "resanitize:product-pages": "tsx --env-file=.env scripts/resanitize-product-pages.ts"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"
@@ -33,12 +43,14 @@
     "fastify": "^5.2.0",
     "fastify-plugin": "^5.0.1",
     "playwright-core": "^1.62.1",
+    "sanitize-html": "^2.17.7",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.4",
     "@electric-sql/pglite-socket": "^0.2.7",
     "@types/node": "^22.10.5",
+    "@types/sanitize-html": "^2.16.1",
     "prisma": "^6.2.1",
     "tsx": "^4.19.2",
     "typescript": "~5.7.2"

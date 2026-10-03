@@ -91,10 +91,15 @@ export async function syncLinduoChatModels(): Promise<LinduoChatModelSyncResult>
 /**
  * 启动时给所有 isOwner=true 的用户自动加 kind=GRANT 的 UserLinduoException,
  * 覆盖所有 enabled LinduoChatModel(R-2 兼容旧 ensureOwnerLinduoGrants 行为)。
- * 幂等：upsert 多次跑也安全(UserLinduoException 复合主键 userId_modelId)。
+ * 幂等：重复跑安全(UserLinduoException 复合主键 userId_modelId)。
+ *
+ * 实现（plan frosty-wood-gudgeon #26）：集合化差集 + 单事务批量写入，
+ * 取代旧 O(n·m) 的逐对 upsert（owners × enabled 每对一次网络往返）。
  *
  * 注意：Task 2 引入 LinduoModelTier 'full' 后,OWNER 默认走 tier='full' 自动包含全部 enabled 模型,
  * 此函数可保留作为历史 fallback(seed 已建过 tier 时 no-op),也可在 Task 3 中改为幂等不重复写。
+ *
+ * @returns 本次覆盖检查的 (owner × model) 对数（与旧实现计数口径一致）
  */
 export async function ensureOwnerLinduoExceptions(): Promise<number> {
   const owners = await prisma.user.findMany({
@@ -105,16 +110,32 @@ export async function ensureOwnerLinduoExceptions(): Promise<number> {
     where: { enabled: true },
     select: { id: true }
   })
-  let count = 0
-  for (const owner of owners) {
-    for (const model of enabled) {
-      await prisma.userLinduoException.upsert({
-        where: { userId_modelId: { userId: owner.id, modelId: model.id } },
-        create: { userId: owner.id, modelId: model.id, kind: 'GRANT' },
-        update: { kind: 'GRANT' }
-      })
-      count += 1
+  if (owners.length === 0 || enabled.length === 0) return 0
+  const ownerIds = owners.map(owner => owner.id)
+  const modelIds = enabled.map(model => model.id)
+
+  // 一次取回既有例外，用 Set 做差集：缺失的 createMany 补插，kind≠GRANT 的 updateMany 翻回
+  const existing = await prisma.userLinduoException.findMany({
+    where: { userId: { in: ownerIds }, modelId: { in: modelIds } },
+    select: { userId: true, modelId: true }
+  })
+  const existingKeys = new Set(existing.map(row => `${row.userId}\u0000${row.modelId}`))
+  const toCreate: Array<{ userId: string; modelId: string; kind: 'GRANT' }> = []
+  for (const userId of ownerIds) {
+    for (const modelId of modelIds) {
+      if (!existingKeys.has(`${userId}\u0000${modelId}`)) toCreate.push({ userId, modelId, kind: 'GRANT' })
     }
   }
-  return count
+
+  await prisma.$transaction(async tx => {
+    if (toCreate.length > 0) {
+      await tx.userLinduoException.createMany({ data: toCreate })
+    }
+    // 历史 REVOKE 行翻回 GRANT（保持旧 upsert update:{kind:'GRANT'} 的语义）
+    await tx.userLinduoException.updateMany({
+      where: { userId: { in: ownerIds }, modelId: { in: modelIds }, kind: { not: 'GRANT' } },
+      data: { kind: 'GRANT' }
+    })
+  })
+  return ownerIds.length * modelIds.length
 }

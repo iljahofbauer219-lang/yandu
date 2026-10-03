@@ -21,6 +21,7 @@ import { LinduoChatModelService } from './services/LinduoChatModelService'
 import { BailianTranslationService } from './services/BailianTranslationService'
 import { SupplyProductDownloadService } from './services/SupplyProductDownloadService'
 import { requireInboundEditPermission } from './services/InboundPermissionGuard'
+import { resolveMacUpdaterZipPath } from './macUpdaterCache'
 import { hasFreeSpaceForUpdate, UPDATE_REQUIRED_FREE_BYTES } from './updateFreeSpace'
 import { FeishuBotService } from './services/FeishuBotService'
 import { RealShiftService } from './services/RealShiftService'
@@ -2555,6 +2556,25 @@ ipcMain.handle('candidate:list', () => database?.getCandidateWorkspace() ?? { pr
 ipcMain.handle('candidate:delete', (_event, request: CandidateUpdateRequest) => database?.setCandidatesDeleted(request, true))
 ipcMain.handle('candidate:restore', (_event, request: CandidateUpdateRequest) => database?.setCandidatesDeleted(request, false))
 ipcMain.handle('candidate:purge', (_event, request: CandidateUpdateRequest) => database?.purgeCandidates(request))
+ipcMain.handle('candidate:reread', async (_event, request: { platformCode: string; url: string }) => {
+  if (!database) throw new Error('候选商品数据库尚未初始化')
+  if (!workspace) throw new Error('浏览器工作区未就绪')
+  const facts = await workspace.rereadSupplyCandidate(request.url)
+  // 空串/null 与降级类目不覆盖既有值：合并策略收敛在 mergeCandidateFacts（AppDatabase 写入时执行）
+  const merged = database.updateSupplyCandidateFacts(request.platformCode, request.url, facts)
+  const product = merged as unknown as CollectedSupplyProduct
+  const hasGigaIndex = product.gigaIndex !== null && product.gigaIndex !== undefined
+  const score = hasGigaIndex ? Math.max(0, Math.min(100, Math.round(product.gigaIndex as number))) : 0
+  database.updateSupplyCandidateFacts(request.platformCode, request.url, {
+    supplierBadges: hasGigaIndex ? ['GIGA_INDEX'] : [],
+    score,
+    grade: hasGigaIndex ? (score >= 80 ? 'A' : score >= 65 ? 'B' : 'C') : 'REJECTED',
+    dataCompleteness: Math.round([product.imageUrl, product.priceText, product.shippingFeeText, product.sellableInventory !== null && product.sellableInventory !== undefined, hasGigaIndex, product.sourceCategory?.pathIds.length].filter(Boolean).length / 6 * 100),
+    recommendation: hasGigaIndex ? `GIGA Index ${product.gigaIndex} · 候选重读` : 'GIGA Index待补采，暂不评分',
+    riskFlags: [!product.priceText ? '价格待补采' : '', !product.supplierName ? '供应商待补采' : '', product.sourceCategory?.status !== 'EXACT' ? '类目待核实' : ''].filter(Boolean)
+  })
+  return database.getCandidateWorkspace()
+})
 ipcMain.handle('selection:list', () => database?.getSelectionCatalog() ?? [])
 ipcMain.handle('selection:import', (_event, request: SelectionImportRequest) => database?.importSelection(request))
 ipcMain.handle('selection:decide', (_event, id: string, decision: SelectionDecision) => database?.updateSelectionDecision(id, decision))
@@ -2589,6 +2609,26 @@ ipcMain.handle('warehouse:restore', async (_event, id: string, accessToken: stri
   await requireInboundEditPermission(accessToken)
   return database.restoreWarehouseProduct(id)
 })
+ipcMain.handle('warehouse:set-region', async (_event, id: string, region: string, accessToken: string) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  await requireInboundEditPermission(accessToken)
+  return database.setSupplyRegion(id, region)
+})
+ipcMain.handle('warehouse:copy-pallet', async (_event, id: string, accessToken: string) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  await requireInboundEditPermission(accessToken)
+  return database.copyWarehouseToPallet(id)
+})
+ipcMain.handle('warehouse:delete-product', async (_event, id: string, accessToken: string) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  await requireInboundEditPermission(accessToken)
+  return database.deleteSupplyProduct(id)
+})
+ipcMain.handle('warehouse:return-preferred', async (_event, id: string, accessToken: string) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  await requireInboundEditPermission(accessToken)
+  return database.returnToPreferred(id)
+})
 ipcMain.handle('warehouse:download', async (_event, warehouseProductId: string, accessToken: string) => {
   if (!database) throw new Error('数据库尚未初始化')
   if (!workspace) throw new Error('应用内浏览器尚未初始化')
@@ -2609,8 +2649,9 @@ ipcMain.handle('warehouse:open-download', async (_event, warehouseProductId: str
   return true
 })
 ipcMain.handle('pallet:list', () => database?.listPalletItems() ?? [])
-ipcMain.handle('pallet:remove', (_event, ids: string[]) => {
+ipcMain.handle('pallet:remove', async (_event, ids: string[], accessToken: string) => {
   if (!database) throw new Error('数据库尚未初始化')
+  await requireInboundEditPermission(accessToken)
   return database.removePalletItems(Array.isArray(ids) ? ids : [])
 })
 ipcMain.handle('inbound:list', () => database?.listInbound() ?? [])
@@ -3263,15 +3304,8 @@ if (hasSingleInstanceLock) app.whenReady().then(async () => {
 // 等应用退出后解包 → 替换 bundle → 拉起新版（根治项 E）。
 function macUpdaterZipPath(): string | null {
   // electron-updater 在 mac 的缓存目录 = ~/Library/Caches/<app.name>-updater（Electron 类型无 'cache' 路径名）
-  const base = path.join(app.getPath('home'), 'Library', 'Caches', `${app.name}-updater`)
-  const direct = path.join(base, 'update.zip')
-  if (fs.existsSync(direct)) return direct
-  const pendingDir = path.join(base, 'pending')
-  if (fs.existsSync(pendingDir)) {
-    const zip = fs.readdirSync(pendingDir).find(name => name.endsWith('.zip'))
-    if (zip) return path.join(pendingDir, zip)
-  }
-  return null
+  const cacheDir = path.join(app.getPath('home'), 'Library', 'Caches', `${app.name}-updater`)
+  return resolveMacUpdaterZipPath(cacheDir)
 }
 
 function startMacSelfInstall(): boolean {

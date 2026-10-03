@@ -9,6 +9,7 @@ import { seedOrgReferenceData } from '../../lib/seed.js'
 import { ensureOrgDefaultTiers } from '../linduo/tier-seed.js'
 import { generateRefreshToken, hashToken } from '../../lib/tokens.js'
 import { PRESET_ROLES } from '../rbac/permissions.js'
+import { syncPresetRoles } from './preset-roles.js'
 
 /** 手机号校验：1 开头的 11 位数字 */
 const phoneSchema = z.string().trim().regex(/^1\d{10}$/, '手机号格式不正确')
@@ -71,6 +72,19 @@ export async function loadProfile(userId: string) {
 }
 
 export async function authRoutes(app: FastifyInstance) {
+  // P1-7：启动即幂等同步预置角色/权限码（存量组织补 COLLECTOR 与新码、回收预置已删的码）。
+  // 与 scripts/migrate-erp-roles.ts（npm run migrate:erp-roles）共用 syncPresetRoles；失败只告警不阻断启动。
+  app.addHook('onReady', async () => {
+    try {
+      const result = await syncPresetRoles()
+      if (result.createdRoles > 0 || result.grantedCodes > 0 || result.revokedCodes > 0) {
+        app.log.info({ ...result }, '预置角色权限码同步完成')
+      }
+    } catch (err) {
+      app.log.error({ err }, '预置角色权限码同步失败（不阻断启动，可手动跑 npm run migrate:erp-roles）')
+    }
+  })
+
   // 注册：无需组织名称。
   // - 库中无组织（首次安装）：自动创建默认组织「砚都跨境」，首个用户成为主帐号并直接登录（引导流程）。
   // - 已有组织：注册为待审核成员（PENDING），不自动登录，待管理员审核通过并分配权限后方可登录。

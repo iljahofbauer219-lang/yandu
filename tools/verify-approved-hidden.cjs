@@ -75,7 +75,7 @@ function json(body) {
     const goSelection = async () => { await flowNav.getByRole('button', { name: /优选产品/ }).click(); await page.waitForSelector('.selection-workbench', { timeout: 8000 }); await page.waitForTimeout(400) }
     const goCandidates = async () => { await flowNav.getByRole('button', { name: '采集侯选' }).click(); await page.waitForSelector('.candidate-catalog-main', { timeout: 8000 }); await page.waitForTimeout(500) }
 
-    await page.locator('.sidebar').getByRole('button', { name: 'AI采集', exact: true }).click()
+    await page.locator('.sidebar').getByRole('button', { name: '货盘采集', exact: true }).click()
     await page.waitForSelector('.ai-collect-grid', { timeout: 8000 })
     await page.locator('.ai-collect-card', { hasText: '大健云仓' }).click()
     await page.waitForTimeout(800)

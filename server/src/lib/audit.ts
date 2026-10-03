@@ -10,7 +10,8 @@ export interface AuditEntry {
   ip?: string
 }
 
-export async function writeAudit(db: PrismaClient, entry: AuditEntry): Promise<void> {
+/** 写审计。db 放宽为事务客户端，使资产变更类操作能把审计纳入同一 $transaction（有审计 ⇔ 变更真实发生） */
+export async function writeAudit(db: PrismaClient | Prisma.TransactionClient, entry: AuditEntry): Promise<void> {
   await db.auditLog.create({
     data: {
       orgId: entry.orgId,

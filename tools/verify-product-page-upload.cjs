@@ -66,7 +66,7 @@ function json(body) {
     await page.waitForTimeout(1200)
 
     // 进入大健云仓正式入库
-    await page.locator('.sidebar').getByRole('button', { name: 'AI采集', exact: true }).click()
+    await page.locator('.sidebar').getByRole('button', { name: '货盘采集', exact: true }).click()
     await page.waitForSelector('.ai-collect-grid', { timeout: 8000 })
     await page.locator('.ai-collect-card', { hasText: '大健云仓' }).click()
     await page.waitForTimeout(700)
@@ -90,7 +90,7 @@ function json(body) {
     await page.getByRole('button', { name: '下载中…', exact: true }).waitFor({ state: 'detached', timeout: 60000 }).catch(() => undefined)
     await page.waitForTimeout(600)
     if (await page.locator('.warehouse-product-grid article').count() === 0) {
-      await page.locator('.sidebar').getByRole('button', { name: 'AI采集', exact: true }).click()
+      await page.locator('.sidebar').getByRole('button', { name: '货盘采集', exact: true }).click()
       await page.waitForSelector('.ai-collect-grid', { timeout: 8000 })
       await page.locator('.ai-collect-card', { hasText: '大健云仓' }).click()
       await page.waitForTimeout(700)

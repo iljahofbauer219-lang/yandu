@@ -1,7 +1,7 @@
 /**
  * AI采集模块导航站风格改版 端到端 UI 验收（真实 Electron 渲染进程 + Playwright）。
  * 对照方案验收标准：
- *  A. 顶页：标签栏（全部/供应货源/市场平台 + 计数）、分区白卡（橙竖条标题 + N 个平台）、
+ *  A. 顶页：标签栏（全部/国内/北美/欧洲/澳洲/中东/亚洲/拉美/非洲/市场平台 + 计数）、分区白卡（橙竖条标题 + N 个平台）、
  *     横向平台卡网格、tab 切换筛选与 active 高亮、点击平台卡进入采集工作台；
  *  B. 工作台「预采集产品」：高密度网址行列表（URL 单行省略、行操作、筛选/全选/清空/仅看已选）；
  *  C. 回归：AI总部等页仍为 .ai-crossborder-page 结构。
@@ -57,23 +57,23 @@ function json(body) {
     await page.getByRole('button', { name: 'AI采集' }).first().click()
     await page.waitForTimeout(700)
     await page.locator('.ai-collect-tabs').waitFor({ timeout: 5000 })
-    assert('顶页渲染导航站式标签栏', await page.locator('.ai-collect-tabs .ai-collect-tab').count() === 3)
+    assert('顶页渲染导航站式标签栏', await page.locator('.ai-collect-tabs .ai-collect-tab').count() === 10)
     assert('标签栏带平台计数徽章', (await page.locator('.ai-collect-tab').first().innerText()).includes('4'))
-    assert('两个分区白卡（供应货源/市场平台）', await page.locator('.ai-collect-region').count() === 2)
-    assert('分区标题含橙竖条与平台计数', await page.locator('.ai-collect-region-title .ai-collect-bar').count() === 2 && (await page.locator('.ai-collect-region-count').first().innerText()).includes('个平台'))
+    assert('九个分区白卡（9 大货盘 + 市场平台）', await page.locator('.ai-collect-region').count() === 9)
+    assert('分区标题含橙竖条与平台计数', await page.locator('.ai-collect-region-title .ai-collect-bar').count() === 9 && (await page.locator('.ai-collect-region-count').first().innerText()).includes('个平台'))
     assert('四个横向平台卡', await page.locator('.ai-collect-card').count() === 4)
     assert('平台卡带候选数徽章', (await page.locator('.ai-collect-card-count').first().innerText()).includes('候选'))
     assert('旧居中卡片结构已移除', await page.locator('.ai-collect-page .ai-crossborder-entries').count() === 0)
     await page.screenshot({ path: path.join(ARTIFACTS, 'ai-collect-nav-01-top.png') })
 
-    await page.locator('.ai-collect-tab', { hasText: '供应货源' }).click()
+    await page.locator('.ai-collect-tab', { hasText: '国内货盘' }).click()
     await page.waitForTimeout(600)
-    assert('tab 切换后 active 高亮供应货源', (await page.locator('.ai-collect-tab.active').innerText()).includes('供应货源'))
-    assert('筛选后仅保留供应货源分区', await page.locator('.ai-collect-region').count() === 1 && await page.locator('#ai-collect-region-SUPPLY').count() === 1)
-    await page.screenshot({ path: path.join(ARTIFACTS, 'ai-collect-nav-02-tab-supply.png') })
+    assert('tab 切换后 active 高亮国内货盘', (await page.locator('.ai-collect-tab.active').innerText()).includes('国内货盘'))
+    assert('筛选后仅保留国内货盘分区', await page.locator('.ai-collect-region').count() === 1 && await page.locator('#ai-collect-region-DOMESTIC').count() === 1)
+    await page.screenshot({ path: path.join(ARTIFACTS, 'ai-collect-nav-02-tab-domestic.png') })
     await page.locator('.ai-collect-tab', { hasText: '全部' }).click()
     await page.waitForTimeout(400)
-    assert('切回全部恢复两个分区', await page.locator('.ai-collect-region').count() === 2)
+    assert('切回全部恢复九个分区', await page.locator('.ai-collect-region').count() === 9)
 
     // ── B. 工作台网址行列表 ──
     await page.locator('.ai-collect-card', { hasText: '1688' }).click()

@@ -33,7 +33,7 @@ async function tick(): Promise<void> {
   try {
     const result = await scrapeAndPersist()
     if (result.fromFallback) {
-      console.log('[linduo-pricing] 本次使用兜底价格（cookie 失效或抓取失败）')
+      console.log('[linduo-pricing] 本次使用兜底价格：', result.reason ?? 'cookie 失效或抓取失败')
     } else {
       console.log(`[linduo-pricing] 刷新 ${result.items.length} 个模型价格${result.loggedInJustNow ? '（已自动重登）' : ''}`)
     }

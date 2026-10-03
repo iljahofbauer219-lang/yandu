@@ -176,7 +176,42 @@ export interface CollectedSupplyProduct {
   candidateDeletedAt?: string
 }
 
-export type CollectorDuplicateStage = 'CANDIDATE' | 'SELECTION' | 'WAREHOUSE' | 'HISTORY'
+export type CollectorDuplicateStage = 'CANDIDATE' | 'SELECTION' | 'WAREHOUSE' | 'HISTORY' | 'ELIMINATED'
+
+// 淘汰产品收录追踪（与客户端 contracts 同构）
+export type EliminatedOrigin = 'SELECTION' | 'CANDIDATE'
+export type EliminatedRecordStatus = 'ACTIVE' | 'REENABLED'
+
+export interface EliminatedProductRecord {
+  id: string
+  identityKey: string
+  platformCode: string
+  productId: string
+  sourceUrl: string
+  title: string
+  imageUrl: string
+  priceText: string
+  origin: EliminatedOrigin
+  originRecordId: string
+  reason: string
+  operator: string
+  status: EliminatedRecordStatus
+  eliminatedAt: string
+  reenabledAt: string | null
+}
+
+export interface EliminateRequest {
+  origin: EliminatedOrigin
+  recordId?: string
+  url?: string
+  platformCode?: string
+  productId?: string
+  title?: string
+  imageUrl?: string
+  priceText?: string
+  reason?: string
+  operator: string
+}
 
 export interface CollectorDuplicateProduct {
   platformCode: string

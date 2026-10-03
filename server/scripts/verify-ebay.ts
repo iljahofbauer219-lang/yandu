@@ -64,6 +64,7 @@ if (stderr.trim()) console.error(stderr.trim())
 
 console.log('[verify] 启动应用…')
 const { buildApp } = await import('../src/app.js')
+const { createSecondOrg } = await import('./lib/verify-org.js')
 const { prisma } = await import('../src/lib/prisma.js')
 const app = await buildApp()
 await app.listen({ port: 0, host: '127.0.0.1' })
@@ -148,7 +149,7 @@ function makeCategory(categoryId: string, name: string, overrides: Record<string
 // ---------- 验收场景 ----------
 try {
   console.log('\n[1] 店铺扩展与凭据')
-  const register = await api('POST', '/api/auth/register', { orgName: '砚都跨境', name: '老板', email: 'owner-a@test.com', password: 'pass1234' })
+  const register = await api('POST', '/api/auth/register', { orgName: '砚都跨境', name: '老板', email: '13900000013', password: 'pass1234' })
   check('注册组织A → 200', register.status === 200, register.data)
   const ownerToken: string = register.data?.tokens?.accessToken ?? ''
 
@@ -508,10 +509,10 @@ try {
   const roles = await api('GET', '/api/roles', undefined, ownerToken)
   const operatorRoleId = roles.data?.find((role: any) => role.name === '运营')?.id
   const publisherRoleId = roles.data?.find((role: any) => role.name === '发布员')?.id
-  await api('POST', '/api/members', { email: 'op-ebay@test.com', name: '运营小A', password: 'pass1234', roleIds: [operatorRoleId], storeIds: [store1Id] }, ownerToken)
-  await api('POST', '/api/members', { email: 'pub-ebay@test.com', name: '发布小B', password: 'pass1234', roleIds: [publisherRoleId], storeIds: [store2Id] }, ownerToken)
-  const opToken: string = (await api('POST', '/api/auth/login', { email: 'op-ebay@test.com', password: 'pass1234' })).data?.tokens?.accessToken ?? ''
-  const pubToken: string = (await api('POST', '/api/auth/login', { email: 'pub-ebay@test.com', password: 'pass1234' })).data?.tokens?.accessToken ?? ''
+  await api('POST', '/api/members', { email: '13900000014', name: '运营小A', password: 'pass1234', roleIds: [operatorRoleId], storeIds: [store1Id] }, ownerToken)
+  await api('POST', '/api/members', { email: '13900000015', name: '发布小B', password: 'pass1234', roleIds: [publisherRoleId], storeIds: [store2Id] }, ownerToken)
+  const opToken: string = (await api('POST', '/api/auth/login', { email: '13900000014', password: 'pass1234' })).data?.tokens?.accessToken ?? ''
+  const pubToken: string = (await api('POST', '/api/auth/login', { email: '13900000015', password: 'pass1234' })).data?.tokens?.accessToken ?? ''
 
   const opStores = await api('GET', '/api/ebay/stores', undefined, opToken)
   check('运营仅见授权店铺', opStores.status === 200 && opStores.data?.length === 1 && opStores.data?.[0]?.id === store1Id, opStores.data?.length)
@@ -547,8 +548,9 @@ try {
   }, pubToken)
   check('发布员保存授权店铺发布任务 → 200', pubTask.status === 200, pubTask.data)
 
-  const registerB = await api('POST', '/api/auth/register', { orgName: '竞争对手', name: '老板B', email: 'owner-b@test.com', password: 'pass1234' })
-  const ownerBToken: string = registerB.data?.tokens?.accessToken ?? ''
+  // register 端点在库中已有组织时只建 PENDING 用户且不返回 tokens，造不出独立组织 → 直接建库
+  const orgB = await createSecondOrg(app, { orgName: '竞争对手', phone: '13900000016' })
+  const ownerBToken: string = orgB.token
   const storesB = await api('GET', '/api/ebay/stores', undefined, ownerBToken)
   check('组织B 店铺列表为空', storesB.status === 200 && storesB.data?.length === 0, storesB.data?.length)
   const crossDraft = await api('GET', `/api/ebay/drafts/${draftId}`, undefined, ownerBToken)

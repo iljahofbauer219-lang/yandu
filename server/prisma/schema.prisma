@@ -46,6 +46,8 @@ model Organization {
   productIntakeRegistries        ProductIntakeRegistry[]
   comparisonRecords              ComparisonRecord[]
   selectionRecords               SelectionRecord[]
+  eliminatedProducts             EliminatedProduct[]
+  eliminationSettings            EliminationSetting[]
   inventoryRecords               InventoryRecord[]
   listingRecords                 ListingRecord[]
   workflowEvents                 WorkflowEvent[]
@@ -90,6 +92,17 @@ model Organization {
   complianceAuditEvents          ComplianceAuditEvent[]
   complianceReleasePermits       ComplianceReleasePermit[]
   complianceEnforcementCases     ComplianceEnforcementCase[]
+
+  // ---- ERP 采集加工域（跨境电商采集 ERP 一期） ----
+  erpSuppliers                   ErpSupplier[]
+  erpProducts                    ErpProduct[]
+  erpProductImages               ErpProductImage[]
+  erpPlatformRules               ErpPlatformRule[]
+  erpPricingRules                ErpPricingRule[]
+  erpListings                    ErpListing[]
+  erpCrawlLogs                   ErpCrawlLog[]
+  erpNotifications               ErpNotification[]
+  erpDownloadJobs                ErpDownloadJob[]
 
   @@map("organizations")
 }
@@ -731,6 +744,40 @@ model SelectionRecord {
   @@map("selection_records")
 }
 
+model EliminatedProduct {
+  id             String       @id @default(cuid())
+  orgId          String       @map("org_id")
+  identityKey    String       @map("identity_key")
+  platformCode   String       @map("platform_code")
+  productId      String?      @map("product_id")
+  sourceUrl      String       @map("source_url")
+  title          String?
+  imageUrl       String?      @map("image_url")
+  priceText      String?      @map("price_text")
+  origin         String
+  originRecordId String?      @map("origin_record_id")
+  reason         String?
+  operator       String
+  status         String       @default("ACTIVE")
+  eliminatedAt   String       @map("eliminated_at")
+  reenabledAt    String?      @map("reenabled_at")
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, identityKey, status])
+  @@index([orgId, eliminatedAt])
+  @@map("eliminated_products")
+}
+
+model EliminationSetting {
+  orgId String       @map("org_id")
+  key   String
+  value String
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@id([orgId, key])
+  @@map("elimination_settings")
+}
+
 model InventoryRecord {
   id             String           @id
   orgId          String           @map("org_id")
@@ -1132,6 +1179,8 @@ model EbayLocalProductSnapshot {
 
 model EbayLocalProductMedia {
   id             String                   @id
+  /// 逻辑媒体 id（客户端在快照间继承复用，故不能当主键）；行主键 id 是写入方生成的代理键
+  mediaKey       String                   @default("") @map("media_key")
   orgId          String                   @map("org_id")
   snapshotId     String                   @map("snapshot_id")
   mediaType      String                   @map("media_type")
@@ -1148,6 +1197,7 @@ model EbayLocalProductMedia {
   snapshot       EbayLocalProductSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
 
   @@index([snapshotId, sortOrder])
+  @@index([snapshotId, mediaKey])
   @@map("ebay_local_product_media")
 }
 
@@ -1627,4 +1677,190 @@ model ComplianceEnforcementCase {
 
   @@index([orgId, status, riskLevel, updatedAt(sort: Desc)])
   @@map("compliance_enforcement_cases")
+}
+
+// ===================== ERP 采集加工域（跨境电商采集 ERP 一期） =====================
+// 敏感字段约定（规格 §2.2）：supplierId/sourceUrl/sourceProductId/sourceSku/collectedBy/crawlConfig
+// 运营角色（无 erp.source.view 权限）在服务端 SQL 投影层即不 SELECT，API JSON 中不出现。
+
+model ErpSupplier {
+  id                String       @id @default(cuid())
+  orgId             String       @map("org_id")
+  code              String
+  name              String
+  loginUrl          String       @default("") @map("login_url")
+  crawlRules        Json         @default("{}") @map("crawl_rules")
+  patrolChannel     String       @default("SERVER") @map("patrol_channel")
+  status            String       @default("ACTIVE")
+  createdAt         String       @map("created_at")
+  updatedAt         String       @map("updated_at")
+  org               Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  products          ErpProduct[]
+
+  @@unique([orgId, code])
+  @@map("erp_suppliers")
+}
+
+model ErpProduct {
+  id                  String            @id @default(cuid())
+  orgId               String            @map("org_id")
+  supplierId          String            @map("supplier_id")
+  sourceProductId     String            @map("source_product_id")
+  sourceUrl           String            @default("") @map("source_url")
+  sourceSku           String            @default("") @map("source_sku")
+  collectedBy         String            @default("") @map("collected_by")
+  crawlConfig         Json              @default("{}") @map("crawl_config")
+  titleOriginal       String            @default("") @map("title_original")
+  descriptionOriginal String            @default("") @map("description_original")
+  costPrice           Float?            @map("cost_price")
+  shippingCost        Float?            @map("shipping_cost")
+  currency            String            @default("CNY")
+  stockQuantity       Int?              @map("stock_quantity")
+  dimensions          Json              @default("{}")
+  weight              Float?
+  material            String            @default("")
+  color               String            @default("")
+  brand               String            @default("")
+  category            String            @default("")
+  variants            Json              @default("[]")
+  status              String            @default("COLLECTED")
+  changeFlag          Int               @default(0) @map("change_flag")
+  lastCrawledAt       String?           @map("last_crawled_at")
+  createdAt           String            @map("created_at")
+  updatedAt           String            @map("updated_at")
+  org                 Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  supplier            ErpSupplier       @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  images              ErpProductImage[]
+  listings            ErpListing[]
+  crawlLogs           ErpCrawlLog[]
+  downloadJobs        ErpDownloadJob[]
+
+  @@unique([orgId, supplierId, sourceProductId])
+  @@index([orgId, status, updatedAt(sort: Desc)])
+  // 巡盘变更列表与晨汇总按 changeFlag 过滤（patrol.listChanges / notify.buildMorningSummary），旧索引不含该列
+  @@index([orgId, changeFlag])
+  @@map("erp_products")
+}
+
+model ErpProductImage {
+  id         String       @id @default(cuid())
+  orgId      String       @map("org_id")
+  productId  String       @map("product_id")
+  imageType  String       @map("image_type")
+  sourceUrl  String       @default("") @map("source_url")
+  localPath  String       @default("") @map("local_path")
+  platform   String?      @map("platform")
+  isSelected Int          @default(0) @map("is_selected")
+  sortOrder  Int          @default(0) @map("sort_order")
+  createdAt  String       @map("created_at")
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  product    ErpProduct   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, imageType, sortOrder])
+  @@map("erp_product_images")
+}
+
+model ErpPlatformRule {
+  id           String       @id @default(cuid())
+  orgId        String       @map("org_id")
+  platformCode String       @map("platform_code")
+  titleCharLimit Int        @default(80) @map("title_char_limit")
+  imageRules   Json         @default("{}") @map("image_rules")
+  updatedAt    String       @map("updated_at")
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, platformCode])
+  @@map("erp_platform_rules")
+}
+
+model ErpPricingRule {
+  id             String       @id @default(cuid())
+  orgId          String       @map("org_id")
+  platformCode   String       @map("platform_code")
+  category       String       @default("")
+  markupRate     Float        @default(1.5) @map("markup_rate")
+  commissionRate Float        @default(0.1) @map("commission_rate")
+  fixedFee       Float        @default(0) @map("fixed_fee")
+  currency       String       @default("USD")
+  updatedAt      String       @map("updated_at")
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, platformCode, category])
+  @@map("erp_pricing_rules")
+}
+
+model ErpListing {
+  id             String       @id @default(cuid())
+  orgId          String       @map("org_id")
+  productId      String       @map("product_id")
+  platformCode   String       @map("platform_code")
+  title          String       @default("")
+  aiTitleOptions Json         @default("[]") @map("ai_title_options")
+  price          Float?       @map("price")
+  priceManual    Int          @default(0) @map("price_manual")
+  category       String       @default("")
+  description    String       @default("")
+  status         String       @default("DRAFT")
+  updatedAt      String       @map("updated_at")
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  product        ErpProduct   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, platformCode])
+  @@index([orgId, status])
+  @@map("erp_listings")
+}
+
+model ErpCrawlLog {
+  id           String       @id @default(cuid())
+  orgId        String       @map("org_id")
+  productId    String       @map("product_id")
+  fieldChanged String       @map("field_changed")
+  oldValue     String       @default("") @map("old_value")
+  newValue     String       @default("") @map("new_value")
+  notified     Int          @default(0) @map("notified")
+  createdAt    String       @map("created_at")
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  product      ErpProduct   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, productId, createdAt(sort: Desc)])
+  // 晨汇总做全组织时间范围查（notify.buildMorningSummary），productId 夹中间使 createdAt 无法作前缀 seek；
+  // 保留旧索引服务 per-product 等值查询，两种查询形态各配一个
+  @@index([orgId, createdAt])
+  @@map("erp_crawl_logs")
+}
+
+model ErpNotification {
+  id        String       @id @default(cuid())
+  orgId     String       @map("org_id")
+  userId    String?      @map("user_id")
+  kind      String       @default("PATROL_CHANGE")
+  title     String       @default("")
+  body      Json         @default("{}")
+  productId String?      @map("product_id")
+  readAt    String?      @map("read_at")
+  createdAt String       @map("created_at")
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, readAt, createdAt(sort: Desc)])
+  @@map("erp_notifications")
+}
+
+model ErpDownloadJob {
+  id         String       @id @default(cuid())
+  orgId      String       @map("org_id")
+  productId  String       @map("product_id")
+  status     String       @default("PENDING")
+  total      Int          @default(0)
+  done       Int          @default(0)
+  failedUrls Json         @default("[]") @map("failed_urls")
+  error      String       @default("")
+  createdAt  String       @map("created_at")
+  updatedAt  String       @map("updated_at")
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  product    ErpProduct   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, status])
+  // 列表按 orgId(+productId) 等值 + createdAt desc 排序（download-worker.listDownloadJobs）
+  @@index([orgId, productId, createdAt(sort: Desc)])
+  @@map("erp_download_jobs")
 }

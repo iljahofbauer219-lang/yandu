@@ -36,6 +36,10 @@ import type {
   SelectionDecision,
   SelectionImportRequest,
   SelectionTask,
+  EliminatedOrigin,
+  EliminatedProductRecord,
+  EliminatedRecordStatus,
+  EliminateRequest,
   SupplyWarehouseProduct,
   WorkflowCounts
 } from './types.js'
@@ -82,7 +86,7 @@ export class CollectionRepository {
       where: { orgId_identityKey: { orgId: this.orgId, identityKey } },
       select: { firstCollectedAt: true, lastStage: true }
     })
-    const rank: Record<CollectorDuplicateStage, number> = { HISTORY: 0, CANDIDATE: 1, SELECTION: 2, WAREHOUSE: 3 }
+    const rank: Record<CollectorDuplicateStage, number> = { HISTORY: 0, CANDIDATE: 1, SELECTION: 2, WAREHOUSE: 3, ELIMINATED: 4 }
     const existingStage = existing?.lastStage as CollectorDuplicateStage | undefined
     const resolvedStage = existingStage && rank[existingStage] > rank[stage] ? existingStage : stage
     const candidateDeletedAt = resolvedStage === 'CANDIDATE' ? null : deletedAt
@@ -98,6 +102,13 @@ export class CollectionRepository {
 
   private async duplicateForProduct(product: CollectedSupplyProduct): Promise<CollectorDuplicateProduct | null> {
     const identityKey = this.intakeIdentity(product.platformCode, product.productId, product.url)
+    if (await this.getEliminationSetting('filter_on_precheck') === '1') {
+      const eliminated = await this.db.eliminatedProduct.findFirst({
+        where: { orgId: this.orgId, status: 'ACTIVE', OR: [{ identityKey }, { sourceUrl: product.url }] },
+        select: { id: true }
+      })
+      if (eliminated) return { platformCode: product.platformCode, productId: product.productId, title: product.title, stage: 'ELIMINATED', message: '该商品已淘汰，采集预检查已自动过滤' }
+    }
     const warehouse = await this.db.supplyWarehouseProduct.findFirst({
       where: { orgId: this.orgId, warehouseCode: product.platformCode, productId: product.productId, status: 'ACTIVE' },
       select: { id: true }
@@ -773,6 +784,91 @@ export class CollectionRepository {
       })
       return { comparison: (await repo.getComparisons()).find(item => item.id === comparison.id)!, selection, warehouseProduct }
     })
+  }
+
+  // ---------------------------------------------------------------- 淘汰产品收录追踪
+
+  async getEliminationSetting(key: string): Promise<string> {
+    const row = await this.db.eliminationSetting.findUnique({ where: { orgId_key: { orgId: this.orgId, key } }, select: { value: true } })
+    if (row) return row.value
+    return key === 'filter_on_precheck' ? '1' : ''
+  }
+
+  async setEliminationSetting(key: string, value: string): Promise<string> {
+    await this.db.eliminationSetting.upsert({
+      where: { orgId_key: { orgId: this.orgId, key } },
+      update: { value },
+      create: { orgId: this.orgId, key, value }
+    })
+    return value
+  }
+
+  async listEliminatedProducts(): Promise<EliminatedProductRecord[]> {
+    const rows = await this.db.eliminatedProduct.findMany({ where: { orgId: this.orgId }, orderBy: { eliminatedAt: 'desc' } })
+    return rows.map(row => ({
+      id: row.id, identityKey: row.identityKey, platformCode: row.platformCode, productId: row.productId ?? '',
+      sourceUrl: row.sourceUrl, title: row.title ?? '', imageUrl: row.imageUrl ?? '', priceText: row.priceText ?? '',
+      origin: row.origin as EliminatedOrigin, originRecordId: row.originRecordId ?? '', reason: row.reason ?? '',
+      operator: row.operator, status: row.status as EliminatedRecordStatus, eliminatedAt: row.eliminatedAt, reenabledAt: row.reenabledAt
+    }))
+  }
+
+  async eliminateProduct(input: EliminateRequest): Promise<EliminatedProductRecord> {
+    const now = new Date().toISOString()
+    let platformCode = input.platformCode ?? ''
+    let productId = input.productId ?? ''
+    let sourceUrl = input.url ?? ''
+    let title = input.title ?? ''
+    let imageUrl = input.imageUrl ?? ''
+    let priceText = input.priceText ?? ''
+    let originRecordId = input.recordId ?? ''
+    if (input.origin === 'SELECTION') {
+      const row = await this.db.selectionRecord.findFirst({ where: { id: input.recordId ?? '', orgId: this.orgId }, select: { payload: true } })
+      if (!row) throw httpError(404, 'SELECTION_NOT_FOUND', '选品记录不存在')
+      const payload = parsePayload<SelectionCatalogItem>(row.payload)
+      platformCode = payload.platformCode
+      productId = payload.productId ?? ''
+      sourceUrl = payload.sourceUrl
+      title = payload.title
+      imageUrl = payload.imageUrl ?? ''
+      priceText = payload.priceText ?? ''
+      originRecordId = payload.id
+      await this.updateSelectionDecision(payload.id, 'REJECTED')
+    } else {
+      if (!sourceUrl) throw httpError(400, 'ELIMINATION_URL_REQUIRED', '候选淘汰缺少商品 URL')
+      if (!platformCode) platformCode = '1688'
+      originRecordId = `${platformCode}:${sourceUrl}`
+      await this.setCandidatesDeleted({ candidateArea: 'SUPPLY', candidateKeys: [originRecordId] }, true)
+    }
+    const id = randomUUID()
+    const identityKey = this.intakeIdentity(platformCode, productId, sourceUrl)
+    await this.db.eliminatedProduct.create({
+      data: {
+        id, orgId: this.orgId, identityKey, platformCode, productId, sourceUrl, title, imageUrl, priceText,
+        origin: input.origin, originRecordId, reason: input.reason ?? '', operator: input.operator, status: 'ACTIVE', eliminatedAt: now
+      }
+    })
+    return (await this.listEliminatedProducts()).find(item => item.id === id)!
+  }
+
+  async reenableEliminated(id: string): Promise<EliminatedProductRecord> {
+    const row = await this.db.eliminatedProduct.findFirst({ where: { id, orgId: this.orgId } })
+    if (!row) throw httpError(404, 'ELIMINATION_NOT_FOUND', '淘汰记录不存在')
+    const now = new Date().toISOString()
+    await this.db.eliminatedProduct.update({ where: { id }, data: { status: 'REENABLED', reenabledAt: now } })
+    if (row.status === 'ACTIVE') {
+      if (row.origin === 'SELECTION' && row.originRecordId) {
+        try { await this.updateSelectionDecision(row.originRecordId, 'PENDING') } catch { /* 原选品记录可能已不存在，仅恢复淘汰记录状态 */ }
+      } else if (row.origin === 'CANDIDATE' && row.originRecordId) {
+        await this.setCandidatesDeleted({ candidateArea: 'SUPPLY', candidateKeys: [row.originRecordId] }, false)
+      }
+    }
+    return (await this.listEliminatedProducts()).find(item => item.id === id)!
+  }
+
+  async deleteEliminated(ids: string[]): Promise<EliminatedProductRecord[]> {
+    if (ids.length) await this.db.eliminatedProduct.deleteMany({ where: { orgId: this.orgId, id: { in: ids } } })
+    return this.listEliminatedProducts()
   }
 
   // ---------------------------------------------------------------- 选品

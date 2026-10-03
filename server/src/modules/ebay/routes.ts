@@ -136,7 +136,7 @@ const marketResearchSnapshotSchema = z.object({
   id: z.string().min(1),
   storeId: z.string().min(1),
   listingId: z.string().min(1),
-  source: z.enum(['EBAY_PRODUCT_RESEARCH', 'EBAY_SOLD_SEARCH']),
+  source: z.enum(['EBAY_PRODUCT_RESEARCH', 'EBAY_SOLD_SEARCH', 'OMKAR_EBAY_SCRAPER']),
   fetchedAt: z.string().min(1),
   samples: z.array(z.record(z.unknown())).default([]),
   keywords: z.array(z.record(z.unknown())).default([]),

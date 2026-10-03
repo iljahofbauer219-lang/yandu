@@ -1761,7 +1761,10 @@ export interface SupplyWarehouseProduct {
   category: string
   subcategory: string
   tertiaryCategory: string
-  status: 'ACTIVE' | 'ARCHIVED' | 'PENDING_REVIEW'
+  status: 'ACTIVE' | 'ARCHIVED' | 'PENDING_REVIEW' | 'DELISTED'
+  region: string
+  delistedReason: string
+  delistedAt: string | null
   updatedAt: string
 }
 
@@ -1798,7 +1801,7 @@ export interface PalletWarehouseItem {
 }
 
 /** 入库处理：快照来源（选品审批 / 服务器采集池） */
-export type InboundOrigin = 'SELECTION' | 'ERP'
+export type InboundOrigin = 'SELECTION' | 'ERP' | 'WAREHOUSE'
 export type InboundStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED'
 
 /** 入库处理：入库快照（编辑=覆盖快照；目标仓/货位=warehouseCode+三级类目） */
@@ -1823,6 +1826,8 @@ export interface InboundProcessingItem {
   origin: InboundOrigin
   sourceId: string
   selectionId: string
+  warehouseProductId: string | null
+  region: string
   status: InboundStatus
   snapshot: InboundSnapshot
   createdAt: string
