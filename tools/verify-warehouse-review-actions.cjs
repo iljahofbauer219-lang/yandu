@@ -100,6 +100,16 @@ const ownerProfile = {
     assert('待复核卡提供查看页面', await pendingCard.getByRole('button', { name: '查看页面', exact: true }).count() === 1)
     assert('待复核卡提供本仓入库', await pendingCard.getByRole('button', { name: '本仓入库', exact: true }).count() === 1)
     assert('待复核卡不再提供下架产品', await pendingCard.getByRole('button', { name: '下架产品', exact: true }).count() === 0)
+    await pendingCard.locator('button.product-image').click()
+    await page.waitForTimeout(1200)
+    const openedSource = await page.locator('.address-bar input').waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false)
+    const addressValue = openedSource ? await page.locator('.address-bar input').inputValue() : '(no address bar)'
+    assert('入库处理主图开内嵌浏览器回原网址', openedSource && new URL(addressValue).hostname === 'www.gigab2b.com')
+    await page.locator('.sidebar').getByRole('button', { name: '货盘采集', exact: true }).click()
+    await page.locator('.ai-collect-card', { hasText: '大健云仓' }).click()
+    await page.waitForTimeout(700)
+    await page.locator('.selection-module-nav.warehouse-flow-nav').getByRole('button', { name: '正式入库' }).click()
+    await page.waitForTimeout(700)
     await pendingCard.getByRole('button', { name: '本仓入库', exact: true }).click()
     await page.waitForTimeout(800)
     assert('本仓入库后待复核区清空', await page.locator('.warehouse-pending-review').count() === 0)
@@ -146,6 +156,7 @@ const ownerProfile = {
     assert('正式入库卡复用候选卡范式 class', await card.evaluate(el => el.classList.contains('product-card') && el.classList.contains('candidate-product-card') && el.classList.contains('supply-source-card')))
     assert('正式入库卡主图为候选卡范式', await card.locator(':scope > button.product-image').count() === 1)
     assert('正式入库卡信息区为候选卡范式', await card.locator(':scope > div.product-info.supply-source-info').count() === 1)
+    assert('正式入库卡主图与查看页面禁用态同步', await card.locator(':scope > button.product-image').isDisabled() === await card.getByRole('button', { name: '查看页面', exact: true }).isDisabled())
     assert('无下载记录时查看页面禁用', await card.getByRole('button', { name: '查看页面', exact: true }).isDisabled())
 
     // 打回优选：第二张 fixture 卡离开正式入库
