@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState, useSyncExternalSto
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useSession } from './SessionGate'
+import { friendlySupplyError, type FriendlyError } from './friendlyError'
 import { hasPermission, getServerBaseUrl } from './serverApi'
 import { LinduoAssignmentModal } from './LinduoAssignmentModal'
 import { LinduoPreferenceModal } from './LinduoPreferenceModal'
@@ -72,7 +73,7 @@ const aiModuleNav: { page: AppPage; label: string; icon: string; perm: string }[
   { page: 'ai-hq', label: 'AI总部', icon: 'ai-hq', perm: 'menu.hq' }
 ]
 type ImageSourceProduct = CollectedOzonProduct | CollectedSupplyProduct | SupplyWarehouseProduct | ImportedProductSource
-type ProductWarehouseCode = 'GIGACLOUD' | 'ALIEXPRESS' | '1688' | 'OZON' | 'QUFENXIAO' | 'KJDS' | 'KJDS_EU' | 'KJDS_AU' | 'KJDS_CN' | 'BIGBUY' | 'SALEYEE_NA' | 'SALEYEE_EU' | 'SALEYEE_AS' | 'SALEYEE_OCE' | 'SALEYEE_LATAM' | 'SALEYEE_ME' | 'YIMAI' | 'HAIBEI'
+type ProductWarehouseCode = 'GIGACLOUD' | 'ALIEXPRESS' | '1688' | 'OZON' | 'QUFENXIAO' | 'KJDS' | 'KJDS_EU' | 'KJDS_AU' | 'KJDS_CN' | 'BIGBUY' | 'SALEYEE_NA' | 'SALEYEE_EU' | 'SALEYEE_AS' | 'SALEYEE_OCE' | 'SALEYEE_LATAM' | 'SALEYEE_ME' | 'YIMAI' | 'HAIBEI' | 'XIZHIYUE_NA' | 'XIZHIYUE_AU' | 'XIZHIYUE_EU' | 'XIZHIYUE_LATAM' | 'XIZHIYUE_AS' | 'XIZHIYUE_CN' | 'CJDROP_NA' | 'CJDROP_EU' | 'CJDROP_AU' | 'CJDROP_LATAM' | 'CJDROP_CN' | 'FAIRE' | 'JOYB2B' | 'SYNCEE_NA' | 'SYNCEE_EU' | 'SYNCEE_AU'
 type EbayImagePurpose = EbayImageGenerationPurpose
 type EbayImageSourceRole = 'HERO'|'FRONT'|'SIDE'|'BACK'|'DETAIL'|'INSTALLATION'|'SIZE'|'PAIN_POINT'|'SCENE'|'UNUSED'
 type EbayImageSourceCurationEntry = { enabled:boolean; role:EbayImageSourceRole }
@@ -418,9 +419,25 @@ const productWarehouses: Array<{code:ProductWarehouseCode;name:string;kind:'SUPP
   {code:'SALEYEE_LATAM',name:'赛盈',kind:'SUPPLY',region:'LATIN_AMERICA',description:'墨西哥仓'},
   {code:'SALEYEE_ME',name:'赛盈',kind:'SUPPLY',region:'MIDDLE_EAST',description:'沙特仓'},
   {code:'YIMAI',name:'亿迈',kind:'SUPPLY',region:'NORTH_AMERICA',description:'美国仓'},
-  {code:'HAIBEI',name:'海贝',kind:'SUPPLY',region:'ASIA',description:'马来西亚仓'}
+  {code:'HAIBEI',name:'海贝',kind:'SUPPLY',region:'ASIA',description:'马来西亚仓'},
+  {code:'XIZHIYUE_NA',name:'西之月',kind:'SUPPLY',region:'NORTH_AMERICA',description:'美国仓'},
+  {code:'XIZHIYUE_AU',name:'西之月',kind:'SUPPLY',region:'OCEANIA',description:'澳大利亚仓|新西兰仓'},
+  {code:'XIZHIYUE_EU',name:'西之月',kind:'SUPPLY',region:'EUROPE',description:'欧盟仓'},
+  {code:'XIZHIYUE_LATAM',name:'西之月',kind:'SUPPLY',region:'LATIN_AMERICA',description:'墨西哥仓'},
+  {code:'XIZHIYUE_AS',name:'西之月',kind:'SUPPLY',region:'ASIA',description:'中亚|马来西亚|越南|印尼|泰国|菲律宾仓'},
+  {code:'XIZHIYUE_CN',name:'西之月',kind:'SUPPLY',region:'DOMESTIC',description:'中国仓'},
+  {code:'CJDROP_NA',name:'CJdropshipping',kind:'SUPPLY',region:'NORTH_AMERICA',description:'美国仓|加拿大仓'},
+  {code:'CJDROP_EU',name:'CJdropshipping',kind:'SUPPLY',region:'EUROPE',description:'英国仓|德国仓|法国仓'},
+  {code:'CJDROP_AU',name:'CJdropshipping',kind:'SUPPLY',region:'OCEANIA',description:'澳大利亚仓'},
+  {code:'CJDROP_LATAM',name:'CJdropshipping',kind:'SUPPLY',region:'LATIN_AMERICA',description:'墨西哥仓'},
+  {code:'CJDROP_CN',name:'CJdropshipping',kind:'SUPPLY',region:'DOMESTIC',description:'中国仓'},
+  {code:'FAIRE',name:'Faire',kind:'SUPPLY',region:'NORTH_AMERICA',description:'美国仓'},
+  {code:'JOYB2B',name:'JOYB2B',kind:'SUPPLY',region:'DOMESTIC',description:'中国仓'},
+  {code:'SYNCEE_NA',name:'Syncee',kind:'SUPPLY',region:'NORTH_AMERICA',description:'美国仓|加拿大仓'},
+  {code:'SYNCEE_EU',name:'Syncee',kind:'SUPPLY',region:'EUROPE',description:'英国仓|欧盟仓'},
+  {code:'SYNCEE_AU',name:'Syncee',kind:'SUPPLY',region:'OCEANIA',description:'澳大利亚仓'}
 ]
-const palletHomeUrls: Partial<Record<ProductWarehouseCode,string>> = {QUFENXIAO:'https://www.qufenxiao.com/',KJDS:'https://www.kjds.com/',KJDS_EU:'https://www.kjds.com/',KJDS_AU:'https://www.kjds.com/sells/homes/search?country_id=16506',KJDS_CN:'https://www.kjds.com/sells/homes/search?country_id=13227',BIGBUY:'https://www.bigbuy.eu/en/',SALEYEE_NA:'https://global.saleyee.com/',SALEYEE_EU:'https://global.saleyee.com/',SALEYEE_AS:'https://global.saleyee.com/',SALEYEE_OCE:'https://global.saleyee.com/',SALEYEE_LATAM:'https://global.saleyee.com/',SALEYEE_ME:'https://global.saleyee.com/',YIMAI:'https://dcmshop.easyseller.com/',HAIBEI:'https://www.haibeigoods.com/'}
+const palletHomeUrls: Partial<Record<ProductWarehouseCode,string>> = {QUFENXIAO:'https://www.qufenxiao.com/',KJDS:'https://www.kjds.com/',KJDS_EU:'https://www.kjds.com/',KJDS_AU:'https://www.kjds.com/sells/homes/search?country_id=16506',KJDS_CN:'https://www.kjds.com/sells/homes/search?country_id=13227',BIGBUY:'https://www.bigbuy.eu/en/',SALEYEE_NA:'https://global.saleyee.com/',SALEYEE_EU:'https://global.saleyee.com/',SALEYEE_AS:'https://global.saleyee.com/',SALEYEE_OCE:'https://global.saleyee.com/',SALEYEE_LATAM:'https://global.saleyee.com/',SALEYEE_ME:'https://global.saleyee.com/',YIMAI:'https://dcmshop.easyseller.com/',HAIBEI:'https://www.haibeigoods.com/',XIZHIYUE_NA:'https://westmonth.com/',XIZHIYUE_AU:'https://westmonth.com/',XIZHIYUE_EU:'https://westmonth.com/',XIZHIYUE_LATAM:'https://westmonth.com/',XIZHIYUE_AS:'https://westmonth.com/',XIZHIYUE_CN:'https://westmonth.com/',CJDROP_NA:'https://www.cjdropshipping.com/',CJDROP_EU:'https://www.cjdropshipping.com/',CJDROP_AU:'https://www.cjdropshipping.com/',CJDROP_LATAM:'https://www.cjdropshipping.com/',CJDROP_CN:'https://www.cjdropshipping.com/',FAIRE:'https://www.faire.com/',JOYB2B:'https://joyb2b.com/',SYNCEE_NA:'https://syncee.com/',SYNCEE_EU:'https://syncee.com/',SYNCEE_AU:'https://syncee.com/'}
 
 // AI采集模块四个货源平台的图标与主题色
 const aiCollectPlatformThemes: Record<ProductWarehouseCode,{color:string;icon:ReactNode}> = {
@@ -441,22 +458,38 @@ const aiCollectPlatformThemes: Record<ProductWarehouseCode,{color:string;icon:Re
   SALEYEE_LATAM:{color:'#9333ea',icon:<><path d="M1 8h13v8H1z"/><path d="M14 11h4l3 3v2h-7z"/><circle cx="6" cy="18" r="1.8"/><circle cx="17.5" cy="18" r="1.8"/></>},
   SALEYEE_ME:{color:'#9333ea',icon:<><path d="M1 8h13v8H1z"/><path d="M14 11h4l3 3v2h-7z"/><circle cx="6" cy="18" r="1.8"/><circle cx="17.5" cy="18" r="1.8"/></>},
   YIMAI:{color:'#0ea5e9',icon:<><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></>},
-  HAIBEI:{color:'#16a34a',icon:<><path d="M2 7c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M2 12c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M2 17c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/></>}
+  HAIBEI:{color:'#16a34a',icon:<><path d="M2 7c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M2 12c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M2 17c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/></>},
+  XIZHIYUE_NA:{color:'#c026d3',icon:<><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></>},
+  XIZHIYUE_AU:{color:'#c026d3',icon:<><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></>},
+  XIZHIYUE_EU:{color:'#c026d3',icon:<><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></>},
+  XIZHIYUE_LATAM:{color:'#c026d3',icon:<><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></>},
+  XIZHIYUE_AS:{color:'#c026d3',icon:<><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></>},
+  XIZHIYUE_CN:{color:'#c026d3',icon:<><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></>},
+  CJDROP_NA:{color:'#dc2626',icon:<><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6v12M10 6v12M14 6v12M18 6v12"/></>},
+  CJDROP_EU:{color:'#dc2626',icon:<><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6v12M10 6v12M14 6v12M18 6v12"/></>},
+  CJDROP_AU:{color:'#dc2626',icon:<><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6v12M10 6v12M14 6v12M18 6v12"/></>},
+  CJDROP_LATAM:{color:'#dc2626',icon:<><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6v12M10 6v12M14 6v12M18 6v12"/></>},
+  CJDROP_CN:{color:'#dc2626',icon:<><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6v12M10 6v12M14 6v12M18 6v12"/></>},
+  FAIRE:{color:'#18181b',icon:<><path d="M20.6 13.4L11 3.8A2 2 0 009.6 3H4a1 1 0 00-1 1v5.6c0 .53.21 1.04.59 1.41l9.6 9.6a2 2 0 002.82 0l3.6-3.6a2 2 0 000-2.82z"/><circle cx="7.5" cy="7.5" r="1.5"/></>},
+  JOYB2B:{color:'#64748b',icon:<><rect x="4" y="3" width="10" height="18"/><path d="M14 9h6v12h-6"/><path d="M7 7h1M7 11h1M7 15h1M17 13h1M17 17h1"/><path d="M2 21h20"/></>},
+  SYNCEE_NA:{color:'#1e3a8a',icon:<><path d="M21 12a9 9 0 01-15.5 6.2M3 12a9 9 0 0115.5-6.2"/><path d="M21 3v6h-6M3 21v-6h6"/></>},
+  SYNCEE_EU:{color:'#1e3a8a',icon:<><path d="M21 12a9 9 0 01-15.5 6.2M3 12a9 9 0 0115.5-6.2"/><path d="M21 3v6h-6M3 21v-6h6"/></>},
+  SYNCEE_AU:{color:'#1e3a8a',icon:<><path d="M21 12a9 9 0 01-15.5 6.2M3 12a9 9 0 0115.5-6.2"/><path d="M21 3v6h-6M3 21v-6h6"/></>}
 }
 
 // AI采集顶页：平台权限映射与分区（9 大货盘 + 市场平台），分区对应导航站白卡区域
-const aiCollectPermMap: Record<ProductWarehouseCode,string> = {GIGACLOUD:'menu.collect.gigacloud','1688':'menu.collect.1688',ALIEXPRESS:'menu.collect.aliexpress',OZON:'menu.collect.ozon',QUFENXIAO:'menu.collect.qufenxiao',KJDS:'menu.collect.kjds',KJDS_EU:'menu.collect.kjdseu',KJDS_AU:'menu.collect.kjdsau',KJDS_CN:'menu.collect.kjdscn',BIGBUY:'menu.collect.bigbuy',SALEYEE_NA:'menu.collect.saleyeena',SALEYEE_EU:'menu.collect.saleyeeeu',SALEYEE_AS:'menu.collect.saleyeeas',SALEYEE_OCE:'menu.collect.saleyeeoce',SALEYEE_LATAM:'menu.collect.saleyeelatam',SALEYEE_ME:'menu.collect.saleyeeme',YIMAI:'menu.collect.yimai',HAIBEI:'menu.collect.haibei'}
+const aiCollectPermMap: Record<ProductWarehouseCode,string> = {GIGACLOUD:'menu.collect.gigacloud','1688':'menu.collect.1688',ALIEXPRESS:'menu.collect.aliexpress',OZON:'menu.collect.ozon',QUFENXIAO:'menu.collect.qufenxiao',KJDS:'menu.collect.kjds',KJDS_EU:'menu.collect.kjdseu',KJDS_AU:'menu.collect.kjdsau',KJDS_CN:'menu.collect.kjdscn',BIGBUY:'menu.collect.bigbuy',SALEYEE_NA:'menu.collect.saleyeena',SALEYEE_EU:'menu.collect.saleyeeeu',SALEYEE_AS:'menu.collect.saleyeeas',SALEYEE_OCE:'menu.collect.saleyeeoce',SALEYEE_LATAM:'menu.collect.saleyeelatam',SALEYEE_ME:'menu.collect.saleyeeme',YIMAI:'menu.collect.yimai',HAIBEI:'menu.collect.haibei',XIZHIYUE_NA:'menu.collect.xizhiyuena',XIZHIYUE_AU:'menu.collect.xizhiyueau',XIZHIYUE_EU:'menu.collect.xizhiyueeu',XIZHIYUE_LATAM:'menu.collect.xizhiyuelatam',XIZHIYUE_AS:'menu.collect.xizhiyueas',XIZHIYUE_CN:'menu.collect.xizhiyuecn',CJDROP_NA:'menu.collect.cjdropna',CJDROP_EU:'menu.collect.cjdropeu',CJDROP_AU:'menu.collect.cjdropau',CJDROP_LATAM:'menu.collect.cjdroplatam',CJDROP_CN:'menu.collect.cjdropcn',FAIRE:'menu.collect.faire',JOYB2B:'menu.collect.joyb2b',SYNCEE_NA:'menu.collect.synceena',SYNCEE_EU:'menu.collect.synceeeu',SYNCEE_AU:'menu.collect.synceeau'}
 // 国家仓维度：顶部 Tab 按国家仓筛选、站点卡片唯一（一个站点聚合多个采集 code，避免同站多地区重复入口）
-type WarehouseCountry = '中国仓'|'美国仓'|'加拿大仓'|'英国仓'|'法国仓'|'德国仓'|'西班牙仓'|'捷克仓'|'澳大利亚仓'|'墨西哥仓'|'日本仓'|'沙特仓'|'马来西亚仓'
+type WarehouseCountry = '中国仓'|'美国仓'|'加拿大仓'|'英国仓'|'法国仓'|'德国仓'|'西班牙仓'|'捷克仓'|'澳大利亚仓'|'墨西哥仓'|'日本仓'|'沙特仓'|'马来西亚仓'|'欧盟仓'|'中亚仓'|'越南仓'|'印尼仓'|'泰国仓'|'菲律宾仓'|'新西兰仓'
 type AiCollectRegionKey = 'CN'|'NA'|'EU'|'AU'|'LATAM'|'ME'|'ASIA'|'PLATFORM'
 const AI_COLLECT_REGIONS: Array<{key:AiCollectRegionKey;title:string;countries:WarehouseCountry[];market?:boolean}> = [
   {key:'CN',title:'中国盘货',countries:['中国仓']},
   {key:'NA',title:'北美盘货',countries:['美国仓','加拿大仓']},
-  {key:'EU',title:'欧洲盘货',countries:['英国仓','德国仓','法国仓','西班牙仓','捷克仓']},
-  {key:'AU',title:'澳洲盘货',countries:['澳大利亚仓']},
+  {key:'EU',title:'欧洲盘货',countries:['英国仓','德国仓','法国仓','西班牙仓','捷克仓','欧盟仓']},
+  {key:'AU',title:'澳洲盘货',countries:['澳大利亚仓','新西兰仓']},
   {key:'LATAM',title:'拉美盘货',countries:['墨西哥仓']},
   {key:'ME',title:'中东盘货',countries:['沙特仓']},
-  {key:'ASIA',title:'亚洲盘货',countries:['日本仓','马来西亚仓']},
+  {key:'ASIA',title:'亚洲盘货',countries:['日本仓','马来西亚仓','中亚仓','越南仓','印尼仓','泰国仓','菲律宾仓']},
   {key:'PLATFORM',title:'平台盘货',countries:[],market:true}
 ]
 const aiCollectSiteInRegion=(site:(typeof aiCollectSites)[number],region:(typeof AI_COLLECT_REGIONS)[number]):boolean=>region.market?aiCollectSiteCountries(site).length===0:aiCollectSiteCountries(site).some(country=>region.countries.includes(country))
@@ -470,7 +503,12 @@ const aiCollectSites: Array<{key:ProductWarehouseCode;description?:string;entrie
   {key:'OZON',entries:[{code:'OZON',countries:[]}]},
   {key:'SALEYEE_NA',description:'十国海外仓 一站采集',entries:[{code:'SALEYEE_NA',countries:['美国仓','加拿大仓']},{code:'SALEYEE_EU',countries:['英国仓','德国仓','法国仓','捷克仓']},{code:'SALEYEE_AS',countries:['日本仓']},{code:'SALEYEE_OCE',countries:['澳大利亚仓']},{code:'SALEYEE_LATAM',countries:['墨西哥仓']},{code:'SALEYEE_ME',countries:['沙特仓']}]},
   {key:'YIMAI',entries:[{code:'YIMAI',countries:['美国仓']}]},
-  {key:'HAIBEI',entries:[{code:'HAIBEI',countries:['马来西亚仓']}]}
+  {key:'HAIBEI',entries:[{code:'HAIBEI',countries:['马来西亚仓']}]},
+  {key:'XIZHIYUE_NA',description:'十二国海外仓 一站采集',entries:[{code:'XIZHIYUE_NA',countries:['美国仓']},{code:'XIZHIYUE_AU',countries:['澳大利亚仓','新西兰仓']},{code:'XIZHIYUE_EU',countries:['欧盟仓']},{code:'XIZHIYUE_LATAM',countries:['墨西哥仓']},{code:'XIZHIYUE_AS',countries:['中亚仓','马来西亚仓','越南仓','印尼仓','泰国仓','菲律宾仓']},{code:'XIZHIYUE_CN',countries:['中国仓']}]},
+  {key:'CJDROP_NA',description:'八国海外仓 一站代发',entries:[{code:'CJDROP_NA',countries:['美国仓','加拿大仓']},{code:'CJDROP_EU',countries:['英国仓','德国仓','法国仓']},{code:'CJDROP_AU',countries:['澳大利亚仓']},{code:'CJDROP_LATAM',countries:['墨西哥仓']},{code:'CJDROP_CN',countries:['中国仓']}]},
+  {key:'FAIRE',entries:[{code:'FAIRE',countries:['美国仓']}]},
+  {key:'JOYB2B',entries:[{code:'JOYB2B',countries:['中国仓']}]},
+  {key:'SYNCEE_NA',description:'五国海外仓 一站代发',entries:[{code:'SYNCEE_NA',countries:['美国仓','加拿大仓']},{code:'SYNCEE_EU',countries:['英国仓','欧盟仓']},{code:'SYNCEE_AU',countries:['澳大利亚仓']}]}
 ]
 const aiCollectSiteCountries=(site:(typeof aiCollectSites)[number]):WarehouseCountry[]=>site.entries.flatMap(entry=>entry.countries)
 const aiCollectSiteLogos: Partial<Record<ProductWarehouseCode,string>> = {GIGACLOUD:logoGigacloud,QUFENXIAO:logoQufenxiao,KJDS:logoKjds,BIGBUY:logoBigbuy,ALIEXPRESS:logoAliexpress,'1688':logo1688}
@@ -493,7 +531,23 @@ const warehouseRuleProfiles:Record<ProductWarehouseCode,string[]>={
   SALEYEE_LATAM:['注册资质与账号状态','各仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
   SALEYEE_ME:['注册资质与账号状态','各仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
   YIMAI:['注册资质与账号状态','美国仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
-  HAIBEI:['注册资质与账号状态','马来西亚仓货源与库存深度','分销定价与利润空间','物流时效与售后保障']
+  HAIBEI:['注册资质与账号状态','马来西亚仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
+  XIZHIYUE_NA:['注册资质与账号状态','各仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
+  XIZHIYUE_AU:['注册资质与账号状态','各仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
+  XIZHIYUE_EU:['注册资质与账号状态','各仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
+  XIZHIYUE_LATAM:['注册资质与账号状态','各仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
+  XIZHIYUE_AS:['注册资质与账号状态','各仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
+  XIZHIYUE_CN:['注册资质与账号状态','各仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
+  CJDROP_NA:['注册资质与账号状态','各仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
+  CJDROP_EU:['注册资质与账号状态','各仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
+  CJDROP_AU:['注册资质与账号状态','各仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
+  CJDROP_LATAM:['注册资质与账号状态','各仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
+  CJDROP_CN:['注册资质与账号状态','各仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
+  FAIRE:['注册资质与账号状态','美国仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
+  JOYB2B:['注册资质与账号状态','中国仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
+  SYNCEE_NA:['注册资质与账号状态','各仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
+  SYNCEE_EU:['注册资质与账号状态','各仓货源与库存深度','分销定价与利润空间','物流时效与售后保障'],
+  SYNCEE_AU:['注册资质与账号状态','各仓货源与库存深度','分销定价与利润空间','物流时效与售后保障']
 }
 
 const initialTask: SelectionTaskDraft = {
@@ -885,6 +939,7 @@ export function App() {
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set())
   const [erpCanEdit, setErpCanEdit] = useState(false)
   const [reviewNotices, setReviewNotices] = useState<Record<string, string>>({})
+  const [supplyErrorModal, setSupplyErrorModal] = useState<(FriendlyError & { warehouse: '1688' | 'GIGACLOUD' }) | null>(null)
   const [comparisons, setComparisons] = useState<ComparisonRecordView[]>([])
   const [,setCatalogRevision] = useState(0)
   const [workflowCounts, setWorkflowCounts] = useState<WorkflowCounts>({ collected: 0, compared: 0, selected: 0, stocked: 0, listed: 0, purchasing: 0, reconciled: 0 })
@@ -1022,7 +1077,7 @@ export function App() {
       setSupplyDownloads(current => [record, ...current.filter(entry => entry.warehouseProductId !== item.id)])
       reviewNotice(item.id, '')
     } catch (reason) {
-      reviewNotice(item.id, reason instanceof Error ? reason.message : '下载失败，请重试')
+      raiseSupplyError(reason, item.warehouseCode, item.id)
     } finally {
       setDownloadingIds(current => { const next = new Set(current); next.delete(item.id); return next })
     }
@@ -1292,11 +1347,39 @@ export function App() {
     try {
       await window.desktop.browser.openTab(browserPlatform, item.sourceUrl, item.title)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '原网址打开失败')
+      setError(friendlySupplyError(reason instanceof Error ? reason.message : String(reason), item.warehouseCode === 'GIGACLOUD' ? '大健云仓' : '1688').text)
       return
     }
     setPage('tasks'); setPlatform(browserPlatform)
   }
+
+  // 未登录提示的「去登录」：供应会话视图直接加载站内登录页，登录完回正式入库重试即可
+  const openSupplyLogin = async (warehouseCode: '1688' | 'GIGACLOUD') => {
+    const url = warehouseCode === 'GIGACLOUD'
+      ? 'https://www.gigab2b.com/index.php?route=account/login'
+      : 'https://login.1688.com/member/signin.htm'
+    try {
+      await window.desktop.browser.openSupply(warehouseCode, url)
+      setPage('tasks'); setPlatform('1688')
+    } catch (reason) {
+      setError(friendlySupplyError(reason instanceof Error ? reason.message : String(reason), warehouseCode === 'GIGACLOUD' ? '大健云仓' : '1688').text)
+    }
+  }
+
+  // 行内单行区只放短摘要，完整文案与动作交给模态弹窗，避免截断后用户看不到入口
+  const raiseSupplyError = (reason: unknown, warehouse: '1688' | 'GIGACLOUD', noticeId?: string): FriendlyError => {
+    const friendly = friendlySupplyError(reason instanceof Error ? reason.message : String(reason), warehouse === 'GIGACLOUD' ? '大健云仓' : '1688')
+    if (noticeId) reviewNotice(noticeId, friendly.brief)
+    if (friendly.kind !== 'other') setSupplyErrorModal({ ...friendly, warehouse })
+    return friendly
+  }
+
+  useEffect(() => {
+    if (!supplyErrorModal) return
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setSupplyErrorModal(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [supplyErrorModal])
 
   const activateBrowserTab = (tab: BrowserTab) => {
     setPlatform(tab.platform)
@@ -1343,7 +1426,7 @@ export function App() {
       void window.desktop.browser.activateSupply(code).then(result => {
         if (supplyActivationRequest.current === requestId) setSupplyActivation(result)
       }).catch(reason => {
-        if (supplyActivationRequest.current === requestId) setError(reason instanceof Error ? reason.message : `${name} 网站打开失败`)
+        if (supplyActivationRequest.current === requestId) setError(friendlySupplyError(reason instanceof Error ? reason.message : String(reason), name).text)
       })
       return
     }
@@ -1508,10 +1591,9 @@ export function App() {
       await window.desktop.candidates.reread({ platformCode, url })
       await refreshSelectionAndCandidates()
     } catch (reason) {
-      const message = (reason instanceof Error ? reason.message : String(reason))
-        .replace(/^Error invoking remote method[\s\S]*?:\s*Error:\s*/i, '')
-        .replace(/^Error:\s*/i, '')
-      window.alert(message)
+      const friendly = friendlySupplyError(reason instanceof Error ? reason.message : String(reason), platformCode === 'GIGACLOUD' ? '大健云仓' : '1688')
+      if (friendly.kind === 'other') window.alert(friendly.text)
+      else setSupplyErrorModal({ ...friendly, warehouse: platformCode === 'GIGACLOUD' ? 'GIGACLOUD' : '1688' })
     } finally {
       setRereadingCandidateKeys(current => { const next = new Set(current); next.delete(candidateKey); return next })
     }
@@ -1909,7 +1991,19 @@ export function App() {
       {page === 'sourcing' && activeWarehouse!=='GIGACLOUD' && (activeWarehouseProfile.kind==='SUPPLY'?<SupplyPlatformComparisonWorkspace warehouse={activeWarehouse} products={supplyProducts.filter(item=>item.platformCode===activeWarehouse&&!item.candidateDeletedAt&&!isExcludedSupply(item))} onCandidates={()=>setPage('ozon')} onSelection={product=>void importCandidate('SUPPLY',product)} onOpen={openSupplyProduct}/>:<ComparisonWorkspace warehouseName={activeWarehouseProfile.name} warehouseRules={warehouseRuleProfiles[activeWarehouse]} records={warehouseComparisons} onRecordsChange={next=>setComparisons(current=>[...current.filter(item=>!warehouseComparisons.some(entry=>entry.id===item.id)),...next])} onCandidates={()=>setPage('ozon')} onSearch={async product=>{const url=await window.desktop.browser.create1688SearchUrl(product.title);setPage('tasks');setPlatform('1688');setTimeout(()=>void window.desktop.browser.openTab('1688',url,`${product.title} · 1688搜款`),80)}} onSelection={async record=>{const imported=await window.desktop.selections.import({sourceArea:'MARKET',product:record.marketProduct,...inferCatalog(record.marketProduct.title),comparison:record});setSelectionItems(current=>[imported,...current.filter(item=>item.id!==imported.id)]);setPage('comparison')}} onPromote={async record=>{const result=await window.desktop.comparisons.promote({id:record.id,...inferCatalog(record.marketProduct.title),tertiaryCategory:'待细分'});setComparisons(current=>current.map(item=>item.id===record.id?result.comparison:item));setSelectionItems(current=>[result.selection,...current.filter(item=>item.id!==result.selection.id)]);setWorkflowCounts(await window.desktop.workflow.counts())}} onOpenMarket={product=>openProduct(product)} onOpenSupply={url=>{setPage('tasks');setPlatform('1688');void window.desktop.browser.openTab('1688',url,'1688货源')}} />)}
       {page === 'comparison' && <SelectionWorkspace warehouseName={activeWarehouseProfile.name} items={warehouseSelectionItems} onItemsChange={mergeWarehouseSelections} onDecision={()=>{void window.desktop.workflow.counts().then(setWorkflowCounts);void window.desktop.warehouses.list().then(setWarehouseProducts);void window.desktop.warehouses.listPendingReview().then(setPendingReviewProducts)}} onCandidates={()=>setPage('ozon')} onReturnCandidate={returnSelectionToCandidates} onOpen={item=>{const browserPlatform:Platform=item.platformCode==='1688'?'1688':item.platformCode==='OZON'?'ozon':'web';setPage('tasks');setPlatform(browserPlatform);void window.desktop.browser.openTab(browserPlatform,item.sourceUrl,item.title)}} operator={operatorLabel} joinSupply={joinSupply} sourceTextFor={candidateSourceText} />}
       {page==='eliminated'&&<EliminatedProductsPage onBack={()=>setPage('comparison')} onDataChange={refreshSelectionAndCandidates}/>}
-      {page === 'review' && <CatalogWorkspace paths={activeWarehouseProfile.kind==='SUPPLY'?warehouseProducts.filter(item=>item.warehouseCode===activeWarehouse).map(item=>({id:item.id,category:item.category,subcategory:item.subcategory,tertiaryCategory:item.tertiaryCategory})):warehouseSelectionItems.filter(item=>item.decision==='APPROVED').map(item=>({id:item.id,category:item.category,subcategory:item.subcategory,tertiaryCategory:item.tertiaryCategory||'待细分'}))}>{category=>activeWarehouseProfile.kind==='SUPPLY'?<SupplyWarehouseWorkspace products={warehouseProducts.filter(item=>item.warehouseCode===activeWarehouse&&catalogSelectionMatches(item,category))} warehouse={activeWarehouse as '1688'|'GIGACLOUD'} onOpenSelection={()=>setPage('comparison')} onOpenCatalog={()=>setPage('catalog')} downloads={Object.fromEntries(supplyDownloads.map(record=>[record.warehouseProductId,record]))} downloadingIds={downloadingIds} notices={reviewNotices} onDownload={item=>void handleWarehouseDownload(item)} onOpenDownload={id=>void window.desktop.warehouses.openDownload(id).catch(reason=>reviewNotice(id,reason instanceof Error?reason.message:'打开下载目录失败'))} pendingProducts={pendingReviewProducts.filter(item=>item.warehouseCode===activeWarehouse)} delistedProducts={delistedWarehouseProducts.filter(item=>item.warehouseCode===activeWarehouse)} canEdit={erpCanEdit} onSetRegion={(item,region)=>void handleSetRegion(item,region)} onCopyPallet={item=>void handleCopyPallet(item)} onOpenSource={openWarehouseSource} onReturnPreferred={item=>void handleReturnPreferred(item)} onRestoreProduct={item=>void handleRestoreProduct(item)} onDeleteProduct={item=>void handleDeleteProduct(item)} onConfirmReview={item=>void handleConfirmReview(item)} onDelist={handleDelistWarehouse} joinSupply={joinSupply} sourceTextFor={candidateSourceText} selectionScores={selectionScoreById} onRereadSource={rereadWarehouseSource} rereadingKeys={rereadingCandidateKeys} />:<MarketOpportunityWarehouse warehouse={activeWarehouse as 'ALIEXPRESS'|'OZON'} items={warehouseSelectionItems.filter(item=>item.decision==='APPROVED'&&catalogSelectionMatches(item,category))} onOpenSelection={()=>setPage('comparison')} onOpen={item=>{setPage('tasks');setPlatform(item.platformCode==='OZON'?'ozon':'web');void window.desktop.browser.openTab(item.platformCode==='OZON'?'ozon':'web',item.sourceUrl,item.title)}} />}</CatalogWorkspace>}
+      {page === 'review' && <CatalogWorkspace paths={activeWarehouseProfile.kind==='SUPPLY'?warehouseProducts.filter(item=>item.warehouseCode===activeWarehouse).map(item=>({id:item.id,category:item.category,subcategory:item.subcategory,tertiaryCategory:item.tertiaryCategory})):warehouseSelectionItems.filter(item=>item.decision==='APPROVED').map(item=>({id:item.id,category:item.category,subcategory:item.subcategory,tertiaryCategory:item.tertiaryCategory||'待细分'}))}>{category=>activeWarehouseProfile.kind==='SUPPLY'?<SupplyWarehouseWorkspace products={warehouseProducts.filter(item=>item.warehouseCode===activeWarehouse&&catalogSelectionMatches(item,category))} warehouse={activeWarehouse as '1688'|'GIGACLOUD'} onOpenSelection={()=>setPage('comparison')} onOpenCatalog={()=>setPage('catalog')} downloads={Object.fromEntries(supplyDownloads.map(record=>[record.warehouseProductId,record]))} downloadingIds={downloadingIds} notices={reviewNotices} onDownload={item=>void handleWarehouseDownload(item)} onOpenDownload={id=>void window.desktop.warehouses.openDownload(id).catch(reason=>reviewNotice(id,reason instanceof Error?reason.message:'打开下载目录失败'))} pendingProducts={pendingReviewProducts.filter(item=>item.warehouseCode===activeWarehouse)} delistedProducts={delistedWarehouseProducts.filter(item=>item.warehouseCode===activeWarehouse)} canEdit={erpCanEdit} onSetRegion={(item,region)=>void handleSetRegion(item,region)} onCopyPallet={item=>void handleCopyPallet(item)} onOpenSource={openWarehouseSource} onReturnPreferred={item=>void handleReturnPreferred(item)} onRestoreProduct={item=>void handleRestoreProduct(item)} onDeleteProduct={item=>void handleDeleteProduct(item)} onConfirmReview={item=>void handleConfirmReview(item)} onDelist={handleDelistWarehouse} joinSupply={joinSupply} sourceTextFor={candidateSourceText} selectionScores={selectionScoreById} onRereadSource={rereadWarehouseSource} rereadingKeys={rereadingCandidateKeys} onGoLogin={code=>void openSupplyLogin(code)} />:<MarketOpportunityWarehouse warehouse={activeWarehouse as 'ALIEXPRESS'|'OZON'} items={warehouseSelectionItems.filter(item=>item.decision==='APPROVED'&&catalogSelectionMatches(item,category))} onOpenSelection={()=>setPage('comparison')} onOpen={item=>{setPage('tasks');setPlatform(item.platformCode==='OZON'?'ozon':'web');void window.desktop.browser.openTab(item.platformCode==='OZON'?'ozon':'web',item.sourceUrl,item.title)}} />}</CatalogWorkspace>}
+      {createPortal(supplyErrorModal ? (
+        <div className="supply-error-overlay" onClick={() => setSupplyErrorModal(null)}>
+          <div className="supply-error-modal" role="dialog" aria-modal="true" onClick={event => event.stopPropagation()}>
+            <b>{supplyErrorModal.kind === 'login' ? `需要登录${supplyErrorModal.warehouse === 'GIGACLOUD' ? '大健云仓' : '1688'}` : supplyErrorModal.kind === 'network' ? '网络连接失败' : supplyErrorModal.kind === 'verify' ? '需要安全验证' : '登录会话已过期'}</b>
+            <p>{supplyErrorModal.text}</p>
+            <div className="supply-error-modal-actions">
+              {supplyErrorModal.kind === 'login' ? <button type="button" className="primary" onClick={() => { const target = supplyErrorModal.warehouse; setSupplyErrorModal(null); void openSupplyLogin(target) }}>去登录</button> : null}
+              <button type="button" onClick={() => setSupplyErrorModal(null)}>{supplyErrorModal.kind === 'login' ? '稍后再说' : '知道了'}</button>
+            </div>
+          </div>
+        </div>
+      ) : null, document.body)}
       {page === 'catalog' && <CatalogManager usagePaths={[...selectionItems.map(item=>({id:item.id,category:item.category,subcategory:item.subcategory,tertiaryCategory:item.tertiaryCategory||'待细分'})),...supplyProducts.filter(item=>item.selected).map(stockCatalogPath)]} onChanged={()=>setCatalogRevision(value=>value+1)} />}
       {page === 'image-studio' && pageAllowed('image-studio') && <ImageStudio product={imageProduct} marketplaceSelection={imageMarketplaceSelection} onOpenInventory={()=>setPage(imageMarketplaceSelection?'publishing':'review')} />}
       {page === 'realshift' && pageAllowed('realshift') && <RealShiftWorkbench />}
@@ -2168,7 +2262,7 @@ function MarketOpportunityWarehouse({warehouse,items,onOpenSelection,onOpen}:{wa
 const REGION_PALLET_OPTIONS = ['美国货盘']
 const DELIST_REASONS = ['库存不足', '成本上升', '供应商停售', '评分数下降', '竞争力不足', '其它原因']
 
-function SupplyWarehouseWorkspace({ products, warehouse, onOpenSelection, onOpenCatalog, downloads, downloadingIds, pendingProducts, delistedProducts, canEdit, notices, onDownload, onOpenDownload, onSetRegion, onCopyPallet, onOpenSource, onReturnPreferred, onConfirmReview, onDelist, onRestoreProduct, onDeleteProduct, joinSupply, sourceTextFor, selectionScores, onRereadSource, rereadingKeys }: { products: SupplyWarehouseProduct[]; warehouse:SupplyWarehouseProduct['warehouseCode']; onOpenSelection: () => void; onOpenCatalog:()=>void; downloads: Record<string, SupplyProductDownload>; downloadingIds: Set<string>; pendingProducts: SupplyWarehouseProduct[]; delistedProducts: SupplyWarehouseProduct[]; canEdit: boolean; notices: Record<string, string>; onDownload: (product: SupplyWarehouseProduct) => void; onOpenDownload: (warehouseProductId: string) => void; onSetRegion: (product: SupplyWarehouseProduct, region: string) => void; onCopyPallet: (product: SupplyWarehouseProduct) => void; onOpenSource: (product: SupplyWarehouseProduct) => void; onReturnPreferred: (product: SupplyWarehouseProduct) => void; onConfirmReview: (product: SupplyWarehouseProduct) => void; onDelist: (product: SupplyWarehouseProduct, reason: string) => Promise<void>; onRestoreProduct: (product: SupplyWarehouseProduct) => void; onDeleteProduct: (product: SupplyWarehouseProduct) => void; joinSupply: (url: string, productId?: string) => CollectedSupplyProduct | undefined; sourceTextFor: (url: string) => string; selectionScores: ReadonlyMap<string, number>; onRereadSource: (item: SupplyWarehouseProduct) => void; rereadingKeys: Set<string> }) {
+function SupplyWarehouseWorkspace({ products, warehouse, onOpenSelection, onOpenCatalog, downloads, downloadingIds, pendingProducts, delistedProducts, canEdit, notices, onDownload, onOpenDownload, onSetRegion, onCopyPallet, onOpenSource, onReturnPreferred, onConfirmReview, onDelist, onRestoreProduct, onDeleteProduct, joinSupply, sourceTextFor, selectionScores, onRereadSource, rereadingKeys, onGoLogin }: { products: SupplyWarehouseProduct[]; warehouse:SupplyWarehouseProduct['warehouseCode']; onOpenSelection: () => void; onOpenCatalog:()=>void; downloads: Record<string, SupplyProductDownload>; downloadingIds: Set<string>; pendingProducts: SupplyWarehouseProduct[]; delistedProducts: SupplyWarehouseProduct[]; canEdit: boolean; notices: Record<string, string>; onDownload: (product: SupplyWarehouseProduct) => void; onOpenDownload: (warehouseProductId: string) => void; onSetRegion: (product: SupplyWarehouseProduct, region: string) => void; onCopyPallet: (product: SupplyWarehouseProduct) => void; onOpenSource: (product: SupplyWarehouseProduct) => void; onReturnPreferred: (product: SupplyWarehouseProduct) => void; onConfirmReview: (product: SupplyWarehouseProduct) => void; onDelist: (product: SupplyWarehouseProduct, reason: string) => Promise<void>; onRestoreProduct: (product: SupplyWarehouseProduct) => void; onDeleteProduct: (product: SupplyWarehouseProduct) => void; joinSupply: (url: string, productId?: string) => CollectedSupplyProduct | undefined; sourceTextFor: (url: string) => string; selectionScores: ReadonlyMap<string, number>; onRereadSource: (item: SupplyWarehouseProduct) => void; rereadingKeys: Set<string>; onGoLogin: (warehouseCode: '1688' | 'GIGACLOUD') => void }) {
   const [query,setQuery] = useState('')
   const [view,setView] = useState<'ALL'|'INBOUND'|'FORMAL'|'DELISTED'>('INBOUND')
   const [delistItems,setDelistItems] = useState<SupplyWarehouseProduct[]>([])
@@ -2187,9 +2281,9 @@ function SupplyWarehouseWorkspace({ products, warehouse, onOpenSelection, onOpen
   return <section className="supply-warehouse-page">
     <div className="warehouse-heading"><div><small>SUPPLY PRODUCT WAREHOUSE</small><h2>{names[warehouse]}产品库</h2></div><div className="warehouse-heading-actions"><button onClick={onOpenCatalog}>目录管理</button><div className="candidate-view-switch"><button className={view==='INBOUND'?'active':''} onClick={()=>setView('INBOUND')}>入库处理 <em>{pendingProducts.length}</em></button><button className={view==='FORMAL'?'active':''} onClick={()=>setView('FORMAL')}>正式入库 <em>{products.length}</em></button><button className={view==='DELISTED'?'active':''} onClick={()=>setView('DELISTED')}>下架产品 <em>{delistedProducts.length}</em></button><button className={view==='ALL'?'active':''} onClick={()=>setView('ALL')}>全部产品 <em>{pendingProducts.length+products.length}</em></button></div></div></div>
     <div className="warehouse-toolbar"><input value={query} onChange={event=>setQuery(event.target.value)} placeholder={`搜索${names[warehouse]}商品、SKU或供应商`}/><span>当前显示 <b>{visible.length}</b> 个商品</span></div>
-    {(view==='ALL'||view==='INBOUND')&&pendingProducts.length?<div className="warehouse-pending-review"><div className="warehouse-heading"><div><small>PENDING REVIEW</small><b>待确认 · 本仓入库后进入「正式入库」阶段</b></div><em>{pendingProducts.length}</em></div><div className="warehouse-product-grid">{pendingProducts.map(item=>{const joined=joinSupply(item.sourceUrl, item.productId);return <article className="product-card candidate-product-card supply-source-card" key={item.id}><button type="button" className="product-image" onClick={()=>onOpenSource(item)}>{item.imageUrl?<img src={item.imageUrl} alt={item.title}/>:<span>无图片</span>}<SupplyImageBadges joined={joined} fallbackScore={badgeFallbackScore(selectionScores.get(item.selectionId), joined?.score)}/></button><div className="product-info supply-source-info"><small>{names[item.warehouseCode]} · SKU {item.productId||'待生成'}</small><b title={item.title}>{item.title}</b><strong>{item.priceText||'价格待核验'}</strong><SupplyFactsDl joined={joined}/><div className="original-price">{sourceTextFor(item.sourceUrl)}</div><div className="product-tags"><span>待确认</span><span title={`${item.category} / ${item.subcategory} / ${item.tertiaryCategory}`}>{item.category} / {item.subcategory} / {item.tertiaryCategory}</span></div><div className="product-actions candidate-next-actions"><button disabled={!canEdit||downloadingIds.has(item.id)} onClick={()=>onDownload(item)}>{downloadLabel(item)}</button><button disabled={!canEdit||downloads[item.id]?.status!=='DOWNLOADED'} onClick={()=>onOpenDownload(item.id)}>查看页面</button><button className="search-1688" disabled={!canEdit} onClick={()=>onConfirmReview(item)}>本仓入库</button></div>{downloads[item.id]?.status==='DOWNLOADED'&&<small className="warehouse-download-note">已生成服务器详情页（{downloads[item.id].imageCount} 张图片）{downloads[item.id].failedCount?`（${downloads[item.id].failedCount} 张失败）`:''} · <button type="button" onClick={()=>onOpenDownload(item.id)}>查看页面</button></small>}{downloads[item.id]?.status==='FAILED'&&<small className="warehouse-download-note error">{downloads[item.id].error||'下载失败，请重试'}</small>}{notices[item.id]?<small className="warehouse-download-note">{notices[item.id]}</small>:null}</div></article>})}</div></div>:null}
-    {(view==='ALL'||view==='FORMAL')&&(visible.length?<div className="warehouse-product-grid">{visible.map(item=>{const joined=joinSupply(item.sourceUrl, item.productId);return <article className="product-card candidate-product-card supply-source-card" key={item.id}><button type="button" className="product-image" disabled={!canEdit||downloads[item.id]?.status!=='DOWNLOADED'} onClick={()=>onOpenDownload(item.id)}>{item.imageUrl?<img src={item.imageUrl} alt={item.title}/>:<span>无图片</span>}<SupplyImageBadges joined={joined} fallbackScore={badgeFallbackScore(selectionScores.get(item.selectionId), joined?.score)}/></button><div className="product-info supply-source-info"><small>{names[item.warehouseCode]} · SKU {item.productId||'待生成'}</small><b title={item.title}>{item.title}</b><strong>{item.priceText||'价格待核验'}</strong><SupplyFactsDl joined={joined}/><div className="original-price">{sourceTextFor(item.sourceUrl)}</div><div className="product-tags"><span>{names[item.warehouseCode]}</span><span title={`${item.category} / ${item.subcategory} / ${item.tertiaryCategory}`}>{item.category} / {item.subcategory} / {item.tertiaryCategory}</span><span>{item.supplierName||'供应商待补采'}</span></div><div className="warehouse-region-row"><label className="warehouse-region-select">地区货盘<select value={item.region} disabled={!canEdit} onChange={event=>onSetRegion(item,event.target.value)}><option value="">未选择</option>{REGION_PALLET_OPTIONS.map(option=><option key={option} value={option}>{option}</option>)}</select></label><button disabled={rereadingKeys.has(`${item.warehouseCode}:${item.sourceUrl}`)} onClick={()=>onRereadSource(item)}>{rereadingKeys.has(`${item.warehouseCode}:${item.sourceUrl}`)?'重读中…':'重读数据'}</button></div><div className="product-actions candidate-next-actions"><button disabled={!canEdit||!item.region} title={!item.region?'请先选择地区货盘':undefined} onClick={()=>onCopyPallet(item)}>抄送货盘</button><button className="candidate-delete" disabled={!canEdit} onClick={()=>openDelist([item])}>下架产品</button><button disabled={!canEdit} onClick={()=>onReturnPreferred(item)}>打回优选</button></div><div className="product-actions candidate-next-actions"><button disabled={!canEdit||downloadingIds.has(item.id)} onClick={()=>onDownload(item)}>{downloadLabel(item)}</button><button disabled={!canEdit||downloads[item.id]?.status!=='DOWNLOADED'} onClick={()=>onOpenDownload(item.id)}>查看页面</button><button onClick={()=>onOpenSource(item)}>原址 <i>↗</i></button></div>{downloads[item.id]?.status==='DOWNLOADED'&&<small className="warehouse-download-note">已生成服务器详情页（{downloads[item.id].imageCount} 张图片）{downloads[item.id].failedCount?`（${downloads[item.id].failedCount} 张失败）`:''}</small>}{downloads[item.id]?.status==='FAILED'&&<small className="warehouse-download-note error">{downloads[item.id].error||'下载失败，请重试'}</small>}{notices[item.id]?<small className="warehouse-download-note">{notices[item.id]}</small>:null}</div></article>})}</div>:<EmptyState title={`${names[warehouse]}暂无入库商品`} description="请在当前仓库的AI选品中审核商品，系统会自动归入本仓库。" action="进入AI选品" onAction={onOpenSelection}/>)}
-    {view==='DELISTED'&&(delistedProducts.length?<div className="warehouse-product-grid">{delistedProducts.map(item=>{const joined=joinSupply(item.sourceUrl, item.productId);return <article key={`dlst-${item.id}`} className="product-card candidate-product-card supply-source-card delisted-product-card"><button type="button" className="product-image">{item.imageUrl?<img src={item.imageUrl} alt={item.title}/>:<span>无图片</span>}<SupplyImageBadges joined={joined} fallbackScore={badgeFallbackScore(selectionScores.get(item.selectionId), joined?.score)}/></button><div className="product-info supply-source-info"><small>{names[item.warehouseCode]} · SKU {item.productId||'待生成'}</small><b title={item.title}>{item.title}</b><strong>{item.priceText||'价格待核验'}</strong><SupplyFactsDl joined={joined}/><div className="original-price">{sourceTextFor(item.sourceUrl)}</div><div className="product-tags"><span>已下架</span><span title={`${item.category} / ${item.subcategory} / ${item.tertiaryCategory}`}>{item.category} / {item.subcategory} / {item.tertiaryCategory}</span><span title={`下架原因：${item.delistedReason||'—'}`}>下架：{item.delistedReason||'—'} · {item.delistedAt?new Date(item.delistedAt).toLocaleString('zh-CN'):'—'}</span></div><div className="product-actions candidate-next-actions"><button disabled={!canEdit||downloadingIds.has(item.id)} onClick={()=>onDownload(item)}>更新产品</button><button className="search-1688" disabled={!canEdit} onClick={()=>onRestoreProduct(item)}>重新上架</button><button className="candidate-delete" disabled={!canEdit} onClick={()=>onDeleteProduct(item)}>删除产品</button></div>{notices[item.id]?<small className="warehouse-download-note">{notices[item.id]}</small>:null}</div></article>})}</div>:<EmptyState title="暂无下架产品" description="正式入库中下架的商品会集中在此，可更新产品、重新上架或永久删除。" action="返回全部产品" onAction={()=>setView('ALL')}/>)}
+    {(view==='ALL'||view==='INBOUND')&&pendingProducts.length?<div className="warehouse-pending-review"><div className="warehouse-heading"><div><small>PENDING REVIEW</small><b>待确认 · 本仓入库后进入「正式入库」阶段</b></div><em>{pendingProducts.length}</em></div><div className="warehouse-product-grid">{pendingProducts.map(item=>{const joined=joinSupply(item.sourceUrl, item.productId);return <article className="product-card candidate-product-card supply-source-card" key={item.id}><button type="button" className="product-image" onClick={()=>onOpenSource(item)}>{item.imageUrl?<img src={item.imageUrl} alt={item.title}/>:<span>无图片</span>}<SupplyImageBadges joined={joined} fallbackScore={badgeFallbackScore(selectionScores.get(item.selectionId), joined?.score)}/></button><div className="product-info supply-source-info"><small>{names[item.warehouseCode]} · SKU {item.productId||'待生成'}</small><b title={item.title}>{item.title}</b><strong>{item.priceText||'价格待核验'}</strong><SupplyFactsDl joined={joined}/><div className="original-price">{sourceTextFor(item.sourceUrl)}</div><div className="product-tags"><span>待确认</span><span title={`${item.category} / ${item.subcategory} / ${item.tertiaryCategory}`}>{item.category} / {item.subcategory} / {item.tertiaryCategory}</span></div><div className="product-actions candidate-next-actions"><button disabled={!canEdit||downloadingIds.has(item.id)} onClick={()=>onDownload(item)}>{downloadLabel(item)}</button><button disabled={!canEdit||downloads[item.id]?.status!=='DOWNLOADED'} onClick={()=>onOpenDownload(item.id)}>查看页面</button><button className="search-1688" disabled={!canEdit} onClick={()=>onConfirmReview(item)}>本仓入库</button></div>{downloads[item.id]?.status==='DOWNLOADED'&&<small className="warehouse-download-note">已生成服务器详情页（{downloads[item.id].imageCount} 张图片）{downloads[item.id].failedCount?`（${downloads[item.id].failedCount} 张失败）`:''} · <button type="button" onClick={()=>onOpenDownload(item.id)}>查看页面</button></small>}{downloads[item.id]?.status==='FAILED'&&<small className="warehouse-download-note error">{downloads[item.id].error||'下载失败，请重试'}</small>}{notices[item.id]?<small className={/登录|失效|过期|网络|验证/.test(notices[item.id]||'')?'warehouse-download-note error':'warehouse-download-note'}>{notices[item.id]}{(notices[item.id]||'').includes('需要登录才能完整下载')?<button type="button" onClick={()=>onGoLogin(warehouse)}>去登录</button>:null}</small>:null}</div></article>})}</div></div>:null}
+    {(view==='ALL'||view==='FORMAL')&&(visible.length?<div className="warehouse-product-grid">{visible.map(item=>{const joined=joinSupply(item.sourceUrl, item.productId);return <article className="product-card candidate-product-card supply-source-card" key={item.id}><button type="button" className="product-image" disabled={!canEdit||downloads[item.id]?.status!=='DOWNLOADED'} onClick={()=>onOpenDownload(item.id)}>{item.imageUrl?<img src={item.imageUrl} alt={item.title}/>:<span>无图片</span>}<SupplyImageBadges joined={joined} fallbackScore={badgeFallbackScore(selectionScores.get(item.selectionId), joined?.score)}/></button><div className="product-info supply-source-info"><small>{names[item.warehouseCode]} · SKU {item.productId||'待生成'}</small><b title={item.title}>{item.title}</b><strong>{item.priceText||'价格待核验'}</strong><SupplyFactsDl joined={joined}/><div className="original-price">{sourceTextFor(item.sourceUrl)}</div><div className="product-tags"><span>{names[item.warehouseCode]}</span><span title={`${item.category} / ${item.subcategory} / ${item.tertiaryCategory}`}>{item.category} / {item.subcategory} / {item.tertiaryCategory}</span><span>{item.supplierName||'供应商待补采'}</span></div><div className="warehouse-region-row"><label className="warehouse-region-select">地区货盘<select value={item.region} disabled={!canEdit} onChange={event=>onSetRegion(item,event.target.value)}><option value="">未选择</option>{REGION_PALLET_OPTIONS.map(option=><option key={option} value={option}>{option}</option>)}</select></label><button disabled={rereadingKeys.has(`${item.warehouseCode}:${item.sourceUrl}`)} onClick={()=>onRereadSource(item)}>{rereadingKeys.has(`${item.warehouseCode}:${item.sourceUrl}`)?'重读中…':'重读数据'}</button></div><div className="product-actions candidate-next-actions"><button disabled={!canEdit||!item.region} title={!item.region?'请先选择地区货盘':undefined} onClick={()=>onCopyPallet(item)}>抄送货盘</button><button className="candidate-delete" disabled={!canEdit} onClick={()=>openDelist([item])}>下架产品</button><button disabled={!canEdit} onClick={()=>onReturnPreferred(item)}>打回优选</button></div><div className="product-actions candidate-next-actions"><button disabled={!canEdit||downloadingIds.has(item.id)} onClick={()=>onDownload(item)}>{downloadLabel(item)}</button><button disabled={!canEdit||downloads[item.id]?.status!=='DOWNLOADED'} onClick={()=>onOpenDownload(item.id)}>查看页面</button><button onClick={()=>onOpenSource(item)}>原址 <i>↗</i></button></div>{downloads[item.id]?.status==='DOWNLOADED'&&<small className="warehouse-download-note">已生成服务器详情页（{downloads[item.id].imageCount} 张图片）{downloads[item.id].failedCount?`（${downloads[item.id].failedCount} 张失败）`:''}</small>}{downloads[item.id]?.status==='FAILED'&&<small className="warehouse-download-note error">{downloads[item.id].error||'下载失败，请重试'}</small>}{notices[item.id]?<small className={/登录|失效|过期|网络|验证/.test(notices[item.id]||'')?'warehouse-download-note error':'warehouse-download-note'}>{notices[item.id]}{(notices[item.id]||'').includes('需要登录才能完整下载')?<button type="button" onClick={()=>onGoLogin(warehouse)}>去登录</button>:null}</small>:null}</div></article>})}</div>:<EmptyState title={`${names[warehouse]}暂无入库商品`} description="请在当前仓库的AI选品中审核商品，系统会自动归入本仓库。" action="进入AI选品" onAction={onOpenSelection}/>)}
+    {view==='DELISTED'&&(delistedProducts.length?<div className="warehouse-product-grid">{delistedProducts.map(item=>{const joined=joinSupply(item.sourceUrl, item.productId);return <article key={`dlst-${item.id}`} className="product-card candidate-product-card supply-source-card delisted-product-card"><button type="button" className="product-image">{item.imageUrl?<img src={item.imageUrl} alt={item.title}/>:<span>无图片</span>}<SupplyImageBadges joined={joined} fallbackScore={badgeFallbackScore(selectionScores.get(item.selectionId), joined?.score)}/></button><div className="product-info supply-source-info"><small>{names[item.warehouseCode]} · SKU {item.productId||'待生成'}</small><b title={item.title}>{item.title}</b><strong>{item.priceText||'价格待核验'}</strong><SupplyFactsDl joined={joined}/><div className="original-price">{sourceTextFor(item.sourceUrl)}</div><div className="product-tags"><span>已下架</span><span title={`${item.category} / ${item.subcategory} / ${item.tertiaryCategory}`}>{item.category} / {item.subcategory} / {item.tertiaryCategory}</span><span title={`下架原因：${item.delistedReason||'—'}`}>下架：{item.delistedReason||'—'} · {item.delistedAt?new Date(item.delistedAt).toLocaleString('zh-CN'):'—'}</span></div><div className="product-actions candidate-next-actions"><button disabled={!canEdit||downloadingIds.has(item.id)} onClick={()=>onDownload(item)}>更新产品</button><button className="search-1688" disabled={!canEdit} onClick={()=>onRestoreProduct(item)}>重新上架</button><button className="candidate-delete" disabled={!canEdit} onClick={()=>onDeleteProduct(item)}>删除产品</button></div>{notices[item.id]?<small className={/登录|失效|过期|网络|验证/.test(notices[item.id]||'')?'warehouse-download-note error':'warehouse-download-note'}>{notices[item.id]}{(notices[item.id]||'').includes('需要登录才能完整下载')?<button type="button" onClick={()=>onGoLogin(warehouse)}>去登录</button>:null}</small>:null}</div></article>})}</div>:<EmptyState title="暂无下架产品" description="正式入库中下架的商品会集中在此，可更新产品、重新上架或永久删除。" action="返回全部产品" onAction={()=>setView('ALL')}/>)}
     {delistItems.length?<div className="eliminate-dialog-backdrop" onClick={()=>setDelistItems([])}><div className="eliminate-dialog" role="dialog" aria-label="下架产品" onClick={event=>event.stopPropagation()}><header><div><small>DELIST PRODUCT</small><h3>下架产品{delistItems.length>1?`（${delistItems.length} 个）`:''}</h3><p title={delistItems[0].title}>{delistItems[0].title}</p><p>SKU {delistItems[0].productId||'待生成'} · {names[delistItems[0].warehouseCode]}</p></div><button type="button" onClick={()=>setDelistItems([])}>×</button></header><div className="eliminate-reason-group"><span className="eliminate-reason-label">下架原因（必选）</span><div className="eliminate-reason-options">{DELIST_REASONS.map(reason=><button key={reason} type="button" className={`eliminate-reason-chip${delistReason===reason?' active':''}`} onClick={()=>{setDelistReason(reason);setDelistError('')}}>{reason}</button>)}</div></div>{delistError?<p className="eliminate-dialog-error">{delistError}</p>:null}<footer><button type="button" onClick={()=>setDelistItems([])}>取消</button><button type="button" className="danger" onClick={()=>void confirmDelist()}>确认下架</button></footer></div></div>:null}
   </section>
 }

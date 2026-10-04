@@ -53,7 +53,23 @@ export const MENU_PERMISSION_TREE: MenuPermNode[] = [
       { code: 'menu.collect.saleyeelatam', label: '赛盈(拉美)' },
       { code: 'menu.collect.saleyeeme', label: '赛盈(中东)' },
       { code: 'menu.collect.yimai', label: '亿迈' },
-      { code: 'menu.collect.haibei', label: '海贝' }
+      { code: 'menu.collect.haibei', label: '海贝' },
+      { code: 'menu.collect.xizhiyuena', label: '西之月(北美)' },
+      { code: 'menu.collect.xizhiyueau', label: '西之月(澳洲)' },
+      { code: 'menu.collect.xizhiyueeu', label: '西之月(欧洲)' },
+      { code: 'menu.collect.xizhiyuelatam', label: '西之月(拉美)' },
+      { code: 'menu.collect.xizhiyueas', label: '西之月(亚洲)' },
+      { code: 'menu.collect.xizhiyuecn', label: '西之月(中国)' },
+      { code: 'menu.collect.cjdropna', label: 'CJdropshipping(北美)' },
+      { code: 'menu.collect.cjdropeu', label: 'CJdropshipping(欧洲)' },
+      { code: 'menu.collect.cjdropau', label: 'CJdropshipping(澳洲)' },
+      { code: 'menu.collect.cjdroplatam', label: 'CJdropshipping(拉美)' },
+      { code: 'menu.collect.cjdropcn', label: 'CJdropshipping(中国)' },
+      { code: 'menu.collect.faire', label: 'Faire' },
+      { code: 'menu.collect.joyb2b', label: 'JOYB2B' },
+      { code: 'menu.collect.synceena', label: 'Syncee(北美)' },
+      { code: 'menu.collect.synceeeu', label: 'Syncee(欧洲)' },
+      { code: 'menu.collect.synceeau', label: 'Syncee(澳洲)' }
     ]
   },
   {
