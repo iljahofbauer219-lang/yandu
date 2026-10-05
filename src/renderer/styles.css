@@ -491,6 +491,7 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .update-pill--downloading { border-color:var(--accent-soft); }
 .update-pill--downloaded { border-color:#b9e333; }
 .update-pill--error { border-color:var(--danger); background:var(--danger-bg); }
+.update-pill--info { border-color:var(--accent); }
 .update-pill span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .update-pill-action { border:1px solid #b9e333; background:#c9f542; color:#142018; padding:4px 10px; border-radius:8px; font-size:12px; font-weight:650; cursor:pointer; flex:none; }
 .update-pill-close { border:none; background:transparent; color:var(--text-muted); font-size:14px; line-height:1; padding:2px 4px; cursor:pointer; flex:none; }

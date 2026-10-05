@@ -267,6 +267,7 @@ contextBridge.exposeInMainWorld('desktop', {
     reload: (platform: Platform) => ipcRenderer.invoke('browser:reload', platform),
     getState: (platform: Platform) => ipcRenderer.invoke('browser:state:get', platform),
     activateSupply: (platformCode: '1688' | 'GIGACLOUD'): Promise<SupplyActivationResult> => ipcRenderer.invoke('browser:supply:activate', platformCode),
+    openSupply: (platformCode: '1688' | 'GIGACLOUD', url: string): Promise<string> => ipcRenderer.invoke('browser:supply:open', platformCode, url),
     openTab: (platform: Platform, url: string, title?: string) => ipcRenderer.invoke('browser:open-tab', platform, url, title),
     ensureDefaultNav: () => ipcRenderer.invoke('browser:ensure-default-nav'),
     newTab: () => ipcRenderer.invoke('browser:new-tab'),

@@ -395,3 +395,12 @@
 /* 地址栏内 trigger 的下拉菜单位置：原 top:39px 针对 heading 高度，表单内 trigger 在 43px 高度的下边缘，top 调到 33px */
 .ie-browser-page .ebay-address-bar .translation-menu { top:33px; right:14px; }
 .warehouse-download-note{display:block;margin-top:8px;color:#0a6d68;font-size:11px;line-height:1.5}.warehouse-download-note.error{color:#b42318}.warehouse-download-note button{padding:0;border:0;background:none;color:#0a6d68;font-size:11px;text-decoration:underline;cursor:pointer}
+/* 卡片信息区 .product-info small 全局 nowrap+ellipsis 会把错误提示截断，notice 须可换行完整显示 */
+.product-info small.warehouse-download-note{white-space:normal;overflow:visible;text-overflow:clip}
+.supply-error-overlay{position:fixed;inset:0;z-index:900;background:rgba(18,37,30,.35);display:grid;place-items:center}
+.supply-error-modal{width:min(420px,calc(100vw - 32px));background:#fff;border-radius:14px;padding:20px 22px;box-shadow:0 20px 60px rgba(25,42,41,.25)}
+.supply-error-modal>b{display:block;font-size:16px;color:#22312e;margin-bottom:10px}
+.supply-error-modal p{margin:0 0 16px;color:#5c6b67;font-size:13px;line-height:1.7;white-space:pre-wrap}
+.supply-error-modal-actions{display:flex;justify-content:flex-end;gap:10px}
+.supply-error-modal-actions button{height:36px;padding:0 16px;border:1px solid #d3dcda;border-radius:9px;background:#fff;font-size:13px;font-weight:650;color:#3c4a47;cursor:pointer}
+.supply-error-modal-actions button.primary{background:#087a75;border-color:#087a75;color:#fff}

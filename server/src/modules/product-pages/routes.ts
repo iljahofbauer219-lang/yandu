@@ -33,6 +33,10 @@ const MAX_HTML_CHARS = 8 * 1024 * 1024
 const MAX_IMAGES = 60
 const ASSET_NAME_PATTERN = /^(?:\d{2}|d-\d{2})\.(jpg|jpeg|png|webp|gif|avif)$/
 const VIDEO_NAME_PATTERN = /^v-\d{2}\.mp4$/
+const FILE_ASSET_NAME_PATTERN = /^f-\d{2}\.(pdf|txt|zip|rar|xlsx|xls|docx|doc|png|jpg|jpeg)$/
+const PACK_ASSET_NAME_PATTERN = /^m-\d{2}\.zip$/
+// 公开页文件/素材包自托管相对路径白名单：杜绝借 meta 注入路径或协议
+const SELF_HOSTED_FILE_URL = /^assets\/(?:f-\d{2}\.(?:pdf|txt|zip|rar|xlsx|xls|docx|doc|png|jpg|jpeg)|m-\d{2}\.zip)$/
 const PAGE_ID_PATTERN = /^[A-Za-z0-9._-]{1,120}$/
 const PAGE_ID_MAX_ATTEMPTS = 8
 
@@ -40,6 +44,11 @@ const CONTENT_TYPE_BY_EXT: Record<string, string> = {
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
   '.webp': 'image/webp', '.gif': 'image/gif', '.avif': 'image/avif',
   '.mp4': 'video/mp4',
+  '.pdf': 'application/pdf', '.txt': 'text/plain; charset=utf-8', '.zip': 'application/zip',
+  '.rar': 'application/vnd.rar', '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   '.html': 'text/html; charset=utf-8', '.json': 'application/json; charset=utf-8'
 }
 
@@ -51,6 +60,18 @@ const imageSchema = z.object({
 
 const videoSchema = z.object({
   name: z.string().regex(VIDEO_NAME_PATTERN, '视频名须为 v-nn.mp4 序列'),
+  contentType: z.string().min(3).max(100),
+  dataBase64: z.string().min(4)
+})
+
+const fileAssetSchema = z.object({
+  name: z.string().regex(FILE_ASSET_NAME_PATTERN, '文件名须为 f-nn.ext 序列'),
+  contentType: z.string().min(3).max(100),
+  dataBase64: z.string().min(4)
+})
+
+const packAssetSchema = z.object({
+  name: z.string().regex(PACK_ASSET_NAME_PATTERN, '素材包名须为 m-nn.zip 序列'),
   contentType: z.string().min(3).max(100),
   dataBase64: z.string().min(4)
 })
@@ -80,9 +101,22 @@ const createSchema = z.object({
   estimatedTotal: z.string().max(200).default(''),
   dropshipLeadTime: z.string().max(120).default(''),
   gigaIndex: z.string().max(60).default(''),
-  materialPackUrl: z.string().max(2000).default(''),
+  materialPackUrl: z.string().regex(/^(?:https?:\/\/[^\s"'<>]{1,1900}|assets\/m-\d{2}\.zip)?$/).default(''),
   materialPackDownloads: z.string().max(60).default(''),
-  files: z.array(z.object({ name: z.string().min(1).max(300), url: z.string().min(1).max(2000) })).max(20).default([]),
+  fileAssets: z.array(fileAssetSchema).max(20).default([]),
+  packAsset: packAssetSchema.optional(),
+  features: z.array(z.string().min(1).max(2000)).max(40).default([]),
+  descriptionFlow: z.array(z.object({
+    kind: z.enum(['t', 'img']),
+    text: z.string().max(6000).default(''),
+    i: z.number().int().min(-1).max(59).default(-1)
+  })).max(200).default([]),
+  // 文件条目：url 空=降级提示；https=源站直链；assets/f-nn.ext|assets/m-nn.zip=本站重托管免登录下载
+  files: z.array(z.object({
+    name: z.string().min(1).max(300),
+    url: z.string().regex(/^(?:https?:\/\/[^\s"'<>]{1,1900}|assets\/(?:f-\d{2}\.(?:pdf|txt|zip|rar|xlsx|xls|docx|doc|png|jpg|jpeg)|m-\d{2}\.zip))?$/).default(''),
+    label: z.string().max(120).default('')
+  })).max(20).default([]),
   // 重下载覆盖同页时回传上一次的 pageId；服务端校验其归属后才允许覆盖
   pageId: z.string().regex(PAGE_ID_PATTERN).optional()
 })
@@ -166,8 +200,19 @@ function metaViewOf(meta: Record<string, unknown>): ProductPageMetaView {
     estimatedTotal: text(meta.estimatedTotal),
     dropshipLeadTime: text(meta.dropshipLeadTime),
     gigaIndex: text(meta.gigaIndex),
-    materialPackUrl: text(meta.materialPackUrl),
+    materialPackUrl: typeof meta.materialPackUrl === 'string' && (/^https?:\/\//i.test(meta.materialPackUrl) || SELF_HOSTED_FILE_URL.test(meta.materialPackUrl)) ? meta.materialPackUrl : '',
     materialPackDownloads: text(meta.materialPackDownloads),
+    features: Array.isArray(meta.features)
+      ? (meta.features as unknown[]).flatMap(entry => (typeof entry === 'string' && entry.trim() ? [entry.trim().slice(0, 2000)] : []))
+      : [],
+    descriptionFlow: Array.isArray(meta.descriptionFlow)
+      ? (meta.descriptionFlow as unknown[]).flatMap((entry): Array<{ kind: 't' | 'img'; text: string; i: number }> => {
+          const row = entry as { kind?: unknown; text?: unknown; i?: unknown } | null
+          if (!row || row.kind === 't') return row && typeof row.text === 'string' && row.text.trim() ? [{ kind: 't' as const, text: row.text.trim().slice(0, 6000), i: -1 }] : []
+          if (row.kind === 'img') return typeof row.i === 'number' && Number.isInteger(row.i) && row.i >= 0 ? [{ kind: 'img' as const, text: '', i: row.i }] : []
+          return []
+        })
+      : [],
     descriptionText: text(meta.descriptionText),
     videos: Array.isArray(meta.videos)
       ? (meta.videos as unknown[]).flatMap(entry => {
@@ -179,10 +224,11 @@ function metaViewOf(meta: Record<string, unknown>): ProductPageMetaView {
       : [],
     files: Array.isArray(meta.files)
       ? (meta.files as unknown[]).flatMap(entry => {
-          const row = entry as { name?: unknown; url?: unknown } | null
-          return row && typeof row.name === 'string' && typeof row.url === 'string' && /^https?:\/\//i.test(row.url)
-            ? [{ name: row.name, url: row.url }]
-            : []
+          const row = entry as { name?: unknown; url?: unknown; label?: unknown } | null
+          if (!row || typeof row.name !== 'string' || !row.name.trim()) return []
+          // 历史 meta 里的 url 可能缺失/非 http(s)/非自托管白名单：一律降级为空串，由模板渲染成纯文件名
+          const url = typeof row.url === 'string' && (/^https?:\/\//i.test(row.url) || SELF_HOSTED_FILE_URL.test(row.url)) ? row.url : ''
+          return [{ name: row.name, url, label: typeof row.label === 'string' ? row.label : '' }]
         })
       : [],
     descriptionImages: Array.isArray(meta.descriptionImages)
@@ -230,6 +276,12 @@ export async function productPageRoutes(app: FastifyInstance) {
     for (const video of body.videos) {
       await fsp.writeFile(path.join(dir, 'assets', video.name), Buffer.from(video.dataBase64, 'base64'))
     }
+    for (const fileAsset of body.fileAssets) {
+      await fsp.writeFile(path.join(dir, 'assets', fileAsset.name), Buffer.from(fileAsset.dataBase64, 'base64'))
+    }
+    if (body.packAsset) {
+      await fsp.writeFile(path.join(dir, 'assets', body.packAsset.name), Buffer.from(body.packAsset.dataBase64, 'base64'))
+    }
     await fsp.writeFile(path.join(dir, 'index.html'), sanitizeProductPageHtml(body.html), 'utf8')
     const meta = {
       pageId,
@@ -260,6 +312,8 @@ export async function productPageRoutes(app: FastifyInstance) {
       gigaIndex: body.gigaIndex,
       materialPackUrl: body.materialPackUrl,
       materialPackDownloads: body.materialPackDownloads,
+      features: body.features,
+      descriptionFlow: body.descriptionFlow,
       files: body.files
     }
     await fsp.writeFile(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf8')

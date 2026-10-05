@@ -251,6 +251,7 @@ try {
   check('CSP 含 sandbox 且不含 allow-same-origin', csp.split(';').map(part => part.trim()).includes('sandbox') && !csp.includes('allow-same-origin'), csp)
   check('CSP base-uri 限定 self（本站 base 可用、外部 base 被拒）', csp.includes("base-uri 'self'"), csp)
   check('CSP 含 frame-ancestors/form-action none', csp.includes("frame-ancestors 'none'") && csp.includes("form-action 'none'"), csp)
+  check('CSP 含 media-src self（重托管视频可播放，且仅本站）', csp.includes("media-src 'self'") && !/media-src[^;]*https:/i.test(csp), csp)
   check('响应头含 nosniff / no-referrer / noindex', page.headers.get('x-content-type-options') === 'nosniff'
     && page.headers.get('referrer-policy') === 'no-referrer'
     && (page.headers.get('x-robots-tag') ?? '').includes('noindex'))
@@ -325,6 +326,75 @@ try {
 
   const audits = await prisma.auditLog.findMany({ where: { orgId: orgAId, action: 'product-page.publish' } })
   check('审计：product-page.publish 留痕（3 次成功提交）', audits.length === 3, audits.length)
+
+  console.log('\n[8] 17 要素扩展字段：提交受理 + 公开页分区渲染 + meta 落盘')
+  const rich = submitPayload({
+    warehouseProductId: 'wh-verify-rich',
+    title: 'Manaul Folding Scooter M2085',
+    category: '首页 / 汽车配件与运输 / 电动代步车',
+    itemCode: 'W2923P220458',
+    firstStockAt: '2024-10-10',
+    returnRate: '低',
+    sellableInventory: '60',
+    unitPrice: '$2300.00',
+    packingFee: '$3.16',
+    freightFee: '$17.47~$37.14',
+    shippingFee: '$20.63~$40.30 /件',
+    estimatedTotal: '$2343.05 /件',
+    dropshipLeadTime: '1-3个工作日',
+    gigaIndex: '64.10',
+    materialPackUrl: 'assets/m-01.zip',
+    materialPackDownloads: '352',
+    fileAssets: [{ name: 'f-01.pdf', contentType: 'application/pdf', dataBase64: 'JVBERi0xLjQK' }],
+    packAsset: { name: 'm-01.zip', contentType: 'application/zip', dataBase64: 'UEsDBBQAAAAA' },
+    descriptionText: 'The M2085 Blue\nfoldable in 2 steps',
+    descriptionImages: [{ name: 'd-01.png', contentType: 'image/png', dataBase64: PNG_BYTES.toString('base64') }],
+    videos: [{ name: 'v-01.mp4', contentType: 'video/mp4', dataBase64: 'AAAA' }],
+    files: [{ name: 'K240272 (2085_2091).pdf', url: 'assets/f-01.pdf', label: 'Medicare/HCPCS Code' }],
+    features: ['【True Foldable, No Need to Disassemble】 The elderly motorized scooter can be folded in 2 steps.'],
+    descriptionFlow: [
+      { kind: 't', text: 'FLOW-BEFORE e2e' },
+      { kind: 'img', i: 0 },
+      { kind: 't', text: 'FLOW-AFTER e2e paragraph long enough to stay a paragraph.' }
+    ],
+    specs: [{ key: '颜色', value: 'Blue' }, { key: '产品重量 (磅)', value: '52.03' }, { key: '长度 (英寸)', value: '40.75' }]
+  })
+  const richPost = await api('POST', '/api/product-pages', rich, tokenA)
+  check('17 要素载荷提交 → 200', richPost.status === 200, richPost.data)
+  const richPageId = String(richPost.data?.pageId ?? '')
+  const richPage = await rawPage(`/product-pages/${richPageId}`)
+  for (const token of ['首页 / 汽车配件与运输', 'W2923P220458', '2024-10-10', '低', '60', '$2300.00', '$3.16', '$17.47~$37.14', '$20.63~$40.30 /件', '$2343.05 /件', '1-3个工作日', '64.10', '下载素材包', '352', 'K240272 (2085_2091).pdf', 'Medicare/HCPCS Code', '图文描述', 'assets/d-01.png', 'assets/v-01.mp4', 'class="pp-badges"', 'class="pp-specs pp-fees"', '颜色', 'Blue', 'class="pp-spec-groups"', '>产品规格<', '>产品尺寸<', '>包装尺寸<', 'class="pp-desc pp-features"', '【True Foldable, No Need to Disassemble】']) {
+    check(`公开页含要素：${token}`, richPage.text.includes(token))
+  }
+  const richMeta = JSON.parse(await fsp.readFile(path.join(pagesDir, richPageId, 'meta.json'), 'utf8')) as Record<string, unknown>
+  check('meta 落盘扩展字段', richMeta.itemCode === 'W2923P220458' && richMeta.estimatedTotal === '$2343.05 /件' && Array.isArray(richMeta.files) && (richMeta.files as unknown[]).length === 1 && Array.isArray(richMeta.videos) && (richMeta.videos as unknown[]).length === 1)
+  const videoAsset = await rawPage(`/product-pages/${richPageId}/assets/v-01.mp4`)
+  check('视频资产 → 200 + video/mp4 + no-cache', videoAsset.status === 200 && (videoAsset.headers.get('content-type') ?? '') === 'video/mp4' && videoAsset.headers.get('cache-control') === 'no-cache', { status: videoAsset.status, ct: videoAsset.headers.get('content-type') })
+  check('描述流文图穿插顺序（图在两段文字之间）', richPage.text.indexOf('FLOW-BEFORE e2e') < richPage.text.indexOf('assets/d-01.png') && richPage.text.indexOf('assets/d-01.png') < richPage.text.indexOf('FLOW-AFTER e2e'))
+  const fileAsset = await rawPage(`/product-pages/${richPageId}/assets/f-01.pdf`)
+  check('文件资产 → 200 + application/pdf（免登录可下）', fileAsset.status === 200 && (fileAsset.headers.get('content-type') ?? '').startsWith('application/pdf'), fileAsset.headers.get('content-type'))
+  const packAssetPage = await rawPage(`/product-pages/${richPageId}/assets/m-01.zip`)
+  check('素材包资产 → 200 + application/zip', packAssetPage.status === 200 && (packAssetPage.headers.get('content-type') ?? '') === 'application/zip', packAssetPage.headers.get('content-type'))
+  check('公开页文件/素材包为自托管 download 直链', richPage.text.includes('href="assets/f-01.pdf" download') && richPage.text.includes('href="assets/m-01.zip" download'))
+
+  console.log('\n[9] 源站无链接场景降级：素材包无 URL / 文件仅文件名')
+  const degraded = submitPayload({
+    warehouseProductId: 'wh-verify-degraded',
+    title: 'Manaul Folding Scooter M2085',
+    materialPackUrl: '',
+    materialPackDownloads: '352',
+    files: [{ name: '2085 disassembly video.txt', url: '', label: '安装视频' }]
+  })
+  const degradedPost = await api('POST', '/api/product-pages', degraded, tokenA)
+  check('降级载荷提交 → 200', degradedPost.status === 200, degradedPost.data)
+  const degradedPageId = String(degradedPost.data?.pageId ?? '')
+  const degradedPage = await rawPage(`/product-pages/${degradedPageId}`)
+  check('素材包无链接 → 渲染次数 + 原站提示', degradedPage.text.includes('class="pp-material-note"') && degradedPage.text.includes('352') && degradedPage.text.includes('素材包需在原站登录后下载'))
+  check('文件无链接 → 纯文件名 + 获取提示', degradedPage.text.includes('class="pp-file-plain">2085 disassembly video.txt') && degradedPage.text.includes('文件链接需在原站登录后获取'))
+  check('文件无链接不产生空 href', !degradedPage.text.includes('<a href=""'))
+  const degradedMeta = JSON.parse(await fsp.readFile(path.join(pagesDir, degradedPageId, 'meta.json'), 'utf8')) as Record<string, unknown>
+  check('meta 保留空 url 与 label', JSON.stringify(degradedMeta.files) === JSON.stringify([{ name: '2085 disassembly video.txt', url: '', label: '安装视频' }]), degradedMeta.files)
+  check('files.url 非 http(s) → 400 VALIDATION', (await api('POST', '/api/product-pages', submitPayload({ warehouseProductId: 'wh-verify-badfile', files: [{ name: 'a.pdf', url: 'javascript:alert(1)' }] }), tokenA)).status === 400)
 } finally {
   await app.close()
   await socket.stop()

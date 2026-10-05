@@ -17,11 +17,22 @@ const EXTENSION_BY_MIME: Record<string, string> = {
   'image/webp': 'webp',
   'image/gif': 'gif',
   'image/avif': 'avif',
-  'video/mp4': 'mp4'
+  'video/mp4': 'mp4',
+  'application/pdf': 'pdf',
+  'text/plain': 'txt',
+  'application/zip': 'zip',
+  'application/x-zip-compressed': 'zip',
+  'application/x-rar-compressed': 'rar',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx'
 }
 
+// 源站对 pdf/zip 常回 octet-stream：mime 未命中时按 URL 路径扩展名兜底
+const EXTENSION_FROM_URL = /\.(pdf|txt|zip|rar|xlsx|xls|docx|doc)(?:\?|#|$)/i
+
 interface ImageEntry {
-  kind: 'img' | 'desc' | 'video'
+  kind: 'img' | 'desc' | 'video' | 'file' | 'pack'
   index: number
   remoteUrl: string
   file: string
@@ -30,6 +41,9 @@ interface ImageEntry {
   status: 'DOWNLOADED' | 'FAILED'
   error: string
 }
+
+const MAX_FILE_BYTES = 50 * 1024 * 1024
+const MAX_PACK_BYTES = 200 * 1024 * 1024
 
 export class SupplyProductDownloadService {
   constructor(private readonly database: AppDatabase, private readonly workspace: BrowserWorkspace) {}
@@ -45,11 +59,18 @@ export class SupplyProductDownloadService {
     const extracted = snapshot.extracted
     const galleryUrls = extracted.images
     const descUrls = (extracted.descriptionImages ?? []).filter(url => !galleryUrls.includes(url))
-    const videoUrls = extracted.videos ?? []
+    // 视频灯箱无 DOM 标签时从源页 HTML 正则 mp4 兜底（与 DOM 通道并集去重）
+    const htmlMp4 = (snapshot.html.match(/https?:\/\/[^"'\s<>\\]+\.mp4/gi) ?? []).filter(url => !url.includes('.mp4.mp4'))
+    const videoUrls = [...new Set([...(extracted.videos ?? []), ...htmlMp4])].slice(0, 8)
+    // 文件/素材包：采集端已在登录态发现签名链接（仅内存瞬时），此处立即取字节重托管，公开页免登录可下
+    const fileSources = (extracted.files ?? []).map((file, index) => ({ index, url: file.url || '' })).filter(item => /^https?:\/\//i.test(item.url))
+    const packUrl = /^https?:\/\//i.test(extracted.materialPackUrl || '') ? (extracted.materialPackUrl as string) : ''
     const assets: ImageEntry[] = [
       ...galleryUrls.map((remoteUrl, index) => ({ kind: 'img' as const, index, remoteUrl, file: '', contentType: '', buffer: null, status: 'FAILED' as const, error: '' })),
       ...descUrls.map((remoteUrl, index) => ({ kind: 'desc' as const, index, remoteUrl, file: '', contentType: '', buffer: null, status: 'FAILED' as const, error: '' })),
-      ...videoUrls.map((remoteUrl, index) => ({ kind: 'video' as const, index, remoteUrl, file: '', contentType: '', buffer: null, status: 'FAILED' as const, error: '' }))
+      ...videoUrls.map((remoteUrl, index) => ({ kind: 'video' as const, index, remoteUrl, file: '', contentType: '', buffer: null, status: 'FAILED' as const, error: '' })),
+      ...fileSources.map(source => ({ kind: 'file' as const, index: source.index, remoteUrl: source.url, file: '', contentType: '', buffer: null, status: 'FAILED' as const, error: '' })),
+      ...(packUrl ? [{ kind: 'pack' as const, index: 0, remoteUrl: packUrl, file: '', contentType: '', buffer: null, status: 'FAILED' as const, error: '' }] : [])
     ]
     const failures: string[] = []
     let cursor = 0
@@ -58,25 +79,35 @@ export class SupplyProductDownloadService {
         const entry = assets[cursor]
         cursor += 1
         try {
+          const timeoutMs = entry.kind === 'video' ? 120_000 : entry.kind === 'pack' ? 180_000 : entry.kind === 'file' ? 60_000 : 15_000
           const response = await fetch(entry.remoteUrl, {
-            signal: AbortSignal.timeout(entry.kind === 'video' ? 120_000 : 15_000),
+            signal: AbortSignal.timeout(timeoutMs),
             headers: { 'User-Agent': 'Mozilla/5.0', Referer: extracted.finalUrl || product.sourceUrl }
           })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
           const buffer = Buffer.from(await response.arrayBuffer())
           if (!buffer.length) throw new Error('内容为空')
+          const cap = entry.kind === 'pack' ? MAX_PACK_BYTES : entry.kind === 'file' ? MAX_FILE_BYTES : 0
+          if (cap && buffer.length > cap) throw new Error(`超过大小上限（${Math.round(cap / 1024 / 1024)}MB）`)
           const mimeType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()
-          const extension = EXTENSION_BY_MIME[mimeType]
+          const urlExt = (EXTENSION_FROM_URL.exec(entry.remoteUrl) || [])[1]?.toLowerCase() || ''
+          const extension = EXTENSION_BY_MIME[mimeType] || urlExt
           if (!extension) throw new Error(`不支持的类型：${mimeType || '未知'}`)
           if (entry.kind === 'video' && extension !== 'mp4') throw new Error(`仅支持 mp4 视频：${mimeType}`)
+          if (entry.kind === 'pack' && extension !== 'zip') throw new Error(`素材包仅支持 zip：${extension}`)
           const seq = String(entry.index + 1).padStart(2, '0')
-          entry.file = entry.kind === 'img' ? `${seq}.${extension}` : entry.kind === 'desc' ? `d-${seq}.${extension}` : `v-${seq}.${extension}`
-          entry.contentType = mimeType
+          entry.file = entry.kind === 'img' ? `${seq}.${extension}`
+            : entry.kind === 'desc' ? `d-${seq}.${extension}`
+            : entry.kind === 'video' ? `v-${seq}.${extension}`
+            : entry.kind === 'file' ? `f-${seq}.${extension}`
+            : `m-${seq}.${extension}`
+          entry.contentType = mimeType && mimeType !== 'application/octet-stream' ? mimeType : (extension === 'pdf' ? 'application/pdf' : extension === 'zip' ? 'application/zip' : extension === 'txt' ? 'text/plain' : mimeType)
           entry.buffer = buffer
           entry.status = 'DOWNLOADED'
         } catch (error) {
           entry.error = error instanceof Error ? error.message : '未知错误'
-          failures.push(`${entry.kind === 'img' ? '第 ' + (entry.index + 1) + ' 张' : entry.kind === 'desc' ? '描述图 ' + (entry.index + 1) : '视频 ' + (entry.index + 1)}：${entry.error}`)
+          const label = entry.kind === 'img' ? `第 ${entry.index + 1} 张` : entry.kind === 'desc' ? `描述图 ${entry.index + 1}` : entry.kind === 'video' ? `视频 ${entry.index + 1}` : entry.kind === 'file' ? `文件 ${entry.index + 1}` : '素材包'
+          failures.push(`${label}：${entry.error}`)
         }
       }
     }
@@ -84,6 +115,15 @@ export class SupplyProductDownloadService {
 
     const uploaded = assets.filter(item => item.status === 'DOWNLOADED')
     const uploadedGallery = uploaded.filter(item => item.kind === 'img')
+    const uploadedFileAssetByIndex = new Map(uploaded.filter(item => item.kind === 'file').map(item => [item.index, item.file]))
+    const uploadedPackAsset = uploaded.find(item => item.kind === 'pack')
+    const filesPayload = (extracted.files ?? []).map((file, index) => ({
+      name: file.name,
+      label: file.label || '',
+      url: uploadedFileAssetByIndex.get(index) ? `assets/${uploadedFileAssetByIndex.get(index)}` : ''
+    }))
+    const materialPackAsset = uploadedPackAsset ? `assets/${uploadedPackAsset.file}` : ''
+    const toAssetPayload = (entry: ImageEntry) => ({ name: entry.file, contentType: entry.contentType, dataBase64: (entry.buffer ?? Buffer.alloc(0)).toString('base64') })
     const failedCount = assets.length - uploaded.length
     if (!uploadedGallery.length) {
       const record: SupplyProductDownload = {
@@ -126,9 +166,11 @@ export class SupplyProductDownloadService {
         specs: extracted.specs,
         descriptionText: extracted.descriptionText,
         html,
-        images: uploadedGallery.map(entry => ({ name: entry.file, contentType: entry.contentType, dataBase64: (entry.buffer ?? Buffer.alloc(0)).toString('base64') })),
-        descriptionImages: uploaded.filter(item => item.kind === 'desc').map(entry => ({ name: entry.file, contentType: entry.contentType, dataBase64: (entry.buffer ?? Buffer.alloc(0)).toString('base64') })),
-        videos: uploaded.filter(item => item.kind === 'video').map(entry => ({ name: entry.file, contentType: entry.contentType, dataBase64: (entry.buffer ?? Buffer.alloc(0)).toString('base64') })),
+        images: uploadedGallery.map(toAssetPayload),
+        descriptionImages: uploaded.filter(item => item.kind === 'desc').map(toAssetPayload),
+        videos: uploaded.filter(item => item.kind === 'video').map(toAssetPayload),
+        fileAssets: uploaded.filter(item => item.kind === 'file').map(toAssetPayload),
+        packAsset: uploadedPackAsset ? toAssetPayload(uploadedPackAsset) : undefined,
         category: extracted.category ?? '',
         itemCode: extracted.itemCode ?? '',
         firstStockAt: extracted.firstStockAt ?? '',
@@ -141,9 +183,11 @@ export class SupplyProductDownloadService {
         estimatedTotal: extracted.estimatedTotal ?? '',
         dropshipLeadTime: extracted.dropshipLeadTime ?? '',
         gigaIndex: extracted.gigaIndex ?? '',
-        materialPackUrl: extracted.materialPackUrl ?? '',
+        materialPackUrl: materialPackAsset,
         materialPackDownloads: extracted.materialPackDownloads ?? '',
-        files: extracted.files ?? []
+        files: filesPayload,
+        features: extracted.features ?? [],
+        descriptionFlow: extracted.descriptionFlow ?? []
       })
     })
     if (response.status === 401) {

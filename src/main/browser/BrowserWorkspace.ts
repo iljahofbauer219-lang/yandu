@@ -1,4 +1,5 @@
-import { BaseWindow, BrowserWindow, WebContents, WebContentsView } from 'electron'
+import { writeFileSync } from 'node:fs'
+import { BaseWindow, BrowserWindow, WebContents, WebContentsView, clipboard } from 'electron'
 import { AMAZON_LISTING_EVIDENCE_SCRIPT, AMAZON_REVIEW_EVIDENCE_SCRIPT, AMAZON_SAMPLES_SCRIPT, type AmazonListingEvidence, type AmazonMarketSample, type AmazonReviewEvidence } from '../../shared/amazonScraper'
 import { matchSellableInventoryText } from '../../shared/sellableInventory'
 import type { BrowserBounds, BrowserState, BrowserTab, BuiltInCollectorState, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, EbayBrowserPluginState, EbayCategorySpecificRequirement, EbayCollectedProduct, EbayDeliveryLocationResult, EbayDirectoryProductScanCategory, EbayLoginResult, EbayMarketResearchFilter, EbayMarketResearchMetric, EbayMarketResearchSample, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayProductDetails, EbaySellerHubAcceptanceSnapshot, EbayStoreCategory, MarketplacePlatformCode, NetworkStrategy, Platform, SelectionTask, SupplyActivationResult } from '../../shared/contracts'
@@ -66,8 +67,11 @@ export interface SupplyProductPageSnapshot {
     materialPackUrl?: string
     materialPackDownloads?: string
     videos?: string[]
-    files?: Array<{ name: string; url: string }>
+    files?: Array<{ name: string; url: string; label?: string }>
+    features?: string[]
     descriptionImages?: string[]
+    descriptionFlow?: Array<{ kind: 't' | 'img'; text?: string; i?: number }>
+    loginWall?: boolean
   }
 }
 
@@ -86,6 +90,8 @@ export class BrowserWorkspace {
   private attached: WebContentsView | null = null
   private browserVisible = false
   private activationVersion = 0
+  // 大健云仓会话是否在线：未在线时 openTab 的深链一律改落首页，避免站点弹「Page expired」原生框
+  private gigaLoginOk = false
   private bounds: BrowserBounds = { x: 264, y: 112, width: 900, height: 640 }
   private marketplaceTitle = 'Ozon 市场'
   private marketplaceDomains = ['ozon.ru']
@@ -314,27 +320,150 @@ export class BrowserWorkspace {
       }
       await window.webContents.executeJavaScript('window.scrollTo(0, 0)')
       await this.sleep(400)
+      // 未登录闸口（仅大健云仓）：匿名实测页为英文登录壳——Item Code 有值但日期/退返品率掩码为 **、
+      // 价格区「Login To See Price」，规格/费用/文件区整体缺失；旧 LOGIN 哨兵只认「请登录」会漏放，
+      // 导致下载产出残缺页并覆盖线上合格页。渲染完成后再判定，防 SPA 未渲染误杀登录态
+      if (warehouseCode === 'GIGACLOUD') {
+        const sessionGate = await window.webContents.executeJavaScript(String.raw`(() => {
+          const text=((document.body?.innerText||'')+' '+(document.body?.textContent||'')).replace(/\s+/g,' ')
+          return {
+            loginEntry: /登录\/注册|立即登录|请登录|sign in/i.test(text),
+            anonMask: /Login To See Price|登录后查看|登录可见|登录后可见|(?:Return Rate|First Arrival Date|退返品率|首次到库时间)\s*[:：]?\s*\*\*/i.test(text),
+            loggedIn: /退出登录|个人中心|我的订单|下载次数|下载素材包|logout|my orders/i.test(text),
+            productData: /单价\(件\)|可售库存|产品规格|打包费/.test(text)
+          }
+        })()`) as { loginEntry: boolean; anonMask: boolean; loggedIn: boolean; productData: boolean }
+        const anonymous = sessionGate.anonMask || (sessionGate.loginEntry && !sessionGate.loggedIn && !sessionGate.productData)
+        if (anonymous && !sessionGate.loggedIn) {
+          const gateError = new Error(`${name}当前为未登录态：商品页价格/规格/文件区被登录墙遮挡（掩码或 Login To See Price），继续下载只会得到残缺详情页。请先在 IE浏览 中登录${name}后重试`) as Error & { code?: string }
+          gateError.code = 'SUPPLY_LOGIN_REQUIRED'
+          throw gateError
+        }
+      }
       const html = await window.webContents.executeJavaScript('document.documentElement.outerHTML') as string
+      // 主图视频要点开「Play Video」才注入播放器，且真实播放器经 XHR/弹窗/MSE 取地址（DOM 常无 .mp4 字面量）：
+      // 全通道捕获 = CDP Network（请求+响应 mime）+ 弹窗隐藏窗 DOM + 主窗 DOM/outerHTML 扫描；
+      // 诊断写 /tmp/yandu-video-probe.log（与开发同机），debugger/弹窗handler 探完即还原
+      const urlBeforeProbe = window.webContents.getURL()
+      const networkVideos: string[] = []
+      let debuggerAttached = false
+      const onDebuggerMessage = (_event: unknown, method: string, params: { request?: { url?: string; method?: string; type?: string }; response?: { url?: string; mimeType?: string } }) => {
+        if (method === 'Network.requestWillBeSent') {
+          const requestUrl = params?.request?.url || ''
+          if (/\.(mp4|m3u8)(\?|#|$)/i.test(requestUrl) || /\/video\//i.test(requestUrl) || params?.request?.type === 'Media') networkVideos.push(requestUrl)
+        } else if (method === 'Network.responseReceived') {
+          const response = params?.response
+          if (response && /^video\//i.test(response.mimeType || '') && /^https?:\/\//i.test(response.url || '')) networkVideos.push(response.url || '')
+        }
+      }
+      try {
+        window.webContents.debugger.attach('1.3')
+        debuggerAttached = true
+        window.webContents.debugger.on('message', onDebuggerMessage)
+        // 播放器可能在跨进程 iframe 内：auto-attach 让其 Network 事件也汇入同一 message 通道
+        await window.webContents.debugger.sendCommand('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }).catch(() => undefined)
+        await window.webContents.debugger.sendCommand('Network.enable')
+      } catch { /* debugger 不可用时仅保留 DOM 通道 */ }
+      let popupUrl = ''
+      let popupWindow: BrowserWindow | null = null
+      const getPopup = (): BrowserWindow | null => popupWindow
+      window.webContents.setWindowOpenHandler(details => {
+        popupUrl = details.url
+        popupWindow = new BrowserWindow({ show: false, width: 1280, height: 800, webPreferences: { partition: `persist:supply:${warehouseCode}:default`, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } })
+        popupWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+        return { action: 'allow', createWindow: () => (popupWindow as BrowserWindow).webContents }
+      })
+      let clicked = false
+      let pageProbe: { blob?: boolean; videoNodes?: number; dialogs?: number; scan?: number } = {}
+      const clickReport: { thumb?: boolean; stage?: boolean; dialogsBefore?: number } = {}
+      try {
+        // 真实交互是两段：先点可见的视频缩略图把轮播切到视频页，再点显现后的主图播放遮罩；
+        // 直接点隐藏 slide 在本站无效果（诊断日志证伪：clicked=true 但 videoNodes/scan/network 全 0）
+        const thumbReport = await window.webContents.executeJavaScript(String.raw`(() => {
+          const vis = (el) => !!(el && el.offsetParent !== null)
+          const nodes = [...document.querySelectorAll('[title*="Play Video" i], .play-action')].map(el => el.closest('[title*="Play Video" i]') || el)
+          const thumb = nodes.find(el => vis(el) && el.querySelector('img'))
+          if (thumb) thumb.click()
+          return { thumb: !!thumb, dialogsBefore: [...document.querySelectorAll('.el-dialog__wrapper, .el-dialog')].filter(d => !/display:\s*none/.test(d.getAttribute('style') || '')).length }
+        })()`) as { thumb: boolean; dialogsBefore: number }
+        clickReport.thumb = thumbReport.thumb
+        clickReport.dialogsBefore = thumbReport.dialogsBefore
+        clicked = thumbReport.thumb
+        if (clicked) {
+          await this.sleep(1500)
+          clickReport.stage = await window.webContents.executeJavaScript(String.raw`(() => {
+            const vis = (el) => !!(el && el.offsetParent !== null)
+            const visibles = [...document.querySelectorAll('[title*="Play Video" i]')].filter(vis)
+            const stage = visibles.find(el => el.querySelector('.play-action, i[class*="play" i], svg')) || visibles[0]
+            if (!stage) return false
+            stage.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
+            stage.click()
+            return true
+          })()`) as boolean
+          await this.sleep(4000)
+          pageProbe = await window.webContents.executeJavaScript(String.raw`(() => {
+            const vids = [...document.querySelectorAll('video, video source')].map(node => node.currentSrc || node.src || node.getAttribute('src') || '')
+            const scan = (document.documentElement.outerHTML.match(/https?:\/\/[^"'\s<>\\)]+(?:\.mp4|\.m3u8|\/video\/)[^"'\s<>\\)]*/gi) || [])
+            window.__yanduVideos = [...new Set([...vids.filter(u => /^https?:\/\//i.test(u)), ...scan])].slice(0, 8)
+            return {
+              blob: vids.some(u => u.startsWith('blob:')),
+              videoNodes: vids.length,
+              dialogs: [...document.querySelectorAll('.el-dialog__wrapper, .el-dialog')].filter(d => !/display:\s*none/.test(d.getAttribute('style') || '')).length,
+              scan: scan.length
+            }
+          })()`) as typeof pageProbe
+          const popup = getPopup()
+          if (popup && !popup.isDestroyed()) {
+            await this.sleep(1500)
+            const popupVideos = await popup.webContents.executeJavaScript(String.raw`(() => {
+              const vids = [...document.querySelectorAll('video, video source')].map(node => node.currentSrc || node.src || '')
+              const scan = (document.documentElement.outerHTML.match(/https?:\/\/[^"'\s<>\\)]+(?:\.mp4|\.m3u8|\/video\/)[^"'\s<>\\)]*/gi) || [])
+              return [...new Set([...vids.filter(u => /^https?:\/\//i.test(u)), ...scan])].slice(0, 8)
+            })()`) as string[]
+            networkVideos.push(...popupVideos)
+          }
+        }
+        const merged = [...new Set([...networkVideos])].filter(u => /^https?:\/\//i.test(u) && !/\.jpg|\.png|\.webp/i.test(u)).slice(0, 8)
+        if (merged.length) {
+          await window.webContents.executeJavaScript(`window.__yanduVideos = [...new Set([...(window.__yanduVideos || []), ...${JSON.stringify(merged)}])].slice(0, 8)`)
+        }
+        try {
+          writeFileSync('/tmp/yandu-video-probe.log', JSON.stringify({ at: new Date().toISOString(), url: urlBeforeProbe, clickReport, popupUrl, pageProbe, networkVideos: [...new Set(networkVideos)].slice(0, 12), merged }, null, 2))
+        } catch { /* 诊断落盘失败不影响采集 */ }
+      } catch { /* 视频探测失败静默降级：videos 为空时公开页不渲染视频区 */ }
+      if (debuggerAttached) {
+        try {
+          window.webContents.debugger.removeListener('message', onDebuggerMessage)
+          window.webContents.debugger.detach()
+        } catch { /* 忽略摘除失败 */ }
+      }
+      window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+      const leftoverPopup = getPopup()
+      if (leftoverPopup && !leftoverPopup.isDestroyed()) leftoverPopup.destroy()
+      if (window.webContents.getURL() !== urlBeforeProbe) {
+        await window.webContents.loadURL(parsed.toString())
+        await this.sleep(2000)
+      }
       const extracted = await window.webContents.executeJavaScript(String.raw`(() => {
         const bodyText = document.body?.innerText || ''
         const hostScore = (u) => (/b2bfiles|gigab2b\.cn|gigab2b\.com|alicdn|cbu\d*|1688/i.test(u) ? 1 : 0)
         const entries = []
-        const push = (u, w) => {
+        const push = (u, w, el) => {
           if (!u) return
           try {
             const abs = new URL(u, location.href).toString()
             if (!/^https?:\/\//i.test(abs)) return
-            entries.push({ u: abs, w: w || 0 })
+            entries.push({ u: abs, w: w || 0, el: el || null })
           } catch (e) { /* 忽略无效图片地址 */ }
         }
         document.querySelectorAll('img').forEach(img => {
-          push(img.currentSrc || img.src, img.naturalWidth || 0)
+          push(img.currentSrc || img.src, img.naturalWidth || 0, img)
           const srcset = img.getAttribute('srcset') || ''
-          srcset.split(',').forEach(part => push(part.trim().split(/\s+/)[0], (img.naturalWidth || 0) + 1))
+          srcset.split(',').forEach(part => push(part.trim().split(/\s+/)[0], (img.naturalWidth || 0) + 1, img))
         })
         document.querySelectorAll('[style*="background"]').forEach(el => {
           const match = /url\((['"]?)(.*?)\1\)/.exec(el.getAttribute('style') || '')
-          if (match) push(match[2], 500)
+          if (match) push(match[2], 500, el)
         })
         const seen = new Set()
         const deduped = entries
@@ -344,9 +473,19 @@ export class BrowserWorkspace {
             seen.add(item.u)
             return !/logo|icon|sprite|avatar|blank|loading|\.svg(\?|$)/i.test(item.u)
           })
-        // 主图仅取大图（naturalWidth≥300），缩略图不进下载页画廊；全被过滤时回退原序列
+        // 分区根（叶子文本匹配，隐藏 Tab 也可命中）：画廊仅主图大图；描述图归描述区；关联产品图丢弃
+        const sectionRoot = (titleText) => {
+          const head = [...document.querySelectorAll('h1,h2,h3,h4,b,strong,span,div')].find(n => n.children.length === 0 && (n.textContent || '').trim() === titleText)
+          return head ? (head.closest('section') || head.parentElement) : null
+        }
+        const descRoot = sectionRoot('图文描述')
+        const relatedRoot = sectionRoot('关联产品') || sectionRoot('相关产品')
+        const inRoot = (el, root) => !!(el && root && root.contains(el))
         const largeOnly = deduped.filter(item => item.w >= 300)
-        const images = (largeOnly.length ? largeOnly : deduped).slice(0, 24).map(item => item.u)
+        const largePool = (largeOnly.length ? largeOnly : deduped).slice(0, 40)
+        // 关联产品轮播卡（.card-item，alt 为其他商品）与视频海报（Play Video 缩略图）不得冒充主图
+        const inCardOrPoster = (el) => !!(el && el.closest && el.closest('.card-item, [class*="card-item"], [title*="Play Video" i]'))
+        const images = largePool.filter(item => !inRoot(item.el, descRoot) && !inRoot(item.el, relatedRoot) && !inCardOrPoster(item.el)).slice(0, 24).map(item => item.u)
         const pickText = (selector) => { const el = document.querySelector(selector); return el ? (el.textContent || '').trim().replace(/\s+/g, ' ') : '' }
         const title = pickText('h1') || (document.title || '').trim()
         const pricePattern = /(US\s?\$|\$|￥|¥|RMB)\s?\d[\d,]*(\.\d+)?(\s*[-–~]\s*(US\s?\$|\$|￥|¥)?\s?\d[\d,]*(\.\d+)?)?/i
@@ -354,42 +493,187 @@ export class BrowserWorkspace {
         const priceMatch = pricePattern.exec((priceNode && priceNode.innerText) || '') || pricePattern.exec(bodyText)
         const price = priceMatch ? priceMatch[0].replace(/\s+/g, ' ').trim() : ''
         const specs = []
+        const specSeen = new Set()
+        // 费用/库存等已有专属字段的键不再进规格表，避免同一数值重复两处
+        const specSkip = /^(预估物流费|物流费|基础运费|运费|打包费|单价|单价\(件\)|预估总额.*|货值.*|可售库存|首次到库时间|退返品率|GIGA\s*Index|Item\s*Code|一件代发发货时效|云送仓发货时效|仓租费)$/i
+        const addSpec = (rawKey, rawValue) => {
+          const key = (rawKey || '').trim().replace(/\s+/g, ' ').replace(/[:：]$/, '')
+          const value = (rawValue || '').trim().replace(/\s+/g, ' ')
+          if (!key || !value || key.length > 40 || value.length > 200 || specSeen.has(key) || specSkip.test(key)) return
+          if (specs.length >= 80) return
+          specSeen.add(key)
+          specs.push({ key, value })
+        }
+        // gigab2b 规格形如 <div class="items"><span>颜色:</span><span title="Blue">Blue</span></div>，藏在 Tab 面板内
+        const pairChannels = [document.querySelector('#pane-description, [class*="des-content" i]'), document.body]
+        for (const root of pairChannels) {
+          if (!root) continue
+          root.querySelectorAll('div,li,tr,td').forEach(node => {
+            const kids = [...node.children]
+            if (kids.length !== 2) return
+            if (!kids.every(kid => kid.tagName === 'SPAN' || kid.tagName === 'TD' || kid.tagName === 'TH')) return
+            addSpec(kids[0].textContent, kids[1].textContent)
+          })
+          if (specs.length) break
+        }
         document.querySelectorAll('dl div, table tr, [class*="spec" i] li, [class*="attr" i] li, [class*="parameter" i] li, [class*="property" i] li').forEach(node => {
-          const line = (node.innerText || '').trim().replace(/\s+/g, ' ')
+          const line = (node.innerText || node.textContent || '').trim().replace(/\s+/g, ' ')
           if (!line || line.length > 200) return
           const kv = /^([^:：\t]{1,40})[:：\t]\s*(.{1,120})$/.exec(line)
-          if (kv && specs.length < 60 && !specs.some(item => item.key === kv[1].trim())) specs.push({ key: kv[1].trim(), value: kv[2].trim() })
+          if (kv) addSpec(kv[1], kv[2])
         })
-        // gigab2b 17 要素补充提取（缺字段返回空串，服务端优雅降级）
+        // gigab2b 17 要素补充提取：innerText+textContent 双通道覆盖默认折叠面板；缺字段返回空串，服务端优雅降级
         const flat = bodyText.replace(/\s+/g, ' ')
-        const grab = (re) => { const m = re.exec(flat); return m && m[1] ? m[1].trim() : '' }
+        const flatAll = (document.body?.textContent || '').replace(/\s+/g, ' ')
+        const grab = (re) => { const m = re.exec(flat) || re.exec(flatAll); return m && m[1] ? m[1].trim() : '' }
         const crumbNode = document.querySelector('[class*="breadcrumb" i],[class*="crumb" i],[class*="category-path" i]')
-        const category = crumbNode ? (crumbNode.innerText || '').replace(/\s+/g, ' ').split(/[>/›]+/).map(s => s.trim()).filter(Boolean).join(' / ') : ''
+        const crumbParts = crumbNode ? (crumbNode.innerText || crumbNode.textContent || '').replace(/\s+/g, ' ').split(/[>/›]+/).map(s => s.trim()).filter(Boolean) : []
+        if (crumbParts.length > 1 && title && crumbParts[crumbParts.length - 1].length >= 8 && (title.includes(crumbParts[crumbParts.length - 1]) || crumbParts[crumbParts.length - 1].includes(title))) crumbParts.pop()
+        const category = crumbParts.join(' / ')
         const itemCode = grab(/Item\s*Code[:：]\s*([A-Z0-9-]+)/i)
         const firstStockAt = grab(/首次到库时间[:：]\s*(\d{4}-\d{2}-\d{2})/)
         const returnRate = grab(/退返品率[:：]\s*(\S+)/)
         const matchStockFn = ${matchSellableInventoryText.toString()};
-        const stockHit = matchStockFn(flat)
+        const stockHit = matchStockFn(flat) || matchStockFn(flatAll)
         const sellableInventory = stockHit && stockHit.sellableInventory !== null ? String(stockHit.sellableInventory) : ''
-        const unitPrice = grab(/单价\(件\)\s*((?:US\s?\$|\$)\s?[\d,.]+)/)
-        const packingFee = grab(/打包费\s*((?:US\s?\$|\$)\s?[\d,.]+(?:\s*\/件)?)/)
-        const freightFee = grab(/运费\s*((?:US\s?\$|\$)\s?[\d,.]+(?:\s*\/件)?)/)
-        const shippingFee = grab(/(?<!预估)物流费\s*[:：]?\s*((?:US\s?\$|\$)\s?[\d,.]+(?:\s*\/件)?)/)
-        const estimatedTotal = grab(/预估总额\s*\(含物流费\)\s*((?:US\s?\$|\$)\s?[\d,.]+(?:\s*\/件)?)/)
+        // 金额统一支持区间（$20.63~$40.30）与「/件」后缀；真实页面标签后带冒号，费用面板默认折叠只能靠 textContent 通道
+        const money = '((?:US\\s?\\$|\\$)\\s?[\\d,.]+(?:\\s*[~～\\-–]\\s*(?:US\\s?\\$|\\$)?\\s?[\\d,.]+)?(?:\\s*/\\s*件)?)'
+        const unitPrice = grab(new RegExp('单价\\s*[（(]\\s*件\\s*[）)]\\s*[:：]?\\s{0,3}' + money)) || grab(new RegExp('单价\\s*[:：]?\\s{0,3}' + money))
+        const packingFee = grab(new RegExp('打包费\\s*[:：]?\\s{0,3}' + money))
+        const freightFee = grab(new RegExp('基础运费\\s*[:：]?\\s{0,3}' + money)) || grab(new RegExp('(?<!基础)运费\\s*[:：]?\\s{0,3}' + money))
+        const shippingFee = grab(new RegExp('(?<!预估)物流费\\s*[:：]\\s{0,3}' + money)) || grab(new RegExp('(?<!预估)物流费\\s*/?\\s*件?\\s*[:：]\\s{0,3}' + money))
+        const estimatedTotal = grab(new RegExp('预估总额\\s*[（(]?\\s*含物流费\\s*[）)]?\\s*[:：]?\\s{0,3}' + money))
         const dropshipLeadTime = grab(/一件代发发货时效\s*(\d+\s*-\s*\d+\s*个工作日)/)
         const gigaIndex = grab(/GIGA\s*Index[:：]\s*([\d.]+)/i)
-        const materialAnchor = [...document.querySelectorAll('a[href]')].find(a => /下载素材包/.test(a.textContent || ''))
-        const materialPackUrl = materialAnchor ? materialAnchor.href : ''
-        const materialPackDownloads = grab(/下载次数[:：]\s*([\d,]+)/)
-        const videos = [...document.querySelectorAll('video source, video')].map(v => v.src || v.currentSrc || '').filter(u => /^https?:\/\//i.test(u)).slice(0, 8)
-        const files = [...document.querySelectorAll('a[href]')].map(a => ({ name: (a.textContent || '').trim(), url: a.href })).filter(f => f.name && !/下载素材包/.test(f.name) && /\.(pdf|txt|zip|rar|xlsx?|docx?)$/i.test((f.url.split('?')[0]) || '')).slice(0, 20)
-        const descHead = [...document.querySelectorAll('h1,h2,h3,h4,b,strong,div,span')].find(n => n.children.length === 0 && (n.textContent || '').trim() === '图文描述')
-        const descRoot = descHead ? (descHead.closest('section,div') || descHead.parentElement) : null
-        const descriptionText = descRoot ? (descRoot.innerText || '').trim().slice(0, 20000) : bodyText.trim().slice(0, 20000)
+        const materialNode = [...document.querySelectorAll('a[href],button,[role="button"],span,div')].find(el => el.children.length <= 3 && /下载素材包/.test(el.textContent || '') && (el.textContent || '').trim().length <= 20)
+        const materialAnchor = materialNode && (materialNode.closest('a[href]') || materialNode.querySelector('a[href]'))
+        const materialFallback = [...document.querySelectorAll('a[href]')].find(a => /\.(zip|rar)$/i.test((a.href || '').split('?')[0]) || /material|download_product/i.test(a.href || ''))
+        const materialPackUrl = (materialAnchor && materialAnchor.href) || (materialNode && materialNode.getAttribute && (materialNode.getAttribute('data-url') || materialNode.getAttribute('href')) || '') || (materialFallback ? materialFallback.href : '')
+        const materialPackDownloads = grab(/下载次数[:：]?\s*([\d,]+)/)
+        // 主图视频：真实页面点击「Play Video」后才注入播放器，主进程探测结果经 window.__yanduVideos 传入
+        const probedVideos = (Array.isArray(window.__yanduVideos) ? window.__yanduVideos : []).filter(u => typeof u === 'string')
+        const domVideos = [...document.querySelectorAll('video, video source, [data-video-url], [data-video], a[href*=".mp4"]')]
+          .map(v => ({ u: v.src || v.currentSrc || v.getAttribute('data-video-url') || v.getAttribute('data-video') || v.href || '', tag: v.tagName }))
+          .filter(item => /^https?:\/\/\S+/i.test(item.u) && (/\.mp4|\.m3u8/i.test(item.u) || item.tag === 'VIDEO' || item.tag === 'SOURCE'))
+          .map(item => item.u)
+        const videos = [...new Set([...probedVideos, ...domVideos])].filter(u => /^https?:\/\//i.test(u)).slice(0, 8)
+        // 文件：gigab2b 藏在隐藏 Tab #pane-documents，条目为 .link-item（.type-name 标签 + .link-text 文件名），
+        // 真实下载地址需登录态点击「获取文件链接」才生成，故 url 允许为空由服务端降级为纯文件名展示
+        const fileRoots = [sectionRoot('文件'), document.querySelector('#pane-documents, [class*="doc-content" i]'), document.body].filter(Boolean)
+        const headingOf = (node) => {
+          let cursor = node
+          while (cursor && cursor !== document.body) {
+            for (let sib = cursor.previousElementSibling; sib; sib = sib.previousElementSibling) {
+              const head = sib.querySelector ? (sib.querySelector('.text-20px, .font-bold, h2, h3, h4') || (/text-20px|font-bold/.test(sib.className || '') ? sib : null)) : null
+              const text = head ? (head.textContent || '').trim().replace(/\s+/g, ' ') : ''
+              if (text && text.length <= 20) return text
+            }
+            cursor = cursor.parentElement
+          }
+          return ''
+        }
+        const cleanLabel = (value) => (value || '').trim().replace(/\s+/g, ' ').replace(/[:：]$/, '').slice(0, 40)
+        let files = []
+        for (const root of fileRoots) {
+          const linkItems = [...root.querySelectorAll('.link-item, [class*="link-item"]')].map(node => {
+            const nameNode = node.querySelector('.link-text, [class*="link-text"]')
+            const anchor = node.querySelector('a[href]')
+            return {
+              name: ((nameNode || node).textContent || '').trim().replace(/\s+/g, ' ').slice(0, 200),
+              label: cleanLabel((node.querySelector('.type-name, [class*="type-name"]') || {}).textContent || headingOf(node)),
+              url: (anchor && /^https?:\/\//i.test(anchor.href || '') && anchor.href) || ''
+            }
+          }).filter(item => item.name && item.name.length <= 200 && !/获取文件链接|下载素材包/.test(item.name))
+          if (linkItems.length) { files = linkItems; break }
+          const anchors = [...root.querySelectorAll('a[href]')]
+            .map(a => ({ name: (a.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 200), label: cleanLabel(headingOf(a)), url: a.href }))
+            .filter(f => f.name && /^https?:\/\//i.test(f.url || '') && !/下载素材包/.test(f.name) && f.url !== materialPackUrl && (root === document.body ? (/\.(pdf|txt|zip|rar|xlsx?|docx?)$/i.test((f.url || '').split('?')[0]) || /download/i.test(f.url || '')) : true))
+          if (anchors.length) { files = anchors; break }
+        }
+        files = files.slice(0, 20)
+        const descriptionText = descRoot ? (descRoot.innerText || descRoot.textContent || '').trim().slice(0, 20000) : bodyText.trim().slice(0, 20000)
+        // 产品特点：原站真 bullets 在描述面板 #pane-description 内；页首同名标题（特点标签块）在文档序上先命中会抓错，
+        // 故先限定作用域再找标题叶子；面板不存在时才回退全文档（兼容其他仓形态）
+        const featScope = document.querySelector('#pane-description, [class*="des-content" i]') || document
+        const featHead = [...featScope.querySelectorAll('h1,h2,h3,h4,b,strong,span,div')].find(n => n.children.length === 0 && (n.textContent || '').trim() === '产品特点')
+        const featuresRoot = featHead ? (featHead.closest('section') || featHead.parentElement) : (featScope === document ? sectionRoot('产品特点') : null)
+        const features = featuresRoot
+          ? (featuresRoot.innerText || featuresRoot.textContent || '').split(/\r?\n/).map(line => line.trim()).filter(line => line && line !== '产品特点' && line.length <= 2000).slice(0, 40)
+          : []
         const descriptionImages = descRoot ? [...descRoot.querySelectorAll('img')].map(img => img.currentSrc || img.src).filter(u => /^https?:\/\//i.test(u)).slice(0, 40) : []
-        return { title, price, specs, images, descriptionText, finalUrl: location.href, category, itemCode, firstStockAt, returnRate, sellableInventory, unitPrice, packingFee, freightFee, shippingFee, estimatedTotal, dropshipLeadTime, gigaIndex, materialPackUrl, materialPackDownloads, videos, files, descriptionImages }
+        // 图文描述流：按文档序记录文字块与图片下标，公开页才能「原排原渲」文图穿插；
+        // 仅文字/仅图片的旧字段保留作历史回退与既有断言依赖
+        const descriptionFlow = []
+        if (descRoot) {
+          const imgIndexOf = new Map(descriptionImages.map((u, idx) => [u, idx]))
+          const walkFlow = (node) => {
+            for (const child of [...node.children]) {
+              const tag = child.tagName
+              if (tag === 'IMG') {
+                const u = child.currentSrc || child.src
+                if (imgIndexOf.has(u)) descriptionFlow.push({ kind: 'img', i: imgIndexOf.get(u) })
+                continue
+              }
+              if (tag === 'VIDEO' || tag === 'SCRIPT' || tag === 'STYLE') continue
+              const hasBlock = !!child.querySelector('p,div,li,h1,h2,h3,h4,img,table,ul,ol,section')
+              if (!hasBlock) {
+                const leafText = (child.innerText || '').trim().replace(/\s+/g, ' ')
+                if (leafText) descriptionFlow.push({ kind: 't', text: leafText.slice(0, 6000) })
+                continue
+              }
+              walkFlow(child)
+            }
+          }
+          walkFlow(descRoot)
+        }
+        // 半登录墙：价格/库存区「登录后查看」且双通道均无值 → 标记由主进程抛引导错误，杜绝静默半页
+        const loginWall = /登录后查看|登录可见|登录后可见|登录后查看价格/.test(flat + ' ' + flatAll) && !unitPrice && !sellableInventory
+        return { title, price, specs, images, descriptionText, finalUrl: location.href, category, itemCode, firstStockAt, returnRate, sellableInventory, unitPrice, packingFee, freightFee, shippingFee, estimatedTotal, dropshipLeadTime, gigaIndex, materialPackUrl, materialPackDownloads, videos, files, features, descriptionImages, descriptionFlow: descriptionFlow.slice(0, 200), loginWall }
       })()`) as SupplyProductPageSnapshot['extracted']
+      if (extracted?.loginWall) throw new Error(`${name}的价格/库存区需登录后查看（供应会话已过期），请先在 IE浏览 中重新登录${name}后重试`)
       if (!extracted?.images?.length) throw new Error('原商品页没有识别到可下载图片，请确认商品页正常显示后重试')
+      // 文件/素材包签名链接发现（登录态）：逐个点击触发器，三通道收 URL（will-download 记 URL 后 cancel /
+      // 剪贴板 / 触发节点内新增锚点）；签名链接仅内存瞬时供下载服务立即取字节，绝不落 meta（数小时即过期）
+      const probeSession = window.webContents.session
+      const probeUrls: string[] = []
+      const onProbeDownload = (_event: Electron.Event, item: Electron.DownloadItem) => {
+        const downloadUrl = item.getURL()
+        if (/gigab2b|b2bfiles/i.test(downloadUrl)) {
+          probeUrls.push(downloadUrl)
+          item.cancel()
+        }
+      }
+      probeSession.on('will-download', onProbeDownload)
+      const clickAndCollect = async (clickScript: string, domScript: string, waitMs: number): Promise<string> => {
+        const before = probeUrls.length
+        const clicked = await window.webContents.executeJavaScript(clickScript) as boolean
+        if (!clicked) return ''
+        await this.sleep(waitMs)
+        const domUrl = await window.webContents.executeJavaScript(domScript) as string
+        const clipText = (clipboard.readText() || '').trim()
+        const fresh = probeUrls.slice(before)
+        return fresh[0] || (/^https?:\/\//i.test(clipText) ? clipText : '') || (/^https?:\/\//i.test(domUrl || '') ? domUrl : '')
+      }
+      try {
+        const triggerCount = await window.webContents.executeJavaScript('document.querySelectorAll(".link-item").length') as number
+        const fileList = extracted.files ?? []
+        for (let idx = 0; idx < Math.min(triggerCount, fileList.length, 6); idx += 1) {
+          const url = await clickAndCollect(
+            `(() => { const node = document.querySelectorAll('.link-item')[${idx}]; const trigger = node && [...node.querySelectorAll('span,button,a')].find(el => /获取文件链接/.test(el.textContent || '')); if (!trigger) return false; trigger.click(); return true })()`,
+            `(() => { const node = document.querySelectorAll('.link-item')[${idx}]; const m = (node ? node.innerHTML : '').match(/https?:\\/\\/[^"'\\s<>)]+\\.(?:pdf|txt|zip|rar)[^"'\\s<>)]*/i); return m ? m[0] : '' })()`,
+            1500
+          )
+          if (url && fileList[idx]) fileList[idx].url = url
+        }
+        if (!extracted.materialPackUrl) {
+          extracted.materialPackUrl = await clickAndCollect(
+            `(() => { const node = [...document.querySelectorAll('span,div,button,a')].find(el => el.children.length <= 3 && /下载素材包/.test(el.textContent || '') && (el.textContent || '').trim().length <= 20); if (!node) return false; node.click(); return true })()`,
+            `(() => { const m = (document.body?.innerHTML || '').match(/https?:\\/\\/[^"'\\s<>)]+\\.zip[^"'\\s<>)]*/i); return m ? m[0] : '' })()`,
+            2500
+          )
+        }
+      } catch { /* 发现失败降级为空链接：公开页显示原站提示，不影响其余要素 */ }
+      probeSession.removeListener('will-download', onProbeDownload)
       return { html, extracted }
     } finally {
       if (!window.isDestroyed()) window.destroy()
@@ -581,6 +865,33 @@ export class BrowserWorkspace {
     this.emitTabs()
     if (!view.webContents.getURL()) await view.webContents.loadURL(profile.url)
     return this.isActivationCurrent(activationVersion, platformCode) ? activationVersion : null
+  }
+
+  // 渲染端「去登录」跳链：让供应会话视图加载指定站内地址（登录页），域名白名单与抓取口径一致
+  async openSupplyUrl(platformCode: '1688' | 'GIGACLOUD', rawUrl: string): Promise<string> {
+    const parsed = new URL(rawUrl)
+    const host = parsed.hostname.toLowerCase()
+    const allowed = platformCode === 'GIGACLOUD'
+      ? host === 'gigab2b.com' || host.endsWith('.gigab2b.com')
+      : host === '1688.com' || host.endsWith('.1688.com')
+    if (parsed.protocol !== 'https:' || !allowed) throw new Error('仅允许打开供应站内的 https 地址')
+    let view = this.supplyViews.get(platformCode)
+    if (!view || view.webContents.isDestroyed()) {
+      this.supplyPlatformCode = platformCode
+      view = this.createView('1688', false)
+      await this.configureNetworkAndLoad('1688', view)
+    }
+    this.supplyPlatformCode = platformCode
+    this.supplyTitle = platformCode === 'GIGACLOUD' ? '大健云仓采购' : '1688 采购'
+    this.supplyTabVisible = true
+    this.marketplaceTabVisible = false
+    this.active = '1688'
+    this.activeTabId = 'home-1688'
+    this.views.set('1688', view)
+    await view.webContents.loadURL(parsed.toString())
+    this.attachView(view)
+    this.emitTabs()
+    return parsed.toString()
   }
 
   async startBuiltInCollector(): Promise<BuiltInCollectorState> {
@@ -1991,6 +2302,12 @@ export class BrowserWorkspace {
   }
 
   async ensureGigaCloudLogin(username:string,password:string,allowAutoLogin:boolean,activationVersion:number):Promise<SupplyActivationResult | null> {
+    const result = await this.runEnsureGigaCloudLogin(username,password,allowAutoLogin,activationVersion)
+    if (result) this.gigaLoginOk = result.loginStatus === 'ONLINE'
+    return result
+  }
+
+  private async runEnsureGigaCloudLogin(username:string,password:string,allowAutoLogin:boolean,activationVersion:number):Promise<SupplyActivationResult | null> {
     const view=this.supplyViews.get('GIGACLOUD')
     if(!view||view.webContents.isDestroyed())throw new Error('大健云仓浏览器尚未初始化')
     if(!this.isActivationCurrent(activationVersion,'GIGACLOUD'))return null
@@ -2132,6 +2449,16 @@ export class BrowserWorkspace {
   async openTab(platform: Platform, url: string, initialTitle?: string) {
     if (this.visibleTabCount() >= 8) throw new Error('最多同时打开8个浏览标签，请先关闭不需要的标签')
     if (!this.isAllowedUrl(platform, url)) throw new Error('链接不属于当前平台，已阻止打开')
+    let targetUrl = url
+    try {
+      const parsed = new URL(targetUrl)
+      const gigaHost = parsed.hostname === 'gigab2b.com' || parsed.hostname.endsWith('.gigab2b.com')
+      const gigaHome = 'https://www.gigab2b.com/index.php?route=common/home'
+      if (gigaHost && !this.gigaLoginOk && targetUrl !== gigaHome) {
+        console.info('[browser] 大健云仓会话未在线，深链改落首页以免站点弹 Page expired：', targetUrl)
+        targetUrl = gigaHome
+      }
+    } catch { /* 解析失败保留原链接 */ }
     const id = crypto.randomUUID()
     const view = new WebContentsView({
       webPreferences: {
@@ -2182,7 +2509,7 @@ export class BrowserWorkspace {
     this.activeTabId = id
     this.attachView(view)
     this.emitTabs()
-    await view.webContents.loadURL(url)
+    await view.webContents.loadURL(targetUrl)
     return id
   }
 

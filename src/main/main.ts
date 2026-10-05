@@ -1663,6 +1663,10 @@ ipcMain.handle('browser:supply:activate', async (_event, platformCode: '1688' | 
     ?? { platformCode, loginStatus:'UNKNOWN', message:'已取消过期的大健云仓登录检查', url:'', autoLoginAttempted:false }
 })
 ipcMain.handle('browser:open-tab', (_event, platform: Platform, url: string, title?: string) => workspace?.openTab(platform, url, title))
+ipcMain.handle('browser:supply:open', async (_event, platformCode: '1688' | 'GIGACLOUD', url: string) => {
+  if (!workspace) throw new Error('采集浏览器尚未初始化')
+  return workspace.openSupplyUrl(platformCode, url)
+})
 // IE 浏览面板挂载时自愈调用：没有通用 web tab 就建默认 nav 站点，已有则补推一次 tab 快照
 ipcMain.handle('browser:ensure-default-nav', () => workspace?.openDefaultNavIfNeeded() ?? Promise.resolve(null))
 // ERP 通用采集注入器（crawl_rules 驱动）：渲染层 CollectWorkbench 通过下列通道驱动内嵌浏览器采集

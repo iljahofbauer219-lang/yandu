@@ -89,7 +89,13 @@ describe('renderProductPageDocument', () => {
       materialPackDownloads: '352',
       videos: [{ name: 'v-01.mp4', contentType: 'video/mp4' }],
       files: [{ name: 'K240272 (2085_2091).pdf', url: 'https://www.gigab2b.com/f.pdf' }],
-      descriptionText: 'The M2085 Blue\nfoldable design',
+      features: ['【True Foldable, No Need to Disassemble】 The elderly motorized scooter can be folded in 2 steps.', '【Full Foldable While Steady】 The M2085 has innovative way of folding.'],
+      specs: [
+        { key: '产品类型', value: 'Single Box Product' }, { key: '颜色', value: 'Blue' },
+        { key: '组装长度 (英寸)', value: '38.43' }, { key: '产品重量 (磅)', value: '52.03' },
+        { key: '长度 (英寸)', value: '40.75' }, { key: '重量 (磅)', value: '63.00' }
+      ],
+      descriptionText: '图文描述\nThe M2085 Blue\nfoldable design with a very long sentence that exceeds forty characters so it stays a paragraph.\n• Delta tiller with ergonomic wraparound handles lets you operate the scooter with one hand.',
       descriptionImages: [{ name: 'd-01.jpg', contentType: 'image/jpeg' }]
     }))
     expect(html).toContain('首页 / 汽车配件与运输 / 电动代步车')
@@ -112,6 +118,72 @@ describe('renderProductPageDocument', () => {
     expect(html).toContain('图文描述')
     expect(html).toContain('K240272 (2085_2091).pdf')
     expect(html).toContain('foldable design')
+    expect(html.indexOf('class="pp-left"')).toBeGreaterThan(-1)
+    expect(html.indexOf('class="pp-videos"')).toBeLessThan(html.indexOf('class="pp-info"'))
+    // 三大版块整宽且按原站顺序：产品规格 → 产品特点 → 图文描述；规格不在右栏内
+    const idxInfo = html.indexOf('class="pp-info"')
+    const idxSpec = html.indexOf('>产品规格<')
+    const idxFeat = html.indexOf('>产品特点<')
+    const idxDesc = html.indexOf('<b>图文描述</b>')
+    expect(idxSpec).toBeGreaterThan(idxInfo)
+    expect(idxSpec).toBeLessThan(idxFeat)
+    expect(idxFeat).toBeLessThan(idxDesc)
+    // 规格三组+三列网格（对照原站图1）
+    expect(html).toContain('class="pp-spec-groups"')
+    expect(html).toContain('>基础信息<')
+    expect(html).toContain('>产品尺寸<')
+    expect(html).toContain('>包装尺寸<')
+    expect(html).toContain('class="pp-spec-grid"')
+    // 产品特点 bullets（对照原站图2）
+    expect(html).toContain('class="pp-desc pp-features"')
+    expect(html).toContain('<li>【True Foldable, No Need to Disassemble】 The elderly motorized scooter can be folded in 2 steps.</li>')
+    // 描述结构化：子标题加粗、长句成段、bullet 归列表、重复标题剥离
+    expect(html).toContain('<h4>The M2085 Blue</h4>')
+    expect(html).toContain('<li>Delta tiller with ergonomic wraparound handles lets you operate the scooter with one hand.</li>')
+    expect(html).not.toContain('<p>图文描述</p>')
+    expect(html).not.toContain('<h4>图文描述</h4>')
+  })
+
+  it('规格无尺寸键时回退扁平表格（历史 meta 零回归）', () => {
+    const html = renderProductPageDocument('page-1', meta())
+    expect(html).toContain('>产品规格<')
+    expect(html).toContain('<table class="pp-specs">')
+    expect(html).not.toContain('class="pp-spec-groups"')
+    expect(html).not.toContain('class="pp-desc pp-features"')
+  })
+
+  it('descriptionFlow 文图穿插渲染，历史 meta 回退先文后图', () => {
+    const html = renderProductPageDocument('page-1', meta({
+      descriptionText: '图文描述\nFLOW-BEFORE paragraph',
+      descriptionImages: [{ name: 'd-01.jpg', contentType: 'image/jpeg' }],
+      descriptionFlow: [
+        { kind: 't', text: 'FLOW-BEFORE paragraph' },
+        { kind: 'img', i: 0 },
+        { kind: 't', text: 'FLOW-AFTER paragraph with enough length to stay a paragraph.' }
+      ]
+    }))
+    const iBefore = html.indexOf('FLOW-BEFORE paragraph')
+    const iImg = html.indexOf('assets/d-01.jpg')
+    const iAfter = html.indexOf('FLOW-AFTER paragraph')
+    expect(iBefore).toBeGreaterThan(-1)
+    expect(iBefore).toBeLessThan(iImg)
+    expect(iImg).toBeLessThan(iAfter)
+    const legacy = renderProductPageDocument('page-2', meta({ descriptionText: 'LEGACY paragraph', descriptionImages: [{ name: 'd-09.jpg', contentType: 'image/jpeg' }] }))
+    expect(legacy.indexOf('LEGACY paragraph')).toBeLessThan(legacy.indexOf('assets/d-09.jpg'))
+  })
+
+  it('自托管文件/素材包渲染 download 直链，源站直链不加', () => {
+    const html = renderProductPageDocument('page-1', meta({
+      materialPackUrl: 'assets/m-01.zip',
+      materialPackDownloads: '352',
+      files: [
+        { name: 'K240272.pdf', url: 'assets/f-01.pdf', label: 'Medicare/HCPCS Code' },
+        { name: 'remote.pdf', url: 'https://www.gigab2b.com/x.pdf' }
+      ]
+    }))
+    expect(html).toContain('<a href="assets/f-01.pdf" download rel="nofollow noopener noreferrer">K240272.pdf</a>')
+    expect(html).toContain('href="assets/m-01.zip" download rel="nofollow noopener noreferrer">下载素材包（352） ↗</a>')
+    expect(html).toContain('<a href="https://www.gigab2b.com/x.pdf" rel="nofollow noopener noreferrer">remote.pdf</a>')
   })
 
   it('扩展字段缺失时新分区整体降级不渲染', () => {
@@ -122,5 +194,20 @@ describe('renderProductPageDocument', () => {
     expect(html).not.toContain('class="pp-videos"')
     expect(html).not.toContain('class="pp-files"')
     expect(html).not.toContain('class="pp-category"')
+  })
+
+  it('源站无链接时素材包/文件降级为提示与纯文件名，不产生空 href', () => {
+    const html = renderProductPageDocument('page-1', meta({
+      materialPackUrl: '',
+      materialPackDownloads: '352',
+      files: [{ name: '2085 disassembly video.txt', url: '', label: '安装视频' }]
+    }))
+    expect(html).toContain('class="pp-material-note"')
+    expect(html).toContain('352')
+    expect(html).toContain('素材包需在原站登录后下载')
+    expect(html).toContain('class="pp-file-plain">2085 disassembly video.txt')
+    expect(html).toContain('安装视频')
+    expect(html).toContain('文件链接需在原站登录后获取')
+    expect(html).not.toContain('<a href=""')
   })
 })

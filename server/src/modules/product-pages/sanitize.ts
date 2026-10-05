@@ -77,6 +77,8 @@ export function sanitizeProductPageHtml(html: string): string {
 export const PRODUCT_PAGE_CSP = [
   "default-src 'none'",
   "img-src 'self' data: https:",
+  // 视频已重托管到本站 assets/，放行 'self' 媒体；源站直链视频不存在故不开 https:
+  "media-src 'self'",
   "style-src 'unsafe-inline'",
   "font-src 'self' data:",
   "script-src 'none'",
