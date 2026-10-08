@@ -66,3 +66,4 @@
 .eliminate-dialog footer { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
 .eliminate-dialog footer button { padding:8px 16px; border:1px solid var(--line); border-radius:10px; background:var(--panel); color:var(--text-secondary); font-size:12px; font-weight:600; cursor:pointer; }
 .eliminate-dialog footer button.danger { color:#fff; background:var(--danger); border-color:transparent; }
+.eliminate-dialog footer button.gate-reread { color:#fff; background:#087a75; border-color:transparent; }

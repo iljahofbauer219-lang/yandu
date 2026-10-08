@@ -1761,7 +1761,7 @@ export interface SupplyWarehouseProduct {
   category: string
   subcategory: string
   tertiaryCategory: string
-  status: 'ACTIVE' | 'ARCHIVED' | 'PENDING_REVIEW' | 'DELISTED'
+  status: 'ACTIVE' | 'ARCHIVED' | 'DELISTED'
   region: string
   delistedReason: string
   delistedAt: string | null
@@ -1971,7 +1971,7 @@ export interface ComparisonPromotionRequest {
 export interface ComparisonPromotionResult {
   comparison: ComparisonRecordView
   selection: SelectionCatalogItem
-  pendingReviewId: string
+  warehouseProductId: string
 }
 
 export interface ComparisonImportRequest {

@@ -354,6 +354,7 @@ try {
     features: ['【True Foldable, No Need to Disassemble】 The elderly motorized scooter can be folded in 2 steps.'],
     descriptionFlow: [
       { kind: 't', text: 'FLOW-BEFORE e2e' },
+      { kind: 'tbl', rows: [['Bike Type', '20 Inch Electric Cargo Tricycle'], ['Rider Height', 'fits height 5\'2"-6\'5"']] },
       { kind: 'img', i: 0 },
       { kind: 't', text: 'FLOW-AFTER e2e paragraph long enough to stay a paragraph.' }
     ],
@@ -371,6 +372,11 @@ try {
   const videoAsset = await rawPage(`/product-pages/${richPageId}/assets/v-01.mp4`)
   check('视频资产 → 200 + video/mp4 + no-cache', videoAsset.status === 200 && (videoAsset.headers.get('content-type') ?? '') === 'video/mp4' && videoAsset.headers.get('cache-control') === 'no-cache', { status: videoAsset.status, ct: videoAsset.headers.get('content-type') })
   check('描述流文图穿插顺序（图在两段文字之间）', richPage.text.indexOf('FLOW-BEFORE e2e') < richPage.text.indexOf('assets/d-01.png') && richPage.text.indexOf('assets/d-01.png') < richPage.text.indexOf('FLOW-AFTER e2e'))
+  check('描述流表格块渲染为原站边框表（两列键值灰底）', richPage.text.includes('<table class="pp-desc-table pp-desc-table--kv">') && richPage.text.includes('<td>Bike Type</td><td>20 Inch Electric Cargo Tricycle</td>') && richPage.text.includes('<td>fits height 5\'2&quot;-6\'5&quot;</td>'))
+  check('描述流表格位于文档序（文字与图之间）', richPage.text.indexOf('FLOW-BEFORE e2e') < richPage.text.indexOf('<table class="pp-desc-table') && richPage.text.indexOf('<table class="pp-desc-table') < richPage.text.indexOf('assets/d-01.png'))
+  const richFlow = Array.isArray(richMeta.descriptionFlow) ? (richMeta.descriptionFlow as Array<Record<string, unknown>>) : []
+  const richTbl = richFlow.find(block => block.kind === 'tbl')
+  check('meta 落盘表格块 rows', !!richTbl && JSON.stringify(richTbl.rows) === JSON.stringify([['Bike Type', '20 Inch Electric Cargo Tricycle'], ['Rider Height', 'fits height 5\'2"-6\'5"']]), richTbl)
   const fileAsset = await rawPage(`/product-pages/${richPageId}/assets/f-01.pdf`)
   check('文件资产 → 200 + application/pdf（免登录可下）', fileAsset.status === 200 && (fileAsset.headers.get('content-type') ?? '').startsWith('application/pdf'), fileAsset.headers.get('content-type'))
   const packAssetPage = await rawPage(`/product-pages/${richPageId}/assets/m-01.zip`)

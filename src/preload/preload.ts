@@ -267,6 +267,7 @@ contextBridge.exposeInMainWorld('desktop', {
     reload: (platform: Platform) => ipcRenderer.invoke('browser:reload', platform),
     getState: (platform: Platform) => ipcRenderer.invoke('browser:state:get', platform),
     activateSupply: (platformCode: '1688' | 'GIGACLOUD'): Promise<SupplyActivationResult> => ipcRenderer.invoke('browser:supply:activate', platformCode),
+    ensureSupplyLogin: (): Promise<SupplyActivationResult> => ipcRenderer.invoke('browser:supply:ensure-login'),
     openSupply: (platformCode: '1688' | 'GIGACLOUD', url: string): Promise<string> => ipcRenderer.invoke('browser:supply:open', platformCode, url),
     openTab: (platform: Platform, url: string, title?: string) => ipcRenderer.invoke('browser:open-tab', platform, url, title),
     ensureDefaultNav: () => ipcRenderer.invoke('browser:ensure-default-nav'),
@@ -371,9 +372,7 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   warehouses: {
     list: (): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:list'),
-    listPendingReview: (): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:list-pending-review'),
     listDelisted: (): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:list-delisted'),
-    confirmReview: (id: string, accessToken: string): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:confirm-review', id, accessToken),
     delist: (id: string, reason: string, accessToken: string): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:delist', id, reason, accessToken),
     restore: (id: string, accessToken: string): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:restore', id, accessToken),
     setRegion: (id: string, region: string, accessToken: string): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:set-region', id, region, accessToken),

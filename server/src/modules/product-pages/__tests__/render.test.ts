@@ -172,6 +172,29 @@ describe('renderProductPageDocument', () => {
     expect(legacy.indexOf('LEGACY paragraph')).toBeLessThan(legacy.indexOf('assets/d-09.jpg'))
   })
 
+  it('descriptionFlow 表格块按原站边框表渲染：两列键值灰底、多列不着色、空表降级、单元格转义', () => {
+    const html = renderProductPageDocument('page-1', meta({
+      descriptionText: '图文描述\nProduct Details',
+      descriptionFlow: [
+        { kind: 't', text: 'Product Details' },
+        { kind: 'tbl', rows: [['Bike Type', '20 Inch Electric Cargo Tricycle'], ['Rider Height', 'fits height 5\'2"-6\'5"']] },
+        { kind: 't', text: 'MULTI-COLUMN TABLE FOLLOWS' },
+        { kind: 'tbl', rows: [['A', 'B', 'C'], ['D', 'E', 'F']] },
+        { kind: 'tbl', rows: [] }
+      ]
+    }))
+    const iKv = html.indexOf('<table class="pp-desc-table pp-desc-table--kv">')
+    expect(iKv).toBeGreaterThan(-1)
+    expect(html).toContain('<td>Bike Type</td><td>20 Inch Electric Cargo Tricycle</td>')
+    expect(html).toContain('<td>fits height 5\'2&quot;-6\'5&quot;</td>')
+    const iMulti = html.indexOf('<table class="pp-desc-table">')
+    expect(iMulti).toBeGreaterThan(iKv)
+    expect(html.indexOf('MULTI-COLUMN TABLE FOLLOWS')).toBeLessThan(iMulti)
+    expect(html.slice(iMulti)).toContain('<td>A</td><td>B</td><td>C</td>')
+    expect(html.match(/<table class="pp-desc-table/g)).toHaveLength(2)
+    expect(html).toContain('.pp-desc-table--kv td:first-child{background:#f7f7f5')
+  })
+
   it('自托管文件/素材包渲染 download 直链，源站直链不加', () => {
     const html = renderProductPageDocument('page-1', meta({
       materialPackUrl: 'assets/m-01.zip',

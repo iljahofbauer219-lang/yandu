@@ -1341,12 +1341,14 @@ export class AppDatabase {
     this.seedComplianceKnowledge()
     this.database.prepare(`DELETE FROM ebay_listings WHERE status='REMOVED'`).run()
     this.repairPlaceholderCandidateImages()
+    this.migratePendingReviewToActive()
+    this.repairStrandedPreferredReturns()
     this.getSelectionCatalog()
       .filter(item => item.decision === 'APPROVED' && (item.sourceArea === 'SUPPLY' || Boolean(item.supplierUrl)))
       .forEach(item => {
         const warehoused = this.database.prepare(`SELECT 1 FROM supply_warehouse_products WHERE selection_id = ? LIMIT 1`).get(item.id)
         const queued = this.database.prepare(`SELECT 1 FROM inbound_processing_items WHERE origin = 'SELECTION' AND source_id = ? LIMIT 1`).get(item.id)
-        if (!warehoused && !queued) this.upsertWarehousePendingReview(item)
+        if (!warehoused && !queued) this.upsertWarehouseActive(item)
       })
     this.migrateProductIntakeRegistry()
     const ebayStores=this.database.prepare(`SELECT id FROM ebay_stores`).all() as Array<{id:string}>
@@ -2613,10 +2615,10 @@ export class AppDatabase {
     comparison = this.updateComparison({id:comparison.id,decision:'RECOMMENDED'})
     const imported = this.importSelection({sourceArea:'MARKET',product:comparison.marketProduct,category:request.category,subcategory:request.subcategory,tertiaryCategory:request.tertiaryCategory,comparison})
     const selection = this.updateSelectionDecision(imported.id,'APPROVED')
-    const pendingReview = this.listPendingReviewWarehouseProducts().find(item=>item.selectionId===selection.id)
-    if (!pendingReview) throw new Error('正式入库待复核条目生成失败')
-    this.database.prepare(`INSERT INTO workflow_events (task_id, ozon_url, stage, action, detail, created_at) VALUES (?, ?, 'REVERSE_COMPARE', 'PROMOTE_TO_PENDING_REVIEW', ?, ?)`).run(comparison.taskId,comparison.marketProduct.url,JSON.stringify({comparisonId:comparison.id,selectionId:selection.id,pendingReviewId:pendingReview.id,supplierUrl:primary.url,estimatedMargin:comparison.estimatedMargin}),new Date().toISOString())
-    return {comparison:this.getComparisons().find(item=>item.id===comparison.id)!,selection,pendingReviewId:pendingReview.id}
+    const warehouse = this.database.prepare(`SELECT id FROM supply_warehouse_products WHERE selection_id = ? LIMIT 1`).get(selection.id) as { id: string } | undefined
+    if (!warehouse) throw new Error('正式入库条目生成失败')
+    this.database.prepare(`INSERT INTO workflow_events (task_id, ozon_url, stage, action, detail, created_at) VALUES (?, ?, 'REVERSE_COMPARE', 'PROMOTE_TO_WAREHOUSE', ?, ?)`).run(comparison.taskId,comparison.marketProduct.url,JSON.stringify({comparisonId:comparison.id,selectionId:selection.id,warehouseProductId:warehouse.id,supplierUrl:primary.url,estimatedMargin:comparison.estimatedMargin}),new Date().toISOString())
+    return {comparison:this.getComparisons().find(item=>item.id===comparison.id)!,selection,warehouseProductId:warehouse.id}
   }
 
   getSelectionCatalog(): SelectionCatalogItem[] {
@@ -2670,7 +2672,7 @@ export class AppDatabase {
       payload.updatedAt = new Date().toISOString()
       this.database.prepare(`UPDATE selection_records SET decision = ?, payload = ?, updated_at = ? WHERE id = ?`).run(decision, JSON.stringify(payload), payload.updatedAt, id)
       if (payload.sourceArea === 'SUPPLY' || payload.supplierUrl) {
-        if (decision === 'APPROVED') this.upsertWarehousePendingReview(payload)
+        if (decision === 'APPROVED') this.upsertWarehouseActive(payload)
         else this.database.prepare(`UPDATE supply_warehouse_products SET status = 'ARCHIVED', updated_at = ? WHERE selection_id = ? AND status <> 'DELISTED'`).run(payload.updatedAt, payload.id)
       }
       this.database.exec('COMMIT')
@@ -2823,7 +2825,7 @@ export class AppDatabase {
   }
 
   getDownloadableSupplyWarehouseProductById(id: string): SupplyWarehouseProduct | undefined {
-    const row = this.database.prepare(`SELECT id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, delisted_reason, delisted_at, region, updated_at FROM supply_warehouse_products WHERE id = ? AND status IN ('PENDING_REVIEW', 'ACTIVE', 'DELISTED')`).get(id) as Record<string, unknown> | undefined
+    const row = this.database.prepare(`SELECT id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, delisted_reason, delisted_at, region, updated_at FROM supply_warehouse_products WHERE id = ? AND status IN ('ACTIVE', 'DELISTED')`).get(id) as Record<string, unknown> | undefined
     return row ? this.mapSupplyWarehouseRow(row) : undefined
   }
 
@@ -2832,11 +2834,20 @@ export class AppDatabase {
     return rows.map(row => this.mapSupplyWarehouseRow(row))
   }
 
+  /** 重读命中 EXACT 类目时写回仓库商品三级类目（按 source_url 定位），返回受影响行数 */
+  updateSupplyWarehouseCategory(sourceUrl: string, category: string, subcategory: string, tertiaryCategory: string): number {
+    if (!sourceUrl || !category) return 0
+    const now = new Date().toISOString()
+    const result = this.database.prepare(`UPDATE supply_warehouse_products SET category = ?, subcategory = ?, tertiary_category = ?, updated_at = ? WHERE source_url = ?`)
+      .run(category, subcategory, tertiaryCategory, now, sourceUrl)
+    return typeof result === 'object' && result && 'changes' in result ? Number((result as { changes: number }).changes) : 0
+  }
+
   delistWarehouseProduct(id: string, reason: string): SupplyWarehouseProduct[] {
     const normalizedReason = reason.trim()
     if (!normalizedReason) throw new Error('下架原因不能为空')
     const row = this.database.prepare(`SELECT status FROM supply_warehouse_products WHERE id = ?`).get(id) as { status:string } | undefined
-    if (!row || (row.status !== 'PENDING_REVIEW' && row.status !== 'ACTIVE')) throw new Error('仅待复核或已入库商品可下架')
+    if (!row || row.status !== 'ACTIVE') throw new Error('仅正式入库商品可下架')
     const now = new Date().toISOString()
     this.database.prepare(`UPDATE supply_warehouse_products SET status = 'DELISTED', delisted_reason = ?, delisted_at = ?, updated_at = ? WHERE id = ?`).run(normalizedReason, now, now, id)
     return this.listDelistedWarehouseProducts()
@@ -2879,48 +2890,31 @@ export class AppDatabase {
     }
   }
 
-  /** 选品审批过闸第一级：APPROVED 不落入库队列，先落正式入库表 PENDING_REVIEW 待复核行 */
-  private upsertWarehousePendingReview(item: SelectionCatalogItem): SupplyWarehouseProduct {
+  /** 选品审批通过即正式入库：APPROVED 不落入库队列，直接落正式入库表 ACTIVE 行（无待复核中间步） */
+  private upsertWarehouseActive(item: SelectionCatalogItem): SupplyWarehouseProduct {
     const now = new Date().toISOString()
     const warehouseCode: SupplyWarehouseCode = item.platformCode === 'GIGACLOUD' ? 'GIGACLOUD' : '1688'
     const sourceUrl = item.supplierUrl || item.sourceUrl
     const existing = this.database.prepare(`SELECT id, status FROM supply_warehouse_products WHERE warehouse_code = ? AND source_url = ?`).get(warehouseCode, sourceUrl) as { id: string; status: string } | undefined
     if (existing && existing.status === 'DELISTED') return this.listDelistedWarehouseProducts().find(product => product.id === existing.id)!
-    // 已 ACTIVE（曾确认入库）的存量行不降级回待复核
+    // 已 ACTIVE 的存量行仅刷新资料，不重复插入
     if (existing && existing.status === 'ACTIVE') return this.getSupplyWarehouseProductById(existing.id)!
     const product: SupplyWarehouseProduct = {
       id: existing?.id || crypto.randomUUID(), warehouseCode, selectionId: item.id, sourceUrl,
       productId: item.productId, title: item.title, imageUrl: item.imageUrl, priceText: item.priceText,
       supplierName: '', category: item.category, subcategory: item.subcategory, tertiaryCategory: item.tertiaryCategory,
-      status: 'PENDING_REVIEW', delistedReason: '', delistedAt: null, region: '', updatedAt: now
+      status: 'ACTIVE', delistedReason: '', delistedAt: null, region: '', updatedAt: now
     }
     this.database.prepare(`INSERT INTO supply_warehouse_products (id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, payload, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, 'PENDING_REVIEW', ?, ?, ?)
-      ON CONFLICT(warehouse_code, source_url) DO UPDATE SET selection_id=excluded.selection_id, product_id=excluded.product_id, title=excluded.title, image_url=excluded.image_url, price_text=excluded.price_text, category=excluded.category, subcategory=excluded.subcategory, tertiary_category=excluded.tertiary_category, status='PENDING_REVIEW', delisted_reason='', delisted_at=NULL, payload=excluded.payload, updated_at=excluded.updated_at`)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, 'ACTIVE', ?, ?, ?)
+      ON CONFLICT(warehouse_code, source_url) DO UPDATE SET selection_id=excluded.selection_id, product_id=excluded.product_id, title=excluded.title, image_url=excluded.image_url, price_text=excluded.price_text, category=excluded.category, subcategory=excluded.subcategory, tertiary_category=excluded.tertiary_category, status='ACTIVE', delisted_reason='', delisted_at=NULL, payload=excluded.payload, updated_at=excluded.updated_at`)
       .run(product.id, warehouseCode, item.id, sourceUrl, product.productId, product.title, product.imageUrl, product.priceText, product.category, product.subcategory, product.tertiaryCategory, JSON.stringify(product), now, now)
     return product
   }
 
-  /** 正式入库待复核列表（审批后第一级确认位） */
-  listPendingReviewWarehouseProducts(): SupplyWarehouseProduct[] {
-    const rows = this.database.prepare(`SELECT id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, delisted_reason, delisted_at, region, updated_at FROM supply_warehouse_products WHERE status = 'PENDING_REVIEW' ORDER BY updated_at DESC`).all() as unknown as Array<Record<string, unknown>>
-    return rows.map(row => this.mapSupplyWarehouseRow(row))
-  }
-
-  /** 待复核二次确认（本仓入库）：仅推进到正式入库 ACTIVE，不写货盘仓库入库队列 */
-  confirmWarehouseReview(id: string): SupplyWarehouseProduct[] {
-    this.database.exec('BEGIN IMMEDIATE')
-    try {
-      const row = this.database.prepare(`SELECT * FROM supply_warehouse_products WHERE id = ?`).get(id) as Record<string, unknown> | undefined
-      if (!row || String(row.status) !== 'PENDING_REVIEW') throw new Error('待复核商品不存在或已处理')
-      const now = new Date().toISOString()
-      this.database.prepare(`UPDATE supply_warehouse_products SET status = 'ACTIVE', delisted_reason = '', delisted_at = NULL, updated_at = ? WHERE id = ?`).run(now, id)
-      this.database.exec('COMMIT')
-    } catch (error) {
-      this.database.exec('ROLLBACK')
-      throw error
-    }
-    return this.listPendingReviewWarehouseProducts()
+  /** 历史库曾存在「待复核」中间步（优选通过→待复核→本仓入库）；该步已取消，启动时把遗留行一次性并入正式入库 */
+  private migratePendingReviewToActive(): void {
+    this.database.prepare(`UPDATE supply_warehouse_products SET status = 'ACTIVE', delisted_reason = '', delisted_at = NULL, updated_at = ? WHERE status = 'PENDING_REVIEW'`).run(new Date().toISOString())
   }
 
   /** 地区货盘归属：写产品地区标识（如「美国货盘」），供入库处理徽标与地区选品使用 */
@@ -2938,6 +2932,9 @@ export class AppDatabase {
   copyWarehouseToPallet(id: string): InboundProcessingItem[] {
     const row = this.database.prepare(`SELECT * FROM supply_warehouse_products WHERE id = ?`).get(id) as Record<string, unknown> | undefined
     if (!row || String(row.status) !== 'ACTIVE') throw new Error('仅正式入库商品可抄送货盘')
+    // 前置二：须已成功下载图文（服务器详情页已生成），避免空素材抄送进货盘队列
+    const downloaded = this.database.prepare(`SELECT 1 FROM supply_product_downloads WHERE warehouse_product_id = ? AND status = 'DOWNLOADED' LIMIT 1`).get(id)
+    if (!downloaded) throw new Error('请先完成「下载图文」后再抄送货盘')
     const product = this.mapSupplyWarehouseRow(row)
     const now = new Date().toISOString()
     const snapshot: InboundSnapshot = {
@@ -2968,11 +2965,73 @@ export class AppDatabase {
 
   /** 打回优选：正式入库商品归档离开正式入库，优选列表可再次操作；不写入库队列、保留货盘存放 */
   returnToPreferred(id: string): SupplyWarehouseProduct[] {
-    const row = this.database.prepare(`SELECT status FROM supply_warehouse_products WHERE id = ?`).get(id) as { status: string } | undefined
-    if (!row || row.status !== 'ACTIVE') throw new Error('仅正式入库商品可打回优选')
+    const row = this.database.prepare(`SELECT * FROM supply_warehouse_products WHERE id = ?`).get(id) as Record<string, unknown> | undefined
+    if (!row || String(row.status) !== 'ACTIVE') throw new Error('仅正式入库商品可打回优选')
     const now = new Date().toISOString()
+    const sourceUrl = String(row.source_url || '')
+    const reason = '自正式入库打回优选，待重新审核'
+    const seed = this.warehouseSelectionSeed(row)
+    const selectionId = row.selection_id ? String(row.selection_id) : ''
+    const existing = selectionId
+      ? this.database.prepare(`SELECT id FROM selection_records WHERE id = ?`).get(selectionId) as { id: string } | undefined
+      : undefined
+    if (selectionId && existing) {
+      this.revertSelectionToPending(selectionId, row, reason, now)
+    } else {
+      // 无回联选品记录（直连入库等路径）：按仓库行合成 PENDING 选品记录，杜绝打回后商品在所有视图消失
+      const taskRow = this.database.prepare(`SELECT task_id FROM supply_candidates WHERE url = ? ORDER BY rowid DESC LIMIT 1`).get(sourceUrl) as { task_id: string } | undefined
+      let taskId = taskRow?.task_id || ''
+      if (!taskId) {
+        taskId = crypto.randomUUID()
+        this.database.prepare(`INSERT INTO selection_tasks (id, payload, stage, created_at) VALUES (?, ?, ?, ?)`).run(taskId, JSON.stringify({ platformCode: seed.platformCode, name: `${seed.platformCode} 打回优选` }), 'RETURN_PREFERRED', now)
+      }
+      const newSelectionId = crypto.randomUUID()
+      const payload = { ...seed, id: newSelectionId, taskId, decision: 'PENDING', score: 70, recommendation: '自正式入库打回，待重新审核', reason, riskFlags: [], updatedAt: now }
+      this.database.prepare(`INSERT INTO selection_records (id, task_id, ozon_url, comparison_id, decision, reason, payload, updated_at) VALUES (?, ?, ?, NULL, 'PENDING', ?, ?, ?)`).run(newSelectionId, taskId, sourceUrl, reason, JSON.stringify(payload), now)
+      this.database.prepare(`UPDATE supply_warehouse_products SET selection_id = ? WHERE id = ?`).run(newSelectionId, id)
+    }
     this.database.prepare(`UPDATE supply_warehouse_products SET status = 'ARCHIVED', updated_at = ? WHERE id = ?`).run(now, id)
     return this.getSupplyWarehouseProducts()
+  }
+
+  /** 选品记录可能由旧路径写入而缺字段（甚至缺 sourceArea），按仓库行补齐；
+   * 否则重新「通过」时 updateSelectionDecision 不走货盘分支，仓库行永远复活不了。 */
+  private warehouseSelectionSeed(row: Record<string, unknown>) {
+    return {
+      sourceArea: 'SUPPLY',
+      platformCode: row.warehouse_code ? String(row.warehouse_code) : 'GIGACLOUD',
+      sourceUrl: String(row.source_url || ''),
+      productId: String(row.product_id || ''),
+      title: String(row.title || ''),
+      imageUrl: String(row.image_url || ''),
+      priceText: String(row.price_text || ''),
+      category: String(row.category || '未分类'),
+      subcategory: String(row.subcategory || '未分类'),
+      tertiaryCategory: String(row.tertiary_category || '待细分')
+    }
+  }
+
+  /** 回联选品记录改回待复核：已有字段优先，缺失项按仓库行补齐 */
+  private revertSelectionToPending(selectionId: string, row: Record<string, unknown>, reason: string, now: string): void {
+    const linked = this.database.prepare(`SELECT payload, task_id FROM selection_records WHERE id = ?`).get(selectionId) as { payload: string; task_id: string } | undefined
+    if (!linked) return
+    const stored = JSON.parse(String(linked.payload || '{}')) as Record<string, unknown>
+    const filled = Object.fromEntries(Object.entries(stored).filter(([, value]) => value !== undefined && value !== null && value !== ''))
+    const payload = { ...this.warehouseSelectionSeed(row), ...filled, id: selectionId, taskId: String(stored.taskId || linked.task_id || ''), decision: 'PENDING', score: Number(stored.score || 70), reason, updatedAt: now }
+    this.database.prepare(`UPDATE selection_records SET decision = 'PENDING', reason = ?, payload = ?, ozon_url = CASE WHEN COALESCE(ozon_url, '') = '' THEN ? ELSE ozon_url END, updated_at = ? WHERE id = ?`)
+      .run(reason, JSON.stringify(payload), String(row.source_url || ''), now, selectionId)
+  }
+
+  /** 旧版打回优选只归档仓库行、未把选品记录改回待复核，商品因而在优选与正式入库双双消失；启动时补修。
+   * 抄送货盘同样会留下 ARCHIVED 仓库行，但那类行带入库队列行且选品仍应是通过态，故排除。 */
+  private repairStrandedPreferredReturns(): void {
+    const rows = this.database.prepare(`SELECT w.* FROM supply_warehouse_products w
+      JOIN selection_records s ON s.id = w.selection_id
+      WHERE w.status = 'ARCHIVED' AND s.decision = 'APPROVED'
+        AND NOT EXISTS (SELECT 1 FROM inbound_processing_items i WHERE i.warehouse_product_id = w.id)`).all() as unknown as Array<Record<string, unknown>>
+    if (!rows.length) return
+    const now = new Date().toISOString()
+    rows.forEach(row => this.revertSelectionToPending(String(row.selection_id), row, '自正式入库打回优选，待重新审核', now))
   }
 
   /** 建/刷新队列行；CONFIRMED 行冻结不覆盖，未传关联键时保留已有值 */
@@ -3030,7 +3089,6 @@ export class AppDatabase {
         }
       }
       if (existingWarehouse?.status === 'DELISTED') throw new Error('已下架商品请先恢复后再确认入库')
-      if (existingWarehouse?.status === 'PENDING_REVIEW') throw new Error('待复核商品请先执行本仓入库')
       const warehouseId = existingWarehouse?.id || crypto.randomUUID()
       const payload = JSON.stringify(snapshot)
       if (existingWarehouse) {
@@ -3839,8 +3897,19 @@ export class AppDatabase {
   }
 
   returnSelectionToCandidates(id: string): void {
-    const result = this.database.prepare(`DELETE FROM selection_records WHERE id = ?`).run(id)
-    if (!result.changes) throw new Error('选品记录不存在')
+    this.database.exec('BEGIN')
+    try {
+      // supply_warehouse_products.selection_id 为 NOT NULL 外键：已入仓商品打回候选会触发 FK 约束，先拦截给出可操作提示
+      const warehoused = this.database.prepare(`SELECT 1 AS hit FROM supply_warehouse_products WHERE selection_id = ? LIMIT 1`).get(id)
+      if (warehoused) throw new Error('该商品已进入供应仓，请先在货盘仓库删除对应产品后再打回候选')
+      this.database.prepare(`UPDATE inventory_records SET selection_id = NULL WHERE selection_id = ?`).run(id)
+      const result = this.database.prepare(`DELETE FROM selection_records WHERE id = ?`).run(id)
+      if (!result.changes) throw new Error('选品记录不存在')
+      this.database.exec('COMMIT')
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
   }
 
   getWorkflowCounts() {

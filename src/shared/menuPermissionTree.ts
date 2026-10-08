@@ -120,7 +120,21 @@ export const MENU_PERMISSION_TREE: MenuPermNode[] = [
       { code: 'menu.collect.dsmtool', label: 'DSMTool' },
       { code: 'menu.collect.diecastdropshipper', label: 'Diecastdropshipper' },
       { code: 'menu.collect.rithum', label: 'Rithum' },
-      { code: 'menu.collect.shopify', label: 'Shopify' }
+      { code: 'menu.collect.shopify', label: 'Shopify' },
+      { code: 'menu.collect.brandsgateway', label: 'Brandsgateway' },
+      { code: 'menu.collect.bdroppy', label: 'BDroppy' },
+      { code: 'menu.collect.brandsdistribution', label: 'BrandsDistribution' },
+      { code: 'menu.collect.wavego', label: 'WaveGo' },
+      { code: 'menu.collect.m5azn', label: 'M5azn' },
+      { code: 'menu.collect.dropshipsa', label: 'Dropship' },
+      { code: 'menu.collect.emiratefulfil', label: 'Emiratefulfil' },
+      { code: 'menu.collect.codpartner', label: 'Cod Partner' },
+      { code: 'menu.collect.tradeling', label: 'Tradeling' },
+      { code: 'menu.collect.tejaraa', label: 'Tejaraa' },
+      { code: 'menu.collect.ksadrop', label: 'Ksa Drop' },
+      { code: 'menu.collect.smmd', label: 'SMMD Dropshipping' },
+      { code: 'menu.collect.yallahsell', label: 'YallahSell' },
+      { code: 'menu.collect.atsum', label: 'ATSUM' }
     ]
   },
   {

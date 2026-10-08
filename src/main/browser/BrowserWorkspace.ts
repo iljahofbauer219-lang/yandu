@@ -2,6 +2,8 @@ import { writeFileSync } from 'node:fs'
 import { BaseWindow, BrowserWindow, WebContents, WebContentsView, clipboard } from 'electron'
 import { AMAZON_LISTING_EVIDENCE_SCRIPT, AMAZON_REVIEW_EVIDENCE_SCRIPT, AMAZON_SAMPLES_SCRIPT, type AmazonListingEvidence, type AmazonMarketSample, type AmazonReviewEvidence } from '../../shared/amazonScraper'
 import { matchSellableInventoryText } from '../../shared/sellableInventory'
+import { shouldActivateSupplyView } from '../../shared/supplyAutoEnter'
+import { pickGigaMainImage } from '../../shared/gigaImageResolve'
 import type { BrowserBounds, BrowserState, BrowserTab, BuiltInCollectorState, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, EbayBrowserPluginState, EbayCategorySpecificRequirement, EbayCollectedProduct, EbayDeliveryLocationResult, EbayDirectoryProductScanCategory, EbayLoginResult, EbayMarketResearchFilter, EbayMarketResearchMetric, EbayMarketResearchSample, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayProductDetails, EbaySellerHubAcceptanceSnapshot, EbayStoreCategory, MarketplacePlatformCode, NetworkStrategy, Platform, SelectionTask, SupplyActivationResult } from '../../shared/contracts'
 import gigaCatalog from '../../renderer/gigaCatalog.json'
 import type { EbayLocalListingRequirements, EbayLocalProduct, EbayLocalRevisionPreparationResult } from '../../shared/contracts'
@@ -70,7 +72,7 @@ export interface SupplyProductPageSnapshot {
     files?: Array<{ name: string; url: string; label?: string }>
     features?: string[]
     descriptionImages?: string[]
-    descriptionFlow?: Array<{ kind: 't' | 'img'; text?: string; i?: number }>
+    descriptionFlow?: Array<{ kind: 't' | 'img' | 'tbl'; text?: string; i?: number; rows?: string[][] }>
     loginWall?: boolean
   }
 }
@@ -110,6 +112,7 @@ export class BrowserWorkspace {
   private ebayPluginActive = false
   private readonly ebayPluginProducts = new Map<string,EbayCollectedProduct>()
   private gigaAutoLoginAttemptedAt = 0
+  private gigaLoginInFlight: { version: number; promise: Promise<SupplyActivationResult | null> } | null = null
   private readonly ebayAutoLoginAttemptedAt = new Map<string,number>()
   private productLoginWindow: BrowserWindow | null = null
 
@@ -615,6 +618,17 @@ export class BrowserWorkspace {
                 continue
               }
               if (tag === 'VIDEO' || tag === 'SCRIPT' || tag === 'STYLE') continue
+              // 表格整体记一个 tbl 块（行×列文本），不递归——递归会把单元格拍平成散段，公开页表格结构全丢
+              if (tag === 'TABLE') {
+                const rows = []
+                for (const tr of [...child.rows]) {
+                  const cells = [...tr.cells].map(td => (td.innerText || td.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 600)).slice(0, 12)
+                  if (cells.some(cell => cell)) rows.push(cells)
+                  if (rows.length >= 60) break
+                }
+                if (rows.length) descriptionFlow.push({ kind: 'tbl', rows })
+                continue
+              }
               const hasBlock = !!child.querySelector('p,div,li,h1,h2,h3,h4,img,table,ul,ol,section')
               if (!hasBlock) {
                 const leafText = (child.innerText || '').trim().replace(/\s+/g, ' ')
@@ -632,10 +646,12 @@ export class BrowserWorkspace {
       })()`) as SupplyProductPageSnapshot['extracted']
       if (extracted?.loginWall) throw new Error(`${name}的价格/库存区需登录后查看（供应会话已过期），请先在 IE浏览 中重新登录${name}后重试`)
       if (!extracted?.images?.length) throw new Error('原商品页没有识别到可下载图片，请确认商品页正常显示后重试')
-      // 文件/素材包签名链接发现（登录态）：逐个点击触发器，三通道收 URL（will-download 记 URL 后 cancel /
-      // 剪贴板 / 触发节点内新增锚点）；签名链接仅内存瞬时供下载服务立即取字节，绝不落 meta（数小时即过期）
+      // 文件/素材包签名链接发现（登录态）：站点「获取文件链接」实测只把签名地址放进 XHR JSON/剪贴板/弹窗，
+      // 无下载事件也无新锚点 → 四通道并收：will-download / CDP 读 API 响应体 / 全页 x-oss-signature 扫描 / 剪贴板；
+      // 签名链接仅内存瞬时供下载服务立即取字节，绝不落 meta（数小时即过期）；诊断写 /tmp/yandu-file-probe.log
       const probeSession = window.webContents.session
       const probeUrls: string[] = []
+      const probeLog: Array<Record<string, unknown>> = []
       const onProbeDownload = (_event: Electron.Event, item: Electron.DownloadItem) => {
         const downloadUrl = item.getURL()
         if (/gigab2b|b2bfiles/i.test(downloadUrl)) {
@@ -644,36 +660,107 @@ export class BrowserWorkspace {
         }
       }
       probeSession.on('will-download', onProbeDownload)
-      const clickAndCollect = async (clickScript: string, domScript: string, waitMs: number): Promise<string> => {
-        const before = probeUrls.length
-        const clicked = await window.webContents.executeJavaScript(clickScript) as boolean
-        if (!clicked) return ''
+      const jsonResponses: Array<{ requestId: string; url: string }> = []
+      const onDbgMessage = (_e: unknown, method: string, params: { requestId?: string; response?: { mimeType?: string; url?: string } }) => {
+        if (method === 'Network.responseReceived') {
+          const resp = params?.response
+          if (resp && /json/i.test(resp.mimeType || '') && /gigab2b|b2bfiles/i.test(resp.url || '')) jsonResponses.push({ requestId: params?.requestId || '', url: resp.url || '' })
+        }
+      }
+      let dbgOn = false
+      try {
+        window.webContents.debugger.attach('1.3')
+        dbgOn = true
+        window.webContents.debugger.on('message', onDbgMessage)
+        await window.webContents.debugger.sendCommand('Network.enable')
+      } catch { dbgOn = false }
+      const collectBodyUrls = async (fromIndex: number): Promise<string[]> => {
+        if (!dbgOn) return []
+        const out: string[] = []
+        for (const entry of jsonResponses.slice(fromIndex)) {
+          try {
+            const body = await window.webContents.debugger.sendCommand('Network.getResponseBody', { requestId: entry.requestId }) as { body?: string; base64Encoded?: boolean }
+            if (body && !body.base64Encoded && body.body) out.push(...(body.body.match(/https?:\/\/[^"'\s<>\\)]+(?:x-oss-signature=|\.(?:pdf|txt|zip|rar)(?:\?|#|$))[^"'\s<>\\)]*/gi) || []))
+          } catch { /* 单个响应体读取失败忽略 */ }
+        }
+        return out
+      }
+      const clickAndCollect = async (clickScript: string, waitMs: number, tag: string): Promise<string> => {
+        const beforeDl = probeUrls.length
+        const beforeJson = jsonResponses.length
+        let clicked = false
+        try {
+          clicked = await window.webContents.executeJavaScript(clickScript) as boolean
+        } catch (error) {
+          probeLog.push({ tag, stage: 'click', error: String(error && (error as Error).message) })
+          return ''
+        }
+        if (!clicked) {
+          probeLog.push({ tag, clicked: false })
+          return ''
+        }
         await this.sleep(waitMs)
-        const domUrl = await window.webContents.executeJavaScript(domScript) as string
+        let domUrls: string[] = []
+        try {
+          domUrls = await window.webContents.executeJavaScript(`(() => (document.documentElement.outerHTML.match(/https?:\\/\\/[^"'\\s<>)]+(?:x-oss-signature=|\\.(?:pdf|txt|zip|rar)(?:\\?|#|$))[^"'\\s<>)]*/gi) || []).slice(0, 12)`) as string[]
+        } catch (error) {
+          probeLog.push({ tag, stage: 'dom', error: String(error && (error as Error).message) })
+        }
+        const bodyUrls = await collectBodyUrls(beforeJson)
         const clipText = (clipboard.readText() || '').trim()
-        const fresh = probeUrls.slice(before)
-        return fresh[0] || (/^https?:\/\//i.test(clipText) ? clipText : '') || (/^https?:\/\//i.test(domUrl || '') ? domUrl : '')
+        const clipUrl = /^https?:\/\/\S+$/i.test(clipText) ? clipText : ''
+        const seen = new Set(probeUrls.slice(0, beforeDl))
+        const url = [...probeUrls.slice(beforeDl), ...bodyUrls, ...domUrls, clipUrl].find(u => u && !seen.has(u)) || ''
+        probeLog.push({ tag, clicked: true, dl: probeUrls.slice(beforeDl).length, body: bodyUrls.length, dom: domUrls.length, clip: !!clipUrl, got: !!url })
+        return url
       }
       try {
-        const triggerCount = await window.webContents.executeJavaScript('document.querySelectorAll(".link-item").length') as number
+        let triggerCount = 0
+        try {
+          triggerCount = await window.webContents.executeJavaScript('document.querySelectorAll(".link-item").length') as number
+        } catch (error) {
+          probeLog.push({ stage: 'triggerCount', error: String(error && (error as Error).message) })
+          await this.sleep(1200)
+          triggerCount = await window.webContents.executeJavaScript('document.querySelectorAll(".link-item").length') as number
+        }
         const fileList = extracted.files ?? []
+        probeLog.push({ stage: 'start', triggerCount, fileCount: fileList.length })
         for (let idx = 0; idx < Math.min(triggerCount, fileList.length, 6); idx += 1) {
-          const url = await clickAndCollect(
-            `(() => { const node = document.querySelectorAll('.link-item')[${idx}]; const trigger = node && [...node.querySelectorAll('span,button,a')].find(el => /获取文件链接/.test(el.textContent || '')); if (!trigger) return false; trigger.click(); return true })()`,
-            `(() => { const node = document.querySelectorAll('.link-item')[${idx}]; const m = (node ? node.innerHTML : '').match(/https?:\\/\\/[^"'\\s<>)]+\\.(?:pdf|txt|zip|rar)[^"'\\s<>)]*/i); return m ? m[0] : '' })()`,
-            1500
-          )
-          if (url && fileList[idx]) fileList[idx].url = url
+          try {
+            const url = await clickAndCollect(
+              `(() => { const node = document.querySelectorAll('.link-item')[${idx}]; const trigger = node && [...node.querySelectorAll('span,button,a')].find(el => /获取文件链接/.test(el.textContent || '')); if (!trigger) return false; trigger.click(); return true })()`,
+              1800,
+              `file-${idx}`
+            )
+            if (url && fileList[idx]) fileList[idx].url = url
+          } catch (error) {
+            probeLog.push({ tag: `file-${idx}`, error: String(error && (error as Error).message) })
+          }
         }
         if (!extracted.materialPackUrl) {
-          extracted.materialPackUrl = await clickAndCollect(
-            `(() => { const node = [...document.querySelectorAll('span,div,button,a')].find(el => el.children.length <= 3 && /下载素材包/.test(el.textContent || '') && (el.textContent || '').trim().length <= 20); if (!node) return false; node.click(); return true })()`,
-            `(() => { const m = (document.body?.innerHTML || '').match(/https?:\\/\\/[^"'\\s<>)]+\\.zip[^"'\\s<>)]*/i); return m ? m[0] : '' })()`,
-            2500
-          )
+          try {
+            extracted.materialPackUrl = await clickAndCollect(
+              `(() => { const node = [...document.querySelectorAll('span,div,button,a')].find(el => el.children.length <= 3 && /下载素材包/.test(el.textContent || '') && (el.textContent || '').trim().length <= 20); if (!node) return false; node.click(); return true })()`,
+              3000,
+              'pack'
+            )
+          } catch (error) {
+            probeLog.push({ tag: 'pack', error: String(error && (error as Error).message) })
+          }
         }
-      } catch { /* 发现失败降级为空链接：公开页显示原站提示，不影响其余要素 */ }
+      } catch (error) {
+        probeLog.push({ stage: 'outer', error: String(error && (error as Error).message) })
+      }
+      if (dbgOn) {
+        try {
+          window.webContents.debugger.removeListener('message', onDbgMessage)
+          window.webContents.debugger.detach()
+        } catch { /* 忽略摘除失败 */ }
+      }
       probeSession.removeListener('will-download', onProbeDownload)
+      try {
+        writeFileSync('/tmp/yandu-file-probe.log', JSON.stringify({ at: new Date().toISOString(), entries: probeLog, files: (extracted.files ?? []).map(f => ({ name: f.name, url: !!f.url })), pack: !!extracted.materialPackUrl }, null, 2))
+      } catch { /* 诊断落盘失败不影响采集 */ }
       return { html, extracted }
     } finally {
       if (!window.isDestroyed()) window.destroy()
@@ -737,8 +824,15 @@ export class BrowserWorkspace {
         const shippingFeeText=text.match(/(?:Shipping(?:\s*Fee)?|物流费)\s*[:：]?\s*((?:US)?\$\s*[\d,.]+(?:\s*-\s*(?:US)?\$?\s*[\d,.]+)?(?:\s*\/件)?)/i)?.[1]||'';
         const promotionText=text.match(/\d+(?:\.\d+)?%\s*OFF/i)?.[0]||'';
         const gigaIndex=Number(text.match(/GIGA Index:\s*([\d.]+)/i)?.[1]||0)||null;
+        // 重读同时修复主图：与内置采集器同口径（画廊优先+排除灰置），使存量串图候选可经「重读数据」纠正
+        const GAL_SEL='[class*="el-image__preview"],[class*="gallery" i],[class*="zoom" i],[class*="swiper" i],[class*="preview" i]';
+        const DIM_SEL='[class*="opacity-40"],[class*="opacity-0"],[hidden],[class*="invisible" i]';
+        const pickMain=${pickGigaMainImage.toString()};
+        const isRealImg=u=>/^https?:\/\//i.test(u||'')&&!/(?:product_base|placeholder|default[-_]?image|loading|lazyload|blank|transparent|no[-_]?image)/i.test(u);
+        const urlOfIm=im=>{const ss=(im.getAttribute('srcset')||'').split(',').map(v=>v.trim().split(/\s+/)[0]).filter(Boolean).pop()||'';return [im.currentSrc,im.src,im.getAttribute('data-src'),im.getAttribute('data-original'),im.getAttribute('data-lazy-src'),ss].find(isRealImg)||'';};
+        const imageUrl=pickMain([...document.querySelectorAll('img')].map(im=>{const u=urlOfIm(im);if(!u)return null;return {url:u,inGallery:Boolean(im.closest(GAL_SEL)),dimmed:Boolean(im.closest(DIM_SEL))||Number(getComputedStyle(im).opacity)<0.5,naturalWidth:im.naturalWidth||0};}).filter(Boolean));
         const sourceCategory=pathIds.length?{platformCode:'GIGACLOUD',catalogVersion:${JSON.stringify(GIGA_CATALOG_VERSION)},level1:level(0),level2:level(1),level3:level(2),pathIds,pathNames:pathIds.map((id,index)=>nameMatched?.[index]?.name||knownPath?.[index]?.name||namesById.get(id)||'').filter(Boolean),capturedFrom,status:knownPath||nameMatched&&pathIds.length>=3?'EXACT':pathIds.length>=3?'EXACT':'PARTIAL',capturedAt:new Date().toISOString()}:undefined;
-        return {priceText,salesText:stockText,shippingFeeText,sellableInventory,promotionText,gigaIndex,sourceCategory};
+        return {priceText,salesText:stockText,shippingFeeText,sellableInventory,promotionText,gigaIndex,imageUrl,sourceCategory};
       })()`) as Partial<CollectedSupplyProduct>
   }
 
@@ -1233,7 +1327,7 @@ export class BrowserWorkspace {
         const capturedFrom=resolved.from==='PRODUCT_URL'?'PRODUCT_URL':resolved.from==='BREADCRUMB'?'BREADCRUMB':'PAGE_CONTEXT';
         return {platformCode:'GIGACLOUD',catalogVersion:${JSON.stringify(GIGA_CATALOG_VERSION)},level1:level(0),level2:level(1),level3:level(2),pathIds:ids,pathNames:names.filter(Boolean),capturedFrom,status:knownPath||ids.length>=3?'EXACT':ids.length?'PARTIAL':'NEEDS_REVIEW',capturedAt:new Date().toISOString()};
       };
-      const extract = (anchor, source) => {
+      const extract = async (anchor, source) => {
         const url = new URL(anchor?.href || location.href, location.href);
         const productId = url.searchParams.get('product_id') || textOf(document.body).match(/Item\s*Code\s*:\s*([\w-]+)/i)?.[1] || '';
         let card = source === 'DETAIL' ? document.body : anchor.closest('[class*="product"],[class*="goods"],[class*="card"],li,article');
@@ -1241,10 +1335,24 @@ export class BrowserWorkspace {
         const text = textOf(card);
         const heading = source === 'DETAIL' ? document.querySelector('h1,[class*="product-name"],[class*="product-title"]') : null;
         const imageNodes=[...new Set([...(anchor?.querySelectorAll?.('img') || []),...card.querySelectorAll('img')])];
-        const imageChoices=imageNodes.map(image=>({image,url:imageUrlOf(image)})).filter(item=>item.url).sort((left,right)=>((/b2bfiles|gigab2b\.cn/i.test(right.url)?100:0)+Math.min(right.image.naturalWidth||0,1000))-((/b2bfiles|gigab2b\.cn/i.test(left.url)?100:0)+Math.min(left.image.naturalWidth||0,1000)));
-        const image=imageChoices[0]?.image || imageNodes[0] || null;
+        // 主图串图根因：画廊懒加载未就绪时，「b2bfiles 加分+已加载宽度」排序会选中跨变体页共享的
+        // opacity-40 灰置变体缩略图（同卖家所有变体页同一张）。改为画廊容器优先+排除灰置+DETAIL 轮询等待懒加载。
+        const GAL_SEL='[class*="el-image__preview"],[class*="gallery" i],[class*="zoom" i],[class*="swiper" i],[class*="preview" i]';
+        const DIM_SEL='[class*="opacity-40"],[class*="opacity-0"],[hidden],[class*="invisible" i]';
+        const pickMain=${pickGigaMainImage.toString()};
+        const choicesOf=nodes=>nodes.map(im=>{const choiceUrl=imageUrlOf(im);if(!choiceUrl)return null;const opacity=Number(getComputedStyle(im).opacity);return {url:choiceUrl,inGallery:Boolean(im.closest(GAL_SEL)),dimmed:Boolean(im.closest(DIM_SEL))||opacity<0.5,naturalWidth:im.naturalWidth||0};}).filter(Boolean);
+        let choices=choicesOf(imageNodes);
+        if(source==='DETAIL'&&!choices.some(item=>item.inGallery)){
+          for(let wait=0;wait<8;wait+=1){
+            await new Promise(resolve=>setTimeout(resolve,300));
+            choices=choicesOf(imageNodes);
+            if(choices.some(item=>item.inGallery))break;
+          }
+        }
+        const resolvedImageUrl=pickMain(choices);
+        const image=imageNodes.find(item=>imageUrlOf(item)===resolvedImageUrl)||imageNodes[0]||null;
         const backgroundImageUrl=[...card.querySelectorAll('*')].map(node=>getComputedStyle(node).backgroundImage.match(/url\(["']?(.*?)["']?\)/)?.[1] || '').find(isRealProductImage) || '';
-        const resolvedImageUrl=imageChoices[0]?.url || backgroundImageUrl;
+        const finalImageUrl=resolvedImageUrl||backgroundImageUrl;
         const title = textOf(heading) || anchor?.getAttribute('title') || image?.alt || text.slice(0,180);
         const priceText = text.match(/(?:US)?\$\s*[\d,.]+(?:\s*-\s*(?:US)?\$?\s*[\d,.]+)?/i)?.[0] || '';
         const salesText = text.match(/(?:Available\s*Stock|可售库存|库存)\s*[:：]?\s*[\d,]+/i)?.[0] || '';
@@ -1254,12 +1362,12 @@ export class BrowserWorkspace {
         const gigaIndex = Number(text.match(/(?:Seller\s*)?GIGA\s*Index\s*[:：]?\s*(\d+(?:\.\d+)?)/i)?.[1] || 0) || null;
         const storeReturnRate = text.match(/(?:店铺退货率|Shop\s*Return\s*Rate)\s*[:：]?\s*([^|,，;；]{1,20})/i)?.[1]?.trim() || '';
         const supplierName = text.match(/(?:Seller|Supplier|供应商)\s*[:：]\s*([^|,，;；]{2,80})/i)?.[1]?.trim() || '';
-        return { platformCode:'GIGACLOUD', productId, url:url.href, title, imageUrl:resolvedImageUrl, priceText, salesText, shippingFeeText, sellableInventory, promotionText, supplierName, gigaIndex, storeReturnRate, capturedFrom:source, sourceCategory:categoryContextOf(url.href) };
+        return { platformCode:'GIGACLOUD', productId, url:url.href, title, imageUrl:finalImageUrl, priceText, salesText, shippingFeeText, sellableInventory, promotionText, supplierName, gigaIndex, storeReturnRate, capturedFrom:source, sourceCategory:categoryContextOf(url.href) };
       };
       const overlay=document.createElement('div');overlay.id='cross-border-collector-overlay';document.documentElement.appendChild(overlay);
       const entries=new Map();
       const update = entry => { const chosen=selected.has(entry.product.url); entry.button.textContent=chosen?'✓ 已选':'🤖 采集'; entry.button.classList.toggle('is-selected',chosen); entry.card?.classList.toggle('cross-border-collector-card-active',chosen); };
-      const toggle = entry => { const isSelected=!selected.has(entry.product.url);if(isSelected){entry.product={...entry.product,...extract(entry.anchor,entry.product.capturedFrom||'LIST')};selected.set(entry.product.url,entry.product)}else selected.delete(entry.product.url);changes.push({selected:isSelected,product:entry.product});update(entry); };
+      const toggle = async entry => { const isSelected=!selected.has(entry.product.url);if(isSelected){entry.product={...entry.product,...await extract(entry.anchor,entry.product.capturedFrom||'LIST')};selected.set(entry.product.url,entry.product)}else selected.delete(entry.product.url);changes.push({selected:isSelected,product:entry.product});update(entry); };
       const removeEntry = entry => { entry.card?.classList.remove('cross-border-collector-card-active');entry.button.remove();entries.delete(entry.product.url); };
       const position = () => {
         entries.forEach(entry=>{
@@ -1272,29 +1380,29 @@ export class BrowserWorkspace {
         });
       };
       let frame=0;const schedulePosition=()=>position();
-      const scan = () => {
+      const scan = async () => {
         const anchors=[...document.querySelectorAll('a[href*="route=product/product"][href*="product_id="]')];
         const currentUrls=new Set();
-        anchors.forEach(anchor => {
+        for (const anchor of anchors) {
           const url=new URL(anchor.href,location.href).href;currentUrls.add(url);
-          if(entries.has(url)){const existing=entries.get(url);if(existing.anchor===anchor){existing.target=anchor.querySelector('img')?.parentElement||anchor;return}removeEntry(existing)}
+          if(entries.has(url)){const existing=entries.get(url);if(existing.anchor===anchor){existing.target=anchor.querySelector('img')?.parentElement||anchor;continue}removeEntry(existing)}
           const card=anchor.closest('[class*="product"],[class*="goods"],[class*="card"],li,article') || anchor.parentElement;
-          if(!card)return;
-          const product=extract(anchor,'LIST');
+          if(!card)continue;
+          const product=await extract(anchor,'LIST');
           const button=document.createElement('button');button.type='button';button.className=buttonClass;
           const entry={anchor,card,target:anchor.querySelector('img')?.parentElement||anchor,product,button,detail:false};
-          button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();toggle(entry)});
+          button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();void toggle(entry)});
           entries.set(url,entry);overlay.appendChild(button);update(entry);
-        });
+        }
         entries.forEach(entry=>{if(!entry.detail&&!currentUrls.has(entry.product.url))removeEntry(entry)});
         if(location.href.includes('route=product/product')&&!document.querySelector('.cross-border-collector-current')){
-          const product=extract(null,'DETAIL');const button=document.createElement('button');button.type='button';button.className=buttonClass+' cross-border-collector-current';
-          const entry={anchor:document.documentElement,card:null,target:document.documentElement,product,button,detail:true};button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();toggle(entry)});entries.set(product.url,entry);overlay.appendChild(button);update(entry);
+          const product=await extract(null,'DETAIL');const button=document.createElement('button');button.type='button';button.className=buttonClass+' cross-border-collector-current';
+          const entry={anchor:document.documentElement,card:null,target:document.documentElement,product,button,detail:true};button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();void toggle(entry)});entries.set(product.url,entry);overlay.appendChild(button);update(entry);
         }
         schedulePosition();
       };
       const style=document.createElement('style');style.id='cross-border-collector-style';style.textContent='#cross-border-collector-overlay{position:fixed!important;z-index:2147483646!important;inset:0!important;width:0!important;height:0!important;overflow:visible!important;pointer-events:none!important}.cross-border-collector-select{position:fixed!important;z-index:2147483647!important;transform:translateX(-100%)!important;padding:9px 12px!important;border:2px solid #fff!important;border-radius:8px!important;color:#fff!important;background:#4f92cf!important;box-shadow:0 4px 14px rgba(30,91,145,.35)!important;font:700 13px/1 sans-serif!important;white-space:nowrap!important;pointer-events:auto!important;cursor:pointer!important}.cross-border-collector-select.is-selected{background:#e79500!important}.cross-border-collector-card-active{outline:3px solid #e79500!important;outline-offset:-3px!important;border-radius:12px!important}.cross-border-collector-select.cross-border-collector-current{top:auto!important;left:auto!important;right:24px!important;bottom:24px!important;transform:none!important;padding:14px 18px!important}';document.documentElement.appendChild(style);
-      let timer=0;let scanQueued=false;const queueScan=()=>{if(scanQueued)return;scanQueued=true;timer=setTimeout(()=>{scanQueued=false;scan()},180)};const observer=new MutationObserver(queueScan);observer.observe(document.body||document.documentElement,{childList:true,subtree:true});const scanInterval=setInterval(scan,1000);document.addEventListener('scroll',schedulePosition,true);addEventListener('resize',schedulePosition);scan();
+      let timer=0;let scanQueued=false;const queueScan=()=>{if(scanQueued)return;scanQueued=true;timer=setTimeout(()=>{scanQueued=false;void scan()},180)};const observer=new MutationObserver(queueScan);observer.observe(document.body||document.documentElement,{childList:true,subtree:true});const scanInterval=setInterval(()=>{void scan()},1000);document.addEventListener('scroll',schedulePosition,true);addEventListener('resize',schedulePosition);void scan();
       window.__crossBorderCollector={
         snapshot:()=>({products:[...selected.values()],visibleUrls:[...entries.keys()],changes:changes.splice(0)}),
         sync:products=>{selected.clear();products.forEach(product=>selected.set(product.url,product));entries.forEach(update)},
@@ -2302,9 +2410,24 @@ export class BrowserWorkspace {
   }
 
   async ensureGigaCloudLogin(username:string,password:string,allowAutoLogin:boolean,activationVersion:number):Promise<SupplyActivationResult | null> {
-    const result = await this.runEnsureGigaCloudLogin(username,password,allowAutoLogin,activationVersion)
-    if (result) this.gigaLoginOk = result.loginStatus === 'ONLINE'
-    return result
+    // 并发去重仅在同一激活版本内有效：hide()/重激活会 bump 版本，旧 run 注定返回 null，不可复用
+    if (this.gigaLoginInFlight && this.gigaLoginInFlight.version === activationVersion) return this.gigaLoginInFlight.promise
+    const run = this.runEnsureGigaCloudLogin(username,password,allowAutoLogin,activationVersion).then(result => {
+      if (result) this.gigaLoginOk = result.loginStatus === 'ONLINE'
+      return result
+    }).finally(() => {
+      if (this.gigaLoginInFlight?.version === activationVersion) this.gigaLoginInFlight = null
+    })
+    this.gigaLoginInFlight = { version: activationVersion, promise: run }
+    return run
+  }
+
+  // AI采集挂载自愈：视图缺失或当前供应平台不是大健云仓才走重激活（会关明细 TAB），否则仅做登录检查
+  async ensureGigaSupplyView(): Promise<number | null> {
+    const view = this.supplyViews.get('GIGACLOUD')
+    const hasLiveView = view ? !view.webContents.isDestroyed() : false
+    if (shouldActivateSupplyView(hasLiveView, this.supplyPlatformCode)) return this.activateSupplyPlatform('GIGACLOUD')
+    return this.activationVersion
   }
 
   private async runEnsureGigaCloudLogin(username:string,password:string,allowAutoLogin:boolean,activationVersion:number):Promise<SupplyActivationResult | null> {

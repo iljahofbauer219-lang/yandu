@@ -107,9 +107,10 @@ const createSchema = z.object({
   packAsset: packAssetSchema.optional(),
   features: z.array(z.string().min(1).max(2000)).max(40).default([]),
   descriptionFlow: z.array(z.object({
-    kind: z.enum(['t', 'img']),
+    kind: z.enum(['t', 'img', 'tbl']),
     text: z.string().max(6000).default(''),
-    i: z.number().int().min(-1).max(59).default(-1)
+    i: z.number().int().min(-1).max(59).default(-1),
+    rows: z.array(z.array(z.string().max(600)).max(12)).max(60).default([])
   })).max(200).default([]),
   // 文件条目：url 空=降级提示；https=源站直链；assets/f-nn.ext|assets/m-nn.zip=本站重托管免登录下载
   files: z.array(z.object({
@@ -206,10 +207,20 @@ function metaViewOf(meta: Record<string, unknown>): ProductPageMetaView {
       ? (meta.features as unknown[]).flatMap(entry => (typeof entry === 'string' && entry.trim() ? [entry.trim().slice(0, 2000)] : []))
       : [],
     descriptionFlow: Array.isArray(meta.descriptionFlow)
-      ? (meta.descriptionFlow as unknown[]).flatMap((entry): Array<{ kind: 't' | 'img'; text: string; i: number }> => {
-          const row = entry as { kind?: unknown; text?: unknown; i?: unknown } | null
-          if (!row || row.kind === 't') return row && typeof row.text === 'string' && row.text.trim() ? [{ kind: 't' as const, text: row.text.trim().slice(0, 6000), i: -1 }] : []
-          if (row.kind === 'img') return typeof row.i === 'number' && Number.isInteger(row.i) && row.i >= 0 ? [{ kind: 'img' as const, text: '', i: row.i }] : []
+      ? (meta.descriptionFlow as unknown[]).flatMap((entry): Array<{ kind: 't' | 'img' | 'tbl'; text: string; i: number; rows: string[][] }> => {
+          const row = entry as { kind?: unknown; text?: unknown; i?: unknown; rows?: unknown } | null
+          if (!row || row.kind === 't') return row && typeof row.text === 'string' && row.text.trim() ? [{ kind: 't' as const, text: row.text.trim().slice(0, 6000), i: -1, rows: [] }] : []
+          if (row.kind === 'img') return typeof row.i === 'number' && Number.isInteger(row.i) && row.i >= 0 ? [{ kind: 'img' as const, text: '', i: row.i, rows: [] }] : []
+          if (row.kind === 'tbl') {
+            const rows = Array.isArray(row.rows)
+              ? (row.rows as unknown[]).flatMap(line => {
+                  if (!Array.isArray(line)) return []
+                  const cells = (line as unknown[]).flatMap(cell => (typeof cell === 'string' ? [cell.trim().replace(/\s+/g, ' ').slice(0, 600)] : [])).slice(0, 12)
+                  return cells.some(cell => cell) ? [cells] : []
+                }).slice(0, 60)
+              : []
+            return rows.length ? [{ kind: 'tbl' as const, text: '', i: -1, rows }] : []
+          }
           return []
         })
       : [],

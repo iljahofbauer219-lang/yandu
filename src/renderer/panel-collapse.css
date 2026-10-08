@@ -33,7 +33,9 @@
 /* 收起态 grid 覆写：左轨缩为展开轨；展开态沿用各文件现有列宽与媒体查询 */
 .workspace.side-collapsed, .candidate-page.side-collapsed, .image-studio.side-collapsed,
 .listing-workbench.side-collapsed, .sample-library-grid.side-collapsed,
-.linduo-mall-layout.side-collapsed, .bailian-mall-layout.side-collapsed { grid-template-columns: 32px minmax(0,1fr); }
+.linduo-mall-layout.side-collapsed, .bailian-mall-layout.side-collapsed,
+.selection-workbench.side-collapsed, .compare-workbench.side-collapsed,
+.warehouse-comparison-page.side-collapsed, .warehouse-catalog-layout.side-collapsed { grid-template-columns: 32px minmax(0,1fr); }
 .ebay-browser-layout.side-collapsed, .ebay-library-layout.side-collapsed { display: grid; grid-template-columns: 32px minmax(0,1fr); }
 .support-workspace.side-collapsed { grid-template-columns: 32px minmax(0,1fr) 320px; }
 .image-editor.side-right-collapsed { grid-template-columns: minmax(0,1fr) 32px; }

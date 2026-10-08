@@ -1663,6 +1663,18 @@ ipcMain.handle('browser:supply:activate', async (_event, platformCode: '1688' | 
     ?? { platformCode, loginStatus:'UNKNOWN', message:'已取消过期的大健云仓登录检查', url:'', autoLoginAttempted:false }
 })
 ipcMain.handle('browser:open-tab', (_event, platform: Platform, url: string, title?: string) => workspace?.openTab(platform, url, title))
+// AI采集工作台挂载自愈：视图缺失才重激活，随后按已存凭据模拟手工登录（会话有效则直接返回）
+ipcMain.handle('browser:supply:ensure-login', async () => {
+  if (!workspace) throw new Error('采集浏览器尚未初始化')
+  const activationVersion = await workspace.ensureGigaSupplyView()
+  if (activationVersion === null) return { platformCode:'GIGACLOUD', loginStatus:'UNKNOWN', message:'已取消过期的大健云仓自动进入请求', url:'', autoLoginAttempted:false }
+  const row=database?.getMarketplaceCredential('supply:GIGACLOUD:default')
+  const allowAutoLogin=row?.automation_mode==='AUTO_FILL'
+  let password=''
+  if(row?.encrypted_password&&secretStorageAvailable())password=decryptSecret(row.encrypted_password)
+  return (await workspace.ensureGigaCloudLogin(row?.username||'',password,allowAutoLogin,activationVersion))
+    ?? { platformCode:'GIGACLOUD', loginStatus:'UNKNOWN', message:'已取消过期的大健云仓登录检查', url:'', autoLoginAttempted:false }
+})
 ipcMain.handle('browser:supply:open', async (_event, platformCode: '1688' | 'GIGACLOUD', url: string) => {
   if (!workspace) throw new Error('采集浏览器尚未初始化')
   return workspace.openSupplyUrl(platformCode, url)
@@ -2564,6 +2576,11 @@ ipcMain.handle('candidate:reread', async (_event, request: { platformCode: strin
   if (!database) throw new Error('候选商品数据库尚未初始化')
   if (!workspace) throw new Error('浏览器工作区未就绪')
   const facts = await workspace.rereadSupplyCandidate(request.url)
+  // 重读命中 EXACT 三级类目时同步写回仓库商品表，正式入库卡「原始类目」不再停留占位
+  const rereadCategory = (facts as { sourceCategory?: { status?: string; pathNames?: string[] } }).sourceCategory
+  if (rereadCategory && rereadCategory.status === 'EXACT' && (rereadCategory.pathNames?.length ?? 0) >= 3) {
+    database.updateSupplyWarehouseCategory(request.url, rereadCategory.pathNames?.[0] || '', rereadCategory.pathNames?.[1] || '', rereadCategory.pathNames?.[2] || '')
+  }
   // 空串/null 与降级类目不覆盖既有值：合并策略收敛在 mergeCandidateFacts（AppDatabase 写入时执行）
   const merged = database.updateSupplyCandidateFacts(request.platformCode, request.url, facts)
   const product = merged as unknown as CollectedSupplyProduct
@@ -2596,13 +2613,7 @@ ipcMain.handle('comparison:update', (_event, request: ComparisonUpdateRequest) =
 ipcMain.handle('comparison:promote', (_event, request: ComparisonPromotionRequest) => database?.promoteComparisonToWarehouse(request))
 ipcMain.handle('workflow:counts', () => database?.getWorkflowCounts() ?? { collected: 0, compared: 0, selected: 0, stocked: 0, listed: 0, purchasing: 0, reconciled: 0 })
 ipcMain.handle('warehouse:list', () => database?.getSupplyWarehouseProducts() ?? [])
-ipcMain.handle('warehouse:list-pending-review', () => database?.listPendingReviewWarehouseProducts() ?? [])
 ipcMain.handle('warehouse:list-delisted', () => database?.listDelistedWarehouseProducts() ?? [])
-ipcMain.handle('warehouse:confirm-review', async (_event, id: string, accessToken: string) => {
-  if (!database) throw new Error('数据库尚未初始化')
-  await requireInboundEditPermission(accessToken)
-  return database.confirmWarehouseReview(id)
-})
 ipcMain.handle('warehouse:delist', async (_event, id: string, reason: string, accessToken: string) => {
   if (!database) throw new Error('数据库尚未初始化')
   await requireInboundEditPermission(accessToken)

@@ -218,6 +218,8 @@ declare global {
         reload(platform: Platform): Promise<void>
         getState(platform: Platform): Promise<BrowserState>
         activateSupply(platformCode: '1688' | 'GIGACLOUD'): Promise<SupplyActivationResult>
+        /** AI采集挂载自愈：视图缺失才重激活，随后按已存凭据模拟手工登录 */
+        ensureSupplyLogin(): Promise<SupplyActivationResult>
         openSupply(platformCode: '1688' | 'GIGACLOUD', url: string): Promise<string>
         openTab(platform: Platform, url: string, title?: string): Promise<string>
         /** IE 浏览挂载自愈：无通用 web tab 则建默认 nav 站点，已有则补推 tab 快照；返回 tab id 或 null */
@@ -309,9 +311,7 @@ declare global {
       }
       warehouses: {
         list(): Promise<SupplyWarehouseProduct[]>
-        listPendingReview(): Promise<SupplyWarehouseProduct[]>
         listDelisted(): Promise<SupplyWarehouseProduct[]>
-        confirmReview(id: string, accessToken: string): Promise<SupplyWarehouseProduct[]>
         delist(id: string, reason: string, accessToken: string): Promise<SupplyWarehouseProduct[]>
         restore(id: string, accessToken: string): Promise<SupplyWarehouseProduct[]>
         setRegion(id: string, region: string, accessToken: string): Promise<SupplyWarehouseProduct[]>

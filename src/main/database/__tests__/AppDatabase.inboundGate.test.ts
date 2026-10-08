@@ -271,94 +271,67 @@ describe('入库闸口流转', () => {
     db.updateSelectionDecision(id, 'APPROVED')
   }
 
-  function reviewThenQueueId(id: string): string {
-    const pending = db.listPendingReviewWarehouseProducts().find(item => item.selectionId === id)!
-    db.confirmWarehouseReview(pending.id)
-    db.copyWarehouseToPallet(pending.id)
-    return db.listInbound().find(item => item.warehouseProductId === pending.id)!.id
+  function seedDownloadFor(warehouseProductId: string): void {
+    const database = new SqliteDatabase(path.join(ctx.dir, 'sourcing-data.sqlite'))
+    database.prepare(`INSERT OR IGNORE INTO supply_product_downloads (warehouse_product_id, directory, image_count, failed_count, detail_path, status, error, downloaded_at) VALUES (?, '', 3, 0, '', 'DOWNLOADED', '', '2026-10-08T00:00:00.000Z')`).run(warehouseProductId)
+    database.close()
   }
 
-  it('选品审批通过落正式入库待复核行，不直接进入库队列', () => {
+  function queueIdAfterApprove(id: string): string {
+    const warehouse = db.getSupplyWarehouseProducts().find(item => item.selectionId === id)!
+    seedDownloadFor(warehouse.id)
+    db.copyWarehouseToPallet(warehouse.id)
+    return db.listInbound().find(item => item.warehouseProductId === warehouse.id)!.id
+  }
+
+  it('选品审批通过直接落正式入库 ACTIVE 行，不进入入库队列', () => {
     approve('sel-1')
-    expect(db.getSupplyWarehouseProducts().filter(item => item.selectionId === 'sel-1')).toHaveLength(0)
-    const pending = db.listPendingReviewWarehouseProducts().filter(item => item.selectionId === 'sel-1')
-    expect(pending).toHaveLength(1)
-    expect(pending[0]).toMatchObject({ warehouseCode: 'GIGACLOUD', status: 'PENDING_REVIEW', selectionId: 'sel-1' })
+    const warehouse = db.getSupplyWarehouseProducts().filter(item => item.selectionId === 'sel-1')
+    expect(warehouse).toHaveLength(1)
+    expect(warehouse[0]).toMatchObject({ warehouseCode: 'GIGACLOUD', status: 'ACTIVE', selectionId: 'sel-1' })
     expect(db.listInbound().filter(item => item.sourceId === 'sel-1')).toHaveLength(0)
-  })
-
-  it('下载资格可取得 PENDING_REVIEW 商品', () => {
-    approve('sel-download-pending')
-    const pending = db.listPendingReviewWarehouseProducts().find(item => item.selectionId === 'sel-download-pending')!
-
-    expect(db.getDownloadableSupplyWarehouseProductById(pending.id)).toMatchObject({
-      id: pending.id,
-      status: 'PENDING_REVIEW'
-    })
   })
 
   it('下载资格可取得 ACTIVE 商品', () => {
     approve('sel-download-active')
-    const pending = db.listPendingReviewWarehouseProducts().find(item => item.selectionId === 'sel-download-active')!
-    db.confirmWarehouseReview(pending.id)
+    const warehouse = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-download-active')!
 
-    expect(db.getDownloadableSupplyWarehouseProductById(pending.id)).toMatchObject({
-      id: pending.id,
+    expect(db.getDownloadableSupplyWarehouseProductById(warehouse.id)).toMatchObject({
+      id: warehouse.id,
       status: 'ACTIVE'
     })
   })
 
   it('下载资格开放 DELISTED 商品（下架视图更新产品）', () => {
     approve('sel-download-delisted')
-    const pending = db.listPendingReviewWarehouseProducts().find(item => item.selectionId === 'sel-download-delisted')!
-    db.delistWarehouseProduct(pending.id, '供应商停售')
+    const warehouse = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-download-delisted')!
+    db.delistWarehouseProduct(warehouse.id, '供应商停售')
 
-    expect(db.getDownloadableSupplyWarehouseProductById(pending.id)).toMatchObject({
-      id: pending.id,
+    expect(db.getDownloadableSupplyWarehouseProductById(warehouse.id)).toMatchObject({
+      id: warehouse.id,
       status: 'DELISTED'
     })
   })
 
   it('下载资格拒绝 ARCHIVED 商品', () => {
     approve('sel-download-archived')
-    const pending = db.listPendingReviewWarehouseProducts().find(item => item.selectionId === 'sel-download-archived')!
+    const warehouse = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-download-archived')!
     db.updateSelectionDecision('sel-download-archived', 'PENDING')
 
-    expect(db.getDownloadableSupplyWarehouseProductById(pending.id)).toBeUndefined()
+    expect(db.getDownloadableSupplyWarehouseProductById(warehouse.id)).toBeUndefined()
   })
 
-  it('本仓入库仅推进正式入库，不写入库队列与货盘', () => {
+  it('审批直入正式入库，不写入库队列与货盘', () => {
     approve('sel-1b')
-    const pendingId = db.listPendingReviewWarehouseProducts().find(item => item.selectionId === 'sel-1b')!.id
-    db.confirmWarehouseReview(pendingId)
-    expect(db.listPendingReviewWarehouseProducts().filter(item => item.selectionId === 'sel-1b')).toHaveLength(0)
     const warehouse = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-1b')!
-    expect(warehouse).toMatchObject({ id: pendingId, status: 'ACTIVE' })
-    expect(db.listInbound().filter(item => item.warehouseProductId === pendingId)).toHaveLength(0)
-    expect(db.listPalletItems().filter(item => item.warehouseProductId === pendingId)).toHaveLength(0)
-  })
-
-  it('复核确认后半段失败时回滚队列写入并保留 PENDING_REVIEW', () => {
-    approve('sel-review-rollback')
-    const pending = db.listPendingReviewWarehouseProducts().find(item => item.selectionId === 'sel-review-rollback')!
-    const database = (db as unknown as { database: { exec(sql: string): void } }).database
-    database.exec(`CREATE TEMP TRIGGER fail_warehouse_review_status_update
-      BEFORE UPDATE OF status ON supply_warehouse_products
-      WHEN OLD.id = '${pending.id}' AND NEW.status = 'ACTIVE'
-      BEGIN SELECT RAISE(ABORT, 'injected warehouse review failure'); END`)
-
-    try {
-      expect(() => db.confirmWarehouseReview(pending.id)).toThrow('injected warehouse review failure')
-      expect(db.listInbound().some(item => item.sourceId === 'sel-review-rollback')).toBe(false)
-      expect(db.listPendingReviewWarehouseProducts().find(item => item.id === pending.id)?.status).toBe('PENDING_REVIEW')
-    } finally {
-      database.exec('DROP TRIGGER IF EXISTS fail_warehouse_review_status_update')
-    }
+    expect(warehouse.status).toBe('ACTIVE')
+    expect(db.listInbound().filter(item => item.warehouseProductId === warehouse.id)).toHaveLength(0)
+    expect(db.listPalletItems().filter(item => item.warehouseProductId === warehouse.id)).toHaveLength(0)
   })
 
   it('确认入库双写正式入库与货盘存放，队列置 CONFIRMED', () => {
     approve('sel-2')
-    const queueId = reviewThenQueueId('sel-2')
+    const queueId = queueIdAfterApprove('sel-2')
     db.confirmInbound(queueId)
     const warehouse = db.getSupplyWarehouseProducts().filter(item => item.selectionId === 'sel-2')
     expect(warehouse).toHaveLength(1)
@@ -402,25 +375,9 @@ describe('入库闸口流转', () => {
     expect(countStoredPallets(warehouse.id)).toBe(0)
   })
 
-  it('ERP 队列不能按来源地址绕过正式入库待复核', () => {
-    approve('sel-erp-pending-review')
-    const pending = db.listPendingReviewWarehouseProducts().find(item => item.selectionId === 'sel-erp-pending-review')!
-    db.erpIntake([{ sourceId: 'erp-pending-review', snapshot: {
-      platformCode: 'GIGACLOUD', warehouseCode: 'GIGACLOUD', itemCode: pending.productId, title: pending.title,
-      imageUrl: pending.imageUrl, priceText: pending.priceText, category: pending.category, subcategory: pending.subcategory,
-      tertiaryCategory: pending.tertiaryCategory, sourceUrl: pending.sourceUrl, tags: [], collectedAt: pending.updatedAt
-    } }])
-    const queue = db.listInbound().find(item => item.sourceId === 'erp-pending-review')!
-
-    expect(() => db.confirmInbound(queue.id)).toThrow('待复核商品请先执行本仓入库')
-    expect(db.listInbound().find(item => item.id === queue.id)?.status).toBe('PENDING')
-    expect(db.listPendingReviewWarehouseProducts().some(item => item.id === pending.id)).toBe(true)
-    expect(countStoredPallets(pending.id)).toBe(0)
-  })
-
   it('货盘插入失败时确认入库回滚队列和正式仓修改', () => {
     approve('sel-confirm-rollback')
-    const queueId = reviewThenQueueId('sel-confirm-rollback')
+    const queueId = queueIdAfterApprove('sel-confirm-rollback')
     const queue = db.listInbound().find(item => item.id === queueId)!
     const warehouseBefore = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-confirm-rollback')!
     db.reeditInbound(queueId, { ...queue.snapshot, title: '不应写入正式仓' })
@@ -441,14 +398,14 @@ describe('入库闸口流转', () => {
 
   it('再次抄送货盘会将已有已确认快照 upsert 回 PENDING', () => {
     approve('sel-2b')
-    const firstQueueId = reviewThenQueueId('sel-2b')
+    const firstQueueId = queueIdAfterApprove('sel-2b')
     db.confirmInbound(firstQueueId)
     db.updateSelectionDecision('sel-2b', 'PENDING')
     db.updateSelectionDecision('sel-2b', 'APPROVED')
-    const pendingId = db.listPendingReviewWarehouseProducts().find(item => item.selectionId === 'sel-2b')!.id
+    const warehouseId = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-2b')!.id
 
-    db.confirmWarehouseReview(pendingId)
-    db.copyWarehouseToPallet(pendingId)
+    seedDownloadFor(warehouseId)
+    db.copyWarehouseToPallet(warehouseId)
 
     expect(db.listInbound().find(item => item.id === firstQueueId)).toMatchObject({
       status: 'PENDING', confirmedAt: null
@@ -457,7 +414,7 @@ describe('入库闸口流转', () => {
 
   it('已确认快照冻结：reedit 抛错', () => {
     approve('sel-3')
-    const queueId = reviewThenQueueId('sel-3')
+    const queueId = queueIdAfterApprove('sel-3')
     const item = db.listInbound().find(entry => entry.id === queueId)!
     db.confirmInbound(item.id)
     expect(() => db.reeditInbound(item.id, { ...item.snapshot, title: '改' })).toThrow('已确认商品请从正式入库退回后再修改')
@@ -465,7 +422,7 @@ describe('入库闸口流转', () => {
 
   it('退回入库处理：正式入库归档、货盘删除、队列回 PENDING', () => {
     approve('sel-4')
-    db.confirmInbound(reviewThenQueueId('sel-4'))
+    db.confirmInbound(queueIdAfterApprove('sel-4'))
     const warehouseId = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-4')!.id
     db.returnToInbound(warehouseId)
     expect(db.getSupplyWarehouseProducts().filter(item => item.selectionId === 'sel-4')).toHaveLength(0)
@@ -477,7 +434,7 @@ describe('入库闸口流转', () => {
 
   it('驳回保留正式仓锚点但不写货盘，重新编辑回 PENDING', () => {
     approve('sel-5')
-    const queueId = reviewThenQueueId('sel-5')
+    const queueId = queueIdAfterApprove('sel-5')
     const item = db.listInbound().find(entry => entry.id === queueId)!
     db.rejectInbound(item.id)
     const warehouse = db.getSupplyWarehouseProducts().find(entry => entry.selectionId === 'sel-5')!
@@ -490,49 +447,48 @@ describe('入库闸口流转', () => {
     expect(revived.snapshot.title).toBe('复活')
   })
 
-  it('待复核商品可下架并记录去空格原因，恢复后统一为 ACTIVE', () => {
+  it('正式入库商品可下架并记录去空格原因，恢复后统一为 ACTIVE', () => {
     approve('sel-7')
-    const pending = db.listPendingReviewWarehouseProducts().find(item => item.selectionId === 'sel-7')!
-    db.delistWarehouseProduct(pending.id, '  供应商停售  ')
+    const warehouse = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-7')!
+    db.delistWarehouseProduct(warehouse.id, '  供应商停售  ')
 
-    expect(db.listPendingReviewWarehouseProducts().some(item => item.id === pending.id)).toBe(false)
-    expect(db.getSupplyWarehouseProducts().some(item => item.id === pending.id)).toBe(false)
-    const delisted = db.listDelistedWarehouseProducts().find(item => item.id === pending.id)!
+    expect(db.getSupplyWarehouseProducts().some(item => item.id === warehouse.id)).toBe(false)
+    const delisted = db.listDelistedWarehouseProducts().find(item => item.id === warehouse.id)!
     expect(delisted).toMatchObject({ status: 'DELISTED', delistedReason: '供应商停售' })
     expect(delisted.delistedAt).not.toBeNull()
 
-    db.restoreWarehouseProduct(pending.id)
-    expect(db.listDelistedWarehouseProducts().some(item => item.id === pending.id)).toBe(false)
-    expect(db.getSupplyWarehouseProducts().find(item => item.id === pending.id)).toMatchObject({
+    db.restoreWarehouseProduct(warehouse.id)
+    expect(db.listDelistedWarehouseProducts().some(item => item.id === warehouse.id)).toBe(false)
+    expect(db.getSupplyWarehouseProducts().find(item => item.id === warehouse.id)).toMatchObject({
       status: 'ACTIVE', delistedReason: '', delistedAt: null
     })
   })
 
   it('DELISTED 商品变更为非审批决定时保留状态与下架元数据', () => {
     approve('sel-10a')
-    const pending = db.listPendingReviewWarehouseProducts().find(item => item.selectionId === 'sel-10a')!
-    db.delistWarehouseProduct(pending.id, '永久停售')
-    const before = readWarehouseState(pending.id)
+    const warehouse = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-10a')!
+    db.delistWarehouseProduct(warehouse.id, '永久停售')
+    const before = readWarehouseState(warehouse.id)
 
     db.updateSelectionDecision('sel-10a', 'PENDING')
 
-    expect(readWarehouseState(pending.id)).toEqual(before)
+    expect(readWarehouseState(warehouse.id)).toEqual(before)
   })
 
   it('DELISTED 商品重新审批仍保留状态与下架元数据', () => {
     approve('sel-10b')
-    const pending = db.listPendingReviewWarehouseProducts().find(item => item.selectionId === 'sel-10b')!
-    db.delistWarehouseProduct(pending.id, '供应商停售')
-    const before = readWarehouseState(pending.id)
+    const warehouse = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-10b')!
+    db.delistWarehouseProduct(warehouse.id, '供应商停售')
+    const before = readWarehouseState(warehouse.id)
 
     db.updateSelectionDecision('sel-10b', 'APPROVED')
 
-    expect(readWarehouseState(pending.id)).toEqual(before)
+    expect(readWarehouseState(warehouse.id)).toEqual(before)
   })
 
   it('下架后的遗留 PENDING 快照不能确认入库且不写货盘', () => {
     approve('sel-11')
-    const queueId = reviewThenQueueId('sel-11')
+    const queueId = queueIdAfterApprove('sel-11')
     const warehouse = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-11')!
     db.delistWarehouseProduct(warehouse.id, '停售')
     const before = readWarehouseState(warehouse.id)
@@ -553,7 +509,7 @@ describe('入库闸口流转', () => {
 
   it('重编可变快照身份后仍按 selectionId 拒绝确认已下架正式仓', () => {
     approve('sel-identity-guard')
-    const queueId = reviewThenQueueId('sel-identity-guard')
+    const queueId = queueIdAfterApprove('sel-identity-guard')
     const warehouse = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-identity-guard')!
     const queue = db.listInbound().find(item => item.id === queueId)!
     db.delistWarehouseProduct(warehouse.id, '停售')
@@ -574,7 +530,7 @@ describe('入库闸口流转', () => {
 
   it('历史队列缺少关联键且 selectionId 命中多个正式仓时拒绝任取一行', () => {
     approve('sel-ambiguous-link')
-    const queueId = reviewThenQueueId('sel-ambiguous-link')
+    const queueId = queueIdAfterApprove('sel-ambiguous-link')
     const queue = db.listInbound().find(item => item.id === queueId)!
     const warehouse = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-ambiguous-link')!
     const database = new SqliteDatabase(path.join(ctx.dir, 'sourcing-data.sqlite'))
@@ -591,42 +547,41 @@ describe('入库闸口流转', () => {
     expect(countStoredPallets('wh-ambiguous-second')).toBe(0)
   })
 
-  it('货盘列表保留 ARCHIVED、PENDING_REVIEW 与无父记录的老数据', () => {
+  it('货盘列表保留 ARCHIVED、ACTIVE 与无父记录的老数据', () => {
     approve('sel-12a')
-    db.confirmInbound(reviewThenQueueId('sel-12a'))
+    db.confirmInbound(queueIdAfterApprove('sel-12a'))
     const archived = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-12a')!
     db.updateSelectionDecision('sel-12a', 'PENDING')
 
     approve('sel-12b')
-    const pending = db.listPendingReviewWarehouseProducts().find(item => item.selectionId === 'sel-12b')!
-    insertLegacyPallet('legacy-pending-pallet', pending.id)
+    const activeRow = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-12b')!
+    insertLegacyPallet('legacy-pending-pallet', activeRow.id)
     insertLegacyPallet('legacy-orphan-pallet', 'missing-warehouse-parent')
 
     const visibleWarehouseIds = db.listPalletItems().map(item => item.warehouseProductId)
     expect(visibleWarehouseIds).toEqual(expect.arrayContaining([
       archived.id,
-      pending.id,
+      activeRow.id,
       'missing-warehouse-parent'
     ]))
   })
 
   it('非 DELISTED 商品不能执行恢复', () => {
     approve('sel-13')
-    const pending = db.listPendingReviewWarehouseProducts().find(item => item.selectionId === 'sel-13')!
+    const warehouse = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-13')!
 
-    expect(() => db.restoreWarehouseProduct(pending.id)).toThrow('仅已下架商品可恢复')
-    expect(db.listPendingReviewWarehouseProducts().some(item => item.id === pending.id)).toBe(true)
+    expect(() => db.restoreWarehouseProduct(warehouse.id)).toThrow('仅已下架商品可恢复')
+    expect(db.getSupplyWarehouseProducts().some(item => item.id === warehouse.id)).toBe(true)
   })
 
   it('已入货盘商品重新上架后直接回正式入库并立即恢复货盘显示', () => {
     approve('sel-8')
-    db.confirmInbound(reviewThenQueueId('sel-8'))
+    db.confirmInbound(queueIdAfterApprove('sel-8'))
     const warehouse = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-8')!
     expect(db.listPalletItems().some(item => item.warehouseProductId === warehouse.id)).toBe(true)
 
     db.delistWarehouseProduct(warehouse.id, '停售')
     expect(db.getSupplyWarehouseProducts().some(item => item.id === warehouse.id)).toBe(false)
-    expect(db.listPendingReviewWarehouseProducts().some(item => item.id === warehouse.id)).toBe(false)
     expect(db.listPalletItems().some(item => item.warehouseProductId === warehouse.id)).toBe(false)
 
     db.restoreWarehouseProduct(warehouse.id)
@@ -637,9 +592,9 @@ describe('入库闸口流转', () => {
 
   it('下架原因去空格后不能为空', () => {
     approve('sel-9')
-    const pending = db.listPendingReviewWarehouseProducts().find(item => item.selectionId === 'sel-9')!
-    expect(() => db.delistWarehouseProduct(pending.id, '   ')).toThrow('下架原因不能为空')
-    expect(db.listPendingReviewWarehouseProducts().some(item => item.id === pending.id)).toBe(true)
+    const warehouse = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-9')!
+    expect(() => db.delistWarehouseProduct(warehouse.id, '   ')).toThrow('下架原因不能为空')
+    expect(db.getSupplyWarehouseProducts().some(item => item.id === warehouse.id)).toBe(true)
   })
 
   it('启动回填跳过已有正式入库记录的 APPROVED 选品（存量豁免）', () => {
@@ -647,6 +602,16 @@ describe('入库闸口流转', () => {
     db.importWarehouseForTest('wh-6', 'sel-6')
     const reopened = new AppDatabase()
     expect(reopened.listInbound().filter(entry => entry.sourceId === 'sel-6')).toHaveLength(0)
-    expect(reopened.listPendingReviewWarehouseProducts().filter(entry => entry.selectionId === 'sel-6')).toHaveLength(0)
+    expect(reopened.getSupplyWarehouseProducts().filter(entry => entry.selectionId === 'sel-6')).toHaveLength(1)
+  })
+
+  it('启动迁移：遗留待复核行一次性并入正式入库', () => {
+    approve('sel-migrate')
+    const warehouse = db.getSupplyWarehouseProducts().find(item => item.selectionId === 'sel-migrate')!
+    const database = new SqliteDatabase(path.join(ctx.dir, 'sourcing-data.sqlite'))
+    database.prepare(`UPDATE supply_warehouse_products SET status = 'PENDING_REVIEW' WHERE id = ?`).run(warehouse.id)
+    database.close()
+    const reopened = new AppDatabase()
+    expect(reopened.getSupplyWarehouseProducts().find(item => item.id === warehouse.id)?.status).toBe('ACTIVE')
   })
 })

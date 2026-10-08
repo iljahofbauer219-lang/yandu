@@ -31,7 +31,7 @@ export interface ProductPageMetaView {
   features?: string[]
   descriptionText?: string
   descriptionImages?: Array<{ name: string; contentType: string }>
-  descriptionFlow?: Array<{ kind: 't' | 'img'; text?: string; i?: number }>
+  descriptionFlow?: Array<{ kind: 't' | 'img' | 'tbl'; text?: string; i?: number; rows?: string[][] }>
 }
 
 const WAREHOUSE_NAMES: Record<string, string> = { GIGACLOUD: '大健云仓', '1688': '1688' }
@@ -150,8 +150,12 @@ export function renderProductPageDocument(pageId: string, meta: ProductPageMetaV
     return { type: 'p', text: line }
   }
   const descImages = (meta.descriptionImages ?? []).map(image => image.name)
-  const flowBlocks = (meta.descriptionFlow ?? []).filter(block => (block.kind === 'img' ? !!descImages[block.i ?? -1] : !!((block.text ?? '').trim()) && (block.text ?? '').trim() !== '图文描述'))
-  const renderBlocks = (blocks: Array<{ type: 'li' | 'h' | 'p' | 'img'; text: string }>): string => {
+  const flowBlocks = (meta.descriptionFlow ?? []).filter(block => (block.kind === 'img' ? !!descImages[block.i ?? -1] : block.kind === 'tbl' ? !!((block.rows ?? []).length) : !!((block.text ?? '').trim()) && (block.text ?? '').trim() !== '图文描述'))
+  const descTable = (rows: string[][]): string => {
+    const kv = rows.every(row => row.length === 2)
+    return `<table class="pp-desc-table${kv ? ' pp-desc-table--kv' : ''}"><tbody>${rows.map(row => `<tr>${row.map(cell => `<td>${escapeHtmlText(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table>`
+  }
+  const renderBlocks = (blocks: Array<{ type: 'li' | 'h' | 'p' | 'img' | 'tbl'; text: string; rows?: string[][] }>): string => {
     let out = ''
     let list: string[] = []
     const flushList = (): void => {
@@ -164,6 +168,11 @@ export function renderProductPageDocument(pageId: string, meta: ProductPageMetaV
       if (block.type === 'img') {
         flushList()
         out += `<div class="pp-desc-images"><img src="assets/${escapeHtmlText(block.text)}" alt=""></div>`
+        continue
+      }
+      if (block.type === 'tbl') {
+        flushList()
+        out += descTable(block.rows ?? [])
         continue
       }
       const classified = classifyLine(block.text)
@@ -182,7 +191,7 @@ export function renderProductPageDocument(pageId: string, meta: ProductPageMetaV
   const legacyLines = descriptionText.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
   if (legacyLines[0] === '图文描述') legacyLines.shift()
   const descBody = flowBlocks.length
-    ? renderBlocks(flowBlocks.map(block => (block.kind === 'img' ? { type: 'img' as const, text: descImages[block.i ?? -1] ?? '' } : { type: 'p' as const, text: (block.text ?? '').trim() })))
+    ? renderBlocks(flowBlocks.map(block => (block.kind === 'img' ? { type: 'img' as const, text: descImages[block.i ?? -1] ?? '' } : block.kind === 'tbl' ? { type: 'tbl' as const, text: '', rows: block.rows ?? [] } : { type: 'p' as const, text: (block.text ?? '').trim() })))
     : renderBlocks(legacyLines.map(line => ({ type: 'p' as const, text: line })))
   const descTail = flowBlocks.length ? imagesGrid(descImages.filter((_, idx) => !referencedIdx.has(idx))) : imagesGrid(descImages)
   const features = meta.features ?? []
@@ -259,6 +268,9 @@ body{font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neu
 @media (max-width:900px){.pp-spec-grid{grid-template-columns:1fr}}
 .pp-desc-images{display:grid;gap:10px}
 .pp-desc-images img{width:100%;border-radius:8px}
+.pp-desc-table{width:100%;border-collapse:collapse;margin:0 0 12px;table-layout:fixed}
+.pp-desc-table td{border:1px solid #e5e5e5;padding:10px 12px;font-size:14px;color:#333;word-break:break-word;text-align:left;vertical-align:top}
+.pp-desc-table--kv td:first-child{background:#f7f7f5;width:30%;color:#444}
 ${galleryCss(meta.images.length)}
 </style>`
   return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">`
