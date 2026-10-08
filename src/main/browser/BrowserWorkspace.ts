@@ -530,7 +530,7 @@ export class BrowserWorkspace {
         const flatAll = (document.body?.textContent || '').replace(/\s+/g, ' ')
         const grab = (re) => { const m = re.exec(flat) || re.exec(flatAll); return m && m[1] ? m[1].trim() : '' }
         const crumbNode = document.querySelector('[class*="breadcrumb" i],[class*="crumb" i],[class*="category-path" i]')
-        const crumbParts = crumbNode ? (crumbNode.innerText || crumbNode.textContent || '').replace(/\s+/g, ' ').split(/[>/›]+/).map(s => s.trim()).filter(Boolean) : []
+        const crumbParts = crumbNode ? (crumbNode.innerText || crumbNode.textContent || '').replace(/\s+/g, ' ').split(/[>/›/]+/).map(s => s.trim()).filter(Boolean) : []
         if (crumbParts.length > 1 && title && crumbParts[crumbParts.length - 1].length >= 8 && (title.includes(crumbParts[crumbParts.length - 1]) || crumbParts[crumbParts.length - 1].includes(title))) crumbParts.pop()
         const category = crumbParts.join(' / ')
         const itemCode = grab(/Item\s*Code[:：]\s*([A-Z0-9-]+)/i)
@@ -794,11 +794,13 @@ export class BrowserWorkspace {
         let nameMatched=null;
         if(!pathIds.length){
           const crumb=(document.querySelector('[class*="breadcrumb" i],[class*="crumb" i],[class*="category-path" i],[class*="position" i]')?.innerText||'').replace(/\s+/g,' ');
-          const seq=crumb.split(/[>/›]+/).map(value=>value.trim()).filter(Boolean).join('>');
+          // 分隔符无关+容忍复数后缀：以目录名为针 against 面包屑原文做按序包含匹配（页面分隔符可为 / > 空格，站方名可能带复数后缀）
+          const inOrder=(haystack:string,names:string[])=>{let pos=0;for(const name of names){if(!name)return false;const idx=haystack.indexOf(name,pos);if(idx<0)return false;pos=idx+name.length;}return true;};
+          const seq=crumb;
           if(seq){
             const entries=Object.entries(knownCategoryPaths);
-            const hit3=entries.find(([,p])=>seq.includes(p[0].name+'>'+p[1].name+'>'+p[2].name));
-            const hit2=hit3?null:entries.find(([,p])=>seq.includes(p[0].name+'>'+p[1].name));
+            const hit3=entries.find(([,p])=>inOrder(seq,[p[0].name,p[1].name,p[2].name]));
+            const hit2=hit3?null:entries.find(([,p])=>inOrder(seq,[p[0].name,p[1].name]));
             const hit=hit3||hit2;
             if(hit){nameMatched=hit[1];pathIds=hit3?hit[1].map(item=>item.id):hit[1].slice(0,2).map(item=>item.id);capturedFrom='BREADCRUMB';}
           }
@@ -2569,6 +2571,21 @@ export class BrowserWorkspace {
     this.getCurrentView(platform).webContents.reload()
   }
 
+  // 站内链接与供应会话视图必须同 cookie 罐：否则同窗口首页标签已登录、深链标签未登录
+  private partitionForTab(platform: Platform, url: string): string {
+    if (platform === 'ozon') return this.marketplacePartition
+    if (platform === '1688') return 'persist:supply:1688:default'
+    if (platform === 'web') {
+      try {
+        const host = new URL(url).hostname
+        if (host === 'gigab2b.com' || host.endsWith('.gigab2b.com')) return 'persist:supply:GIGACLOUD:default'
+        if (host === '1688.com' || host.endsWith('.1688.com')) return 'persist:supply:1688:default'
+      } catch { /* 解析失败回落通用罐 */ }
+      return 'persist:web-general'
+    }
+    return `persist:${platform}`
+  }
+
   async openTab(platform: Platform, url: string, initialTitle?: string) {
     if (this.visibleTabCount() >= 8) throw new Error('最多同时打开8个浏览标签，请先关闭不需要的标签')
     if (!this.isAllowedUrl(platform, url)) throw new Error('链接不属于当前平台，已阻止打开')
@@ -2585,7 +2602,7 @@ export class BrowserWorkspace {
     const id = crypto.randomUUID()
     const view = new WebContentsView({
       webPreferences: {
-        partition: platform === 'ozon' ? this.marketplacePartition : platform === 'web' ? 'persist:web-general' : `persist:${platform}`,
+        partition: this.partitionForTab(platform, targetUrl),
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: true

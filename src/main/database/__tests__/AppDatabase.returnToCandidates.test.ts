@@ -11,6 +11,13 @@ vi.mock('electron', () => ({ app: { getPath: () => ctx.dir } }))
 let SqliteDatabase: typeof import('node:sqlite').DatabaseSync
 let db: AppDatabaseType
 
+function warehouseSelectionId(warehouseId: string): string | null {
+  const database = new SqliteDatabase(path.join(ctx.dir, 'sourcing-data.sqlite'))
+  const row = database.prepare(`SELECT selection_id FROM supply_warehouse_products WHERE id = ?`).get(warehouseId) as { selection_id: string | null }
+  database.close()
+  return row.selection_id
+}
+
 function countRows(table: string, column: string, value: string): number {
   const database = new SqliteDatabase(path.join(ctx.dir, 'sourcing-data.sqlite'))
   const row = database.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE ${column} = ?`).get(value) as { count: number }
@@ -38,10 +45,10 @@ beforeAll(async () => {
 })
 
 describe('返回AI候选：守卫语义与错误可感知', () => {
-  it('存在货盘仓副本时抛中文全文守卫错误且数据不变', () => {
-    expect(() => db.returnSelectionToCandidates('sel-ret-1')).toThrow('货盘仓库')
-    expect(countRows('selection_records', 'id', 'sel-ret-1')).toBe(1)
-    expect(countRows('supply_warehouse_products', 'selection_id', 'sel-ret-1')).toBe(1)
+  it('存在货盘仓副本时也能退回候选：选品删除、仓副本保留并自动解绑', () => {
+    expect(() => db.returnSelectionToCandidates('sel-ret-1')).not.toThrow()
+    expect(countRows('selection_records', 'id', 'sel-ret-1')).toBe(0)
+    expect(warehouseSelectionId('wh-ret-1')).toBeNull()
   })
 
   it('无货盘仓副本时正常退回候选', () => {

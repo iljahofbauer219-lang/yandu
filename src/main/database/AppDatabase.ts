@@ -1338,6 +1338,8 @@ export class AppDatabase {
     // 把 CREATE INDEX 放进 schema 块会 no such column 直接抛错，而构造函数失败等于应用启动崩溃。
     this.database.exec(`CREATE INDEX IF NOT EXISTS idx_ebay_local_product_media_key ON ebay_local_product_media(snapshot_id, media_key)`)
     this.migrateInboundProcessingQueue()
+    this.migrateWarehouseSelectionLink()
+    this.restoreReenabledCandidateRows()
     this.seedComplianceKnowledge()
     this.database.prepare(`DELETE FROM ebay_listings WHERE status='REMOVED'`).run()
     this.repairPlaceholderCandidateImages()
@@ -1399,6 +1401,46 @@ export class AppDatabase {
   }
 
   /** 入库闸口 v2：老平铺表重建为快照行，并补齐正式仓内部关联键 */
+  // 供应仓产品与选品记录解绑迁移：selection_id 改可空 + ON DELETE SET NULL，
+  // 使「打回候选」删除选品行时保留仓产品（重建表期间临时关闭外键，避免 DROP 父表触发子表级联误删）。
+  private migrateWarehouseSelectionLink() {
+    const columns = this.database.prepare(`PRAGMA table_info(supply_warehouse_products)`).all() as Array<{ name: string; type: string; notnull: number; dflt_value: unknown; pk: number }>
+    const selectionColumn = columns.find(item => item.name === 'selection_id')
+    if (!selectionColumn || selectionColumn.notnull !== 1) return
+    // 动态保留全部现存列（含 ensureColumn 后补列），仅 selection_id 改可空 + ON DELETE SET NULL
+    const renderColumn = (column: { name: string; type: string; notnull: number; dflt_value: unknown; pk: number }) => {
+      if (column.name === 'selection_id') return 'selection_id TEXT'
+      const parts = [column.name, column.type || 'TEXT']
+      if (column.pk) parts.push('PRIMARY KEY')
+      else if (column.notnull) parts.push('NOT NULL')
+      if (column.dflt_value !== null && column.dflt_value !== undefined) parts.push(`DEFAULT ${String(column.dflt_value)}`)
+      return parts.join(' ')
+    }
+    const columnDefs = columns.map(renderColumn).join(',\n          ')
+    const columnList = columns.map(item => item.name).join(', ')
+    this.database.exec(`PRAGMA foreign_keys=OFF`)
+    this.database.exec(`BEGIN IMMEDIATE`)
+    try {
+      this.database.exec(`
+        CREATE TABLE supply_warehouse_products_v2 (
+          ${columnDefs},
+          UNIQUE(warehouse_code, source_url),
+          FOREIGN KEY (selection_id) REFERENCES selection_records(id) ON DELETE SET NULL
+        );
+        INSERT INTO supply_warehouse_products_v2 (${columnList}) SELECT ${columnList} FROM supply_warehouse_products;
+        DROP TABLE supply_warehouse_products;
+        ALTER TABLE supply_warehouse_products_v2 RENAME TO supply_warehouse_products;
+        CREATE INDEX IF NOT EXISTS idx_supply_warehouse_code ON supply_warehouse_products(warehouse_code, status, updated_at DESC);
+      `)
+      this.database.exec(`COMMIT`)
+    } catch (error) {
+      this.database.exec(`ROLLBACK`)
+      throw error
+    } finally {
+      this.database.exec(`PRAGMA foreign_keys=ON`)
+    }
+  }
+
   private migrateInboundProcessingQueue() {
     const columns = this.database.prepare(`PRAGMA table_info(inbound_processing_items)`).all() as Array<{ name: string }>
     if (!columns.some(item => item.name === 'snapshot_json')) {
@@ -2755,18 +2797,54 @@ export class AppDatabase {
     return this.mapEliminatedRow(this.database.prepare(`SELECT * FROM eliminated_products WHERE id = ?`).get(id) as Record<string, unknown>)
   }
 
+  // 按淘汰快照重建候选行（含任务/溯源 run+record）：候选可能被后续按任务覆盖式采集删除，
+  // 启动期回填迁移只覆盖启动前存在的候选，故中途重建与历史修复都走这里
+  private restoreCandidateRow(platformCode: string, productId: string, url: string, title: string, imageUrl: string, priceText: string, candidateKey: string, now: string): void {
+    const exists = this.database.prepare(`SELECT 1 FROM supply_candidates WHERE url = ? LIMIT 1`).get(url)
+    if (exists) return
+    const taskId = `collector-plugin-${platformCode.toLowerCase()}`
+    this.database.prepare(`INSERT INTO selection_tasks (id, payload, stage, created_at) VALUES (?, ?, 'IDLE', ?) ON CONFLICT(id) DO NOTHING`).run(taskId, JSON.stringify({ id: taskId, selectionMode: 'FORWARD_SUPPLY', supplyPlatforms: [platformCode], name: '淘汰恢复' }), now)
+    const payload = { platformCode, productId, url, title, imageUrl, priceText, salesText: '', shippingFeeText: '', sellableInventory: null, gigaIndex: null, promotionText: '', supplierName: '', supplierBadges: [], categoryTopRank: null, returnRate: null, networkSalesCount: null, serviceRating: null, serviceDetails: {}, dataCompleteness: 0, score: 0, grade: 'C', dimensionScores: {}, recommendation: '', riskFlags: [], selected: false }
+    this.database.prepare(`INSERT INTO supply_candidates (task_id, url, payload, score, selected, sort_order, deleted_at) VALUES (?, ?, ?, 0, 0, 0, NULL) ON CONFLICT(task_id, url) DO UPDATE SET deleted_at = NULL`).run(taskId, url, JSON.stringify(payload))
+    this.database.prepare(`INSERT INTO candidate_collection_runs (id, task_id, candidate_area, platform_code, collection_method, source_entry, requested_count, collected_count, new_count, updated_count, selected_count, status, started_at, completed_at) VALUES (?, ?, 'SUPPLY', ?, 'PRODUCT_URL', ?, 1, 1, 1, 0, 0, 'COMPLETED', ?, ?) ON CONFLICT(id) DO NOTHING`).run(taskId, taskId, platformCode, '淘汰恢复重新启用', now, now)
+    this.database.prepare(`INSERT OR IGNORE INTO candidate_collection_records (candidate_area, candidate_key, collection_run_id, platform_code, collection_method, source_entry, source_rank, collected_at) VALUES ('SUPPLY', ?, ?, ?, 'PRODUCT_URL', ?, 0, ?)`).run(candidateKey, taskId, platformCode, '淘汰恢复重新启用', now)
+  }
+
+  // 历史修复：此前「重新启用」只反删不重建，REENABLED 但候选行已丢失的记录在启动时补建
+  private restoreReenabledCandidateRows() {
+    const rows = this.database.prepare(`SELECT platform_code, product_id, source_url, title, image_url, price_text, origin_record_id FROM eliminated_products WHERE origin = 'CANDIDATE' AND status = 'REENABLED'`).all() as Array<Record<string, unknown>>
+    const now = new Date().toISOString()
+    rows.forEach(row => {
+      const key = String(row.origin_record_id || '')
+      const separator = key.indexOf(':')
+      const url = String(row.source_url || '')
+      if (separator < 0 || !url) return
+      this.restoreCandidateRow(String(row.platform_code || key.slice(0, separator)), String(row.product_id || ''), url, String(row.title || ''), String(row.image_url || ''), String(row.price_text || ''), key, now)
+    })
+  }
+
   reenableEliminated(id: string): EliminatedProductRecord {
     const row = this.database.prepare(`SELECT * FROM eliminated_products WHERE id = ?`).get(id) as Record<string, unknown> | undefined
     if (!row) throw new Error('淘汰记录不存在')
     const record = this.mapEliminatedRow(row)
     const now = new Date().toISOString()
-    this.database.prepare(`UPDATE eliminated_products SET status='REENABLED', reenabled_at=? WHERE id=?`).run(now, id)
-    if (record.status === 'ACTIVE') {
-      if (record.origin === 'SELECTION' && record.originRecordId) {
-        try { this.updateSelectionDecision(record.originRecordId, 'PENDING') } catch { /* 原选品记录可能已不存在，仅恢复淘汰记录状态 */ }
-      } else if (record.origin === 'CANDIDATE' && record.originRecordId) {
-        this.setCandidatesDeleted({ candidateArea: 'SUPPLY', candidateKeys: [record.originRecordId] }, false)
+    // CANDIDATE 源自带事务，保持原有顺序调用；候选行若已被后续按任务覆盖式采集删除，则按淘汰快照重建
+    if (record.status === 'ACTIVE' && record.origin === 'CANDIDATE' && record.originRecordId) {
+      this.setCandidatesDeleted({ candidateArea: 'SUPPLY', candidateKeys: [record.originRecordId] }, false)
+      const separator = record.originRecordId.indexOf(':')
+      this.restoreCandidateRow(record.originRecordId.slice(0, separator), record.productId || '', record.originRecordId.slice(separator + 1), record.title || '', record.imageUrl || '', record.priceText || '', record.originRecordId, now)
+    }
+    this.database.exec('BEGIN IMMEDIATE')
+    try {
+      if (record.status === 'ACTIVE' && record.origin === 'SELECTION' && record.originRecordId) {
+        const selectionExists = this.database.prepare(`SELECT 1 FROM selection_records WHERE id = ? LIMIT 1`).get(record.originRecordId)
+        if (selectionExists) this.deleteSelectionRecord(record.originRecordId)
       }
+      this.database.prepare(`UPDATE eliminated_products SET status='REENABLED', reenabled_at=? WHERE id=?`).run(now, id)
+      this.database.exec('COMMIT')
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
     }
     return this.mapEliminatedRow(this.database.prepare(`SELECT * FROM eliminated_products WHERE id = ?`).get(id) as Record<string, unknown>)
   }
@@ -3896,15 +3974,17 @@ export class AppDatabase {
     return this.getSelectionCatalog().find(item => item.id === id)!
   }
 
+  // 选品删除统一口径：selection_id 已迁移为可空 + ON DELETE SET NULL，删选品自动解绑仓副本与库存引用
+  private deleteSelectionRecord(id: string): void {
+    this.database.prepare(`UPDATE inventory_records SET selection_id = NULL WHERE selection_id = ?`).run(id)
+    const result = this.database.prepare(`DELETE FROM selection_records WHERE id = ?`).run(id)
+    if (!result.changes) throw new Error('选品记录不存在')
+  }
+
   returnSelectionToCandidates(id: string): void {
     this.database.exec('BEGIN')
     try {
-      // supply_warehouse_products.selection_id 为 NOT NULL 外键：已入仓商品打回候选会触发 FK 约束，先拦截给出可操作提示
-      const warehoused = this.database.prepare(`SELECT 1 AS hit FROM supply_warehouse_products WHERE selection_id = ? LIMIT 1`).get(id)
-      if (warehoused) throw new Error('该商品已进入供应仓，请先在货盘仓库删除对应产品后再打回候选')
-      this.database.prepare(`UPDATE inventory_records SET selection_id = NULL WHERE selection_id = ?`).run(id)
-      const result = this.database.prepare(`DELETE FROM selection_records WHERE id = ?`).run(id)
-      if (!result.changes) throw new Error('选品记录不存在')
+      this.deleteSelectionRecord(id)
       this.database.exec('COMMIT')
     } catch (error) {
       this.database.exec('ROLLBACK')

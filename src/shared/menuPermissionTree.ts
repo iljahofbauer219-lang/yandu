@@ -134,7 +134,13 @@ export const MENU_PERMISSION_TREE: MenuPermNode[] = [
       { code: 'menu.collect.ksadrop', label: 'Ksa Drop' },
       { code: 'menu.collect.smmd', label: 'SMMD Dropshipping' },
       { code: 'menu.collect.yallahsell', label: 'YallahSell' },
-      { code: 'menu.collect.atsum', label: 'ATSUM' }
+      { code: 'menu.collect.atsum', label: 'ATSUM' },
+      { code: 'menu.collect.dropi', label: 'dropi' },
+      { code: 'menu.collect.droplatam', label: 'DropLatam' },
+      { code: 'menu.collect.depdrop', label: 'Depdrop' },
+      { code: 'menu.collect.dropping', label: 'Dropping' },
+      { code: 'menu.collect.dropibr', label: 'Dropi' },
+      { code: 'menu.collect.nocnoc', label: 'Nocnoc' }
     ]
   },
   {
