@@ -1316,6 +1316,8 @@ export class AppDatabase {
     ensureColumn('supply_product_downloads', 'page_url', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_warehouse_products', 'region', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('inbound_processing_items', 'region', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('supply_candidates', 'added_at', 'TEXT')
+    this.database.exec(`UPDATE supply_candidates SET added_at = (SELECT created_at FROM selection_tasks WHERE id = task_id) WHERE added_at IS NULL AND task_id IN (SELECT id FROM selection_tasks)`)
     ensureColumn('compliance_check_runs', 'input_fingerprint', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('compliance_check_runs', 'request_json', "TEXT NOT NULL DEFAULT '{}'")
     ensureColumn('compliance_sources', 'content_hash', "TEXT NOT NULL DEFAULT ''")
@@ -1339,6 +1341,7 @@ export class AppDatabase {
     this.database.exec(`CREATE INDEX IF NOT EXISTS idx_ebay_local_product_media_key ON ebay_local_product_media(snapshot_id, media_key)`)
     this.migrateInboundProcessingQueue()
     this.migrateWarehouseSelectionLink()
+    this.mergeDuplicateEliminatedRows()
     this.restoreReenabledCandidateRows()
     this.seedComplianceKnowledge()
     this.database.prepare(`DELETE FROM ebay_listings WHERE status='REMOVED'`).run()
@@ -2336,7 +2339,7 @@ export class AppDatabase {
     const task = this.getTask(taskId)
     if (!task) throw new Error('保存供应链候选失败：任务不存在')
     const remove = this.database.prepare('DELETE FROM supply_candidates WHERE task_id = ?')
-    const insert = this.database.prepare(`INSERT INTO supply_candidates (task_id, url, payload, score, selected, sort_order) VALUES (?, ?, ?, ?, ?, ?)`)
+    const insert = this.database.prepare(`INSERT INTO supply_candidates (task_id, url, payload, score, selected, sort_order, added_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
     const removeEvaluations = this.database.prepare('DELETE FROM product_evaluations WHERE task_id = ?')
     const insertEvaluation = this.database.prepare(`INSERT INTO product_evaluations (id, task_id, product_url, total_score, grade, data_completeness, dimension_scores, recommendation, evaluated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     const removeRejections = this.database.prepare('DELETE FROM product_rejection_records WHERE task_id = ?')
@@ -2355,7 +2358,7 @@ export class AppDatabase {
       removeEvaluations.run(taskId)
       removeRejections.run(taskId)
       products.forEach((product, index) => {
-        insert.run(taskId, product.url, JSON.stringify(product), product.score, product.selected ? 1 : 0, index)
+        insert.run(taskId, product.url, JSON.stringify(product), product.score, product.selected ? 1 : 0, index, now)
         const evaluationId = crypto.randomUUID()
         insertEvaluation.run(evaluationId, taskId, product.url, product.score, product.grade, product.dataCompleteness / 100, JSON.stringify(product.dimensionScores), product.recommendation, now)
         Object.entries(product.dimensionScores).forEach(([code, score]) => insertEvidence.run(crypto.randomUUID(), evaluationId, code, product.url, JSON.stringify({ supplierBadges: product.supplierBadges, categoryTopRank: product.categoryTopRank, returnRate: product.returnRate, networkSalesCount: product.networkSalesCount, serviceRating: product.serviceRating }), score))
@@ -2397,11 +2400,12 @@ export class AppDatabase {
     // 此前 imported 恒等于 accepted.length、updated 恒为 0，重复采集被全部报成"新增"。
     const existsForTask = this.database.prepare(`SELECT 1 AS hit FROM supply_candidates WHERE task_id = ? AND url = ? LIMIT 1`)
     const upsert = this.database.prepare(`
-      INSERT INTO supply_candidates (task_id, url, payload, score, selected, sort_order, deleted_at)
-      VALUES (?, ?, ?, ?, ?, ?, NULL)
+      INSERT INTO supply_candidates (task_id, url, payload, score, selected, sort_order, deleted_at, added_at)
+      VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
       ON CONFLICT(task_id, url) DO UPDATE SET
         payload = excluded.payload, score = excluded.score, selected = excluded.selected,
-        sort_order = excluded.sort_order, deleted_at = NULL
+        sort_order = excluded.sort_order, deleted_at = NULL,
+        added_at = COALESCE(supply_candidates.added_at, excluded.added_at)
     `)
     const saveRun = this.database.prepare(`INSERT INTO candidate_collection_runs (id, task_id, candidate_area, platform_code, collection_method, source_entry, requested_count, collected_count, new_count, updated_count, selected_count, status, started_at, completed_at) VALUES (?, ?, 'SUPPLY', ?, 'PRODUCT_URL', '内置选择采集', ?, ?, ?, ?, 0, 'COMPLETED', ?, ?)`)
     const saveRecord = this.database.prepare(`INSERT INTO candidate_collection_records (candidate_area, candidate_key, collection_run_id, platform_code, collection_method, source_entry, source_rank, collected_at) VALUES ('SUPPLY', ?, ?, ?, 'PRODUCT_URL', '内置选择采集', ?, ?)`)
@@ -2428,7 +2432,7 @@ export class AppDatabase {
         const savedProduct = { ...product, imageUrl, sourceCategory }
         // 必须在 upsert 之前判定：upsert 之后该行一定存在，就分不清新增还是更新了
         const isUpdate = Boolean(existsForTask.get(task.id, product.url))
-        upsert.run(task.id, product.url, JSON.stringify(savedProduct), product.score, 0, index)
+        upsert.run(task.id, product.url, JSON.stringify(savedProduct), product.score, 0, index, now)
         if (isUpdate) updated += 1
         else imported += 1
         this.registerProductIntake(product.platformCode,product.productId,product.url,product.title,'CANDIDATE',now)
@@ -2466,7 +2470,7 @@ export class AppDatabase {
       SELECT p.payload, p.deleted_at
       FROM supply_candidates p
       JOIN selection_tasks t ON t.id = p.task_id
-      ORDER BY p.deleted_at IS NOT NULL, t.created_at DESC, p.selected DESC, p.score DESC, p.sort_order
+      ORDER BY p.deleted_at IS NOT NULL, COALESCE(p.added_at, t.created_at) DESC, p.score DESC, p.sort_order
     `).all() as Array<{ payload: string; deleted_at: string | null }>
     const runRows = this.database.prepare(`SELECT id, task_id, candidate_area, platform_code, collection_method, source_entry, requested_count, collected_count, new_count, updated_count, selected_count, status, started_at, completed_at FROM candidate_collection_runs ORDER BY completed_at DESC`).all() as unknown as Array<Record<string, unknown>>
     const recordRows = this.database.prepare(`SELECT candidate_area, candidate_key, collection_run_id, platform_code, collection_method, source_entry, source_rank, collected_at FROM candidate_collection_records ORDER BY collected_at DESC, source_rank`).all() as unknown as Array<Record<string, unknown>>
@@ -2500,10 +2504,10 @@ export class AppDatabase {
           update.run(timestamp, key.slice(0, separator), key.slice(separator + 1))
         })
       } else {
-        const update = this.database.prepare(`UPDATE supply_candidates SET deleted_at = ? WHERE url = ? AND COALESCE(json_extract(payload, '$.platformCode'), '1688') = ?`)
+        const update = this.database.prepare(`UPDATE supply_candidates SET deleted_at = ?, added_at = COALESCE(?, added_at) WHERE url = ? AND COALESCE(json_extract(payload, '$.platformCode'), '1688') = ?`)
         request.candidateKeys.forEach(key => {
           const separator = key.indexOf(':')
-          update.run(timestamp, key.slice(separator + 1), key.slice(0, separator))
+          update.run(timestamp, deleted ? null : new Date().toISOString(), key.slice(separator + 1), key.slice(0, separator))
         })
       }
       this.database.exec('COMMIT')
@@ -2789,12 +2793,40 @@ export class AppDatabase {
       originRecordId = `${platformCode}:${sourceUrl}`
       this.setCandidatesDeleted({ candidateArea: 'SUPPLY', candidateKeys: [originRecordId] }, true)
     }
-    const id = crypto.randomUUID()
     const identityKey = this.intakeIdentity(platformCode, productId, sourceUrl)
+    // 同身份一行：重复淘汰/重启用循环不再新增行，原地刷新快照与状态
+    const existing = this.database.prepare(`SELECT id FROM eliminated_products WHERE identity_key = ? ORDER BY eliminated_at DESC, rowid DESC LIMIT 1`).get(identityKey) as { id: string } | undefined
+    if (existing) {
+      this.database.prepare(`UPDATE eliminated_products SET platform_code = ?, product_id = ?, source_url = ?, title = ?, image_url = ?, price_text = ?, origin = ?, origin_record_id = ?, reason = ?, operator = ?, status = 'ACTIVE', eliminated_at = ?, reenabled_at = NULL WHERE id = ?`)
+        .run(platformCode, productId, sourceUrl, title, imageUrl, priceText, input.origin, originRecordId, input.reason || '', input.operator, now, existing.id)
+      return this.mapEliminatedRow(this.database.prepare(`SELECT * FROM eliminated_products WHERE id = ?`).get(existing.id) as Record<string, unknown>)
+    }
+    const id = crypto.randomUUID()
     this.database.prepare(`INSERT INTO eliminated_products (id, identity_key, platform_code, product_id, source_url, title, image_url, price_text, origin, origin_record_id, reason, operator, status, eliminated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)`)
       .run(id, identityKey, platformCode, productId, sourceUrl, title, imageUrl, priceText, input.origin, originRecordId, input.reason || '', input.operator, now)
     return this.mapEliminatedRow(this.database.prepare(`SELECT * FROM eliminated_products WHERE id = ?`).get(id) as Record<string, unknown>)
+  }
+
+  // 历史修复：同一 identity_key 的重复淘汰行合并为最新一行，并加唯一索引防复发
+  private mergeDuplicateEliminatedRows() {
+    this.database.exec('BEGIN IMMEDIATE')
+    try {
+      this.database.prepare(`
+        DELETE FROM eliminated_products
+        WHERE id NOT IN (
+          SELECT id FROM (
+            SELECT id, ROW_NUMBER() OVER (PARTITION BY identity_key ORDER BY eliminated_at DESC, rowid DESC) AS rn
+            FROM eliminated_products
+          ) WHERE rn = 1
+        )
+      `).run()
+      this.database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_eliminated_identity_unique ON eliminated_products(identity_key)`)
+      this.database.exec('COMMIT')
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
   }
 
   // 按淘汰快照重建候选行（含任务/溯源 run+record）：候选可能被后续按任务覆盖式采集删除，
@@ -2805,7 +2837,7 @@ export class AppDatabase {
     const taskId = `collector-plugin-${platformCode.toLowerCase()}`
     this.database.prepare(`INSERT INTO selection_tasks (id, payload, stage, created_at) VALUES (?, ?, 'IDLE', ?) ON CONFLICT(id) DO NOTHING`).run(taskId, JSON.stringify({ id: taskId, selectionMode: 'FORWARD_SUPPLY', supplyPlatforms: [platformCode], name: '淘汰恢复' }), now)
     const payload = { platformCode, productId, url, title, imageUrl, priceText, salesText: '', shippingFeeText: '', sellableInventory: null, gigaIndex: null, promotionText: '', supplierName: '', supplierBadges: [], categoryTopRank: null, returnRate: null, networkSalesCount: null, serviceRating: null, serviceDetails: {}, dataCompleteness: 0, score: 0, grade: 'C', dimensionScores: {}, recommendation: '', riskFlags: [], selected: false }
-    this.database.prepare(`INSERT INTO supply_candidates (task_id, url, payload, score, selected, sort_order, deleted_at) VALUES (?, ?, ?, 0, 0, 0, NULL) ON CONFLICT(task_id, url) DO UPDATE SET deleted_at = NULL`).run(taskId, url, JSON.stringify(payload))
+    this.database.prepare(`INSERT INTO supply_candidates (task_id, url, payload, score, selected, sort_order, deleted_at, added_at) VALUES (?, ?, ?, 0, 0, 0, NULL, ?) ON CONFLICT(task_id, url) DO UPDATE SET deleted_at = NULL, added_at = COALESCE(supply_candidates.added_at, excluded.added_at)`).run(taskId, url, JSON.stringify(payload), new Date().toISOString())
     this.database.prepare(`INSERT INTO candidate_collection_runs (id, task_id, candidate_area, platform_code, collection_method, source_entry, requested_count, collected_count, new_count, updated_count, selected_count, status, started_at, completed_at) VALUES (?, ?, 'SUPPLY', ?, 'PRODUCT_URL', ?, 1, 1, 1, 0, 0, 'COMPLETED', ?, ?) ON CONFLICT(id) DO NOTHING`).run(taskId, taskId, platformCode, '淘汰恢复重新启用', now, now)
     this.database.prepare(`INSERT OR IGNORE INTO candidate_collection_records (candidate_area, candidate_key, collection_run_id, platform_code, collection_method, source_entry, source_rank, collected_at) VALUES ('SUPPLY', ?, ?, ?, 'PRODUCT_URL', ?, 0, ?)`).run(candidateKey, taskId, platformCode, '淘汰恢复重新启用', now)
   }

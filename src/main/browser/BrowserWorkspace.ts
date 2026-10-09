@@ -795,7 +795,7 @@ export class BrowserWorkspace {
         if(!pathIds.length){
           const crumb=(document.querySelector('[class*="breadcrumb" i],[class*="crumb" i],[class*="category-path" i],[class*="position" i]')?.innerText||'').replace(/\s+/g,' ');
           // 分隔符无关+容忍复数后缀：以目录名为针 against 面包屑原文做按序包含匹配（页面分隔符可为 / > 空格，站方名可能带复数后缀）
-          const inOrder=(haystack:string,names:string[])=>{let pos=0;for(const name of names){if(!name)return false;const idx=haystack.indexOf(name,pos);if(idx<0)return false;pos=idx+name.length;}return true;};
+          const inOrder=(haystack,names)=>{let pos=0;for(const name of names){if(!name)return false;const idx=haystack.indexOf(name,pos);if(idx<0)return false;pos=idx+name.length;}return true;};
           const seq=crumb;
           if(seq){
             const entries=Object.entries(knownCategoryPaths);
