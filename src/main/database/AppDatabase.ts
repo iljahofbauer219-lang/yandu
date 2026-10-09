@@ -3203,11 +3203,11 @@ export class AppDatabase {
       const payload = JSON.stringify(snapshot)
       if (existingWarehouse) {
         this.database.prepare(`UPDATE supply_warehouse_products SET warehouse_code = ?, selection_id = ?, source_url = ?, product_id = ?, title = ?, image_url = ?, price_text = ?, category = ?, subcategory = ?, tertiary_category = ?, status = 'ACTIVE', delisted_reason = '', delisted_at = NULL, payload = ?, updated_at = ? WHERE id = ?`)
-          .run(snapshot.warehouseCode, item.selectionId, snapshot.sourceUrl, snapshot.itemCode, snapshot.title, snapshot.imageUrl, snapshot.priceText, snapshot.category, snapshot.subcategory, snapshot.tertiaryCategory, payload, now, warehouseId)
+          .run(snapshot.warehouseCode, item.selectionId || null, snapshot.sourceUrl, snapshot.itemCode, snapshot.title, snapshot.imageUrl, snapshot.priceText, snapshot.category, snapshot.subcategory, snapshot.tertiaryCategory, payload, now, warehouseId)
       } else {
         this.database.prepare(`INSERT INTO supply_warehouse_products (id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, payload, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, 'ACTIVE', ?, ?, ?)`)
-          .run(warehouseId, snapshot.warehouseCode, item.selectionId, snapshot.sourceUrl, snapshot.itemCode, snapshot.title, snapshot.imageUrl, snapshot.priceText, snapshot.category, snapshot.subcategory, snapshot.tertiaryCategory, payload, now, now)
+          .run(warehouseId, snapshot.warehouseCode, item.selectionId || null, snapshot.sourceUrl, snapshot.itemCode, snapshot.title, snapshot.imageUrl, snapshot.priceText, snapshot.category, snapshot.subcategory, snapshot.tertiaryCategory, payload, now, now)
       }
       const palletExists = this.database.prepare(`SELECT 1 FROM pallet_warehouse_items WHERE warehouse_product_id = ? LIMIT 1`).get(warehouseId)
       if (palletExists) {

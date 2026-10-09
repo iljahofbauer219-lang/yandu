@@ -1250,6 +1250,7 @@ export interface CollectedSupplyProduct {
   shippingFeeText?: string
   sellableInventory?: number | null
   gigaIndex?: number | null
+  gigaIndexText?: string
   promotionText?: string
   supplierName: string
   supplierBadges: string[]
@@ -1300,6 +1301,7 @@ export interface CollectorPluginProduct {
   promotionText?: string
   supplierName: string
   gigaIndex?: number | null
+  gigaIndexText?: string
   storeReturnRate?: string
   capturedFrom: 'DETAIL' | 'LIST'
   sourceCategory?: SupplySourceCategory

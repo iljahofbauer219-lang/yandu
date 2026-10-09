@@ -3,7 +3,8 @@
  * 1. 启动内存版 PGlite → 2. prisma migrate deploy → 3. 启动应用（PRODUCT_PAGES_DIR 指向临时目录）
  * 4. 断言：HTML 净化（script/事件属性/iframe/meta refresh/base/javascript: 全剥除）、
  *    公开响应头（CSP script-src 'none' + sandbox + nosniff）、本站 base 注入与 assets 闭环、
- *    pageId 不可从商品 id 推导、跨组织覆盖被拒、重下载覆盖同页、列表按组织过滤、
+ *    pageId 不可从商品 id 推导、跨组织覆盖被拒、重下载覆盖同页且只留最新一批
+ *    （旧资产删除、同商品孤儿目录清理、丢档无 pageId 时复用同页）、列表按组织过滤、
  *    无 erp.source.view 时货盘源链被裁剪、鉴权与权限门禁、路径穿越防护、HTML 超长拒绝
  * 运行：pnpm verify:product-pages
  */
@@ -296,6 +297,29 @@ try {
   const overwrittenMeta = JSON.parse(await fsp.readFile(path.join(pagesDir, pageId, 'meta.json'), 'utf8')) as Record<string, unknown>
   check('覆盖后 meta.title 更新且 orgId 保留', overwrittenMeta.title === '纯棉 T 恤 V2' && overwrittenMeta.orgId === orgAId, overwrittenMeta)
 
+  console.log('\n[5b] 重下载只留最新一批：旧资产删除 + 同商品孤儿目录清理 + 无 pageId 复用同页')
+  await fsp.writeFile(path.join(pagesDir, pageId, 'assets', '99-stale.png'), PNG_BYTES)
+  const staleOverwrite = await api('POST', '/api/product-pages', submitPayload({ pageId, html: '<div>第三次下载</div>' }), editor.token)
+  const assetsAfter = (await fsp.readdir(path.join(pagesDir, pageId, 'assets'))).sort()
+  check('重下载成功后旧批次资产自动删除（仅留最新）', staleOverwrite.status === 200 && assetsAfter.join(',') === '01.png', assetsAfter)
+
+  const orphanDir = path.join(pagesDir, 'orphan-sib-verify')
+  await fsp.mkdir(path.join(orphanDir, 'assets'), { recursive: true })
+  await fsp.writeFile(path.join(orphanDir, 'assets', '01.png'), PNG_BYTES)
+  await fsp.writeFile(path.join(orphanDir, 'index.html'), '<div>孤儿旧页</div>')
+  await fsp.writeFile(path.join(orphanDir, 'meta.json'), JSON.stringify({ orgId: orgAId, warehouseProductId: 'wh-verify-1', capturedAt: '2020-01-01T00:00:00.000Z' }))
+  const prunePost = await api('POST', '/api/product-pages', submitPayload({ pageId, html: '<div>第四次下载</div>' }), editor.token)
+  const orphanGone = await fsp.access(orphanDir).then(() => false, () => true)
+  check('同商品历史孤儿目录在新一批落盘成功后被清理', prunePost.status === 200 && orphanGone, { prunePost: prunePost.status, orphanGone })
+
+  const reuse = await api('POST', '/api/product-pages', submitPayload({ html: '<div>丢档重下</div>' }), editor.token)
+  const allDirs = (await fsp.readdir(pagesDir, { withFileTypes: true }))
+    .filter(entry => entry.isDirectory() && /^[A-Za-z0-9._-]{1,120}$/.test(entry.name) && !entry.name.startsWith('~staging'))
+    .map(entry => entry.name)
+  const wh1Metas = await Promise.all(allDirs.map(async name => JSON.parse(await fsp.readFile(path.join(pagesDir, name, 'meta.json'), 'utf8')).warehouseProductId))
+  check('不带 pageId 重下复用同商品既有页（不再开新目录）', reuse.status === 200 && reuse.data?.pageId === pageId, reuse.data)
+  check('同商品磁盘仅存一个页面目录', wh1Metas.filter((id: unknown) => id === 'wh-verify-1').length === 1, wh1Metas)
+
   const fresh = await api('POST', '/api/product-pages', submitPayload({ warehouseProductId: 'wh-verify-2' }), editor.token)
   check('不带 pageId 的提交生成新的独立 pageId', fresh.status === 200 && fresh.data?.pageId !== pageId, fresh.data)
 
@@ -325,7 +349,7 @@ try {
   check('非法图片名（穿越尝试）→ 400 VALIDATION', badImageName.status === 400, badImageName.status)
 
   const audits = await prisma.auditLog.findMany({ where: { orgId: orgAId, action: 'product-page.publish' } })
-  check('审计：product-page.publish 留痕（3 次成功提交）', audits.length === 3, audits.length)
+  check('审计：product-page.publish 留痕（6 次成功提交）', audits.length === 6, audits.length)
 
   console.log('\n[8] 17 要素扩展字段：提交受理 + 公开页分区渲染 + meta 落盘')
   const rich = submitPayload({
@@ -358,7 +382,7 @@ try {
       { kind: 'img', i: 0 },
       { kind: 't', text: 'FLOW-AFTER e2e paragraph long enough to stay a paragraph.' }
     ],
-    specs: [{ key: '颜色', value: 'Blue' }, { key: '产品重量 (磅)', value: '52.03' }, { key: '长度 (英寸)', value: '40.75' }]
+    specs: [{ key: 'Item Code', value: 'W2923P220458' }, { key: '颜色', value: 'Blue' }, { key: '产品重量 (磅)', value: '52.03' }, { key: '长度 (英寸)', value: '40.75' }]
   })
   const richPost = await api('POST', '/api/product-pages', rich, tokenA)
   check('17 要素载荷提交 → 200', richPost.status === 200, richPost.data)
@@ -369,6 +393,7 @@ try {
   }
   const richMeta = JSON.parse(await fsp.readFile(path.join(pagesDir, richPageId, 'meta.json'), 'utf8')) as Record<string, unknown>
   check('meta 落盘扩展字段', richMeta.itemCode === 'W2923P220458' && richMeta.estimatedTotal === '$2343.05 /件' && Array.isArray(richMeta.files) && (richMeta.files as unknown[]).length === 1 && Array.isArray(richMeta.videos) && (richMeta.videos as unknown[]).length === 1)
+  check('Item Code 归位规格区行且右栏无徽章', richPage.text.includes('<span>Item Code:</span>W2923P220458') && !richPage.text.includes('<small>Item Code</small>'))
   const videoAsset = await rawPage(`/product-pages/${richPageId}/assets/v-01.mp4`)
   check('视频资产 → 200 + video/mp4 + no-cache', videoAsset.status === 200 && (videoAsset.headers.get('content-type') ?? '') === 'video/mp4' && videoAsset.headers.get('cache-control') === 'no-cache', { status: videoAsset.status, ct: videoAsset.headers.get('content-type') })
   check('描述流文图穿插顺序（图在两段文字之间）', richPage.text.indexOf('FLOW-BEFORE e2e') < richPage.text.indexOf('assets/d-01.png') && richPage.text.indexOf('assets/d-01.png') < richPage.text.indexOf('FLOW-AFTER e2e'))

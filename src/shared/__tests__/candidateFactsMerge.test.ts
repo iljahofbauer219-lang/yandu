@@ -32,4 +32,9 @@ describe('mergeCandidateFacts', () => {
   it('非保护字段按新值覆盖', () => {
     expect(mergeCandidateFacts({ gigaIndex: 64.1 }, { gigaIndex: 70.5 })).toMatchObject({ gigaIndex: 70.5 })
   })
+
+  it('重读覆盖 gigaIndexText，空文本不覆盖既有值', () => {
+    expect(mergeCandidateFacts({ gigaIndexText: '94.31' }, { gigaIndexText: '<60' })).toMatchObject({ gigaIndexText: '<60' })
+    expect(mergeCandidateFacts({ gigaIndexText: '<60' }, { gigaIndexText: '' })).toMatchObject({ gigaIndexText: '<60' })
+  })
 })

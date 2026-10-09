@@ -66,6 +66,7 @@ export interface SupplyProductPageSnapshot {
     estimatedTotal?: string
     dropshipLeadTime?: string
     gigaIndex?: string
+    gigaIndexText?: string
     materialPackUrl?: string
     materialPackDownloads?: string
     videos?: string[]
@@ -498,7 +499,7 @@ export class BrowserWorkspace {
         const specs = []
         const specSeen = new Set()
         // 费用/库存等已有专属字段的键不再进规格表，避免同一数值重复两处
-        const specSkip = /^(预估物流费|物流费|基础运费|运费|打包费|单价|单价\(件\)|预估总额.*|货值.*|可售库存|首次到库时间|退返品率|GIGA\s*Index|Item\s*Code|一件代发发货时效|云送仓发货时效|仓租费)$/i
+        const specSkip = /^(预估物流费|物流费|基础运费|运费|打包费|单价|单价\(件\)|预估总额.*|货值.*|可售库存|首次到库时间|退返品率|GIGA\s*Index|一件代发发货时效|云送仓发货时效|仓租费)$/i
         const addSpec = (rawKey, rawValue) => {
           const key = (rawKey || '').trim().replace(/\s+/g, ' ').replace(/[:：]$/, '')
           const value = (rawValue || '').trim().replace(/\s+/g, ' ')
@@ -508,10 +509,13 @@ export class BrowserWorkspace {
           specs.push({ key, value })
         }
         // gigab2b 规格形如 <div class="items"><span>颜色:</span><span title="Blue">Blue</span></div>，藏在 Tab 面板内
+        // 图文描述区内的表格属描述块（已记 tbl 块），严禁混入产品规格，否则下载页规格比原址多一整块
+        const inDescTable = (node) => !!(descRoot && descRoot.contains(node) && node.closest('table'))
         const pairChannels = [document.querySelector('#pane-description, [class*="des-content" i]'), document.body]
         for (const root of pairChannels) {
           if (!root) continue
           root.querySelectorAll('div,li,tr,td').forEach(node => {
+            if (inDescTable(node)) return
             const kids = [...node.children]
             if (kids.length !== 2) return
             if (!kids.every(kid => kid.tagName === 'SPAN' || kid.tagName === 'TD' || kid.tagName === 'TH')) return
@@ -520,6 +524,7 @@ export class BrowserWorkspace {
           if (specs.length) break
         }
         document.querySelectorAll('dl div, table tr, [class*="spec" i] li, [class*="attr" i] li, [class*="parameter" i] li, [class*="property" i] li').forEach(node => {
+          if (inDescTable(node)) return
           const line = (node.innerText || node.textContent || '').trim().replace(/\s+/g, ' ')
           if (!line || line.length > 200) return
           const kv = /^([^:：\t]{1,40})[:：\t]\s*(.{1,120})$/.exec(line)
@@ -548,6 +553,8 @@ export class BrowserWorkspace {
         const estimatedTotal = grab(new RegExp('预估总额\\s*[（(]?\\s*含物流费\\s*[）)]?\\s*[:：]?\\s{0,3}' + money))
         const dropshipLeadTime = grab(/一件代发发货时效\s*(\d+\s*-\s*\d+\s*个工作日)/)
         const gigaIndex = grab(/GIGA\s*Index[:：]\s*([\d.]+)/i)
+        // 站点存在非数值形态（供应商卡「GIGA Index: <60」）：原样保留供展示与闸口判读，数值字段仅纯数字时才有
+        const gigaIndexText = grab(/GIGA\s*Index[:：]\s*([<>≤≥]?\s*\d+(?:\.\d+)?)/i).replace(/\s+/g, '')
         const materialNode = [...document.querySelectorAll('a[href],button,[role="button"],span,div')].find(el => el.children.length <= 3 && /下载素材包/.test(el.textContent || '') && (el.textContent || '').trim().length <= 20)
         const materialAnchor = materialNode && (materialNode.closest('a[href]') || materialNode.querySelector('a[href]'))
         const materialFallback = [...document.querySelectorAll('a[href]')].find(a => /\.(zip|rar)$/i.test((a.href || '').split('?')[0]) || /material|download_product/i.test(a.href || ''))
@@ -642,7 +649,7 @@ export class BrowserWorkspace {
         }
         // 半登录墙：价格/库存区「登录后查看」且双通道均无值 → 标记由主进程抛引导错误，杜绝静默半页
         const loginWall = /登录后查看|登录可见|登录后可见|登录后查看价格/.test(flat + ' ' + flatAll) && !unitPrice && !sellableInventory
-        return { title, price, specs, images, descriptionText, finalUrl: location.href, category, itemCode, firstStockAt, returnRate, sellableInventory, unitPrice, packingFee, freightFee, shippingFee, estimatedTotal, dropshipLeadTime, gigaIndex, materialPackUrl, materialPackDownloads, videos, files, features, descriptionImages, descriptionFlow: descriptionFlow.slice(0, 200), loginWall }
+        return { title, price, specs, images, descriptionText, finalUrl: location.href, category, itemCode, firstStockAt, returnRate, sellableInventory, unitPrice, packingFee, freightFee, shippingFee, estimatedTotal, dropshipLeadTime, gigaIndex, gigaIndexText, materialPackUrl, materialPackDownloads, videos, files, features, descriptionImages, descriptionFlow: descriptionFlow.slice(0, 200), loginWall }
       })()`) as SupplyProductPageSnapshot['extracted']
       if (extracted?.loginWall) throw new Error(`${name}的价格/库存区需登录后查看（供应会话已过期），请先在 IE浏览 中重新登录${name}后重试`)
       if (!extracted?.images?.length) throw new Error('原商品页没有识别到可下载图片，请确认商品页正常显示后重试')
@@ -825,7 +832,9 @@ export class BrowserWorkspace {
         }
         const shippingFeeText=text.match(/(?:Shipping(?:\s*Fee)?|物流费)\s*[:：]?\s*((?:US)?\$\s*[\d,.]+(?:\s*-\s*(?:US)?\$?\s*[\d,.]+)?(?:\s*\/件)?)/i)?.[1]||'';
         const promotionText=text.match(/\d+(?:\.\d+)?%\s*OFF/i)?.[0]||'';
-        const gigaIndex=Number(text.match(/GIGA Index:\s*([\d.]+)/i)?.[1]||0)||null;
+        const gigaRaw=(text.match(/GIGA Index:\s*([<>≤≥]?\s*\d+(?:\.\d+)?)/i)?.[1]||'').replace(/\s+/g,'');
+        const gigaIndex=/^[<>≤≥]/.test(gigaRaw)?null:(Number(gigaRaw||0)||null);
+        const gigaIndexText=gigaRaw;
         // 重读同时修复主图：与内置采集器同口径（画廊优先+排除灰置），使存量串图候选可经「重读数据」纠正
         const GAL_SEL='[class*="el-image__preview"],[class*="gallery" i],[class*="zoom" i],[class*="swiper" i],[class*="preview" i]';
         const DIM_SEL='[class*="opacity-40"],[class*="opacity-0"],[hidden],[class*="invisible" i]';
@@ -833,8 +842,8 @@ export class BrowserWorkspace {
         const isRealImg=u=>/^https?:\/\//i.test(u||'')&&!/(?:product_base|placeholder|default[-_]?image|loading|lazyload|blank|transparent|no[-_]?image)/i.test(u);
         const urlOfIm=im=>{const ss=(im.getAttribute('srcset')||'').split(',').map(v=>v.trim().split(/\s+/)[0]).filter(Boolean).pop()||'';return [im.currentSrc,im.src,im.getAttribute('data-src'),im.getAttribute('data-original'),im.getAttribute('data-lazy-src'),ss].find(isRealImg)||'';};
         const imageUrl=pickMain([...document.querySelectorAll('img')].map(im=>{const u=urlOfIm(im);if(!u)return null;return {url:u,inGallery:Boolean(im.closest(GAL_SEL)),dimmed:Boolean(im.closest(DIM_SEL))||Number(getComputedStyle(im).opacity)<0.5,naturalWidth:im.naturalWidth||0};}).filter(Boolean));
-        const sourceCategory=pathIds.length?{platformCode:'GIGACLOUD',catalogVersion:${JSON.stringify(GIGA_CATALOG_VERSION)},level1:level(0),level2:level(1),level3:level(2),pathIds,pathNames:pathIds.map((id,index)=>nameMatched?.[index]?.name||knownPath?.[index]?.name||namesById.get(id)||'').filter(Boolean),capturedFrom,status:knownPath||nameMatched&&pathIds.length>=3?'EXACT':pathIds.length>=3?'EXACT':'PARTIAL',capturedAt:new Date().toISOString()}:undefined;
-        return {priceText,salesText:stockText,shippingFeeText,sellableInventory,promotionText,gigaIndex,imageUrl,sourceCategory};
+        const sourceCategory=pathIds.length?{platformCode:'GIGACLOUD',catalogVersion:${JSON.stringify(GIGA_CATALOG_VERSION)},level1:level(0),level2:level(1),level3:level(2),pathIds,pathNames:pathIds.map((id,index)=>nameMatched?.[index]?.name||knownPath?.[index]?.name||namesById.get(id)||'').filter(Boolean),capturedFrom,status:knownPath||nameMatched&&pathIds.length>=2?'EXACT':pathIds.length>=2?'EXACT':'PARTIAL',capturedAt:new Date().toISOString()}:undefined;
+        return {priceText,salesText:stockText,shippingFeeText,sellableInventory,promotionText,gigaIndex,gigaIndexText,imageUrl,sourceCategory};
       })()`) as Partial<CollectedSupplyProduct>
   }
 
@@ -1327,7 +1336,7 @@ export class BrowserWorkspace {
         const names=ids.map((id,index)=>knownPath?.[index]?.name || namesById.get(id) || '');
         const level=(index)=>ids[index]?{id:ids[index],name:names[index]||''}:undefined;
         const capturedFrom=resolved.from==='PRODUCT_URL'?'PRODUCT_URL':resolved.from==='BREADCRUMB'?'BREADCRUMB':'PAGE_CONTEXT';
-        return {platformCode:'GIGACLOUD',catalogVersion:${JSON.stringify(GIGA_CATALOG_VERSION)},level1:level(0),level2:level(1),level3:level(2),pathIds:ids,pathNames:names.filter(Boolean),capturedFrom,status:knownPath||ids.length>=3?'EXACT':ids.length?'PARTIAL':'NEEDS_REVIEW',capturedAt:new Date().toISOString()};
+        return {platformCode:'GIGACLOUD',catalogVersion:${JSON.stringify(GIGA_CATALOG_VERSION)},level1:level(0),level2:level(1),level3:level(2),pathIds:ids,pathNames:names.filter(Boolean),capturedFrom,status:knownPath||ids.length>=2?'EXACT':ids.length?'PARTIAL':'NEEDS_REVIEW',capturedAt:new Date().toISOString()};
       };
       const extract = async (anchor, source) => {
         const url = new URL(anchor?.href || location.href, location.href);
@@ -1361,10 +1370,12 @@ export class BrowserWorkspace {
         const sellableInventory = Number(salesText.match(/[\d,]+/)?.[0]?.replace(/,/g,'') || 0) || null;
         const shippingFeeText = text.match(/(?:Shipping(?:\s*Fee)?|物流费)\s*[:：]?\s*((?:US)?\$\s*[\d,.]+(?:\s*-\s*(?:US)?\$?\s*[\d,.]+)?(?:\s*\/件)?)/i)?.[1] || '';
         const promotionText = text.match(/\d+(?:\.\d+)?%\s*OFF/i)?.[0] || '';
-        const gigaIndex = Number(text.match(/(?:Seller\s*)?GIGA\s*Index\s*[:：]?\s*(\d+(?:\.\d+)?)/i)?.[1] || 0) || null;
+        const gigaRaw = (text.match(/(?:Seller\s*)?GIGA\s*Index\s*[:：]?\s*([<>≤≥]?\s*\d+(?:\.\d+)?)/i)?.[1] || '').replace(/\s+/g, '')
+        const gigaIndex = /^[<>≤≥]/.test(gigaRaw) ? null : (Number(gigaRaw || 0) || null)
+        const gigaIndexText = gigaRaw
         const storeReturnRate = text.match(/(?:店铺退货率|Shop\s*Return\s*Rate)\s*[:：]?\s*([^|,，;；]{1,20})/i)?.[1]?.trim() || '';
         const supplierName = text.match(/(?:Seller|Supplier|供应商)\s*[:：]\s*([^|,，;；]{2,80})/i)?.[1]?.trim() || '';
-        return { platformCode:'GIGACLOUD', productId, url:url.href, title, imageUrl:finalImageUrl, priceText, salesText, shippingFeeText, sellableInventory, promotionText, supplierName, gigaIndex, storeReturnRate, capturedFrom:source, sourceCategory:categoryContextOf(url.href) };
+        return { platformCode:'GIGACLOUD', productId, url:url.href, title, imageUrl:finalImageUrl, priceText, salesText, shippingFeeText, sellableInventory, promotionText, supplierName, gigaIndex, gigaIndexText, storeReturnRate, capturedFrom:source, sourceCategory:categoryContextOf(url.href) };
       };
       const overlay=document.createElement('div');overlay.id='cross-border-collector-overlay';document.documentElement.appendChild(overlay);
       const entries=new Map();
@@ -3017,7 +3028,7 @@ export class BrowserWorkspace {
       const pageIds=knownPagePath?knownPagePath.map(item=>item.id):rawPageIds;
       const namesById=new Map(categoryAnchors.map(item=>[item.ids[item.ids.length-1],(item.node.textContent||'').replace(/\s+/g,' ').trim()]));
       const categoryLevel=index=>pageIds[index]?{id:pageIds[index],name:knownPagePath?.[index]?.name||namesById.get(pageIds[index])||''}:undefined;
-      const sourceCategory={platformCode:'GIGACLOUD',catalogVersion:${JSON.stringify(GIGA_CATALOG_VERSION)},level1:categoryLevel(0),level2:categoryLevel(1),level3:categoryLevel(2),pathIds:pageIds,pathNames:pageIds.map((id,index)=>knownPagePath?.[index]?.name||namesById.get(id)||'').filter(Boolean),capturedFrom:categoryAnchors.length?'BREADCRUMB':'PAGE_CONTEXT',status:knownPagePath||pageIds.length>=3?'EXACT':pageIds.length?'PARTIAL':'NEEDS_REVIEW',capturedAt:new Date().toISOString()};
+      const sourceCategory={platformCode:'GIGACLOUD',catalogVersion:${JSON.stringify(GIGA_CATALOG_VERSION)},level1:categoryLevel(0),level2:categoryLevel(1),level3:categoryLevel(2),pathIds:pageIds,pathNames:pageIds.map((id,index)=>knownPagePath?.[index]?.name||namesById.get(id)||'').filter(Boolean),capturedFrom:categoryAnchors.length?'BREADCRUMB':'PAGE_CONTEXT',status:knownPagePath||pageIds.length>=2?'EXACT':pageIds.length?'PARTIAL':'NEEDS_REVIEW',capturedAt:new Date().toISOString()};
       const anchors = [...document.querySelectorAll('a[href*="route=product/product"][href*="product_id="]')];
       for (const anchor of anchors) {
         const href = anchor.href || anchor.getAttribute('href');
@@ -3036,22 +3047,24 @@ export class BrowserWorkspace {
         const shippingFeeText = text.match(/(?:Shipping(?:\s*Fee)?|物流费)\s*[:：]?\s*((?:US)?\$\s*[\d,.]+(?:\s*-\s*(?:US)?\$?\s*[\d,.]+)?(?:\s*\/件)?)/i)?.[1] || '';
         const promotionText = text.match(/\d+(?:\.\d+)?%\s*OFF/i)?.[0] || '';
         const supplierName = [...card.querySelectorAll('[title],a,span')].map(node => node.getAttribute('title') || node.textContent || '').map(value => value.trim()).find(value => value && value.length < 60 && /Furniture|Home|Garden|Supply|Seller|家具|家居|公司/.test(value)) || '';
-        const gigaIndex = Number(text.match(/GIGA Index:\s*([\d.]+)/i)?.[1] || 0) || null;
+        const gigaRaw = (text.match(/GIGA Index:\s*([<>≤≥]?\s*\d+(?:\.\d+)?)/i)?.[1] || '').replace(/\s+/g, '')
+        const gigaIndex = /^[<>≤≥]/.test(gigaRaw) ? null : (Number(gigaRaw || 0) || null)
+        const gigaIndexText = gigaRaw
         seen.add(productId);
         const productIds=categoryIdsOf(url).slice(0,3);const productCategory=productIds.length>=pageIds.length&&productIds.length?{...sourceCategory,pathIds:productIds,level1:{id:productIds[0],name:namesById.get(productIds[0])||''},level2:productIds[1]?{id:productIds[1],name:namesById.get(productIds[1])||''}:undefined,level3:productIds[2]?{id:productIds[2],name:namesById.get(productIds[2])||''}:undefined,pathNames:productIds.map(id=>namesById.get(id)||'').filter(Boolean),capturedFrom:'PRODUCT_URL',status:productIds.length>=3?'EXACT':'PARTIAL'}:sourceCategory;
-        result.push({productId,url,title,imageUrl:image?.currentSrc || image?.src || '',priceText,salesText:stockText,shippingFeeText,sellableInventory,promotionText,supplierName,gigaIndex,text,sourceCategory:productCategory});
+        result.push({productId,url,title,imageUrl:image?.currentSrc || image?.src || '',priceText,salesText:stockText,shippingFeeText,sellableInventory,promotionText,supplierName,gigaIndex,gigaIndexText,text,sourceCategory:productCategory});
         if (result.length >= ${Math.max(1, Math.min(task.maxProducts, 300))}) break;
       }
       return result;
-    })()` ) as Array<{productId:string;url:string;title:string;imageUrl:string;priceText:string;salesText:string;shippingFeeText:string;sellableInventory:number|null;promotionText:string;supplierName:string;gigaIndex:number|null;text:string;sourceCategory:CollectedSupplyProduct['sourceCategory']}>
+    })()` ) as Array<{productId:string;url:string;title:string;imageUrl:string;priceText:string;salesText:string;shippingFeeText:string;sellableInventory:number|null;promotionText:string;supplierName:string;gigaIndex:number|null;gigaIndexText:string;text:string;sourceCategory:CollectedSupplyProduct['sourceCategory']}>
     const products = rawProducts.map(raw => {
       const score = raw.gigaIndex === null ? 0 : Math.round(raw.gigaIndex)
       const selected = raw.gigaIndex !== null && score >= task.minimumSelectionScore
       const sellerFilterText = ({ ANY:'不限', NEW:'新Seller', GE90:'≥90', GE80:'≥80', GE70:'≥70', GE60:'≥60', LT60:'＜60' } as const)[task.gigaSellerIndexFilter || 'GE80']
       const returnRateFilterText = ({ ANY:'不限', LOW:'低', MEDIUM:'中', HIGH:'高' } as const)[task.gigaReturnRateFilter || 'LOW']
       const dimensionScores = { inventory:raw.sellableInventory !== null ? Math.min(100,Math.round(45+Math.log10(Math.max(1,raw.sellableInventory))*18)) : 0, logistics:raw.shippingFeeText ? 70 : 0, supplier:raw.gigaIndex === null ? 0 : score }
-      const riskFlags = [!raw.priceText ? '价格待补采' : '', !raw.salesText ? '库存待补采' : '', !raw.gigaIndex ? 'GIGA Index待补采' : '', raw.sourceCategory?.status !== 'EXACT' ? '类目待核实' : ''].filter(Boolean)
-      return { platformCode:'GIGACLOUD' as const, productId:raw.productId, url:raw.url, title:raw.title, imageUrl:raw.imageUrl, priceText:raw.priceText, salesText:raw.salesText, shippingFeeText:raw.shippingFeeText, sellableInventory:raw.sellableInventory, promotionText:raw.promotionText, gigaIndex:raw.gigaIndex, supplierName:raw.supplierName, supplierBadges:raw.gigaIndex !== null ? ['GIGA_INDEX'] : [], categoryTopRank:null, returnRate:null, networkSalesCount:null, serviceRating:null, serviceDetails:{}, dataCompleteness:Math.round([raw.imageUrl,raw.priceText,raw.shippingFeeText,raw.sellableInventory !== null,raw.gigaIndex !== null,raw.sourceCategory?.pathIds.length].filter(Boolean).length / 6 * 100), score, grade:(!selected ? 'REJECTED' : score >= 80 ? 'A' : score >= 65 ? 'B' : 'C') as CollectedSupplyProduct['grade'], dimensionScores, recommendation:raw.gigaIndex === null ? 'GIGA Index待补采，暂不评分' : selected ? `GIGA Index ${raw.gigaIndex} · 筛选${sellerFilterText} · 店铺退货率${returnRateFilterText}` : `GIGA Index低于${task.minimumSelectionScore}`, riskFlags, selected, sourceCategory:raw.sourceCategory }
+      const riskFlags = [!raw.priceText ? '价格待补采' : '', !raw.salesText ? '库存待补采' : '', !raw.gigaIndexText ? 'GIGA Index待补采' : '', raw.sourceCategory?.status !== 'EXACT' ? '类目待核实' : ''].filter(Boolean)
+      return { platformCode:'GIGACLOUD' as const, productId:raw.productId, url:raw.url, title:raw.title, imageUrl:raw.imageUrl, priceText:raw.priceText, salesText:raw.salesText, shippingFeeText:raw.shippingFeeText, sellableInventory:raw.sellableInventory, promotionText:raw.promotionText, gigaIndex:raw.gigaIndex, gigaIndexText:raw.gigaIndexText, supplierName:raw.supplierName, supplierBadges:raw.gigaIndex !== null ? ['GIGA_INDEX'] : [], categoryTopRank:null, returnRate:null, networkSalesCount:null, serviceRating:null, serviceDetails:{}, dataCompleteness:Math.round([raw.imageUrl,raw.priceText,raw.shippingFeeText,raw.sellableInventory !== null,Boolean(raw.gigaIndexText),raw.sourceCategory?.pathIds.length].filter(Boolean).length / 6 * 100), score, grade:(!selected ? 'REJECTED' : score >= 80 ? 'A' : score >= 65 ? 'B' : 'C') as CollectedSupplyProduct['grade'], dimensionScores, recommendation:raw.gigaIndex === null ? (raw.gigaIndexText ? `GIGA Index ${raw.gigaIndexText} · 非数值不评分` : 'GIGA Index待补采，暂不评分') : selected ? `GIGA Index ${raw.gigaIndex} · 筛选${sellerFilterText} · 店铺退货率${returnRateFilterText}` : `GIGA Index低于${task.minimumSelectionScore}`, riskFlags, selected, sourceCategory:raw.sourceCategory }
     }).sort((a,b)=>b.score-a.score)
     onProgress(`大健云仓采集完成，共${products.length}个商品`, products.length)
     return products

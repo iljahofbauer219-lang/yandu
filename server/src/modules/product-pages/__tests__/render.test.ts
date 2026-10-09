@@ -91,6 +91,7 @@ describe('renderProductPageDocument', () => {
       files: [{ name: 'K240272 (2085_2091).pdf', url: 'https://www.gigab2b.com/f.pdf' }],
       features: ['【True Foldable, No Need to Disassemble】 The elderly motorized scooter can be folded in 2 steps.', '【Full Foldable While Steady】 The M2085 has innovative way of folding.'],
       specs: [
+        { key: 'Item Code', value: 'W2923P220458' },
         { key: '产品类型', value: 'Single Box Product' }, { key: '颜色', value: 'Blue' },
         { key: '组装长度 (英寸)', value: '38.43' }, { key: '产品重量 (磅)', value: '52.03' },
         { key: '长度 (英寸)', value: '40.75' }, { key: '重量 (磅)', value: '63.00' }
@@ -99,7 +100,8 @@ describe('renderProductPageDocument', () => {
       descriptionImages: [{ name: 'd-01.jpg', contentType: 'image/jpeg' }]
     }))
     expect(html).toContain('首页 / 汽车配件与运输 / 电动代步车')
-    expect(html).toContain('Item Code')
+    expect(html).toContain('<span>Item Code:</span>W2923P220458')
+    expect(html).not.toContain('<small>Item Code</small>')
     expect(html).toContain('W2923P220458')
     expect(html).toContain('首次到库')
     expect(html).toContain('退返品率')

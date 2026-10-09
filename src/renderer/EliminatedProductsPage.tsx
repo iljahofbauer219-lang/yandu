@@ -98,7 +98,7 @@ export default function EliminatedProductsPage({ onBack, onDataChange }: { onBac
 
   return <section className="eliminated-page">
     <div className="eliminated-heading">
-      <div><small>ELIMINATION TRACKING</small><h2>淘汰产品</h2><p>商品淘汰全量追踪：主要针对采集侯选环节，优选产品同样支持；防重复采集 · 可追溯 · 可重新启用</p></div>
+      <div><small>ELIMINATION TRACKING</small><h2>淘汰产品</h2><p>商品淘汰全量追踪：主要针对采集候选环节，优选产品同样支持；防重复采集 · 可追溯 · 可重新启用</p></div>
       <label className={`eliminated-filter-toggle${filterOn ? ' on' : ''}`} title="开启后，采集预检查会自动过滤处于淘汰生效期的商品">
         <input type="checkbox" checked={filterOn} onChange={() => void toggleFilter()} />采集预检查自动过滤已淘汰
       </label>

@@ -2,7 +2,7 @@
  * 已通过入库商品立即移出优选产品列表 端到端验收（真实 Electron + Playwright）。
  * fixture（stocked 模式）：候选 u1..u6；选品 u1(PENDING)/u4(APPROVED+入库)/u5(PENDING)。
  * 场景：
- *  1 优选产品初始仅 u1/u5 两卡（u4 隐藏）；统计无"已通过"；下拉无"已通过"；徽标 优选2/入库1。
+ *  1 优选产品初始仅 u1/u5 两卡（u4 隐藏）；统计区仅"待复核 2"（无选品商品/已淘汰卡）；下拉无"已通过"；徽标 优选2/入库1。
  *  2 对 u1 点"通过"→ 列表立即剩 u5 一卡；优选徽标 1；入库徽标 2。
  *  3 正式入库 Tab 含 u1/u4 共 2 项。
  *  4 优选产品对 u5 点"候选"→ u5 回到采集候选（4 卡）；优选产品空态。
@@ -86,7 +86,9 @@ function json(body) {
     assert('优选产品仅 u1/u5 两卡', await selectionCards.count() === 2)
     const selText0 = await page.locator('.selection-main').innerText()
     assert('u4（APPROVED+入库）不在列表', !selText0.includes(T4) && selText0.includes(T1) && selText0.includes(T5))
-    assert('统计行 3 项且无已通过', await page.locator('.selection-stats button').count() === 3 && !(await page.locator('.selection-stats').innerText()).includes('已通过'))
+    const statsText = await page.locator('.selection-stats').innerText()
+    assert('统计区仅展示待复核计数 2', (await page.locator('.selection-stats b').count()) === 1 && (await page.locator('.selection-stats b').innerText()) === '2' && statsText.includes('待复核'))
+    assert('统计区不再展示选品商品/已淘汰且无可点击统计按钮', !statsText.includes('选品商品') && !statsText.includes('已淘汰') && !statsText.includes('已通过') && (await page.locator('.selection-stats button').count()) === 0)
     const options = await page.locator('.selection-filters select option').allInnerTexts()
     assert('状态下拉无已通过选项', !options.includes('已通过'))
     assert('优选徽标 2 / 入库徽标 1', await badge(/优选产品/) === '2' && await badge(/正式入库/) === '1')

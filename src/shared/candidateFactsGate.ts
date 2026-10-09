@@ -6,6 +6,7 @@ export interface CandidateFactsGateInput {
   salesText: string
   exactCatalog: boolean
   gigaIndex?: number | null
+  gigaIndexText?: string
 }
 
 const INVENTORY_LABEL_PATTERN = /^(?:Available\s*Stock|可售库存|库存)\s*[:：]?\s*/i
@@ -23,7 +24,8 @@ export function missingCandidateFacts(facts: CandidateFactsGateInput): string[] 
     : facts.salesText.replace(INVENTORY_LABEL_PATTERN, '').trim()
   if (!inventoryText || inventoryText === '待补采') missing.push('可售库存')
   if (!facts.exactCatalog) missing.push('原始类目')
-  if (facts.gigaIndex === null || facts.gigaIndex === undefined) missing.push('GIGA Index')
+  // 「<60」等非数值形态也算读取成功：展示与闸口看文本，评分才需要纯数值
+  if ((facts.gigaIndex === null || facts.gigaIndex === undefined) && !(facts.gigaIndexText || '').trim()) missing.push('GIGA Index')
   return missing
 }
 

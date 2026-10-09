@@ -1,7 +1,7 @@
 /**
  * 淘汰产品机制 端到端 UI 验收（真实 Electron 渲染进程 + Playwright + node:sqlite 种子）。
  * 覆盖：优选页黄框统一入口、卡片按钮精简（无待复核）、淘汰原因对话框、淘汰记录归集页、
- * 重新启用回滚决策、采集候选淘汰、预检查过滤开关持久化。
+ * 重新启用打回采集候选、采集候选淘汰、预检查过滤开关持久化。
  *
  * 运行：node tools/verify-elimination-ui.cjs
  */
@@ -119,7 +119,7 @@ async function mockAuth(page) {
     await page.screenshot({ path: path.join(ARTIFACTS, 'elimination-01-dialog.png') })
     await page.locator('.eliminate-dialog button', { hasText: '确认淘汰' }).click()
     await page.waitForTimeout(700)
-    assert('淘汰对话框关闭且统计「已淘汰」为 1', (await count('.eliminate-dialog')) === 0 && (await page.locator('.selection-stats button', { hasText: '已淘汰' }).locator('b').innerText()) === '1')
+    assert('淘汰对话框关闭且卡片决策转为已淘汰', (await count('.eliminate-dialog')) === 0 && (await count('.selection-card.decision-rejected')) === 1)
 
     // 数据流转：SQLite 行级字段 + 决策联动
     const selRow = queryDb(`SELECT * FROM eliminated_products WHERE origin='SELECTION'`)[0]
@@ -156,7 +156,9 @@ async function mockAuth(page) {
     await topNav('优选产品').click()
     await page.waitForSelector('.selection-workbench', { timeout: 8000 })
     await page.waitForTimeout(400)
-    assert('重新启用后优选决策回滚为待复核', (await page.locator('.selection-stats button', { hasText: '待复核' }).locator('b').innerText()) === '1')
+    assert('重新启用后优选不再保留该商品（待复核统计归 0）', (await count('.selection-card')) === 0 && (await page.locator('.selection-stats b').innerText()) === '0' && (await page.locator('.selection-stats').innerText()).includes('待复核'))
+    // 本 fixture 的 sel-seed-1 没有对应 supply_candidates 行，打回采集候选的界面可见性由 verify-approved-hidden 的「候选」路径覆盖
+    assert('SELECTION 原记录随重新启用删除（打回采集候选）', queryDb(`SELECT COUNT(*) AS n FROM selection_records WHERE id='sel-seed-1'`)[0].n === 0)
 
     // 采集候选淘汰
     console.log('采集候选 · 删除改淘汰')

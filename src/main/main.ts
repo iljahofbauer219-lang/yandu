@@ -171,11 +171,11 @@ function importCollectorProducts(products: CollectorPluginProduct[]) {
       const score = hasGigaIndex ? Math.max(0, Math.min(100, Math.round(item.gigaIndex!))) : 0
       return {
         platformCode: item.platformCode, productId: item.productId, url: item.url, title: item.title, imageUrl: item.imageUrl,
-        priceText: item.priceText, salesText: item.salesText, shippingFeeText:item.shippingFeeText, sellableInventory:item.sellableInventory, promotionText:item.promotionText, gigaIndex:item.gigaIndex, supplierName: item.supplierName, supplierBadges: hasGigaIndex ? ['GIGA_INDEX'] : [],
+        priceText: item.priceText, salesText: item.salesText, shippingFeeText:item.shippingFeeText, sellableInventory:item.sellableInventory, promotionText:item.promotionText, gigaIndex:item.gigaIndex, gigaIndexText:item.gigaIndexText, supplierName: item.supplierName, supplierBadges: hasGigaIndex ? ['GIGA_INDEX'] : [],
         categoryTopRank: null, returnRate: null, networkSalesCount: null, serviceRating: null, serviceDetails: {},
         dataCompleteness: Math.round([item.imageUrl,item.priceText,item.shippingFeeText,item.sellableInventory !== null && item.sellableInventory !== undefined,hasGigaIndex,item.sourceCategory?.pathIds.length].filter(Boolean).length / 6 * 100),
         score, grade: hasGigaIndex ? score >= 80 ? 'A' : score >= 65 ? 'B' : 'C' : 'REJECTED', dimensionScores: { supplier: score, inventory:item.sellableInventory === null || item.sellableInventory === undefined ? 0 : Math.min(100,Math.round(45+Math.log10(Math.max(1,item.sellableInventory))*18)), logistics:item.shippingFeeText?70:0 },
-        recommendation: hasGigaIndex ? `GIGA Index ${item.gigaIndex} · 内置选择采集 · ${item.capturedFrom === 'DETAIL' ? '详情页' : '列表页'}${item.storeReturnRate ? ` · 退货率${item.storeReturnRate}` : ''}` : 'GIGA Index待补采，暂不评分',
+        recommendation: hasGigaIndex ? `GIGA Index ${item.gigaIndex} · 内置选择采集 · ${item.capturedFrom === 'DETAIL' ? '详情页' : '列表页'}${item.storeReturnRate ? ` · 退货率${item.storeReturnRate}` : ''}` : item.gigaIndexText ? `GIGA Index ${item.gigaIndexText} · 非数值不评分` : 'GIGA Index待补采，暂不评分',
         riskFlags: [!item.priceText ? '价格待补采' : '', !item.supplierName ? '供应商待补采' : '', item.sourceCategory?.status !== 'EXACT' ? '类目待核实' : ''].filter(Boolean),
         selected: false, sourceCategory: item.sourceCategory
       }
@@ -207,7 +207,7 @@ function validateBuiltInCollectorProducts(products: CollectorPluginProduct[]) {
       catalogVersion: String(source.catalogVersion || 'gigab2b-2026-07-13').slice(0, 80),
       level1: level(0), level2: level(1), level3: level(2), pathIds, pathNames,
       capturedFrom: source.capturedFrom === 'PRODUCT_URL' ? 'PRODUCT_URL' as const : source.capturedFrom === 'BREADCRUMB' ? 'BREADCRUMB' as const : 'PAGE_CONTEXT' as const,
-      status: pathIds.length >= 3 ? 'EXACT' as const : pathIds.length ? 'PARTIAL' as const : 'NEEDS_REVIEW' as const,
+      status: pathIds.length >= 2 ? 'EXACT' as const : pathIds.length ? 'PARTIAL' as const : 'NEEDS_REVIEW' as const,
       capturedAt: String(source.capturedAt || new Date().toISOString()).slice(0, 80)
     } : undefined
     return { ...item, platformCode: 'GIGACLOUD' as const, url: url.href, title, sourceCategory }
@@ -2578,8 +2578,8 @@ ipcMain.handle('candidate:reread', async (_event, request: { platformCode: strin
   const facts = await workspace.rereadSupplyCandidate(request.url)
   // 重读命中 EXACT 三级类目时同步写回仓库商品表，正式入库卡「原始类目」不再停留占位
   const rereadCategory = (facts as { sourceCategory?: { status?: string; pathNames?: string[] } }).sourceCategory
-  if (rereadCategory && rereadCategory.status === 'EXACT' && (rereadCategory.pathNames?.length ?? 0) >= 3) {
-    database.updateSupplyWarehouseCategory(request.url, rereadCategory.pathNames?.[0] || '', rereadCategory.pathNames?.[1] || '', rereadCategory.pathNames?.[2] || '')
+  if (rereadCategory && rereadCategory.status === 'EXACT' && (rereadCategory.pathNames?.length ?? 0) >= 2) {
+    database.updateSupplyWarehouseCategory(request.url, rereadCategory.pathNames?.[0] || '', rereadCategory.pathNames?.[1] || '', rereadCategory.pathNames?.[2] || '待细分')
   }
   // 空串/null 与降级类目不覆盖既有值：合并策略收敛在 mergeCandidateFacts（AppDatabase 写入时执行）
   const merged = database.updateSupplyCandidateFacts(request.platformCode, request.url, facts)
@@ -2591,7 +2591,7 @@ ipcMain.handle('candidate:reread', async (_event, request: { platformCode: strin
     score,
     grade: hasGigaIndex ? (score >= 80 ? 'A' : score >= 65 ? 'B' : 'C') : 'REJECTED',
     dataCompleteness: Math.round([product.imageUrl, product.priceText, product.shippingFeeText, product.sellableInventory !== null && product.sellableInventory !== undefined, hasGigaIndex, product.sourceCategory?.pathIds.length].filter(Boolean).length / 6 * 100),
-    recommendation: hasGigaIndex ? `GIGA Index ${product.gigaIndex} · 候选重读` : 'GIGA Index待补采，暂不评分',
+    recommendation: hasGigaIndex ? `GIGA Index ${product.gigaIndex} · 候选重读` : product.gigaIndexText ? `GIGA Index ${product.gigaIndexText} · 非数值不评分` : 'GIGA Index待补采，暂不评分',
     riskFlags: [!product.priceText ? '价格待补采' : '', !product.supplierName ? '供应商待补采' : '', product.sourceCategory?.status !== 'EXACT' ? '类目待核实' : ''].filter(Boolean)
   })
   return database.getCandidateWorkspace()

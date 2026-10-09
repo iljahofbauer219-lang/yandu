@@ -75,16 +75,20 @@ export function renderProductPageDocument(pageId: string, meta: ProductPageMetaV
   // 历史 meta 无尺寸键时启发式命中 0 组，回退扁平表格保证零回归
   const isDimKey = (key: string): boolean => /^组装/.test(key) || /^产品重量/.test(key)
   const isPackKey = (key: string): boolean => /^(长度|宽度|高度|重量)\s*[（(]/.test(key)
-  const dimRows = meta.specs.filter(spec => isDimKey(spec.key))
-  const packRows = meta.specs.filter(spec => isPackKey(spec.key))
-  const baseRows = meta.specs.filter(spec => !isDimKey(spec.key) && !isPackKey(spec.key))
+  // 原址「产品规格·基础信息」首行恒为 Item Code：新采集已入 specs；历史 meta 仅存 itemCode 字段时补行，保证旧页也与原址一致
+  const specRows = (meta.itemCode ?? '').trim() && !meta.specs.some(spec => spec.key === 'Item Code')
+    ? [{ key: 'Item Code', value: (meta.itemCode ?? '').trim() }, ...meta.specs]
+    : meta.specs
+  const dimRows = specRows.filter(spec => isDimKey(spec.key))
+  const packRows = specRows.filter(spec => isPackKey(spec.key))
+  const baseRows = specRows.filter(spec => !isDimKey(spec.key) && !isPackKey(spec.key))
   const specGroups = dimRows.length || packRows.length
     ? [{ title: '基础信息', rows: baseRows }, { title: '产品尺寸', rows: dimRows }, { title: '包装尺寸', rows: packRows }].filter(group => group.rows.length)
     : []
   const specsTable = specGroups.length
     ? `<div class="pp-spec-groups">${specGroups.map(group => `<section class="pp-spec-group"><b>${escapeHtmlText(group.title)}</b><div class="pp-spec-grid">${group.rows.map(spec => `<div><span>${escapeHtmlText(spec.key)}:</span>${escapeHtmlText(spec.value)}</div>`).join('')}</div></section>`).join('')}</div>`
-    : (meta.specs.length
-        ? `<table class="pp-specs"><tbody>${meta.specs.map(spec => `<tr><th scope="row">${escapeHtmlText(spec.key)}</th><td>${escapeHtmlText(spec.value)}</td></tr>`).join('')}</tbody></table>`
+    : (specRows.length
+        ? `<table class="pp-specs"><tbody>${specRows.map(spec => `<tr><th scope="row">${escapeHtmlText(spec.key)}</th><td>${escapeHtmlText(spec.value)}</td></tr>`).join('')}</tbody></table>`
         : '')
   // 原站三大版块顺序：产品规格 → 产品特点 → 图文描述，均为整宽版块
   const specsSection = specsTable
@@ -114,7 +118,7 @@ export function renderProductPageDocument(pageId: string, meta: ProductPageMetaV
   const badge = (label: string, value: string): string =>
     value.trim() ? `<span class="pp-badge"><small>${escapeHtmlText(label)}</small><b>${escapeHtmlText(value.trim())}</b></span>` : ''
   const categoryLine = category.trim() ? `<div class="pp-category">${escapeHtmlText(category.trim())}</div>` : ''
-  const badges = [badge('Item Code', itemCode), badge('首次到库', firstStockAt), badge('退返品率', returnRate), badge('GIGA Index', gigaIndex)].join('')
+  const badges = [badge('首次到库', firstStockAt), badge('退返品率', returnRate), badge('GIGA Index', gigaIndex)].join('')
   const stockBadges = [badge('可售库存', sellableInventory), badge('一件代发时效', dropshipLeadTime)].join('')
   const feeRows: Array<[string, string]> = [
     ['单价(件)', unitPrice], ['打包费', packingFee], ['运费', freightFee],

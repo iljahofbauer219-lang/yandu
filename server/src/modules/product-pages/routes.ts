@@ -25,6 +25,7 @@ import { prisma } from '../../lib/prisma.js'
 import { newPageId } from './pageId.js'
 import { renderProductPageDocument, type ProductPageMetaView } from './render.js'
 import { applyProductPageSecurityHeaders, sanitizeProductPageHtml } from './sanitize.js'
+import { findProductPages, pruneProductPages, readMeta, writePageAtomic } from './storage.js'
 
 // 约 24 张常规商品图 + 描述图 + 视频 base64 上限（4/3 膨胀后）
 const MAX_BODY_BYTES = 256 * 1024 * 1024
@@ -142,14 +143,6 @@ function assertPageId(pageId: string): string {
   return dir
 }
 
-async function readMeta(dir: string): Promise<Record<string, unknown> | null> {
-  try {
-    return JSON.parse(await fsp.readFile(path.join(dir, 'meta.json'), 'utf8')) as Record<string, unknown>
-  } catch {
-    return null
-  }
-}
-
 async function allocatePageId(): Promise<string> {
   for (let attempt = 0; attempt < PAGE_ID_MAX_ATTEMPTS; attempt += 1) {
     const candidate = newPageId()
@@ -264,6 +257,7 @@ export async function productPageRoutes(app: FastifyInstance) {
   }, async request => {
     const body = createSchema.parse(request.body)
     const orgId = request.currentUser.orgId
+    const root = pagesRoot()
     let pageId: string
     if (body.pageId) {
       const existingMeta = await readMeta(assertPageId(body.pageId))
@@ -272,28 +266,10 @@ export async function productPageRoutes(app: FastifyInstance) {
       }
       pageId = body.pageId
     } else {
-      pageId = await allocatePageId()
+      // 桌面端建档记录丢失而回传不了 pageId 时：复用同商品既有页，避免再开孤儿目录
+      const matches = await findProductPages(root, orgId, body.warehouseProductId)
+      pageId = matches[0] ?? await allocatePageId()
     }
-    const dir = assertPageId(pageId)
-    // 重下载语义：同商品整目录覆盖（pageId 已确认归属本组织）
-    await fsp.rm(dir, { recursive: true, force: true })
-    await fsp.mkdir(path.join(dir, 'assets'), { recursive: true })
-    for (const image of body.images) {
-      await fsp.writeFile(path.join(dir, 'assets', image.name), Buffer.from(image.dataBase64, 'base64'))
-    }
-    for (const image of body.descriptionImages) {
-      await fsp.writeFile(path.join(dir, 'assets', image.name), Buffer.from(image.dataBase64, 'base64'))
-    }
-    for (const video of body.videos) {
-      await fsp.writeFile(path.join(dir, 'assets', video.name), Buffer.from(video.dataBase64, 'base64'))
-    }
-    for (const fileAsset of body.fileAssets) {
-      await fsp.writeFile(path.join(dir, 'assets', fileAsset.name), Buffer.from(fileAsset.dataBase64, 'base64'))
-    }
-    if (body.packAsset) {
-      await fsp.writeFile(path.join(dir, 'assets', body.packAsset.name), Buffer.from(body.packAsset.dataBase64, 'base64'))
-    }
-    await fsp.writeFile(path.join(dir, 'index.html'), sanitizeProductPageHtml(body.html), 'utf8')
     const meta = {
       pageId,
       capturedAt: new Date().toISOString(),
@@ -327,7 +303,27 @@ export async function productPageRoutes(app: FastifyInstance) {
       descriptionFlow: body.descriptionFlow,
       files: body.files
     }
-    await fsp.writeFile(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf8')
+    // 重下载语义：同商品整目录覆盖。新批次先写 staging 再原子接管，中途失败旧批次不丢；接管成功后清理同商品历史孤儿目录
+    await writePageAtomic(root, pageId, async staging => {
+      for (const image of body.images) {
+        await fsp.writeFile(path.join(staging, 'assets', image.name), Buffer.from(image.dataBase64, 'base64'))
+      }
+      for (const image of body.descriptionImages) {
+        await fsp.writeFile(path.join(staging, 'assets', image.name), Buffer.from(image.dataBase64, 'base64'))
+      }
+      for (const video of body.videos) {
+        await fsp.writeFile(path.join(staging, 'assets', video.name), Buffer.from(video.dataBase64, 'base64'))
+      }
+      for (const fileAsset of body.fileAssets) {
+        await fsp.writeFile(path.join(staging, 'assets', fileAsset.name), Buffer.from(fileAsset.dataBase64, 'base64'))
+      }
+      if (body.packAsset) {
+        await fsp.writeFile(path.join(staging, 'assets', body.packAsset.name), Buffer.from(body.packAsset.dataBase64, 'base64'))
+      }
+      await fsp.writeFile(path.join(staging, 'index.html'), sanitizeProductPageHtml(body.html), 'utf8')
+      await fsp.writeFile(path.join(staging, 'meta.json'), JSON.stringify(meta, null, 2), 'utf8')
+    })
+    await pruneProductPages(root, orgId, body.warehouseProductId, pageId)
     await writeAudit(prisma, {
       orgId,
       userId: request.currentUser.id,

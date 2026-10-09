@@ -954,9 +954,10 @@ function exactSupplyCatalog(product: CollectedSupplyProduct) {
   const [level1Id,level2Id,level3Id] = source.pathIds
   const group = gigaCatalog.find(item=>item.id===level1Id)
   const child = group?.children.find(item=>item.id===level2Id)
-  const tertiary = child?.children.find(item=>item.id===level3Id)
-  if (!group || !child || !tertiary) return null
-  return { category:group.name, subcategory:child.name, tertiaryCategory:tertiary.name }
+  if (!group || !child) return null
+  // 原址面包屑可能本就两级：前两级命中内置目录即算读取成功，第三级留「待细分」待人工补
+  const tertiary = child.children.find(item=>item.id===level3Id)
+  return { category:group.name, subcategory:child.name, tertiaryCategory:tertiary?.name || '待细分' }
 }
 
 function supplyCatalog(product: CollectedSupplyProduct) {
@@ -993,7 +994,7 @@ function SupplyCandidateCard({ product, candidateKey, sourceCount, sourceText, c
       <small>{platformName} · Item Code {product.productId || '待补采'} · 来源批次 {sourceCount}</small>
       <b title={product.title}>{product.title}</b>
       <strong>{product.priceText || '价格待补采'}</strong>
-      <dl className="candidate-source-facts"><div><dt>物流费</dt><dd>{product.shippingFeeText || '待补采'}</dd></div><div><dt>可售库存</dt><dd>{inventoryText}</dd></div><div><dt>原始类目</dt><dd title={`${catalog.category} / ${catalog.subcategory} / ${catalog.tertiaryCategory}`}>{catalog.category} / {catalog.subcategory} / {catalog.tertiaryCategory}</dd></div><div><dt>GIGA Index</dt><dd>{inferredGigaIndex ?? '待补采'}</dd></div></dl>
+      <dl className="candidate-source-facts"><div><dt>物流费</dt><dd>{product.shippingFeeText || '待补采'}</dd></div><div><dt>可售库存</dt><dd>{inventoryText}</dd></div><div><dt>原始类目</dt><dd title={`${catalog.category} / ${catalog.subcategory} / ${catalog.tertiaryCategory}`}>{catalog.category} / {catalog.subcategory} / {catalog.tertiaryCategory}</dd></div><div><dt>GIGA Index</dt><dd>{product.gigaIndexText || (inferredGigaIndex ?? '待补采')}</dd></div></dl>
       <div className="original-price" title={sourceText}>{sourceText}</div>
       <div className="product-tags"><span>{product.candidateDeletedAt?'已删除':preferred?'已优选':product.selected?'AI入选':'待人工复核'}</span><span>{exactCatalog?'精确类目':'类目待核实'}</span></div>
       <div className="product-actions candidate-next-actions"><button className="search-1688" disabled={Boolean(product.candidateDeletedAt)} onClick={onPrefer}>{preferred?'已优选':'优选'} <i>→</i></button><button disabled={Boolean(product.candidateDeletedAt)||rereading} onClick={onReread} title="登录采集站点后重读价格、可售库存、物流费、原始类目与 GIGA Index">{rereading?'重读中…':'重读数据'}</button><button className="candidate-delete" disabled={Boolean(product.candidateDeletedAt)} onClick={onEliminate} title="淘汰商品并记录原因">淘汰</button></div>
@@ -1015,7 +1016,7 @@ function SupplyFactsDl({ joined, fallbackCatalog }: { joined?: CollectedSupplyPr
   const catalog = (joined ? exactSupplyCatalog(joined) : null)
     || (fallbackCatalog && fallbackCatalog.category ? fallbackCatalog : null)
     || { category:'类目待核实', subcategory:'待核实', tertiaryCategory:'待核实' }
-  return <dl className="candidate-source-facts"><div><dt>物流费</dt><dd>{joined?.shippingFeeText || '待补采'}</dd></div><div><dt>可售库存</dt><dd>{inventoryText}</dd></div><div><dt>原始类目</dt><dd title={`${catalog.category} / ${catalog.subcategory} / ${catalog.tertiaryCategory}`}>{catalog.category} / {catalog.subcategory} / {catalog.tertiaryCategory}</dd></div><div><dt>GIGA Index</dt><dd>{joined?.gigaIndex ?? '待补采'}</dd></div></dl>
+  return <dl className="candidate-source-facts"><div><dt>物流费</dt><dd>{joined?.shippingFeeText || '待补采'}</dd></div><div><dt>可售库存</dt><dd>{inventoryText}</dd></div><div><dt>原始类目</dt><dd title={`${catalog.category} / ${catalog.subcategory} / ${catalog.tertiaryCategory}`}>{catalog.category} / {catalog.subcategory} / {catalog.tertiaryCategory}</dd></div><div><dt>GIGA Index</dt><dd>{joined?.gigaIndexText || (joined?.gigaIndex ?? '待补采')}</dd></div></dl>
 }
 // 自动更新状态悬浮提示（右下角）：下载中显示百分比，失败显示原因，下载完成可一键重启安装；
 // 状态由主进程 app:update-status 推送（见 main.ts initAutoUpdate）
@@ -1933,7 +1934,8 @@ export function App() {
       sellableInventory: product.sellableInventory,
       salesText: product.salesText,
       exactCatalog: Boolean(exactSupplyCatalog(product)),
-      gigaIndex: inferCandidateGigaIndex(product)
+      gigaIndex: inferCandidateGigaIndex(product),
+      gigaIndexText: product.gigaIndexText
     })
     if (missing.length) { setFactsGate({ product, missing }); return }
     void importCandidate('SUPPLY', product)
@@ -2545,7 +2547,7 @@ function SelectionWorkspace({ warehouseName, items, onItemsChange, onDecision, o
   return <section className={`selection-workbench${panel?.collapsed?' side-collapsed':''}`}>
     <ThreeLevelCatalog paths={activeItems.map(item=>({id:item.id,category:item.category,subcategory:item.subcategory,tertiaryCategory:item.tertiaryCategory||'待细分'}))} selected={category} onSelect={setCategory} panel={panel} railLabel="选品目录"/>
     <div className="selection-main"><div className="selection-heading"><div><small>AI SELECTION WORKSPACE</small><b>{warehouseName} · AI选品</b><span>当前选品决策只影响本仓库</span></div></div>
-      <div className="selection-stats"><button onClick={()=>setDecision('ALL')}><b>{activeItems.length}</b><small>选品商品</small></button><button onClick={()=>setDecision('PENDING')}><b>{count('PENDING')}</b><small>待复核</small></button><button onClick={()=>setDecision('REJECTED')}><b>{count('REJECTED')}</b><small>已淘汰</small></button></div>
+      <div className="selection-stats"><span className="pending"><b>{count('PENDING')}</b><small>待复核</small></span></div>
       <div className="selection-filters"><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="搜索商品标题、ID或平台"/><select value={decision} onChange={event=>setDecision(event.target.value as typeof decision)}><option value="ALL">全部状态</option><option value="PENDING">待人工复核</option><option value="REJECTED">已淘汰</option></select><span>当前显示 <b>{visible.length}</b> 个商品</span></div>
       {visible.length===0?<EmptyState title={activeItems.length?'当前筛选下暂无商品':'暂无选品商品'} description={activeItems.length?'请切换目录、状态或清除搜索条件。':'请从AI候选中将商品加入AI选品。'} action="进入AI候选" onAction={onCandidates}/>:<div className="selection-grid">{visible.map(item=>{const group=productCatalog.find(entry=>entry.name===item.category)||productCatalog[0];const subcategory=group.children.includes(item.subcategory)?item.subcategory:group.children[0];const joined=joinSupply(item.sourceUrl, item.productId);return <article className={`selection-card decision-${item.decision.toLocaleLowerCase()}`} key={item.id}><button className="selection-image" onClick={()=>onOpen(item)}>{item.imageUrl?<img src={item.imageUrl} alt={item.title}/>:<span>无图片</span>}<SupplyImageBadges joined={joined} fallbackScore={item.score}/></button><div className="selection-card-body"><small>{item.platformCode} · ID {item.productId||'待识别'}</small><b title={item.title}>{item.title}</b><strong>{item.priceText||'价格待核验'}</strong><SupplyFactsDl joined={joined} fallbackCatalog={{category:item.category,subcategory:item.subcategory,tertiaryCategory:item.tertiaryCategory}}/><div className="original-price">{sourceTextFor(item.sourceUrl)}</div><div className="selection-category-selects"><select value={item.category} onChange={event=>{const next=productCatalog.find(entry=>entry.name===event.target.value)!;void categorize(item,next.name,next.children[0],'待细分')}}>{productCatalog.map(entry=><option key={entry.name}>{entry.name}</option>)}</select><select value={subcategory} onChange={event=>void categorize(item,item.category,event.target.value,'待细分')}>{group.children.map(child=><option key={child}>{child}</option>)}</select><select value={item.tertiaryCategory||'待细分'} onChange={event=>void categorize(item,item.category,subcategory,event.target.value)}>{tertiaryOptions(catalog,subcategory,item.category).map(option=><option key={option.name}>{option.name}</option>)}</select></div><p>{item.recommendation||item.reason}</p><div className="selection-tags"><span>{item.category} / {subcategory} / {item.tertiaryCategory||'待细分'}</span><span>{item.riskFlags.length?`${item.riskFlags.length}项风险`:'暂无风险'}</span></div><div className="selection-decisions"><button className="candidate" onClick={()=>void onReturnCandidate(item)}>候选</button><button className={item.decision==='APPROVED'?'approved':''} onClick={()=>void decide(item,'APPROVED')}>通过</button><button className={item.decision==='REJECTED'?'rejected':''} onClick={()=>{setEliminateTarget(item);setEliminateError('')}}>淘汰</button></div></div></article>})}</div>}
     {eliminateTarget&&<EliminateReasonDialog kind="product" title={eliminateTarget.title} meta={`${eliminateTarget.platformCode} · ID ${eliminateTarget.productId||'待识别'} · ${eliminateTarget.sourceUrl}`} error={eliminateError} onCancel={()=>setEliminateTarget(null)} onConfirm={reason=>void confirmEliminate(reason)} />}

@@ -35,6 +35,12 @@ describe('missingCandidateFacts', () => {
       .toEqual(['价格', '物流费', 'GIGA Index'])
   })
 
+  it('GIGA Index 非数值形态（<60）凭文本判已读取，评分推断仍为 null', () => {
+    expect(missingCandidateFacts({ ...complete, gigaIndex: null, gigaIndexText: '<60' })).toEqual([])
+    expect(missingCandidateFacts({ ...complete, gigaIndex: null, gigaIndexText: '   ' })).toEqual(['GIGA Index'])
+    expect(inferCandidateGigaIndex({ gigaIndex: null, platformCode: 'GIGACLOUD', supplierBadges: [], score: 0 })).toBeNull()
+  })
+
   it('可售库存数字缺失但 salesText 带真值时不算缺失', () => {
     expect(missingCandidateFacts({ ...complete, sellableInventory: null, salesText: 'Available Stock: 88' })).toEqual([])
   })
