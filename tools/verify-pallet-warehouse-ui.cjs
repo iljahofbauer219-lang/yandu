@@ -32,7 +32,7 @@ const ownerProfile = {
   org: { id: 'pw-ui-org', name: '货盘验收组织' }, roles: [], permissions: 'ALL', stores: null
 }
 
-const HUB_TABS = ['入库处理', '全部产品', '新品速递', '热销产品', '时节热品', '限时促销', '地区选品', '即将到货', '下架产品']
+const HUB_TABS = ['入库处理', '全部产品', '地区货盘', '新品速递', '热销产品', '时节热品', '限时促销', '即将到货', '下架产品']
 
 // 入库处理 Tab 的服务器采集池 mock（status=COLLECTED 原始采集 3 件）
 const ERP_COLLECTED_MOCK = [
@@ -237,6 +237,7 @@ const OFFICE_CATS = [
     assert('顶部筛选栏渲染 9 个 Tab', await tabBar.getByRole('button').count() === 9)
     assert('顶栏首位为入库处理', (await tabBar.getByRole('button').nth(0).innerText()).includes('入库处理'))
     assert('顶栏次位为全部产品', (await tabBar.getByRole('button').nth(1).innerText()).includes('全部产品'))
+    assert('Tab 顺序与命名固定（地区货盘紧随全部产品）', JSON.stringify(await tabBar.getByRole('button').allInnerTexts()) === JSON.stringify(HUB_TABS))
     assert('pallet.add 直写链已移除', await page.evaluate(() => typeof window.desktop.pallet.add) === 'undefined')
     for (const tab of HUB_TABS) assert(`Tab 存在：${tab}`, await tabBar.getByRole('button', { name: tab, exact: true }).count() === 1)
     assert('默认选中全部产品', await tabBar.getByRole('button', { name: '全部产品', exact: true }).evaluate(el => el.classList.contains('active')))

@@ -370,6 +370,9 @@ contextBridge.exposeInMainWorld('desktop', {
     exportEvidence: ():Promise<{canceled:boolean;filePath?:string}> => ipcRenderer.invoke('compliance:evidence:export'),
     recheckProfiles: (platform='ALL',country='ALL'):Promise<ComplianceBatchRecheckResult> => ipcRenderer.invoke('compliance:profiles:recheck',platform,country)
   },
+  member: {
+    announce: (label: string): Promise<boolean> => ipcRenderer.invoke('member:announce', label)
+  },
   warehouses: {
     list: (): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:list'),
     listDelisted: (): Promise<SupplyWarehouseProduct[]> => ipcRenderer.invoke('warehouse:list-delisted'),

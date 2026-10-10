@@ -1251,6 +1251,8 @@ export interface CollectedSupplyProduct {
   sellableInventory?: number | null
   gigaIndex?: number | null
   gigaIndexText?: string
+  collectedAt?: string
+  collectedBy?: string
   promotionText?: string
   supplierName: string
   supplierBadges: string[]
@@ -1302,6 +1304,8 @@ export interface CollectorPluginProduct {
   supplierName: string
   gigaIndex?: number | null
   gigaIndexText?: string
+  collectedAt?: string
+  collectedBy?: string
   storeReturnRate?: string
   capturedFrom: 'DETAIL' | 'LIST'
   sourceCategory?: SupplySourceCategory
@@ -1745,6 +1749,8 @@ export interface SelectionCatalogItem {
   landedCostCny?: number
   estimatedProfitCny?: number
   estimatedMargin?: number
+  collectedAt?: string
+  collectedBy?: string
   updatedAt: string
 }
 
@@ -1767,6 +1773,8 @@ export interface SupplyWarehouseProduct {
   region: string
   delistedReason: string
   delistedAt: string | null
+  collectedAt: string
+  collectedBy: string
   updatedAt: string
 }
 
@@ -1820,6 +1828,19 @@ export interface InboundSnapshot {
   sourceUrl: string
   tags: string[]
   collectedAt: string
+  // 抄送自正式入库时携带的货架要素（旧队列行可能缺失，渲染端占位兜底）
+  promotionText?: string
+  shippingFeeText?: string
+  sellableInventory?: number | null
+  salesText?: string
+  gigaIndex?: number | null
+  gigaIndexText?: string
+  score?: number
+  sourceCategory?: string
+  sourceSubcategory?: string
+  sourceTertiaryCategory?: string
+  // 货架要素回填规则版本：提升补修幂等标记，规则升级后旧回填行可再次补修
+  shelfElementsVersion?: number
 }
 
 /** 入库处理：待确认队列行（本地持久化，唯一闸口真源） */

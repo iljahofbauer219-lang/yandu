@@ -12,19 +12,11 @@ import { fetchErpCapabilities, fetchErpProducts, type ErpCapabilities } from './
 import { runWithSessionRetry } from '../serverApi'
 import { MOCK_CATEGORIES, MOCK_TERTIARY_CATALOG } from './warehouseCatalogData'
 
-const HUB_TABS = ['入库处理', '全部产品', '新品速递', '热销产品', '时节热品', '限时促销', '地区选品', '即将到货', '下架产品'] as const
+const HUB_TABS = ['入库处理', '全部产品', '地区货盘', '新品速递', '热销产品', '时节热品', '限时促销', '即将到货', '下架产品'] as const
 type HubTab = (typeof HUB_TABS)[number]
 
 // 已接入数据源的 Tab：入库处理 / 全部产品 / 新品速递 / 下架产品；其余 Tab 暂无数据源
 const DATA_READY_TABS: HubTab[] = ['入库处理', '全部产品', '新品速递', '下架产品']
-
-const SEGMENTS = [
-  { key: 'ALL', label: '全部商品' },
-  { key: 'WAREHOUSE', label: '正式入库' },
-  { key: 'KEYWORD', label: '关键词搜索' },
-  { key: 'PRODUCT_URL', label: '单链接采集' },
-  { key: 'CATEGORY_URL', label: '类目页采集' }
-] as const
 
 const INBOUND_FILTERS = [
   { key: 'PENDING', label: '待确认' },
@@ -33,19 +25,72 @@ const INBOUND_FILTERS = [
 ] as const
 type InboundFilter = (typeof INBOUND_FILTERS)[number]['key']
 
+type CatalogPath = { category: string; subcategory: string; tertiaryCategory: string }
+
+// 标题关键词兜底表：原始类目名匹配不上目录时使用（货源标题多为英文）
+const CATEGORY_KEYWORDS: { category: string; subcategory?: string; keywords: string[] }[] = [
+  { category: '汽车用品', subcategory: '电动车', keywords: ['electric tricycle', 'electric bike', 'e-bike', 'ebike', 'electric bicycle', 'scooter'] },
+  { category: '汽车用品', subcategory: '摩托车配附件', keywords: ['motorcycle', 'motorbike'] },
+  { category: '汽车用品', subcategory: '车灯', keywords: ['headlight', 'taillight', 'light bar'] },
+  { category: '汽车用品', subcategory: '汽车内饰用品', keywords: ['seat cover', 'car interior', 'floor mat'] },
+  { category: '汽摩及配件', subcategory: '电动车配件', keywords: ['hub motor', 'controller', 'battery pack'] },
+  { category: '五金、工具', subcategory: '电动工具', keywords: ['drill', 'grinder', 'power tool'] },
+  { category: '五金、工具', subcategory: '手动工具', keywords: ['wrench', 'screwdriver', 'pliers', 'tool set'] },
+  { category: '花园与户外', keywords: ['garden', 'outdoor', 'patio', 'camping', 'lawn'] },
+  { category: '办公、文化', keywords: ['office', 'stationery', 'notebook', 'pen'] },
+  { category: '居家日用品', keywords: ['kitchen', 'storage', 'household', 'cleaning'] },
+  { category: '家具', keywords: ['furniture', 'sofa', 'table', 'chair', 'bed', 'shelf', 'cabinet'] }
+]
+
+const nameHit = (a: string, b: string) => Boolean(a) && Boolean(b) && (a === b || a.includes(b) || b.includes(a))
+
+// 两级匹配：先按快照原始一/二/三级类目名对目录做包含匹配，再按标题关键词兜底；三级匹配不到只推荐到二级
+export function recommendCatalogPath(source: { title?: string; category?: string; subcategory?: string; tertiaryCategory?: string }): CatalogPath | null {
+  const cat = (source.category || '').trim()
+  const sub = (source.subcategory || '').trim()
+  const ter = (source.tertiaryCategory || '').trim()
+  const groupByName = MOCK_CATEGORIES.find(group => nameHit(group.name, cat))
+  if (groupByName) {
+    const subName = groupByName.children.find(child => nameHit(child, sub)) || groupByName.children.find(child => nameHit(child, ter)) || ''
+    const terName = subName ? (MOCK_TERTIARY_CATALOG[subName] || []).find(option => nameHit(option.name, ter))?.name || '' : ''
+    return { category: groupByName.name, subcategory: subName, tertiaryCategory: terName }
+  }
+  for (const group of MOCK_CATEGORIES) {
+    const subName = group.children.find(child => nameHit(child, sub) || child === cat)
+    if (subName) {
+      const terName = (MOCK_TERTIARY_CATALOG[subName] || []).find(option => nameHit(option.name, ter))?.name || ''
+      return { category: group.name, subcategory: subName, tertiaryCategory: terName }
+    }
+  }
+  if (ter) {
+    for (const [subName, options] of Object.entries(MOCK_TERTIARY_CATALOG)) {
+      const option = options.find(entry => nameHit(entry.name, ter))
+      const group = option ? MOCK_CATEGORIES.find(entry => entry.children.includes(subName)) : null
+      if (option && group) return { category: group.name, subcategory: subName, tertiaryCategory: option.name }
+    }
+  }
+  const title = (source.title || '').toLocaleLowerCase()
+  if (title) {
+    for (const entry of CATEGORY_KEYWORDS) {
+      if (entry.keywords.some(keyword => title.includes(keyword))) return { category: entry.category, subcategory: entry.subcategory || '', tertiaryCategory: '' }
+    }
+  }
+  return null
+}
+
 const DAY_MS = 86400000
 
-export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn }: {
+export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn, onOpenInboundSource }: {
   onOpenSource?: (item: PalletWarehouseItem) => void
   canEdit?: boolean
   onReturn?: (item: PalletWarehouseItem) => Promise<void> | void
+  onOpenInboundSource?: (item: InboundProcessingItem) => void
 }) {
   const catalogPanel = usePanelCollapse('pallet-catalog')
   const [hubTab, setHubTab] = useState<HubTab>('全部产品')
   const [selected, setSelected] = useState('ALL')
   const [expanded, setExpanded] = useState('')
   const [selectedSubcategory, setSelectedSubcategory] = useState('')
-  const [segment, setSegment] = useState<'ALL' | 'WAREHOUSE' | 'KEYWORD' | 'PRODUCT_URL' | 'CATEGORY_URL'>('ALL')
   const [query, setQuery] = useState('')
   const [batchId, setBatchId] = useState('ALL')
   const [status, setStatus] = useState('ALL')
@@ -63,6 +108,7 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn }:
   const [capsLoaded, setCapsLoaded] = useState(false)
   const [inboundTagDrafts, setInboundTagDrafts] = useState<Record<string, string>>({})
   const [inboundEdit, setInboundEdit] = useState<{ id: string; draft: InboundSnapshot } | null>(null)
+  const [activeInboundId, setActiveInboundId] = useState('')
 
   useEffect(() => {
     let alive = true
@@ -141,6 +187,25 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn }:
       .catch(reason => { setInboundOk(''); setInboundNotice(reason instanceof Error ? reason.message : '保存失败') })
   }
 
+  const activeInbound = inboundItems.find(item => item.id === activeInboundId) || null
+
+  const assignCatalog = (item: InboundProcessingItem, path: CatalogPath, okMessage: string, finish: boolean) => {
+    if (finish) { setActiveInboundId(''); setSelectedSubcategory('') }
+    patchSnapshot(item, { ...item.snapshot, ...path }, okMessage)
+  }
+
+  const catalogPathText = (path: CatalogPath) => [path.category, path.subcategory, path.tertiaryCategory].filter(Boolean).join(' / ')
+
+  // 归位模式下树的高亮跟随当前产品的快照类目，而非目录筛选选中项
+  const treeActiveClass = (name: string, parent: string, tertiary = false) => {
+    if (activeInbound) {
+      const snapshot = activeInbound.snapshot
+      if (tertiary) return snapshot.tertiaryCategory === name && snapshot.subcategory === parent ? 'active' : ''
+      return parent ? (snapshot.subcategory === name && snapshot.category === parent ? 'active' : '') : (snapshot.category === name ? 'active' : '')
+    }
+    return selected === name ? 'active' : ''
+  }
+
   const addInboundTag = (item: InboundProcessingItem) => {
     const value = (inboundTagDrafts[item.id] || '').trim()
     if (!value || item.snapshot.tags.includes(value)) return
@@ -182,12 +247,11 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn }:
       : items
     const normalized = query.trim().toLocaleLowerCase()
     return base.filter(item => {
-      if (segment !== 'ALL' && segment !== 'WAREHOUSE') return false
       if (selected !== 'ALL' && item.category !== selected && item.subcategory !== selected && item.tertiaryCategory !== selected) return false
       if (normalized && !`${item.title} ${item.itemCode}`.toLocaleLowerCase().includes(normalized)) return false
       return true
     })
-  }, [items, hubTab, selected, query, segment])
+  }, [items, hubTab, selected, query])
 
   const delistedVisible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase()
@@ -236,7 +300,7 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn }:
 
   return <>
     <div className="selection-module-nav warehouse-flow-nav">
-      {HUB_TABS.map(tab => <button key={tab} className={hubTab === tab ? 'active' : ''} onClick={() => { setHubTab(tab); setBatchMode(false); setCheckedKeys(new Set()) }}><span>{tab}</span></button>)}
+      {HUB_TABS.map(tab => <button key={tab} className={hubTab === tab ? 'active' : ''} onClick={() => { setHubTab(tab); setBatchMode(false); setCheckedKeys(new Set()); setActiveInboundId('') }}><span>{tab}</span></button>)}
     </div>
     <section className={`candidate-page${catalogPanel.collapsed?' side-collapsed':''}`}>
       {catalogPanel.collapsed?<PanelExpandRail panel={catalogPanel} label="产品目录库"/>:<aside className="catalog-panel collapsible-aside">
@@ -247,11 +311,22 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn }:
           {MOCK_CATEGORIES.map(group => {
             const open = expanded === group.name
             return <div className="catalog-group" key={group.name}>
-              <button className={selected === group.name ? 'active' : ''} onClick={() => { setSelected(group.name); setExpanded(open ? '' : group.name); setSelectedSubcategory(open ? '' : group.children[0] || '') }}>
+              <button className={treeActiveClass(group.name, '')} onClick={() => {
+                if (activeInbound) { setExpanded(group.name); assignCatalog(activeInbound, { category: group.name, subcategory: '', tertiaryCategory: '' }, '已选一级类目，请继续选择二级类目', false); return }
+                setSelected(group.name); setExpanded(open ? '' : group.name); setSelectedSubcategory(open ? '' : group.children[0] || '')
+              }}>
                 <i>{open ? '⌄' : '›'}</i><span>{group.name}</span><em>{countCategory(group.name)}</em>
               </button>
               {open && <div>
-                {group.children.map(child => <button key={child} className={selected === child ? 'active' : ''} onClick={() => { setSelected(child); setSelectedSubcategory(child) }}>
+                {group.children.map(child => <button key={child} className={treeActiveClass(child, group.name)} onClick={() => {
+                  if (activeInbound) {
+                    const hasTertiary = (MOCK_TERTIARY_CATALOG[child] || []).length > 0
+                    setSelectedSubcategory(child)
+                    assignCatalog(activeInbound, { category: group.name, subcategory: child, tertiaryCategory: '' }, hasTertiary ? '已选二级类目，请继续选择三级类目' : `类目已归位：${group.name} / ${child}`, !hasTertiary)
+                    return
+                  }
+                  setSelected(child); setSelectedSubcategory(child)
+                }}>
                   <span>{child}</span><em>{countSubcategory(group.name, child)}</em>
                 </button>)}
               </div>}
@@ -261,16 +336,21 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn }:
         {selectedSubcategory && tertiaryOptions.length > 0 && <div className="tertiary-flyout">
           <div><small>LEVEL 3 CATEGORY</small><b>{selectedSubcategory}</b><button onClick={() => setSelectedSubcategory('')}>×</button></div>
           <div className="tertiary-icon-grid">
-            {tertiaryOptions.map(option => <button key={option.name} className={selected === option.name ? 'active' : ''} onClick={() => { setSelected(option.name); setSelectedSubcategory('') }}>
+            {tertiaryOptions.map(option => <button key={option.name} className={treeActiveClass(option.name, selectedSubcategory, true)} onClick={() => {
+              if (activeInbound) { assignCatalog(activeInbound, { category: activeInbound.snapshot.category, subcategory: activeInbound.snapshot.subcategory, tertiaryCategory: option.name }, `类目已归位：${activeInbound.snapshot.category} / ${activeInbound.snapshot.subcategory} / ${option.name}`, true); return }
+              setSelected(option.name); setSelectedSubcategory('')
+            }}>
               <i>{option.icon.endsWith('.png') ? <img src={option.icon} alt={option.name}/> : option.icon}</i><span>{option.name}</span><em>{option.count}</em>
             </button>)}
           </div>
         </div>}
       </aside>}
       <div className="candidate-catalog-main">
-        <div className="warehouse-page-heading"><div><small>货盘仓库</small><div className="pallet-heading-title-row"><b>{hubTab === '入库处理' ? '入库处理 · 待确认队列' : hubTab === '下架产品' ? '下架产品 · 可恢复' : '全部货源 · 已存放'}</b><em>{hubTab === '入库处理' ? inboundVisible.length : hubTab === '下架产品' ? delistedVisible.length : visible.length}</em></div></div><div className="pallet-heading-switch"><div className="candidate-view-switch">
-          {SEGMENTS.map(item => <button key={item.key} className={segment === item.key ? 'active' : ''} onClick={() => setSegment(item.key)}>{item.label}</button>)}
-        </div></div></div>
+        <div className="warehouse-page-heading"><div><small>货盘仓库</small><div className="pallet-heading-title-row"><b>{hubTab === '入库处理' ? '入库处理 · 待确认队列' : hubTab === '下架产品' ? '下架产品 · 可恢复' : '全部货源 · 已存放'}</b><em>{hubTab === '入库处理' ? inboundVisible.length : hubTab === '下架产品' ? delistedVisible.length : visible.length}</em></div></div>{hubTab === '入库处理' && <div className="pallet-heading-switch"><div className="candidate-view-switch inbound-status-filter">
+          {INBOUND_FILTERS.map(filter => <button key={filter.key} className={inboundFilter === filter.key ? 'active' : ''} onClick={() => setInboundFilter(filter.key)}>
+            {filter.label} <em>{inboundItems.filter(item => item.status === filter.key).length}</em>
+          </button>)}
+        </div></div>}</div>
         <div className="candidate-filterbar">
           <input value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索商品标题、商品ID或供应商"/>
           <select value={batchId} onChange={event => setBatchId(event.target.value)}>
@@ -288,11 +368,6 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn }:
           <label><input type="checkbox" checked={visible.length > 0 && visible.every(item => checkedKeys.has(item.id))} onChange={event => setCheckedKeys(event.target.checked ? new Set(visible.map(item => item.id)) : new Set())}/>全选当前结果</label>
           <span>已选 <b>{checkedKeys.size}</b> 个</span>
           {canEdit && <button className="danger" disabled={!checkedKeys.size} onClick={() => removeItems([...checkedKeys])}>删除已选</button>}
-        </div>}
-        {hubTab === '入库处理' && <div className="candidate-view-switch inbound-status-filter">
-          {INBOUND_FILTERS.map(filter => <button key={filter.key} className={inboundFilter === filter.key ? 'active' : ''} onClick={() => setInboundFilter(filter.key)}>
-            {filter.label} <em>{inboundItems.filter(item => item.status === filter.key).length}</em>
-          </button>)}
         </div>}
         <div className="candidate-zone-summary">
           {hubTab === '入库处理' ? <>
@@ -313,9 +388,6 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn }:
         {inboundOk ? <div className="erp-banner erp-banner-ok">{inboundOk}</div> : null}
         {inboundNotice ? <div className="erp-banner erp-banner-error">{inboundNotice}</div> : null}
         {notice ? <div className="erp-banner erp-banner-error">{notice}</div> : null}
-        {(hubTab === '全部产品' || hubTab === '新品速递') && segment !== 'ALL' && segment !== 'WAREHOUSE' ? (
-          <div className="erp-banner erp-banner-info">采集方式「{SEGMENTS.find(item => item.key === segment)?.label ?? segment}」尚未接入数据源，列表已过滤为空；当前商品均来自入库处理确认。</div>
-        ) : null}
         {hubTab === '入库处理' ? (
           caps !== null && !caps.canEdit ? (
             <div className="empty-state"><span>◎</span><h2>无入库处理权限</h2><p>当前账号缺少 ERP 仓库编辑权限（erp.warehouse.edit），无法同步采集池与确认入库，请联系管理员开通。</p></div>
@@ -324,10 +396,18 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn }:
             {inboundVisible.map(item => {
               const snapshot = item.snapshot
               const edit = inboundEdit?.id === item.id ? inboundEdit.draft : null
+              const assignedInCatalog = MOCK_CATEGORIES.some(group => group.name === snapshot.category)
+              const rec = assignedInCatalog ? null : recommendCatalogPath(snapshot)
+              const scoreValue = snapshot.gigaIndex ?? snapshot.score ?? null
+              const scoreGrade = scoreValue === null ? null : Math.round(scoreValue) >= 80 ? 'A' : Math.round(scoreValue) >= 65 ? 'B' : 'C'
+              const inventoryText = snapshot.sellableInventory !== null && snapshot.sellableInventory !== undefined ? snapshot.sellableInventory.toLocaleString('zh-CN') : snapshot.salesText?.replace(/^(?:Available\s*Stock|可售库存|库存)\s*[:：]?\s*/i, '') || '待补采'
+              const sourceCatalogText = snapshot.sourceCategory ? `${snapshot.sourceCategory} / ${snapshot.sourceSubcategory || '—'} / ${snapshot.sourceTertiaryCategory || '—'}` : '类目待核实'
               return (
-              <article className="product-card candidate-product-card supply-source-card" key={item.id}>
+              <article className={`product-card candidate-product-card supply-source-card${activeInboundId === item.id ? ' inbound-card-active' : ''}`} key={item.id} onClick={event => { if ((event.target as HTMLElement).closest('button, input, select, textarea, a')) return; setActiveInboundId(activeInboundId === item.id ? '' : item.id) }}>
                 <button type="button" className="product-image" aria-label={`查看商品图片：${snapshot.title}`}>
                   {snapshot.imageUrl ? <img src={snapshot.imageUrl} alt={snapshot.title}/> : <span>无图</span>}
+                  {snapshot.promotionText ? <span className="candidate-promotion">{snapshot.promotionText}</span> : null}
+                  <span className={`score-badge${scoreValue === null ? ' pending' : ''}`} title={scoreValue === null ? 'GIGA Index 未采集，待重读补采' : `评分依据：GIGA Index ${snapshot.gigaIndex}`}>{scoreValue === null ? '待评分' : `${Math.round(scoreValue)}分 · ${scoreGrade}级`}</span>
                 </button>
                 <div className="product-info supply-source-info">
                   <small>
@@ -339,10 +419,27 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn }:
                   <strong>{snapshot.priceText || '价格待核验'}</strong>
                   <dl className="candidate-source-facts">
                     <div><dt>目标仓/货位</dt><dd title={`${snapshot.category} / ${snapshot.subcategory} / ${snapshot.tertiaryCategory}`}>{snapshot.warehouseCode} / {snapshot.category || '—'} / {snapshot.subcategory || '—'} / {snapshot.tertiaryCategory || '—'}</dd></div>
+                    <div><dt>物流费</dt><dd>{snapshot.shippingFeeText || '待补采'}</dd></div>
+                    <div><dt>可售库存</dt><dd>{inventoryText}</dd></div>
+                    <div><dt>原始类目</dt><dd title={sourceCatalogText}>{sourceCatalogText}</dd></div>
+                    <div><dt>GIGA Index</dt><dd>{snapshot.gigaIndexText ?? snapshot.gigaIndex ?? '待补采'}</dd></div>
                     <div><dt>采集时间</dt><dd>{(snapshot.collectedAt || '').slice(0, 10) || '—'}</dd></div>
                     {item.status === 'REJECTED' && <div><dt>驳回时间</dt><dd>{(item.updatedAt || '').slice(0, 10)}</dd></div>}
                     {item.status === 'CONFIRMED' && <div><dt>确认时间</dt><dd>{(item.confirmedAt || '').slice(0, 10)}</dd></div>}
                   </dl>
+                  <div className="inbound-category-row">
+                    {assignedInCatalog ? (
+                      <span className="path">已选：{catalogPathText({ category: snapshot.category, subcategory: snapshot.subcategory, tertiaryCategory: snapshot.tertiaryCategory })}</span>
+                    ) : rec ? (
+                      <>
+                        <span className="path recommend">推荐：{catalogPathText(rec)}</span>
+                        <button type="button" onClick={() => assignCatalog(item, rec, `已采纳推荐类目：${catalogPathText(rec)}`, false)}>采纳推荐</button>
+                      </>
+                    ) : (
+                      <span className="path empty">未匹配到推荐类目，请手动选择</span>
+                    )}
+                    {activeInboundId === item.id ? <span className="hint">请在左侧目录树点选类目</span> : null}
+                  </div>
                   {edit ? (
                     <div className="inbound-edit-form">
                       <label>标题<input value={edit.title} onChange={event => setInboundEdit({ id: item.id, draft: { ...edit, title: event.target.value } })}/></label>
@@ -371,6 +468,7 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn }:
                       <button className="candidate-delete" onClick={() => rejectInbound(item.id)}>驳回</button>
                     </>}
                     {item.status === 'REJECTED' && <button onClick={() => setInboundEdit({ id: item.id, draft: { ...snapshot } })}>重新编辑</button>}
+                    {snapshot.sourceUrl ? <button onClick={() => onOpenInboundSource?.(item)}>查看页面</button> : null}
                   </div>
                 </div>
               </article>
@@ -395,7 +493,7 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn }:
               </div>
             </article>)}
           </div>
-        ) : hubTab === '地区选品' ? (
+        ) : hubTab === '地区货盘' ? (
           regionGroups.length === 0 ? <div className="empty-state"><span>◎</span><h2>暂无地区货盘</h2><p>在正式入库为商品选择地区货盘（如美国货盘）并抄送后，会在此按国家货盘分组展示。</p></div> : <>
             <div className="candidate-view-switch inbound-status-filter">{regionGroups.map(region => <button key={region} className={activeRegion === region ? 'active' : ''} onClick={() => setSelectedRegion(region)}>{region} <em>{inboundItems.filter(entry => entry.region === region).length}</em></button>)}</div>
             <div className="product-grid">{inboundItems.filter(entry => entry.region === activeRegion).map(item => <article className="product-card candidate-product-card supply-source-card" key={item.id}><div className="product-info supply-source-info"><small><span className="inbound-origin-badge origin-region">{item.region}</span>{item.snapshot.platformCode === 'GIGACLOUD' ? '大健云仓' : item.snapshot.platformCode} · {INBOUND_FILTERS.find(filter => filter.key === item.status)?.label}</small><b title={item.snapshot.title}>{item.snapshot.title}</b><strong>{item.snapshot.priceText || '价格待核验'}</strong></div></article>)}</div>

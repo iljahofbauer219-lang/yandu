@@ -173,7 +173,7 @@ const ownerProfile = {
     await page.locator('.warehouse-product-grid article', { hasText: FIXTURE_TITLE }).getByRole('button', { name: '抄送货盘', exact: true }).click()
     await page.waitForFunction(async () => (await window.desktop.inbound.list()).some(entry => entry.origin === 'WAREHOUSE'), null, { timeout: 15000 })
 
-    // 货盘仓库入库处理：抄送行带来源与地区徽标；地区选品分组可见
+    // 货盘仓库入库处理：抄送行带来源与地区徽标；地区货盘分组可见
     await page.locator('.sidebar').getByRole('button', { name: '货盘仓库', exact: true }).click()
     await page.waitForTimeout(800)
     await page.locator('.selection-module-nav.warehouse-flow-nav').getByRole('button', { name: '入库处理', exact: true }).click()
@@ -182,9 +182,9 @@ const ownerProfile = {
     assert('抄送生成入库处理待确认卡', await inboundCard.count() === 1)
     assert('入库处理来源徽标为正式入库抄送', (await inboundCard.innerText()).includes('正式入库抄送'))
     assert('入库处理卡展示美国货盘徽标', (await inboundCard.innerText()).includes('美国货盘'))
-    await page.locator('.selection-module-nav.warehouse-flow-nav').getByRole('button', { name: '地区选品', exact: true }).click()
+    await page.locator('.selection-module-nav.warehouse-flow-nav').getByRole('button', { name: '地区货盘', exact: true }).click()
     await page.waitForTimeout(600)
-    assert('地区选品展示美国货盘分组', (await page.locator('.candidate-catalog-main').innerText()).includes('美国货盘'))
+    assert('地区货盘展示美国货盘分组', (await page.locator('.candidate-catalog-main').innerText()).includes('美国货盘'))
     await page.locator('.selection-module-nav.warehouse-flow-nav').getByRole('button', { name: '入库处理', exact: true }).click()
     await page.waitForTimeout(600)
     await page.locator('.product-card', { hasText: FIXTURE_TITLE }).getByRole('button', { name: '确认入库', exact: true }).click()

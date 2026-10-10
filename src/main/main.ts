@@ -2613,6 +2613,10 @@ ipcMain.handle('comparison:update', (_event, request: ComparisonUpdateRequest) =
 ipcMain.handle('comparison:promote', (_event, request: ComparisonPromotionRequest) => database?.promoteComparisonToWarehouse(request))
 ipcMain.handle('workflow:counts', () => database?.getWorkflowCounts() ?? { collected: 0, compared: 0, selected: 0, stocked: 0, listed: 0, purchasing: 0, reconciled: 0 })
 ipcMain.handle('warehouse:list', () => database?.getSupplyWarehouseProducts() ?? [])
+ipcMain.handle('member:announce', (_event, label: unknown) => {
+  database?.announceCollector(typeof label === 'string' ? label : '')
+  return true
+})
 ipcMain.handle('warehouse:list-delisted', () => database?.listDelistedWarehouseProducts() ?? [])
 ipcMain.handle('warehouse:delist', async (_event, id: string, reason: string, accessToken: string) => {
   if (!database) throw new Error('数据库尚未初始化')

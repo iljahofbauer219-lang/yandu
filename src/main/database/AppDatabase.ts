@@ -4,6 +4,7 @@ import path from 'node:path'
 import type { CandidateCollectionRecord, CandidateCollectionRun, CandidateUpdateRequest, CandidateWorkspace, CollectedOzonProduct, CollectedSupplyProduct, CollectorDuplicateProduct, CollectorDuplicateStage, CollectorPluginImportResult, ComparisonCostSettings, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonRecordView, ComparisonSupplierMatch, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceAuditEvent, ComplianceBatchRecheckResult, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementAction, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceFinding, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReleasePermit, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceRuleVersion, ComplianceSource, ComplianceSourceChange, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, EbayAcceptanceBatch, EbayCategoryChange, EbayCategorySyncSummary, EbayCategoryWorkspace, EbayCollectedProduct, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayDirectoryProductScanCategory, EbayDirectoryProductSyncCheckpoint, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductSnapshot, EbayLocalProductSnapshotInput, EbayMarketResearchDecisionRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayProductDetails, EbayProductSyncChange, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayStore, EbayStoreCategory, EbayTitleDecision, EbayTitleDecisionInput, EbayTitleHandoff, EliminatedOrigin, EliminatedProductRecord, EliminatedRecordStatus, EliminateRequest, InboundErpIntakeInput, InboundOrigin, InboundProcessingItem, InboundSnapshot, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, SelectionCatalogItem, SelectionDecision, SelectionImportRequest, SelectionTask, SupplyProductDownload, SupplyWarehouseCode, SupplyWarehouseProduct } from '../../shared/contracts'
 import { complianceCheckFingerprint } from '../../shared/complianceFingerprint'
 import { mergeCandidateFacts } from '../../shared/candidateFactsMerge'
+import { badgeFallbackScore } from '../../shared/badgeScore'
 
 function isUsableCandidateImage(value: string) {
   return /^https?:\/\//i.test(value) && !/(?:product_base|placeholder|default[-_]?image|loading|lazyload|blank|transparent|no[-_]?image)/i.test(value)
@@ -54,6 +55,14 @@ export interface PersistedWorkspace {
   task: SelectionTask
   products: CollectedOzonProduct[]
   supplyProducts: CollectedSupplyProduct[]
+}
+
+/** 候选回联 payload 取值：非数字归 null、空串归 undefined，供快照货架要素映射与启动补修共用 */
+function optNumber(value: unknown): number | null {
+  return typeof value === 'number' ? value : null
+}
+function optString(value: unknown): string | undefined {
+  return typeof value === 'string' && value ? value : undefined
 }
 
 export class AppDatabase {
@@ -1315,6 +1324,8 @@ export class AppDatabase {
     ensureColumn('supply_product_downloads', 'page_id', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_product_downloads', 'page_url', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_warehouse_products', 'region', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('supply_warehouse_products', 'collected_at', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('supply_warehouse_products', 'collected_by', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('inbound_processing_items', 'region', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_candidates', 'added_at', 'TEXT')
     this.database.exec(`UPDATE supply_candidates SET added_at = (SELECT created_at FROM selection_tasks WHERE id = task_id) WHERE added_at IS NULL AND task_id IN (SELECT id FROM selection_tasks)`)
@@ -1348,6 +1359,7 @@ export class AppDatabase {
     this.repairPlaceholderCandidateImages()
     this.migratePendingReviewToActive()
     this.repairStrandedPreferredReturns()
+    this.repairInboundShelfElements()
     this.getSelectionCatalog()
       .filter(item => item.decision === 'APPROVED' && (item.sourceArea === 'SUPPLY' || Boolean(item.supplierUrl)))
       .forEach(item => {
@@ -2338,6 +2350,7 @@ export class AppDatabase {
   saveSupplyProducts(taskId: string, products: CollectedSupplyProduct[]) {
     const task = this.getTask(taskId)
     if (!task) throw new Error('保存供应链候选失败：任务不存在')
+    products = products.map(product => this.withCollectorStamp(product))
     const remove = this.database.prepare('DELETE FROM supply_candidates WHERE task_id = ?')
     const insert = this.database.prepare(`INSERT INTO supply_candidates (task_id, url, payload, score, selected, sort_order, added_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
     const removeEvaluations = this.database.prepare('DELETE FROM product_evaluations WHERE task_id = ?')
@@ -2378,6 +2391,7 @@ export class AppDatabase {
   }
 
   importPluginSupplyCandidates(task: SelectionTask, products: CollectedSupplyProduct[]): CollectorPluginImportResult {
+    products = products.map(product => this.withCollectorStamp(product))
     if (!products.length) return { imported:0, updated:0, total:0, blocked:0, duplicates:[] }
     const duplicates:CollectorDuplicateProduct[] = []
     const accepted:CollectedSupplyProduct[] = []
@@ -2523,9 +2537,24 @@ export class AppDatabase {
     const row = this.database.prepare(`SELECT payload FROM supply_candidates WHERE url = ? AND COALESCE(json_extract(payload, '$.platformCode'), '1688') = ?`).get(url, platformCode) as { payload: string } | undefined
     if (!row) throw new Error('候选商品已不存在，请刷新后重试')
     const payload = JSON.parse(row.payload) as Record<string, unknown>
-    const merged = mergeCandidateFacts(payload, patch)
+    const merged = { ...mergeCandidateFacts(payload, patch), ...this.collectorStamp() }
     this.database.prepare(`UPDATE supply_candidates SET payload = ? WHERE url = ? AND COALESCE(json_extract(payload, '$.platformCode'), '1688') = ?`).run(JSON.stringify(merged), url, platformCode)
     return merged
+  }
+
+  /** 采集人由渲染端登录成员经 member:announce 上报；未登录记『未知』 */
+  private collectorLabel = ''
+
+  announceCollector(label: string): void {
+    this.collectorLabel = label.trim().slice(0, 60)
+  }
+
+  private collectorStamp(): { collectedAt: string; collectedBy: string } {
+    return { collectedAt: new Date().toISOString(), collectedBy: this.collectorLabel || '未知' }
+  }
+
+  private withCollectorStamp(product: CollectedSupplyProduct): CollectedSupplyProduct {
+    return { ...product, ...this.collectorStamp() }
   }
 
   purgeCandidates(request: CandidateUpdateRequest): CandidateWorkspace {
@@ -2676,7 +2705,7 @@ export class AppDatabase {
         productId: payload.productId || '', platformCode: payload.platformCode || 'OZON', title: payload.title || '未命名商品', imageUrl: payload.imageUrl || '',
         priceText: payload.priceText || '', score: Number(payload.score || 0), category: payload.category || '未分类', subcategory: payload.subcategory || '未分类', tertiaryCategory:payload.tertiaryCategory || '待细分',
         decision: row.decision as SelectionDecision, reason: String(row.reason || payload.reason || ''), recommendation: payload.recommendation || '',
-        riskFlags: Array.isArray(payload.riskFlags) ? payload.riskFlags : [], updatedAt: String(row.updated_at)
+        riskFlags: Array.isArray(payload.riskFlags) ? payload.riskFlags : [], collectedAt: String(payload.collectedAt || ''), collectedBy: String(payload.collectedBy || ''), updatedAt: String(row.updated_at)
       }
     })
   }
@@ -2700,7 +2729,7 @@ export class AppDatabase {
       category: request.category, subcategory: request.subcategory, tertiaryCategory:request.tertiaryCategory || '待细分', decision: existing?.decision || 'PENDING',
       reason: supply?.recommendation || '已进入选品库，待结合利润和风险完成决策。', recommendation: supply?.recommendation || '待完成供应链比价',
       riskFlags: supply?.riskFlags || [], comparisonId:request.comparison?.id, supplierUrl:request.comparison?.suppliers.find(item=>item.binding==='PRIMARY')?.url,
-      landedCostCny:request.comparison?.landedCostCny, estimatedProfitCny:request.comparison?.estimatedProfitCny, estimatedMargin:request.comparison?.estimatedMargin, updatedAt: now
+      landedCostCny:request.comparison?.landedCostCny, estimatedProfitCny:request.comparison?.estimatedProfitCny, estimatedMargin:request.comparison?.estimatedMargin, collectedAt: (product as { collectedAt?: string }).collectedAt || '', collectedBy: (product as { collectedBy?: string }).collectedBy || '', updatedAt: now
     }
     this.database.prepare(`INSERT INTO selection_records (id, task_id, ozon_url, comparison_id, decision, reason, payload, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET task_id=excluded.task_id, comparison_id=excluded.comparison_id, decision=selection_records.decision, reason=excluded.reason, payload=excluded.payload, updated_at=excluded.updated_at`)
       .run(id, taskId, sourceUrl, request.comparison?.id || null, item.decision, item.reason, JSON.stringify(item), now)
@@ -2906,12 +2935,12 @@ export class AppDatabase {
       id: existing?.id || crypto.randomUUID(), warehouseCode, selectionId:item.id, sourceUrl,
       productId:sourceProduct.productId || item.productId, title:sourceProduct.title || item.title, imageUrl:sourceProduct.imageUrl || item.imageUrl, priceText:sourceProduct.priceText || item.priceText,
       supplierName:sourceProduct.supplierName || '', category:item.category, subcategory:item.subcategory,
-      tertiaryCategory:item.tertiaryCategory || '待细分', status:'ACTIVE', delistedReason:'', delistedAt:null, region:'', updatedAt:now
+      tertiaryCategory:item.tertiaryCategory || '待细分', status:'ACTIVE', delistedReason:'', delistedAt:null, region:'', collectedAt:sourceProduct.collectedAt || '', collectedBy:sourceProduct.collectedBy || '', updatedAt:now
     }
-    this.database.prepare(`INSERT INTO supply_warehouse_products (id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, payload, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?)
-      ON CONFLICT(warehouse_code, source_url) DO UPDATE SET selection_id=excluded.selection_id, product_id=excluded.product_id, title=excluded.title, image_url=excluded.image_url, price_text=excluded.price_text, supplier_name=excluded.supplier_name, category=excluded.category, subcategory=excluded.subcategory, tertiary_category=excluded.tertiary_category, status='ACTIVE', delisted_reason='', delisted_at=NULL, payload=excluded.payload, updated_at=excluded.updated_at`)
-      .run(product.id,warehouseCode,item.id,sourceUrl,product.productId,product.title,product.imageUrl,product.priceText,product.supplierName,item.category,item.subcategory,product.tertiaryCategory,JSON.stringify(product),now,now)
+    this.database.prepare(`INSERT INTO supply_warehouse_products (id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, payload, created_at, updated_at, collected_at, collected_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?, ?)
+      ON CONFLICT(warehouse_code, source_url) DO UPDATE SET selection_id=excluded.selection_id, product_id=excluded.product_id, title=excluded.title, image_url=excluded.image_url, price_text=excluded.price_text, supplier_name=excluded.supplier_name, category=excluded.category, subcategory=excluded.subcategory, tertiary_category=excluded.tertiary_category, status='ACTIVE', delisted_reason='', delisted_at=NULL, payload=excluded.payload, updated_at=excluded.updated_at, collected_at=excluded.collected_at, collected_by=excluded.collected_by`)
+      .run(product.id,warehouseCode,item.id,sourceUrl,product.productId,product.title,product.imageUrl,product.priceText,product.supplierName,item.category,item.subcategory,product.tertiaryCategory,JSON.stringify(product),now,now,product.collectedAt,product.collectedBy)
     this.registerProductIntake(warehouseCode,product.productId,sourceUrl,product.title,'WAREHOUSE',now)
     return product
   }
@@ -2921,12 +2950,12 @@ export class AppDatabase {
       id:String(row.id), warehouseCode:row.warehouse_code as SupplyWarehouseProduct['warehouseCode'], selectionId:String(row.selection_id), sourceUrl:String(row.source_url),
       productId:String(row.product_id), title:String(row.title), imageUrl:String(row.image_url), priceText:String(row.price_text), supplierName:String(row.supplier_name),
       category:String(row.category), subcategory:String(row.subcategory), tertiaryCategory:String(row.tertiary_category), status:row.status as SupplyWarehouseProduct['status'],
-      delistedReason:String(row.delisted_reason || ''), delistedAt:row.delisted_at ? String(row.delisted_at) : null, region:String(row.region || ''), updatedAt:String(row.updated_at)
+      delistedReason:String(row.delisted_reason || ''), delistedAt:row.delisted_at ? String(row.delisted_at) : null, region:String(row.region || ''), collectedAt:String(row.collected_at || ''), collectedBy:String(row.collected_by || ''), updatedAt:String(row.updated_at)
     }
   }
 
   getSupplyWarehouseProducts(): SupplyWarehouseProduct[] {
-    const rows = this.database.prepare(`SELECT id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, delisted_reason, delisted_at, region, updated_at FROM supply_warehouse_products WHERE status = 'ACTIVE' ORDER BY updated_at DESC`).all() as unknown as Array<Record<string,unknown>>
+    const rows = this.database.prepare(`SELECT id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, delisted_reason, delisted_at, region, collected_at, collected_by, updated_at FROM supply_warehouse_products WHERE status = 'ACTIVE' ORDER BY updated_at DESC`).all() as unknown as Array<Record<string,unknown>>
     return rows.map(row => this.mapSupplyWarehouseRow(row))
   }
 
@@ -2935,12 +2964,12 @@ export class AppDatabase {
   }
 
   getDownloadableSupplyWarehouseProductById(id: string): SupplyWarehouseProduct | undefined {
-    const row = this.database.prepare(`SELECT id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, delisted_reason, delisted_at, region, updated_at FROM supply_warehouse_products WHERE id = ? AND status IN ('ACTIVE', 'DELISTED')`).get(id) as Record<string, unknown> | undefined
+    const row = this.database.prepare(`SELECT id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, delisted_reason, delisted_at, region, collected_at, collected_by, updated_at FROM supply_warehouse_products WHERE id = ? AND status IN ('ACTIVE', 'DELISTED')`).get(id) as Record<string, unknown> | undefined
     return row ? this.mapSupplyWarehouseRow(row) : undefined
   }
 
   listDelistedWarehouseProducts(): SupplyWarehouseProduct[] {
-    const rows = this.database.prepare(`SELECT id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, delisted_reason, delisted_at, region, updated_at FROM supply_warehouse_products WHERE status = 'DELISTED' ORDER BY updated_at DESC`).all() as unknown as Array<Record<string,unknown>>
+    const rows = this.database.prepare(`SELECT id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, delisted_reason, delisted_at, region, collected_at, collected_by, updated_at FROM supply_warehouse_products WHERE status = 'DELISTED' ORDER BY updated_at DESC`).all() as unknown as Array<Record<string,unknown>>
     return rows.map(row => this.mapSupplyWarehouseRow(row))
   }
 
@@ -3013,12 +3042,12 @@ export class AppDatabase {
       id: existing?.id || crypto.randomUUID(), warehouseCode, selectionId: item.id, sourceUrl,
       productId: item.productId, title: item.title, imageUrl: item.imageUrl, priceText: item.priceText,
       supplierName: '', category: item.category, subcategory: item.subcategory, tertiaryCategory: item.tertiaryCategory,
-      status: 'ACTIVE', delistedReason: '', delistedAt: null, region: '', updatedAt: now
+      status: 'ACTIVE', delistedReason: '', delistedAt: null, region: '', collectedAt: item.collectedAt || '', collectedBy: item.collectedBy || '', updatedAt: now
     }
-    this.database.prepare(`INSERT INTO supply_warehouse_products (id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, payload, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, 'ACTIVE', ?, ?, ?)
-      ON CONFLICT(warehouse_code, source_url) DO UPDATE SET selection_id=excluded.selection_id, product_id=excluded.product_id, title=excluded.title, image_url=excluded.image_url, price_text=excluded.price_text, category=excluded.category, subcategory=excluded.subcategory, tertiary_category=excluded.tertiary_category, status='ACTIVE', delisted_reason='', delisted_at=NULL, payload=excluded.payload, updated_at=excluded.updated_at`)
-      .run(product.id, warehouseCode, item.id, sourceUrl, product.productId, product.title, product.imageUrl, product.priceText, product.category, product.subcategory, product.tertiaryCategory, JSON.stringify(product), now, now)
+    this.database.prepare(`INSERT INTO supply_warehouse_products (id, warehouse_code, selection_id, source_url, product_id, title, image_url, price_text, supplier_name, category, subcategory, tertiary_category, status, payload, created_at, updated_at, collected_at, collected_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, 'ACTIVE', ?, ?, ?, ?, ?)
+      ON CONFLICT(warehouse_code, source_url) DO UPDATE SET selection_id=excluded.selection_id, product_id=excluded.product_id, title=excluded.title, image_url=excluded.image_url, price_text=excluded.price_text, category=excluded.category, subcategory=excluded.subcategory, tertiary_category=excluded.tertiary_category, status='ACTIVE', delisted_reason='', delisted_at=NULL, payload=excluded.payload, updated_at=excluded.updated_at, collected_at=excluded.collected_at, collected_by=excluded.collected_by`)
+      .run(product.id, warehouseCode, item.id, sourceUrl, product.productId, product.title, product.imageUrl, product.priceText, product.category, product.subcategory, product.tertiaryCategory, JSON.stringify(product), now, now, product.collectedAt, product.collectedBy)
     return product
   }
 
@@ -3027,7 +3056,7 @@ export class AppDatabase {
     this.database.prepare(`UPDATE supply_warehouse_products SET status = 'ACTIVE', delisted_reason = '', delisted_at = NULL, updated_at = ? WHERE status = 'PENDING_REVIEW'`).run(new Date().toISOString())
   }
 
-  /** 地区货盘归属：写产品地区标识（如「美国货盘」），供入库处理徽标与地区选品使用 */
+  /** 地区货盘归属：写产品地区标识（如「美国货盘」），供入库处理徽标与地区货盘使用 */
   setSupplyRegion(id: string, region: string): SupplyWarehouseProduct[] {
     const normalized = region.trim()
     if (!normalized) throw new Error('地区货盘不能为空')
@@ -3051,10 +3080,38 @@ export class AppDatabase {
       platformCode: product.warehouseCode, warehouseCode: product.warehouseCode, itemCode: product.productId,
       title: product.title, imageUrl: product.imageUrl, priceText: product.priceText,
       category: product.category, subcategory: product.subcategory, tertiaryCategory: product.tertiaryCategory,
-      sourceUrl: product.sourceUrl, tags: [], collectedAt: now
+      sourceUrl: product.sourceUrl, tags: [], collectedAt: now,
+      ...this.shelfElements(product.sourceUrl, product.selectionId, { category: product.category, subcategory: product.subcategory, tertiaryCategory: product.tertiaryCategory })
     }
     this.upsertInboundRow({ origin: 'WAREHOUSE', sourceId: `warehouse:${id}`, selectionId: product.selectionId, warehouseProductId: id, region: product.region, snapshot, now, resetConfirmed: true })
     return this.listInbound()
+  }
+
+  /** 货架要素映射：候选回联真值 + 选品得分回退（与正式入库卡徽章同口径），带规则版本标记 */
+  private shelfElements(sourceUrl: string, selectionId: string, warehouse: { category: string; subcategory: string; tertiaryCategory: string }): Partial<InboundSnapshot> {
+    const candidateRow = this.database.prepare(`SELECT payload FROM supply_candidates WHERE url = ? AND deleted_at IS NULL ORDER BY rowid DESC LIMIT 1`).get(sourceUrl) as { payload: string } | undefined
+    let candidate: Record<string, unknown> = {}
+    if (candidateRow) {
+      try { candidate = JSON.parse(candidateRow.payload) as Record<string, unknown> } catch { candidate = {} }
+    }
+    let selectionScore: number | undefined
+    if (selectionId) {
+      const selectionRow = this.database.prepare(`SELECT payload FROM selection_records WHERE id = ?`).get(selectionId) as { payload: string } | undefined
+      if (selectionRow) {
+        try { selectionScore = optNumber((JSON.parse(selectionRow.payload) as Record<string, unknown>).score) ?? undefined } catch { selectionScore = undefined }
+      }
+    }
+    return {
+      promotionText: optString(candidate.promotionText),
+      shippingFeeText: optString(candidate.shippingFeeText),
+      sellableInventory: candidate.sellableInventory === undefined ? null : optNumber(candidate.sellableInventory),
+      salesText: optString(candidate.salesText),
+      gigaIndex: candidate.gigaIndex === undefined ? null : optNumber(candidate.gigaIndex),
+      gigaIndexText: optString(candidate.gigaIndexText),
+      score: badgeFallbackScore(selectionScore, optNumber(candidate.score)),
+      sourceCategory: warehouse.category, sourceSubcategory: warehouse.subcategory, sourceTertiaryCategory: warehouse.tertiaryCategory,
+      shelfElementsVersion: 2
+    }
   }
 
   /** 删除产品：仅已下架商品可永久删除，同时清理下载档案 */
@@ -3134,6 +3191,21 @@ export class AppDatabase {
 
   /** 旧版打回优选只归档仓库行、未把选品记录改回待复核，商品因而在优选与正式入库双双消失；启动时补修。
    * 抄送货盘同样会留下 ARCHIVED 仓库行，但那类行带入库队列行且选品仍应是通过态，故排除。 */
+  /** 启动补修：存量抄送队列行按仓库行+候选回联回填快照货架要素（评分回退与正式入库卡同口径），
+   * 以 shelfElementsVersion 为幂等标记，规则升级后旧回填行会再次补修；仓库源行缺失跳过待下次启动重试。 */
+  private repairInboundShelfElements(): void {
+    const rows = this.database.prepare(`SELECT id, selection_id, snapshot_json, warehouse_product_id FROM inbound_processing_items WHERE warehouse_product_id IS NOT NULL`).all() as Array<{ id: string; selection_id: string; snapshot_json: string; warehouse_product_id: string }>
+    for (const row of rows) {
+      let snapshot: InboundSnapshot
+      try { snapshot = JSON.parse(row.snapshot_json) as InboundSnapshot } catch { continue }
+      if (snapshot.shelfElementsVersion === 2) continue
+      const warehouse = this.database.prepare(`SELECT category, subcategory, tertiary_category, source_url FROM supply_warehouse_products WHERE id = ?`).get(row.warehouse_product_id) as { category: string; subcategory: string; tertiary_category: string; source_url: string } | undefined
+      if (!warehouse) continue
+      const next: InboundSnapshot = { ...snapshot, ...this.shelfElements(warehouse.source_url, row.selection_id, { category: warehouse.category, subcategory: warehouse.subcategory, tertiaryCategory: warehouse.tertiary_category }) }
+      this.database.prepare(`UPDATE inbound_processing_items SET snapshot_json = ? WHERE id = ?`).run(JSON.stringify(next), row.id)
+    }
+  }
+
   private repairStrandedPreferredReturns(): void {
     const rows = this.database.prepare(`SELECT w.* FROM supply_warehouse_products w
       JOIN selection_records s ON s.id = w.selection_id

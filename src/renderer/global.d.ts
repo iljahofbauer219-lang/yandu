@@ -309,6 +309,9 @@ declare global {
         exportEvidence():Promise<{canceled:boolean;filePath?:string}>
         recheckProfiles(platform?:string,country?:string):Promise<ComplianceBatchRecheckResult>
       }
+      member: {
+        announce(label: string): Promise<boolean>
+      }
       warehouses: {
         list(): Promise<SupplyWarehouseProduct[]>
         listDelisted(): Promise<SupplyWarehouseProduct[]>

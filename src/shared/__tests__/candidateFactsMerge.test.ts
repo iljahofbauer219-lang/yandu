@@ -37,4 +37,9 @@ describe('mergeCandidateFacts', () => {
     expect(mergeCandidateFacts({ gigaIndexText: '94.31' }, { gigaIndexText: '<60' })).toMatchObject({ gigaIndexText: '<60' })
     expect(mergeCandidateFacts({ gigaIndexText: '<60' }, { gigaIndexText: '' })).toMatchObject({ gigaIndexText: '<60' })
   })
+
+  it('采集留痕字段按新值覆盖', () => {
+    expect(mergeCandidateFacts({ collectedAt: '2026-10-01T00:00:00.000Z', collectedBy: '张三' }, { collectedAt: '2026-10-10T00:00:00.000Z', collectedBy: '李四' }))
+      .toMatchObject({ collectedAt: '2026-10-10T00:00:00.000Z', collectedBy: '李四' })
+  })
 })
