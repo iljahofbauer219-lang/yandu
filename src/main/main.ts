@@ -2661,6 +2661,7 @@ ipcMain.handle('warehouse:download', async (_event, warehouseProductId: string, 
   }
 })
 ipcMain.handle('warehouse:download-list', () => database?.listSupplyDownloads() ?? [])
+ipcMain.handle('warehouse:delisted-pallet', () => database?.listDelistedPalletItems() ?? [])
 ipcMain.handle('warehouse:open-download', async (_event, warehouseProductId: string) => {
   const record = database?.listSupplyDownloads().find(item => item.warehouseProductId === warehouseProductId)
   if (!record?.pageUrl) throw new Error('该商品还没有服务器详情页')
@@ -2672,6 +2673,17 @@ ipcMain.handle('pallet:remove', async (_event, ids: string[], accessToken: strin
   if (!database) throw new Error('数据库尚未初始化')
   await requireInboundEditPermission(accessToken)
   return database.removePalletItems(Array.isArray(ids) ? ids : [])
+})
+// 我的货盘为成员个人本地入选关系，不涉及服务器写通道，故与 pallet:list 同口径不做服务端权限校验
+ipcMain.handle('my-pallet:list', () => database?.listMyPalletItems() ?? [])
+ipcMain.handle('my-pallet:ids', () => database?.listMyPalletWarehouseIds() ?? [])
+ipcMain.handle('my-pallet:add', (_event, warehouseProductIds: string[]) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  return database.addMyPalletItems(Array.isArray(warehouseProductIds) ? warehouseProductIds : [])
+})
+ipcMain.handle('my-pallet:remove', (_event, warehouseProductIds: string[]) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  return database.removeMyPalletItems(Array.isArray(warehouseProductIds) ? warehouseProductIds : [])
 })
 ipcMain.handle('inbound:list', () => database?.listInbound() ?? [])
 ipcMain.handle('erp:intake', async (_event, rows: InboundErpIntakeInput[], accessToken: string) => {

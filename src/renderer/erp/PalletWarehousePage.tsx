@@ -7,13 +7,19 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { PanelCollapseButton, PanelExpandRail, usePanelCollapse } from '../panel-collapse'
-import type { InboundProcessingItem, InboundSnapshot, PalletWarehouseItem, SupplyWarehouseProduct } from '../../shared/contracts'
+import type { DelistedPalletItem, InboundProcessingItem, InboundSnapshot, PalletWarehouseItem, SupplyProductDownload } from '../../shared/contracts'
 import { fetchErpCapabilities, fetchErpProducts, type ErpCapabilities } from './erpApi'
 import { runWithSessionRetry } from '../serverApi'
-import { MOCK_CATEGORIES, MOCK_TERTIARY_CATALOG } from './warehouseCatalogData'
+import { MOCK_CATEGORIES, MOCK_TERTIARY_CATALOG, buildCatalogTree } from './warehouseCatalogData'
 
 const HUB_TABS = ['入库处理', '全部产品', '地区货盘', '新品速递', '热销产品', '时节热品', '限时促销', '即将到货', '下架产品'] as const
 type HubTab = (typeof HUB_TABS)[number]
+
+// 我的货盘为个人入选视图：总货盘营运栏目五页签名称与功能一并移除，仅留全部产品/地区货盘/即将到货/下架产品
+const MINE_HIDDEN_TABS: HubTab[] = ['入库处理', '新品速递', '热销产品', '时节热品', '限时促销']
+export function hubTabsForScope(scope: 'warehouse' | 'mine'): readonly HubTab[] {
+  return scope === 'mine' ? HUB_TABS.filter(tab => !MINE_HIDDEN_TABS.includes(tab)) : HUB_TABS
+}
 
 // 已接入数据源的 Tab：入库处理 / 全部产品 / 新品速递 / 下架产品；其余 Tab 暂无数据源
 const DATA_READY_TABS: HubTab[] = ['入库处理', '全部产品', '新品速递', '下架产品']
@@ -80,11 +86,12 @@ export function recommendCatalogPath(source: { title?: string; category?: string
 
 const DAY_MS = 86400000
 
-export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn, onOpenInboundSource }: {
-  onOpenSource?: (item: PalletWarehouseItem) => void
+export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'warehouse', onSendToCrossborder }: {
   canEdit?: boolean
   onReturn?: (item: PalletWarehouseItem) => Promise<void> | void
-  onOpenInboundSource?: (item: InboundProcessingItem) => void
+  /** warehouse = 总货盘；mine = 我的货盘（个人入选视图，界面与总货盘一致） */
+  scope?: 'warehouse' | 'mine'
+  onSendToCrossborder?: () => void
 }) {
   const catalogPanel = usePanelCollapse('pallet-catalog')
   const [hubTab, setHubTab] = useState<HubTab>('全部产品')
@@ -97,7 +104,7 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn, o
   const [batchMode, setBatchMode] = useState(false)
   const [checkedKeys, setCheckedKeys] = useState<Set<string>>(new Set())
   const [items, setItems] = useState<PalletWarehouseItem[]>([])
-  const [delistedItems, setDelistedItems] = useState<SupplyWarehouseProduct[]>([])
+  const [delistedItems, setDelistedItems] = useState<DelistedPalletItem[]>([])
   const [notice, setNotice] = useState('')
   const [inboundItems, setInboundItems] = useState<InboundProcessingItem[]>([])
   const [inboundFilter, setInboundFilter] = useState<InboundFilter>('PENDING')
@@ -106,24 +113,47 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn, o
   const [inboundOk, setInboundOk] = useState('')
   const [caps, setCaps] = useState<ErpCapabilities | null>(null)
   const [capsLoaded, setCapsLoaded] = useState(false)
-  const [inboundTagDrafts, setInboundTagDrafts] = useState<Record<string, string>>({})
   const [inboundEdit, setInboundEdit] = useState<{ id: string; draft: InboundSnapshot } | null>(null)
   const [activeInboundId, setActiveInboundId] = useState('')
+  const [warehouseDownloads, setWarehouseDownloads] = useState<Record<string, SupplyProductDownload>>({})
+  const [myPalletIds, setMyPalletIds] = useState<Set<string>>(new Set())
+  // 目录树名称单源入参：恒为总货盘商品（我的货盘侧复用总货盘结果，不按自身入选推导）
+  const [masterItems, setMasterItems] = useState<PalletWarehouseItem[]>([])
+
+  const reloadItems = () => (scope === 'mine'
+    ? Promise.all([window.desktop.myPallet.list(), window.desktop.pallet.list()]).then(([mine, master]) => { setMasterItems(master); setItems(mine); return mine })
+    : window.desktop.pallet.list().then(list => { setMasterItems(list); setItems(list); return list }))
 
   useEffect(() => {
+    void reloadItems()
+      .catch(reason => setNotice(reason instanceof Error ? reason.message : (scope === 'mine' ? '我的货盘加载失败' : '货盘仓库加载失败')))
+  }, [scope])
+
+  // 我的货盘入选关系：总货盘卡片据此显示「已加入」态；我的货盘页移除后同步清态
+  useEffect(() => {
     let alive = true
-    window.desktop.pallet.list()
-      .then(list => { if (alive) setItems(list) })
-      .catch(reason => { if (alive) setNotice(reason instanceof Error ? reason.message : '货盘仓库加载失败') })
+    window.desktop.myPallet.ids()
+      .then(ids => { if (alive) setMyPalletIds(new Set(ids)) })
+      .catch(() => undefined)
     return () => { alive = false }
   }, [])
 
   useEffect(() => {
     if (hubTab !== '下架产品') return
     let alive = true
-    window.desktop.warehouses.listDelisted()
+    window.desktop.warehouses.delistedPallet()
       .then(list => { if (alive) setDelistedItems(list) })
       .catch(reason => { if (alive) setNotice(reason instanceof Error ? reason.message : '下架产品加载失败') })
+    return () => { alive = false }
+  }, [hubTab])
+
+  // 入库卡/存放卡「查看页面」门控：与正式入库卡同口径，仅 DOWNLOADED 图文档案可开服务器详情页
+  useEffect(() => {
+    if (hubTab !== '入库处理' && hubTab !== '全部产品' && hubTab !== '新品速递') return
+    let alive = true
+    window.desktop.warehouses.downloads()
+      .then(list => { if (alive) setWarehouseDownloads(Object.fromEntries(list.map(item => [item.warehouseProductId, item]))) })
+      .catch(() => undefined)
     return () => { alive = false }
   }, [hubTab])
 
@@ -174,6 +204,27 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn, o
       .catch(reason => setNotice(reason instanceof Error ? reason.message : '删除失败'))
   }
 
+  const syncMyPallet = (list: PalletWarehouseItem[]) => {
+    setMyPalletIds(new Set(list.map(item => item.warehouseProductId)))
+    if (scope === 'mine') { setItems(list); setCheckedKeys(new Set()) }
+  }
+
+  const addToMyPallet = (warehouseProductIds: string[]) => {
+    if (!warehouseProductIds.length) return
+    void window.desktop.myPallet.add(warehouseProductIds)
+      .then(syncMyPallet)
+      .catch(reason => setNotice(reason instanceof Error ? reason.message : '加入我的货盘失败'))
+  }
+
+  const removeFromMyPallet = (warehouseProductIds: string[]) => {
+    if (!warehouseProductIds.length) return
+    void window.desktop.myPallet.remove(warehouseProductIds)
+      .then(syncMyPallet)
+      .catch(reason => setNotice(reason instanceof Error ? reason.message : '移出我的货盘失败'))
+  }
+
+  const checkedWarehouseIds = () => visible.filter(item => checkedKeys.has(item.id)).map(item => item.warehouseProductId)
+
   const inboundVisible = useMemo(() => {
     const byStatus = inboundItems.filter(item => item.status === inboundFilter)
     const normalized = query.trim().toLocaleLowerCase()
@@ -206,18 +257,11 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn, o
     return selected === name ? 'active' : ''
   }
 
-  const addInboundTag = (item: InboundProcessingItem) => {
-    const value = (inboundTagDrafts[item.id] || '').trim()
-    if (!value || item.snapshot.tags.includes(value)) return
-    patchSnapshot(item, { ...item.snapshot, tags: [...item.snapshot.tags, value] }, '标签已补充')
-    setInboundTagDrafts(current => ({ ...current, [item.id]: '' }))
-  }
-
   const confirmInbound = (id: string) => {
     void runWithSessionRetry(token => window.desktop.inbound.confirm(id, token))
       .then(list => {
         setInboundItems(list)
-        return window.desktop.pallet.list()
+        return reloadItems()
       })
       .then(list => { setItems(list); setInboundNotice(''); setInboundOk('已确认转入正式入库与货盘仓库') })
       .catch(reason => { setInboundOk(''); setInboundNotice(reason instanceof Error ? reason.message : '确认入库失败') })
@@ -232,7 +276,7 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn, o
 
   const returnPalletItem = (item: PalletWarehouseItem) => {
     void Promise.resolve(onReturn?.(item))
-      .then(() => window.desktop.pallet.list())
+      .then(() => reloadItems())
       .then(list => setItems(list))
       .catch(reason => setNotice(reason instanceof Error ? reason.message : '退回入库处理失败'))
   }
@@ -257,33 +301,35 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn, o
     const normalized = query.trim().toLocaleLowerCase()
     return delistedItems.filter(item => {
       if (selected !== 'ALL' && item.category !== selected && item.subcategory !== selected && item.tertiaryCategory !== selected) return false
-      if (normalized && !`${item.title} ${item.productId} ${item.supplierName}`.toLocaleLowerCase().includes(normalized)) return false
+      if (normalized && !`${item.title} ${item.itemCode}`.toLocaleLowerCase().includes(normalized)) return false
       return true
     })
   }, [delistedItems, query, selected])
 
-  const restoreDelisted = (id: string) => {
-    void runWithSessionRetry(token => window.desktop.warehouses.restore(id, token))
-      .then(() => Promise.all([window.desktop.warehouses.listDelisted(), window.desktop.pallet.list()]))
-      .then(([delisted, pallet]) => { setDelistedItems(delisted); setItems(pallet); setNotice(''); setInboundOk('已恢复到正式入库') })
+  const reloadDelisted = () => window.desktop.warehouses.delistedPallet().then(setDelistedItems).catch(reason => setNotice(reason instanceof Error ? reason.message : '下架产品加载失败'))
+
+  const restoreDelisted = (warehouseProductId: string) => {
+    void runWithSessionRetry(token => window.desktop.warehouses.restore(warehouseProductId, token))
+      .then(() => Promise.all([reloadDelisted(), reloadItems()]))
+      .then(() => { setNotice(''); setInboundOk('已恢复到正式入库') })
       .catch(reason => { setInboundOk(''); setNotice(reason instanceof Error ? reason.message : '恢复失败') })
   }
 
-  const updateDelisted = (item: SupplyWarehouseProduct) => {
-    void runWithSessionRetry(token => window.desktop.warehouses.download(item.id, token))
+  const updateDelisted = (item: PalletWarehouseItem) => {
+    void runWithSessionRetry(token => window.desktop.warehouses.download(item.warehouseProductId, token))
       .then(() => { setNotice(''); setInboundOk(`「${item.title}」图文已更新`) })
       .catch(reason => { setInboundOk(''); setNotice(reason instanceof Error ? reason.message : '更新产品失败') })
   }
 
-  const deleteDelisted = (item: SupplyWarehouseProduct) => {
+  const deleteDelisted = (item: PalletWarehouseItem) => {
     if (!window.confirm(`确认永久删除「${item.title}」？删除后不可恢复。`)) return
-    void runWithSessionRetry(token => window.desktop.warehouses.deleteProduct(item.id, token))
-      .then(() => window.desktop.warehouses.listDelisted())
-      .then(list => { setDelistedItems(list); setNotice(''); setInboundOk('产品已永久删除') })
+    void runWithSessionRetry(token => window.desktop.warehouses.deleteProduct(item.warehouseProductId, token))
+      .then(() => reloadDelisted())
+      .then(() => { setNotice(''); setInboundOk('产品已永久删除') })
       .catch(reason => { setInboundOk(''); setNotice(reason instanceof Error ? reason.message : '删除产品失败') })
   }
 
-  const regionGroups = [...new Set(inboundItems.map(entry => entry.region).filter(Boolean))]
+  const regionGroups = [...new Set(items.map(entry => entry.region).filter((region): region is string => Boolean(region)))]
   const activeRegion = selectedRegion && regionGroups.includes(selectedRegion) ? selectedRegion : regionGroups[0] || ''
 
   const toggleKey = (id: string) => setCheckedKeys(current => {
@@ -293,22 +339,80 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn, o
     return next
   })
 
+  const catalogTree = useMemo(() => buildCatalogTree(masterItems), [masterItems])
+
   const tertiaryOptions = useMemo(() => {
     if (!selectedSubcategory) return [] as { name: string; icon: string; count: number }[]
-    return (MOCK_TERTIARY_CATALOG[selectedSubcategory] || []).map(option => ({ ...option, count: items.filter(item => item.tertiaryCategory === option.name).length }))
-  }, [items, selectedSubcategory])
+    return (catalogTree.tertiary[selectedSubcategory] || []).map(option => ({ ...option, count: items.filter(item => item.tertiaryCategory === option.name).length }))
+  }, [items, selectedSubcategory, catalogTree])
+
+  // 存放卡渲染：全部产品/新品速递/地区货盘/下架产品共用，保证红框区口径一致；delisted 传入时附加下架追溯两行事实与下架操作按钮
+  const renderStoredCard = (item: PalletWarehouseItem, delisted?: { reason: string; at: string | null }) => {
+    const scoreValue = item.gigaIndex ?? item.score ?? null
+    const scoreGrade = scoreValue === null ? null : Math.round(scoreValue) >= 80 ? 'A' : Math.round(scoreValue) >= 65 ? 'B' : 'C'
+    const inventoryText = item.sellableInventory !== null && item.sellableInventory !== undefined ? item.sellableInventory.toLocaleString('zh-CN') : item.salesText?.replace(/^(?:Available\s*Stock|可售库存|库存)\s*[:：]?\s*/i, '') || '待补采'
+    const sourceCatalogText = item.sourceCategory ? `${item.sourceCategory} / ${item.sourceSubcategory || '—'} / ${item.sourceTertiaryCategory || '—'}` : '类目待核实'
+    const origin = item.origin || 'WAREHOUSE'
+    return <article className={`product-card candidate-product-card supply-source-card${delisted ? ' delisted-product-card' : ''}`} key={item.id}>
+      <div className="candidate-card-tools">{batchMode ? <label title="选择商品"><input type="checkbox" checked={checkedKeys.has(item.id)} onChange={() => toggleKey(item.id)}/></label> : null}</div>
+      <button type="button" className="product-image" aria-label={`查看商品图片：${item.title}`}>
+        {item.imageUrl ? <img src={item.imageUrl} alt={item.title}/> : <span>无图</span>}
+        {item.promotionText ? <span className="candidate-promotion">{item.promotionText}</span> : null}
+        <span className={`score-badge${scoreValue === null ? ' pending' : ''}`} title={scoreValue === null ? 'GIGA Index 未采集，待重读补采' : `评分依据：GIGA Index ${item.gigaIndex}`}>{scoreValue === null ? '待评分' : `${Math.round(scoreValue)}分 · ${scoreGrade}级`}</span>
+      </button>
+      <div className="product-info supply-source-info">
+        <small>
+          <span className={`inbound-origin-badge ${origin === 'SELECTION' ? 'origin-selection' : origin === 'WAREHOUSE' ? 'origin-warehouse' : 'origin-erp'}`}>{origin === 'SELECTION' ? '选品审批' : origin === 'WAREHOUSE' ? '正式入库抄送' : '服务器采集池'}</span>
+          {item.region ? <span className="inbound-origin-badge origin-region">{item.region}</span> : null}
+          {item.warehouseCode === 'GIGACLOUD' ? '大健云仓' : item.warehouseCode} · Item Code {item.itemCode || '—'}
+        </small>
+        <b title={item.title}>{item.title}</b>
+        <strong>{item.priceText || '价格待核验'}</strong>
+        <dl className="candidate-source-facts">
+          <div><dt>目标仓/货位</dt><dd title={`${item.category} / ${item.subcategory} / ${item.tertiaryCategory}`}>{item.warehouseCode} / {item.category || '—'} / {item.subcategory || '—'} / {item.tertiaryCategory || '—'}</dd></div>
+          <div><dt>物流费</dt><dd>{item.shippingFeeText || '待补采'}</dd></div>
+          <div><dt>可售库存</dt><dd>{inventoryText}</dd></div>
+          <div><dt>原始类目</dt><dd title={sourceCatalogText}>{sourceCatalogText}</dd></div>
+          <div><dt>GIGA Index</dt><dd>{item.gigaIndexText ?? item.gigaIndex ?? '待补采'}</dd></div>
+          <div><dt>采集时间</dt><dd>{(item.collectedAt || '').slice(0, 10) || '—'}</dd></div>
+          {delisted && <div><dt>下架原因</dt><dd title={delisted.reason}>{delisted.reason || '—'}</dd></div>}
+          {delisted && <div><dt>下架时间</dt><dd>{delisted.at ? new Date(delisted.at).toLocaleString('zh-CN') : '—'}</dd></div>}
+        </dl>
+        <div className="product-actions candidate-next-actions">
+          {item.warehouseProductId && warehouseDownloads[item.warehouseProductId]?.status === 'DOWNLOADED' ? (
+            <button onClick={() => void window.desktop.warehouses.openDownload(item.warehouseProductId).catch(reason => { setInboundOk(''); setInboundNotice(reason instanceof Error ? reason.message : '打开下载图文页失败') })}>查看页面</button>
+          ) : null}
+          {delisted ? <>
+            <button disabled={!canEdit} onClick={() => updateDelisted(item)}>更新产品</button>
+            <button className="primary" disabled={!canEdit} onClick={() => restoreDelisted(item.warehouseProductId)}>重新上架</button>
+            <button className="candidate-delete" disabled={!canEdit} onClick={() => deleteDelisted(item)}>删除产品</button>
+          </> : <>
+            {scope === 'warehouse' ? (
+              myPalletIds.has(item.warehouseProductId)
+                ? <button className="my-pallet-added" title="点击移出我的货盘" onClick={() => removeFromMyPallet([item.warehouseProductId])}>已加入</button>
+                : <button onClick={() => addToMyPallet([item.warehouseProductId])}>加入我的货盘</button>
+            ) : <>
+              <button className="primary" onClick={() => onSendToCrossborder?.()}>送AI跨境</button>
+              <button className="candidate-delete" onClick={() => removeFromMyPallet([item.warehouseProductId])}>移除</button>
+            </>}
+            {scope === 'warehouse' && canEdit && <button onClick={() => returnPalletItem(item)}>退回入库处理</button>}
+          </>}
+        </div>
+      </div>
+    </article>
+  }
 
   return <>
     <div className="selection-module-nav warehouse-flow-nav">
-      {HUB_TABS.map(tab => <button key={tab} className={hubTab === tab ? 'active' : ''} onClick={() => { setHubTab(tab); setBatchMode(false); setCheckedKeys(new Set()); setActiveInboundId('') }}><span>{tab}</span></button>)}
+      {hubTabsForScope(scope).map(tab => <button key={tab} className={hubTab === tab ? 'active' : ''} onClick={() => { setHubTab(tab); setBatchMode(false); setCheckedKeys(new Set()); setActiveInboundId('') }}><span>{tab}</span></button>)}
     </div>
     <section className={`candidate-page${catalogPanel.collapsed?' side-collapsed':''}`}>
       {catalogPanel.collapsed?<PanelExpandRail panel={catalogPanel} label="产品目录库"/>:<aside className="catalog-panel collapsible-aside">
         <PanelCollapseButton panel={catalogPanel}/>
-        <div className="catalog-heading"><small>PRODUCT CATALOG</small><h2>产品目录库</h2><p>大健云仓三级目录 · 支持人工调整</p></div>
+        <div className="catalog-heading"><h2>产品目录库</h2></div>
         <button className={`catalog-all ${selected === 'ALL' ? 'active' : ''}`} onClick={() => { setSelected('ALL'); setSelectedSubcategory('') }}><span>全部产品</span><em>{items.length}</em></button>
         <div className="catalog-tree">
-          {MOCK_CATEGORIES.map(group => {
+          {catalogTree.categories.map(group => {
             const open = expanded === group.name
             return <div className="catalog-group" key={group.name}>
               <button className={treeActiveClass(group.name, '')} onClick={() => {
@@ -346,7 +450,7 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn, o
         </div>}
       </aside>}
       <div className="candidate-catalog-main">
-        <div className="warehouse-page-heading"><div><small>货盘仓库</small><div className="pallet-heading-title-row"><b>{hubTab === '入库处理' ? '入库处理 · 待确认队列' : hubTab === '下架产品' ? '下架产品 · 可恢复' : '全部货源 · 已存放'}</b><em>{hubTab === '入库处理' ? inboundVisible.length : hubTab === '下架产品' ? delistedVisible.length : visible.length}</em></div></div>{hubTab === '入库处理' && <div className="pallet-heading-switch"><div className="candidate-view-switch inbound-status-filter">
+        <div className="warehouse-page-heading"><div><small>{scope === 'mine' ? '我的货盘' : '货盘仓库'}</small><div className="pallet-heading-title-row"><b>{hubTab === '入库处理' ? '入库处理 · 待确认队列' : hubTab === '下架产品' ? '下架产品 · 可恢复' : scope === 'mine' ? '我的入选 · 货盘仓库选入' : '全部货源 · 已存放'}</b><em>{hubTab === '入库处理' ? inboundVisible.length : hubTab === '下架产品' ? delistedVisible.length : visible.length}</em></div></div>{hubTab === '入库处理' && <div className="pallet-heading-switch"><div className="candidate-view-switch inbound-status-filter">
           {INBOUND_FILTERS.map(filter => <button key={filter.key} className={inboundFilter === filter.key ? 'active' : ''} onClick={() => setInboundFilter(filter.key)}>
             {filter.label} <em>{inboundItems.filter(item => item.status === filter.key).length}</em>
           </button>)}
@@ -367,7 +471,10 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn, o
         {batchMode && <div className="candidate-batchbar">
           <label><input type="checkbox" checked={visible.length > 0 && visible.every(item => checkedKeys.has(item.id))} onChange={event => setCheckedKeys(event.target.checked ? new Set(visible.map(item => item.id)) : new Set())}/>全选当前结果</label>
           <span>已选 <b>{checkedKeys.size}</b> 个</span>
-          {canEdit && <button className="danger" disabled={!checkedKeys.size} onClick={() => removeItems([...checkedKeys])}>删除已选</button>}
+          {scope === 'warehouse'
+            ? <button disabled={!checkedKeys.size} onClick={() => addToMyPallet(checkedWarehouseIds())}>加入我的货盘</button>
+            : <button disabled={!checkedKeys.size} onClick={() => removeFromMyPallet(checkedWarehouseIds())}>移除已选</button>}
+          {canEdit && scope === 'warehouse' && <button className="danger" disabled={!checkedKeys.size} onClick={() => removeItems([...checkedKeys])}>删除已选</button>}
         </div>}
         <div className="candidate-zone-summary">
           {hubTab === '入库处理' ? <>
@@ -379,7 +486,7 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn, o
             <span>可恢复 <b>{delistedItems.length}</b></span>
             <span>当前显示 <b>{delistedVisible.length}</b></span>
           </> : <>
-            <span>货盘商品 <b>{items.length}</b></span>
+            <span>{scope === 'mine' ? '我的货盘商品' : '货盘商品'} <b>{items.length}</b></span>
             <span>采集批次 <b>—</b></span>
             <span>采集方式 <b>{items.length ? 1 : 0}</b></span>
             <span>当前显示 <b>{visible.length}</b></span>
@@ -452,15 +559,7 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn, o
                       <label>三级类目<input value={edit.tertiaryCategory} onChange={event => setInboundEdit({ id: item.id, draft: { ...edit, tertiaryCategory: event.target.value } })}/></label>
                       <div className="product-actions candidate-next-actions"><button className="primary" onClick={() => patchSnapshot(item, edit, '已保存编辑')}>保存</button><button onClick={() => setInboundEdit(null)}>取消</button></div>
                     </div>
-                  ) : (
-                    <div className="product-tags">
-                      {snapshot.tags.map(tag => <span key={tag}>{tag}</span>)}
-                      {item.status !== 'CONFIRMED' && <>
-                        <input className="inbound-tag-input" placeholder="补标签" value={inboundTagDrafts[item.id] || ''} onChange={event => setInboundTagDrafts(current => ({ ...current, [item.id]: event.target.value }))} onKeyDown={event => { if (event.key === 'Enter') addInboundTag(item) }}/>
-                        <button type="button" onClick={() => addInboundTag(item)}>添加</button>
-                      </>}
-                    </div>
-                  )}
+                  ) : null}
                   <div className="product-actions candidate-next-actions">
                     {item.status === 'PENDING' && <>
                       <button onClick={() => setInboundEdit(edit ? null : { id: item.id, draft: { ...snapshot } })}>{edit ? '收起编辑' : '重新编辑'}</button>
@@ -468,7 +567,9 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn, o
                       <button className="candidate-delete" onClick={() => rejectInbound(item.id)}>驳回</button>
                     </>}
                     {item.status === 'REJECTED' && <button onClick={() => setInboundEdit({ id: item.id, draft: { ...snapshot } })}>重新编辑</button>}
-                    {snapshot.sourceUrl ? <button onClick={() => onOpenInboundSource?.(item)}>查看页面</button> : null}
+                    {item.warehouseProductId && warehouseDownloads[item.warehouseProductId]?.status === 'DOWNLOADED' ? (
+                      <button onClick={() => void window.desktop.warehouses.openDownload(item.warehouseProductId as string).catch(reason => { setInboundOk(''); setInboundNotice(reason instanceof Error ? reason.message : '打开下载图文页失败') })}>查看页面</button>
+                    ) : null}
                   </div>
                 </div>
               </article>
@@ -477,54 +578,17 @@ export function PalletWarehousePage({ onOpenSource, canEdit = false, onReturn, o
           </div>)
         ) : hubTab === '下架产品' ? (
           delistedVisible.length === 0 ? <div className="empty-state"><span>◎</span><h2>暂无下架产品</h2><p>正式入库中下架的商品会保留原因和时间，可在此恢复为有效商品。</p></div> : <div className="product-grid">
-            {delistedVisible.map(item => <article className="product-card candidate-product-card supply-source-card delisted-product-card" key={item.id}>
-              <button type="button" className="product-image" aria-label={`查看商品图片：${item.title}`}>{item.imageUrl ? <img src={item.imageUrl} alt={item.title}/> : <span>无图</span>}</button>
-              <div className="product-info supply-source-info">
-                <small>{item.warehouseCode === 'GIGACLOUD' ? '大健云仓' : '1688'} · SKU {item.productId || '—'} · 已下架</small>
-                <b title={item.title}>{item.title}</b>
-                <strong>{item.priceText || '价格待核验'}</strong>
-                <dl className="candidate-source-facts">
-                  <div><dt>下架原因</dt><dd title={item.delistedReason}>{item.delistedReason || '—'}</dd></div>
-                  <div><dt>下架时间</dt><dd>{item.delistedAt ? new Date(item.delistedAt).toLocaleString('zh-CN') : '—'}</dd></div>
-                  <div><dt>原始类目</dt><dd title={`${item.category} / ${item.subcategory} / ${item.tertiaryCategory}`}>{item.category} / {item.subcategory} / {item.tertiaryCategory}</dd></div>
-                </dl>
-                <div className="product-tags"><span>已下架</span></div>
-                <div className="product-actions candidate-next-actions"><button disabled={!canEdit} onClick={() => updateDelisted(item)}>更新产品</button><button className="primary" disabled={!canEdit} onClick={() => restoreDelisted(item.id)}>重新上架</button><button className="candidate-delete" disabled={!canEdit} onClick={() => deleteDelisted(item)}>删除产品</button></div>
-              </div>
-            </article>)}
+            {delistedVisible.map(item => renderStoredCard(item, { reason: item.delistedReason, at: item.delistedAt }))}
           </div>
         ) : hubTab === '地区货盘' ? (
-          regionGroups.length === 0 ? <div className="empty-state"><span>◎</span><h2>暂无地区货盘</h2><p>在正式入库为商品选择地区货盘（如美国货盘）并抄送后，会在此按国家货盘分组展示。</p></div> : <>
-            <div className="candidate-view-switch inbound-status-filter">{regionGroups.map(region => <button key={region} className={activeRegion === region ? 'active' : ''} onClick={() => setSelectedRegion(region)}>{region} <em>{inboundItems.filter(entry => entry.region === region).length}</em></button>)}</div>
-            <div className="product-grid">{inboundItems.filter(entry => entry.region === activeRegion).map(item => <article className="product-card candidate-product-card supply-source-card" key={item.id}><div className="product-info supply-source-info"><small><span className="inbound-origin-badge origin-region">{item.region}</span>{item.snapshot.platformCode === 'GIGACLOUD' ? '大健云仓' : item.snapshot.platformCode} · {INBOUND_FILTERS.find(filter => filter.key === item.status)?.label}</small><b title={item.snapshot.title}>{item.snapshot.title}</b><strong>{item.snapshot.priceText || '价格待核验'}</strong></div></article>)}</div>
+          regionGroups.length === 0 ? <div className="empty-state"><span>◎</span><h2>暂无地区货盘</h2><p>产品确认入库时携带地区货盘（如美国货盘）后，会在此按国家货盘分组展示。</p></div> : <>
+            <div className="candidate-view-switch inbound-status-filter">{regionGroups.map(region => <button key={region} className={activeRegion === region ? 'active' : ''} onClick={() => setSelectedRegion(region)}>{region} <em>{items.filter(entry => entry.region === region).length}</em></button>)}</div>
+            <div className="product-grid">{items.filter(entry => entry.region === activeRegion).map(item => renderStoredCard(item))}</div>
           </>
         ) : !DATA_READY_TABS.includes(hubTab) ? (
           <div className="empty-state"><span>◎</span><h2>{hubTab} · 即将上线</h2><p>该栏目暂未接入数据源，敬请期待；当前可使用「入库处理 / 全部产品 / 新品速递 / 下架产品」。</p></div>
-        ) : visible.length === 0 ? <div className="empty-state"><span>◎</span><h2>暂无货盘商品</h2><p>当前栏目或筛选条件下没有商品。产品经“入库处理”审核确认后转入这里。</p></div> : <div className="product-grid">
-          {visible.map(item => <article className="product-card candidate-product-card supply-source-card" key={item.id}>
-            <div className="candidate-card-tools">{batchMode ? <label title="选择商品"><input type="checkbox" checked={checkedKeys.has(item.id)} onChange={() => toggleKey(item.id)}/></label> : null}</div>
-            <button type="button" className="product-image" aria-label={`查看商品图片：${item.title}`}>
-              {item.imageUrl ? <img src={item.imageUrl} alt={item.title}/> : <span>无图</span>}
-            </button>
-            <div className="product-info supply-source-info">
-              <small>{item.warehouseCode === 'GIGACLOUD' ? '大健云仓' : '1688'} · Item Code {item.itemCode || '—'} · 来源批次 —</small>
-              <b title={item.title}>{item.title}</b>
-              <strong>{item.priceText || '价格待核验'}</strong>
-              <dl className="candidate-source-facts">
-                <div><dt>物流费</dt><dd>待补采</dd></div>
-                <div><dt>可售库存</dt><dd>待补采</dd></div>
-                <div><dt>原始类目</dt><dd title={`${item.category} / ${item.subcategory} / ${item.tertiaryCategory}`}>{item.category} / {item.subcategory} / {item.tertiaryCategory}</dd></div>
-                <div><dt>GIGA Index</dt><dd>—</dd></div>
-              </dl>
-              <div className="original-price">入库处理确认 · 正式入库并存放</div>
-              <div className="product-tags"><span>入库确认</span></div>
-              <div className="product-actions candidate-next-actions">
-                <button onClick={() => onOpenSource?.(item)}>原址 <i>↗</i></button>
-                {canEdit && <button onClick={() => returnPalletItem(item)}>退回入库处理</button>}
-                {canEdit && <button className="candidate-delete" onClick={() => removeItems([item.id])}>删除</button>}
-              </div>
-            </div>
-          </article>)}
+        ) : visible.length === 0 ? <div className="empty-state"><span>◎</span><h2>{scope === 'mine' ? '暂无我的货盘产品' : '暂无货盘商品'}</h2><p>{scope === 'mine' ? '到「货盘仓库」在产品卡点击「加入我的货盘」挑选适合你营运的产品；加入后可在本页送 AI跨境 营运。' : '当前栏目或筛选条件下没有商品。产品经“入库处理”审核确认后转入这里。'}</p></div> : <div className="product-grid">
+          {visible.map(item => renderStoredCard(item))}
         </div>}
       </div>
     </section>

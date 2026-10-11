@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { DatabaseSync } from 'node:sqlite'
 import path from 'node:path'
-import type { CandidateCollectionRecord, CandidateCollectionRun, CandidateUpdateRequest, CandidateWorkspace, CollectedOzonProduct, CollectedSupplyProduct, CollectorDuplicateProduct, CollectorDuplicateStage, CollectorPluginImportResult, ComparisonCostSettings, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonRecordView, ComparisonSupplierMatch, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceAuditEvent, ComplianceBatchRecheckResult, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementAction, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceFinding, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReleasePermit, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceRuleVersion, ComplianceSource, ComplianceSourceChange, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, EbayAcceptanceBatch, EbayCategoryChange, EbayCategorySyncSummary, EbayCategoryWorkspace, EbayCollectedProduct, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayDirectoryProductScanCategory, EbayDirectoryProductSyncCheckpoint, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductSnapshot, EbayLocalProductSnapshotInput, EbayMarketResearchDecisionRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayProductDetails, EbayProductSyncChange, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayStore, EbayStoreCategory, EbayTitleDecision, EbayTitleDecisionInput, EbayTitleHandoff, EliminatedOrigin, EliminatedProductRecord, EliminatedRecordStatus, EliminateRequest, InboundErpIntakeInput, InboundOrigin, InboundProcessingItem, InboundSnapshot, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, SelectionCatalogItem, SelectionDecision, SelectionImportRequest, SelectionTask, SupplyProductDownload, SupplyWarehouseCode, SupplyWarehouseProduct } from '../../shared/contracts'
+import type { CandidateCollectionRecord, CandidateCollectionRun, CandidateUpdateRequest, CandidateWorkspace, CollectedOzonProduct, CollectedSupplyProduct, CollectorDuplicateProduct, CollectorDuplicateStage, CollectorPluginImportResult, ComparisonCostSettings, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonRecordView, ComparisonSupplierMatch, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceAuditEvent, ComplianceBatchRecheckResult, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementAction, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceFinding, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReleasePermit, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceRuleVersion, ComplianceSource, ComplianceSourceChange, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, DelistedPalletItem, EbayAcceptanceBatch, EbayCategoryChange, EbayCategorySyncSummary, EbayCategoryWorkspace, EbayCollectedProduct, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayDirectoryProductScanCategory, EbayDirectoryProductSyncCheckpoint, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductSnapshot, EbayLocalProductSnapshotInput, EbayMarketResearchDecisionRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayProductDetails, EbayProductSyncChange, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayStore, EbayStoreCategory, EbayTitleDecision, EbayTitleDecisionInput, EbayTitleHandoff, EliminatedOrigin, EliminatedProductRecord, EliminatedRecordStatus, EliminateRequest, InboundErpIntakeInput, InboundOrigin, InboundProcessingItem, InboundSnapshot, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, SelectionCatalogItem, SelectionDecision, SelectionImportRequest, SelectionTask, SupplyProductDownload, SupplyWarehouseCode, SupplyWarehouseProduct } from '../../shared/contracts'
 import { complianceCheckFingerprint } from '../../shared/complianceFingerprint'
 import { mergeCandidateFacts } from '../../shared/candidateFactsMerge'
 import { badgeFallbackScore } from '../../shared/badgeScore'
@@ -857,6 +857,11 @@ export class AppDatabase {
         stored_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_pallet_warehouse_code ON pallet_warehouse_items(warehouse_code, stored_at DESC);
+      CREATE TABLE IF NOT EXISTS my_pallet_items (
+        id TEXT PRIMARY KEY,
+        warehouse_product_id TEXT NOT NULL UNIQUE,
+        added_at TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS inbound_processing_items (
         id TEXT PRIMARY KEY,
         origin TEXT NOT NULL,
@@ -1324,6 +1329,19 @@ export class AppDatabase {
     ensureColumn('supply_product_downloads', 'page_id', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_product_downloads', 'page_url', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_warehouse_products', 'region', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('pallet_warehouse_items', 'promotion_text', 'TEXT')
+    ensureColumn('pallet_warehouse_items', 'shipping_fee_text', 'TEXT')
+    ensureColumn('pallet_warehouse_items', 'sellable_inventory', 'REAL')
+    ensureColumn('pallet_warehouse_items', 'sales_text', 'TEXT')
+    ensureColumn('pallet_warehouse_items', 'giga_index', 'REAL')
+    ensureColumn('pallet_warehouse_items', 'giga_index_text', 'TEXT')
+    ensureColumn('pallet_warehouse_items', 'score', 'REAL')
+    ensureColumn('pallet_warehouse_items', 'source_category', 'TEXT')
+    ensureColumn('pallet_warehouse_items', 'source_subcategory', 'TEXT')
+    ensureColumn('pallet_warehouse_items', 'source_tertiary_category', 'TEXT')
+    ensureColumn('pallet_warehouse_items', 'collected_at', 'TEXT')
+    ensureColumn('pallet_warehouse_items', 'region', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('pallet_warehouse_items', 'origin', 'TEXT')
     ensureColumn('supply_warehouse_products', 'collected_at', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_warehouse_products', 'collected_by', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('inbound_processing_items', 'region', "TEXT NOT NULL DEFAULT ''")
@@ -1360,6 +1378,7 @@ export class AppDatabase {
     this.migratePendingReviewToActive()
     this.repairStrandedPreferredReturns()
     this.repairInboundShelfElements()
+    this.repairPalletShelfElements()
     this.getSelectionCatalog()
       .filter(item => item.decision === 'APPROVED' && (item.sourceArea === 'SUPPLY' || Boolean(item.supplierUrl)))
       .forEach(item => {
@@ -2481,19 +2500,22 @@ export class AppDatabase {
       ORDER BY deleted_at IS NOT NULL, updated_at DESC
     `).all() as Array<{ payload: string; deleted_at: string | null }>
     const supplyRows = this.database.prepare(`
-      SELECT p.payload, p.deleted_at
+      SELECT p.payload, p.deleted_at, p.added_at
       FROM supply_candidates p
       JOIN selection_tasks t ON t.id = p.task_id
       ORDER BY p.deleted_at IS NOT NULL, COALESCE(p.added_at, t.created_at) DESC, p.score DESC, p.sort_order
-    `).all() as Array<{ payload: string; deleted_at: string | null }>
+    `).all() as Array<{ payload: string; deleted_at: string | null; added_at: string | null }>
     const runRows = this.database.prepare(`SELECT id, task_id, candidate_area, platform_code, collection_method, source_entry, requested_count, collected_count, new_count, updated_count, selected_count, status, started_at, completed_at FROM candidate_collection_runs ORDER BY completed_at DESC`).all() as unknown as Array<Record<string, unknown>>
     const recordRows = this.database.prepare(`SELECT candidate_area, candidate_key, collection_run_id, platform_code, collection_method, source_entry, source_rank, collected_at FROM candidate_collection_records ORDER BY collected_at DESC, source_rank`).all() as unknown as Array<Record<string, unknown>>
-    const unique = <T extends { url: string; candidateDeletedAt?: string }>(rows: Array<{ payload: string; deleted_at: string | null }>) => {
+    const unique = <T extends { url: string; candidateDeletedAt?: string }>(rows: Array<{ payload: string; deleted_at: string | null; added_at?: string | null }>) => {
       const products = new Map<string, T>()
       rows.forEach(row => {
         const product = JSON.parse(row.payload) as T
         if (row.deleted_at) product.candidateDeletedAt = row.deleted_at
         else delete product.candidateDeletedAt
+        // 存量候选 payload 无 collectedAt 时，用首次入候选列时间作采集时间回退值（只读展示，不写回）
+        const rec = product as Record<string, unknown>
+        if (row.added_at && !rec.addedAt) rec.addedAt = row.added_at
         if (!products.has(product.url)) products.set(product.url, product)
       })
       return [...products.values()]
@@ -3001,9 +3023,43 @@ export class AppDatabase {
     return this.getSupplyWarehouseProducts()
   }
 
+  private mapPalletRow(row: Record<string, unknown>): PalletWarehouseItem {
+    return { id:String(row.id), warehouseProductId:String(row.warehouse_product_id), warehouseCode:row.warehouse_code as PalletWarehouseItem['warehouseCode'], itemCode:String(row.item_code), title:String(row.title), imageUrl:String(row.image_url), priceText:String(row.price_text), category:String(row.category), subcategory:String(row.subcategory), tertiaryCategory:String(row.tertiary_category), sourceUrl:String(row.source_url), storedAt:String(row.stored_at),
+      promotionText: row.promotion_text ? String(row.promotion_text) : undefined,
+      shippingFeeText: row.shipping_fee_text ? String(row.shipping_fee_text) : undefined,
+      sellableInventory: typeof row.sellable_inventory === 'number' ? row.sellable_inventory : null,
+      salesText: row.sales_text ? String(row.sales_text) : undefined,
+      gigaIndex: typeof row.giga_index === 'number' ? row.giga_index : null,
+      gigaIndexText: row.giga_index_text ? String(row.giga_index_text) : undefined,
+      score: typeof row.score === 'number' ? row.score : undefined,
+      sourceCategory: row.source_category ? String(row.source_category) : undefined,
+      sourceSubcategory: row.source_subcategory ? String(row.source_subcategory) : undefined,
+      sourceTertiaryCategory: row.source_tertiary_category ? String(row.source_tertiary_category) : undefined,
+      collectedAt: row.collected_at ? String(row.collected_at) : undefined,
+      region: String(row.region || ''),
+      origin: row.origin ? String(row.origin) as PalletWarehouseItem['origin'] : undefined }
+  }
+
   listPalletItems(): PalletWarehouseItem[] {
-    const rows = this.database.prepare(`SELECT p.id, p.warehouse_product_id, p.warehouse_code, p.item_code, p.title, p.image_url, p.price_text, p.category, p.subcategory, p.tertiary_category, p.source_url, p.stored_at FROM pallet_warehouse_items p LEFT JOIN supply_warehouse_products w ON w.id = p.warehouse_product_id WHERE w.id IS NULL OR (w.status <> 'DELISTED' AND NOT EXISTS (SELECT 1 FROM inbound_processing_items i WHERE i.warehouse_product_id = p.warehouse_product_id AND i.status <> 'CONFIRMED')) ORDER BY p.stored_at DESC`).all() as unknown as Array<Record<string,unknown>>
-    return rows.map(row => ({ id:String(row.id), warehouseProductId:String(row.warehouse_product_id), warehouseCode:row.warehouse_code as PalletWarehouseItem['warehouseCode'], itemCode:String(row.item_code), title:String(row.title), imageUrl:String(row.image_url), priceText:String(row.price_text), category:String(row.category), subcategory:String(row.subcategory), tertiaryCategory:String(row.tertiary_category), sourceUrl:String(row.source_url), storedAt:String(row.stored_at) }))
+    const rows = this.database.prepare(`SELECT p.* FROM pallet_warehouse_items p LEFT JOIN supply_warehouse_products w ON w.id = p.warehouse_product_id WHERE w.id IS NULL OR (w.status <> 'DELISTED' AND NOT EXISTS (SELECT 1 FROM inbound_processing_items i WHERE i.warehouse_product_id = p.warehouse_product_id AND i.status <> 'CONFIRMED')) ORDER BY p.stored_at DESC`).all() as unknown as Array<Record<string,unknown>>
+    return rows.map(row => this.mapPalletRow(row))
+  }
+
+  /** 下架卡数据：DELISTED 仓行 LEFT JOIN pallet 同源事实；无 pallet 同源行时按仓行合成，保证下架卡与存放卡同构渲染 */
+  listDelistedPalletItems(): DelistedPalletItem[] {
+    const rows = this.database.prepare(`SELECT p.*, w.id AS w_id, w.warehouse_code AS w_warehouse_code, w.source_url AS w_source_url, w.product_id AS w_product_id, w.title AS w_title, w.image_url AS w_image_url, w.price_text AS w_price_text, w.category AS w_category, w.subcategory AS w_subcategory, w.tertiary_category AS w_tertiary_category, w.region AS w_region, w.collected_at AS w_collected_at, w.updated_at AS w_updated_at, w.delisted_reason AS w_delisted_reason, w.delisted_at AS w_delisted_at FROM supply_warehouse_products w LEFT JOIN pallet_warehouse_items p ON p.warehouse_product_id = w.id WHERE w.status = 'DELISTED' ORDER BY w.delisted_at DESC`).all() as unknown as Array<Record<string,unknown>>
+    return rows.map(row => {
+      const delistedReason = String(row.w_delisted_reason || '')
+      const delistedAt = row.w_delisted_at ? String(row.w_delisted_at) : null
+      if (row.id) return { ...this.mapPalletRow(row), delistedReason, delistedAt }
+      return {
+        id: `delisted-${row.w_id}`, warehouseProductId: String(row.w_id), warehouseCode: row.w_warehouse_code as PalletWarehouseItem['warehouseCode'],
+        itemCode: String(row.w_product_id), title: String(row.w_title), imageUrl: String(row.w_image_url), priceText: String(row.w_price_text),
+        category: String(row.w_category), subcategory: String(row.w_subcategory), tertiaryCategory: String(row.w_tertiary_category),
+        sourceUrl: String(row.w_source_url), storedAt: String(row.w_updated_at), collectedAt: String(row.w_collected_at || ''),
+        region: String(row.w_region || ''), origin: 'WAREHOUSE' as const, delistedReason, delistedAt
+      }
+    })
   }
 
   removePalletItems(ids: string[]): PalletWarehouseItem[] {
@@ -3012,6 +3068,37 @@ export class AppDatabase {
       ids.forEach(id => statement.run(id))
     }
     return this.listPalletItems()
+  }
+
+  /** 我的货盘入选关系（warehouse_product_id 去重）；列表内容始终取自货盘仓库现行数据，总货盘删除后自动消失 */
+  listMyPalletWarehouseIds(): string[] {
+    const rows = this.database.prepare(`SELECT warehouse_product_id FROM my_pallet_items ORDER BY added_at DESC`).all() as unknown as Array<{ warehouse_product_id: string }>
+    return rows.map(row => String(row.warehouse_product_id))
+  }
+
+  listMyPalletItems(): PalletWarehouseItem[] {
+    const order = this.listMyPalletWarehouseIds()
+    const byWarehouseId = new Map(this.listPalletItems().map(item => [item.warehouseProductId, item]))
+    return order.map(id => byWarehouseId.get(id)).filter((item): item is PalletWarehouseItem => Boolean(item))
+  }
+
+  addMyPalletItems(warehouseProductIds: string[]): PalletWarehouseItem[] {
+    const available = new Set(this.listPalletItems().map(item => item.warehouseProductId))
+    const now = new Date().toISOString()
+    const statement = this.database.prepare(`INSERT OR IGNORE INTO my_pallet_items (id, warehouse_product_id, added_at) VALUES (?, ?, ?)`)
+    for (const warehouseProductId of warehouseProductIds) {
+      if (!available.has(warehouseProductId)) continue
+      statement.run(crypto.randomUUID(), warehouseProductId, now)
+    }
+    return this.listMyPalletItems()
+  }
+
+  removeMyPalletItems(warehouseProductIds: string[]): PalletWarehouseItem[] {
+    if (warehouseProductIds.length) {
+      const statement = this.database.prepare(`DELETE FROM my_pallet_items WHERE warehouse_product_id = ?`)
+      warehouseProductIds.forEach(id => statement.run(id))
+    }
+    return this.listMyPalletItems()
   }
 
   /** 入库处理：全状态队列（UI 侧筛选），按更新时间倒序 */
@@ -3206,6 +3293,20 @@ export class AppDatabase {
     }
   }
 
+  /** 启动补修：存量存放行（无 collected_at 标记）按入库快照回填货架要素/地区/来源，使存放卡与入库卡红框区一致；
+   * 回填后 collected_at 非空即幂等跳过，无对应入库行跳过待下次启动重试。 */
+  private repairPalletShelfElements(): void {
+    const rows = this.database.prepare(`SELECT id, warehouse_product_id FROM pallet_warehouse_items WHERE collected_at IS NULL`).all() as Array<{ id: string; warehouse_product_id: string }>
+    for (const row of rows) {
+      const inbound = this.database.prepare(`SELECT origin, region, snapshot_json FROM inbound_processing_items WHERE warehouse_product_id = ? ORDER BY updated_at DESC LIMIT 1`).get(row.warehouse_product_id) as { origin: string; region: string; snapshot_json: string } | undefined
+      if (!inbound) continue
+      let snapshot: InboundSnapshot
+      try { snapshot = JSON.parse(inbound.snapshot_json) as InboundSnapshot } catch { continue }
+      this.database.prepare(`UPDATE pallet_warehouse_items SET promotion_text = ?, shipping_fee_text = ?, sellable_inventory = ?, sales_text = ?, giga_index = ?, giga_index_text = ?, score = ?, source_category = ?, source_subcategory = ?, source_tertiary_category = ?, collected_at = ?, region = ?, origin = ? WHERE id = ?`)
+        .run(snapshot.promotionText ?? null, snapshot.shippingFeeText ?? null, snapshot.sellableInventory ?? null, snapshot.salesText ?? null, snapshot.gigaIndex ?? null, snapshot.gigaIndexText ?? null, snapshot.score ?? null, snapshot.sourceCategory ?? null, snapshot.sourceSubcategory ?? null, snapshot.sourceTertiaryCategory ?? null, snapshot.collectedAt ?? null, inbound.region || '', inbound.origin, row.id)
+    }
+  }
+
   private repairStrandedPreferredReturns(): void {
     const rows = this.database.prepare(`SELECT w.* FROM supply_warehouse_products w
       JOIN selection_records s ON s.id = w.selection_id
@@ -3282,12 +3383,19 @@ export class AppDatabase {
           .run(warehouseId, snapshot.warehouseCode, item.selectionId || null, snapshot.sourceUrl, snapshot.itemCode, snapshot.title, snapshot.imageUrl, snapshot.priceText, snapshot.category, snapshot.subcategory, snapshot.tertiaryCategory, payload, now, now)
       }
       const palletExists = this.database.prepare(`SELECT 1 FROM pallet_warehouse_items WHERE warehouse_product_id = ? LIMIT 1`).get(warehouseId)
+      // 存放行与入库快照同口径带入货架要素/地区/来源，供存放卡 100% 复刻入库卡红框区
+      const shelfValues = [
+        snapshot.promotionText ?? null, snapshot.shippingFeeText ?? null, snapshot.sellableInventory ?? null, snapshot.salesText ?? null,
+        snapshot.gigaIndex ?? null, snapshot.gigaIndexText ?? null, snapshot.score ?? null,
+        snapshot.sourceCategory ?? null, snapshot.sourceSubcategory ?? null, snapshot.sourceTertiaryCategory ?? null,
+        snapshot.collectedAt ?? null, item.region || '', item.origin
+      ]
       if (palletExists) {
-        this.database.prepare(`UPDATE pallet_warehouse_items SET warehouse_code = ?, item_code = ?, title = ?, image_url = ?, price_text = ?, category = ?, subcategory = ?, tertiary_category = ?, source_url = ?, stored_at = ? WHERE warehouse_product_id = ?`)
-          .run(snapshot.warehouseCode, snapshot.itemCode, snapshot.title, snapshot.imageUrl, snapshot.priceText, snapshot.category, snapshot.subcategory, snapshot.tertiaryCategory, snapshot.sourceUrl, now, warehouseId)
+        this.database.prepare(`UPDATE pallet_warehouse_items SET warehouse_code = ?, item_code = ?, title = ?, image_url = ?, price_text = ?, category = ?, subcategory = ?, tertiary_category = ?, source_url = ?, stored_at = ?, promotion_text = ?, shipping_fee_text = ?, sellable_inventory = ?, sales_text = ?, giga_index = ?, giga_index_text = ?, score = ?, source_category = ?, source_subcategory = ?, source_tertiary_category = ?, collected_at = ?, region = ?, origin = ? WHERE warehouse_product_id = ?`)
+          .run(snapshot.warehouseCode, snapshot.itemCode, snapshot.title, snapshot.imageUrl, snapshot.priceText, snapshot.category, snapshot.subcategory, snapshot.tertiaryCategory, snapshot.sourceUrl, now, ...shelfValues, warehouseId)
       } else {
-        this.database.prepare(`INSERT INTO pallet_warehouse_items (id, warehouse_product_id, warehouse_code, item_code, title, image_url, price_text, category, subcategory, tertiary_category, source_url, stored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-          .run(crypto.randomUUID(), warehouseId, snapshot.warehouseCode, snapshot.itemCode, snapshot.title, snapshot.imageUrl, snapshot.priceText, snapshot.category, snapshot.subcategory, snapshot.tertiaryCategory, snapshot.sourceUrl, now)
+        this.database.prepare(`INSERT INTO pallet_warehouse_items (id, warehouse_product_id, warehouse_code, item_code, title, image_url, price_text, category, subcategory, tertiary_category, source_url, stored_at, promotion_text, shipping_fee_text, sellable_inventory, sales_text, giga_index, giga_index_text, score, source_category, source_subcategory, source_tertiary_category, collected_at, region, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(crypto.randomUUID(), warehouseId, snapshot.warehouseCode, snapshot.itemCode, snapshot.title, snapshot.imageUrl, snapshot.priceText, snapshot.category, snapshot.subcategory, snapshot.tertiaryCategory, snapshot.sourceUrl, now, ...shelfValues)
       }
       this.registerProductIntake(snapshot.warehouseCode, snapshot.itemCode, snapshot.sourceUrl, snapshot.title, 'WAREHOUSE', now)
       this.database.prepare(`UPDATE inbound_processing_items SET warehouse_product_id = ?, status = 'CONFIRMED', confirmed_at = ?, updated_at = ? WHERE id = ?`).run(warehouseId, now, now, id)

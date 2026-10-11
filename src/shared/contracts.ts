@@ -1253,6 +1253,7 @@ export interface CollectedSupplyProduct {
   gigaIndexText?: string
   collectedAt?: string
   collectedBy?: string
+  addedAt?: string
   promotionText?: string
   supplierName: string
   supplierBadges: string[]
@@ -1306,6 +1307,7 @@ export interface CollectorPluginProduct {
   gigaIndexText?: string
   collectedAt?: string
   collectedBy?: string
+  addedAt?: string
   storeReturnRate?: string
   capturedFrom: 'DETAIL' | 'LIST'
   sourceCategory?: SupplySourceCategory
@@ -1808,6 +1810,26 @@ export interface PalletWarehouseItem {
   tertiaryCategory: string
   sourceUrl: string
   storedAt: string
+  // 存放时自入库快照带入，供存放卡 100% 复刻入库卡红框区（旧行由启动补修回填）
+  promotionText?: string
+  shippingFeeText?: string
+  sellableInventory?: number | null
+  salesText?: string
+  gigaIndex?: number | null
+  gigaIndexText?: string
+  score?: number
+  sourceCategory?: string
+  sourceSubcategory?: string
+  sourceTertiaryCategory?: string
+  collectedAt?: string
+  region?: string
+  origin?: InboundOrigin
+}
+
+/** 下架卡数据：DELISTED 仓行 + pallet 同源事实（无 pallet 同源行时由仓行合成），供下架卡与存放卡同构渲染 */
+export interface DelistedPalletItem extends PalletWarehouseItem {
+  delistedReason: string
+  delistedAt: string | null
 }
 
 /** 入库处理：快照来源（选品审批 / 服务器采集池） */

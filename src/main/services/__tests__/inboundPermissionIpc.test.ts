@@ -22,9 +22,9 @@ describe('货盘删除权限接线', () => {
     expect(page).toMatch(/runWithSessionRetry\(token => window\.desktop\.pallet\.remove\(ids, token\)\)/)
   })
 
-  it('无编辑权限时不渲染单件和批量删除入口', () => {
+  it('无编辑权限时不渲染批量删除与退回入库处理入口', () => {
     const page = readSource('src/renderer/erp/PalletWarehousePage.tsx')
-    expect(page).toMatch(/canEdit && <button className="danger"[\s\S]*?removeItems/)
-    expect(page).toMatch(/canEdit && <button className="candidate-delete"[\s\S]*?removeItems/)
+    expect(page).toMatch(/canEdit && scope === 'warehouse' && <button className="danger"[\s\S]*?removeItems/)
+    expect(page).toMatch(/scope === 'warehouse' && canEdit && <button onClick=\{\(\) => returnPalletItem\(item\)\}>/)
   })
 })

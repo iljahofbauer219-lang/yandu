@@ -1470,3 +1470,36 @@ export const MOCK_TERTIARY_CATALOG: Record<string, { name: string; icon: string 
     { name: 'MIDI键盘', icon: iconOfficeMidiKeyboard }, { name: '声卡', icon: iconOfficeSoundCard }, { name: '控制器', icon: iconOfficeMidiController }, { name: '电脑音乐软件', icon: iconOfficeMusicSoftware }, { name: '监听耳机', icon: iconOfficeMonitorHeadphone }, { name: '其他电脑音乐', icon: iconOfficeMisc }
   ]
 }
+
+export type CatalogTree = { categories: { name: string; children: string[] }[]; tertiary: Record<string, { name: string; icon: string }[]> }
+
+// 数据新增类目的三级兜底图标（静态表未登记时 flyout 仍需可渲染图标）
+const DEFAULT_TERTIARY_ICON = iconOtherInterior
+
+/**
+ * 目录树名称唯一来源：静态登记表 ∪ 总货盘商品携带的一/二/三级类目。
+ * 货盘仓库与我的货盘两页必须同读本函数结果（我的货盘侧传入的也是总货盘商品），
+ * 保证任一侧类目名称变化时两页红框目录面板同步呈现；顺序=静态登记序+数据首现序，确定可断言。
+ */
+export function buildCatalogTree(sources: readonly { category?: string; subcategory?: string; tertiaryCategory?: string }[]): CatalogTree {
+  const categories = MOCK_CATEGORIES.map(group => ({ name: group.name, children: [...group.children] }))
+  const tertiary: Record<string, { name: string; icon: string }[]> = {}
+  for (const [sub, options] of Object.entries(MOCK_TERTIARY_CATALOG)) tertiary[sub] = options.map(option => ({ ...option }))
+  for (const source of sources) {
+    const category = (source.category || '').trim()
+    if (!category) continue
+    let group = categories.find(entry => entry.name === category)
+    if (!group) {
+      group = { name: category, children: [] }
+      categories.push(group)
+    }
+    const subcategory = (source.subcategory || '').trim()
+    if (subcategory && !group.children.includes(subcategory)) group.children.push(subcategory)
+    const tertiaryCategory = (source.tertiaryCategory || '').trim()
+    if (subcategory && tertiaryCategory) {
+      const options = tertiary[subcategory] || (tertiary[subcategory] = [])
+      if (!options.some(option => option.name === tertiaryCategory)) options.push({ name: tertiaryCategory, icon: DEFAULT_TERTIARY_ICON })
+    }
+  }
+  return { categories, tertiary }
+}

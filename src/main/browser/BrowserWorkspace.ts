@@ -554,7 +554,7 @@ export class BrowserWorkspace {
         const dropshipLeadTime = grab(/一件代发发货时效\s*(\d+\s*-\s*\d+\s*个工作日)/)
         const gigaIndex = grab(/GIGA\s*Index[:：]\s*([\d.]+)/i)
         // 站点存在非数值形态（供应商卡「GIGA Index: <60」）：原样保留供展示与闸口判读，数值字段仅纯数字时才有
-        const gigaIndexText = grab(/GIGA\s*Index[:：]\s*([<>≤≥]?\s*\d+(?:\.\d+)?)/i).replace(/\s+/g, '')
+        const gigaIndexText = grab(/GIGA\s*Index[:：]\s*([<>≤≥]?\s*\d+(?:\.\d+)?)/i).replace(/\s+/g, '') || grab(/(新Seller|New\s*Seller)/i).slice(0, 60)
         const materialNode = [...document.querySelectorAll('a[href],button,[role="button"],span,div')].find(el => el.children.length <= 3 && /下载素材包/.test(el.textContent || '') && (el.textContent || '').trim().length <= 20)
         const materialAnchor = materialNode && (materialNode.closest('a[href]') || materialNode.querySelector('a[href]'))
         const materialFallback = [...document.querySelectorAll('a[href]')].find(a => /\.(zip|rar)$/i.test((a.href || '').split('?')[0]) || /material|download_product/i.test(a.href || ''))
@@ -833,8 +833,10 @@ export class BrowserWorkspace {
         const shippingFeeText=text.match(/(?:Shipping(?:\s*Fee)?|物流费)\s*[:：]?\s*((?:US)?\$\s*[\d,.]+(?:\s*-\s*(?:US)?\$?\s*[\d,.]+)?(?:\s*\/件)?)/i)?.[1]||'';
         const promotionText=text.match(/\d+(?:\.\d+)?%\s*OFF/i)?.[0]||'';
         const gigaRaw=(text.match(/GIGA Index:\s*([<>≤≥]?\s*\d+(?:\.\d+)?)/i)?.[1]||'').replace(/\s+/g,'');
+        // 新店卖家卡无 GIGA Index 行、仅身份徽章（新Seller）：徽章原文照读为文本，评分仍留空
+        const gigaBadge=(text.match(/(新Seller|New\s*Seller)/i)?.[1]||'').replace(/\s+/g,'').slice(0,60);
         const gigaIndex=/^[<>≤≥]/.test(gigaRaw)?null:(Number(gigaRaw||0)||null);
-        const gigaIndexText=gigaRaw;
+        const gigaIndexText=gigaRaw||gigaBadge;
         // 重读同时修复主图：与内置采集器同口径（画廊优先+排除灰置），使存量串图候选可经「重读数据」纠正
         const GAL_SEL='[class*="el-image__preview"],[class*="gallery" i],[class*="zoom" i],[class*="swiper" i],[class*="preview" i]';
         const DIM_SEL='[class*="opacity-40"],[class*="opacity-0"],[hidden],[class*="invisible" i]';
@@ -1371,8 +1373,9 @@ export class BrowserWorkspace {
         const shippingFeeText = text.match(/(?:Shipping(?:\s*Fee)?|物流费)\s*[:：]?\s*((?:US)?\$\s*[\d,.]+(?:\s*-\s*(?:US)?\$?\s*[\d,.]+)?(?:\s*\/件)?)/i)?.[1] || '';
         const promotionText = text.match(/\d+(?:\.\d+)?%\s*OFF/i)?.[0] || '';
         const gigaRaw = (text.match(/(?:Seller\s*)?GIGA\s*Index\s*[:：]?\s*([<>≤≥]?\s*\d+(?:\.\d+)?)/i)?.[1] || '').replace(/\s+/g, '')
+        const gigaBadge = (text.match(/(新Seller|New\s*Seller)/i)?.[1] || '').replace(/\s+/g, '').slice(0, 60)
         const gigaIndex = /^[<>≤≥]/.test(gigaRaw) ? null : (Number(gigaRaw || 0) || null)
-        const gigaIndexText = gigaRaw
+        const gigaIndexText = gigaRaw || gigaBadge
         const storeReturnRate = text.match(/(?:店铺退货率|Shop\s*Return\s*Rate)\s*[:：]?\s*([^|,，;；]{1,20})/i)?.[1]?.trim() || '';
         const supplierName = text.match(/(?:Seller|Supplier|供应商)\s*[:：]\s*([^|,，;；]{2,80})/i)?.[1]?.trim() || '';
         return { platformCode:'GIGACLOUD', productId, url:url.href, title, imageUrl:finalImageUrl, priceText, salesText, shippingFeeText, sellableInventory, promotionText, supplierName, gigaIndex, gigaIndexText, storeReturnRate, capturedFrom:source, sourceCategory:categoryContextOf(url.href) };
@@ -3048,8 +3051,9 @@ export class BrowserWorkspace {
         const promotionText = text.match(/\d+(?:\.\d+)?%\s*OFF/i)?.[0] || '';
         const supplierName = [...card.querySelectorAll('[title],a,span')].map(node => node.getAttribute('title') || node.textContent || '').map(value => value.trim()).find(value => value && value.length < 60 && /Furniture|Home|Garden|Supply|Seller|家具|家居|公司/.test(value)) || '';
         const gigaRaw = (text.match(/GIGA Index:\s*([<>≤≥]?\s*\d+(?:\.\d+)?)/i)?.[1] || '').replace(/\s+/g, '')
+        const gigaBadge = (text.match(/(新Seller|New\s*Seller)/i)?.[1] || '').replace(/\s+/g, '').slice(0, 60)
         const gigaIndex = /^[<>≤≥]/.test(gigaRaw) ? null : (Number(gigaRaw || 0) || null)
-        const gigaIndexText = gigaRaw
+        const gigaIndexText = gigaRaw || gigaBadge
         seen.add(productId);
         const productIds=categoryIdsOf(url).slice(0,3);const productCategory=productIds.length>=pageIds.length&&productIds.length?{...sourceCategory,pathIds:productIds,level1:{id:productIds[0],name:namesById.get(productIds[0])||''},level2:productIds[1]?{id:productIds[1],name:namesById.get(productIds[1])||''}:undefined,level3:productIds[2]?{id:productIds[2],name:namesById.get(productIds[2])||''}:undefined,pathNames:productIds.map(id=>namesById.get(id)||'').filter(Boolean),capturedFrom:'PRODUCT_URL',status:productIds.length>=3?'EXACT':'PARTIAL'}:sourceCategory;
         result.push({productId,url,title,imageUrl:image?.currentSrc || image?.src || '',priceText,salesText:stockText,shippingFeeText,sellableInventory,promotionText,supplierName,gigaIndex,gigaIndexText,text,sourceCategory:productCategory});
