@@ -17,9 +17,11 @@ import {
 
 type Props = {
   onSelect: (agent: AgentProfile) => void
+  /** 权限门禁（可选）：返回 false 的 live 卡片灰态不可点，与 coming-soon 同一视觉语义 */
+  accessCheck?: (agent: AgentProfile) => boolean
 }
 
-export default function CrossborderAgentGrid({ onSelect }: Props) {
+export default function CrossborderAgentGrid({ onSelect, accessCheck }: Props) {
   return (
     <div className="crossborder-dept-groups">
       {CROSSBORDER_DEPARTMENTS.map(dept => (
@@ -37,7 +39,8 @@ export default function CrossborderAgentGrid({ onSelect }: Props) {
             {dept.agents.map(slug => {
               const agent = findAgentById(slug)
               if (!agent) return null
-              const live = agent.readiness === 'live'
+              const permitted = accessCheck ? accessCheck(agent) : true
+              const live = agent.readiness === 'live' && permitted
               return (
                 <button
                   key={agent.id}
@@ -48,10 +51,10 @@ export default function CrossborderAgentGrid({ onSelect }: Props) {
                   onClick={() => {
                     if (live) onSelect(agent)
                   }}
-                  aria-label={`${agent.name} - ${agent.description}${live ? '' : '（即将上线）'}`}
+                  aria-label={`${agent.name} - ${agent.description}${live ? '' : permitted ? '（即将上线）' : '（无权限）'}`}
                 >
                   <span className={`crossborder-agent-badge ${live ? 'live' : 'soon'}`}>
-                    {live ? '已上线' : readinessLabel(agent.readiness)}
+                    {live ? '已上线' : permitted ? readinessLabel(agent.readiness) : '无权限'}
                   </span>
                   <i
                     className="crossborder-agent-icon"

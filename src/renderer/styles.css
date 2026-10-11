@@ -392,7 +392,7 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .sysadmin-org-info dd { margin:0; font-size:13px; color:#17201d; font-weight:600; line-height:1.6; }
 
 /* ─── AI跨境平台卡片 ─── */
-.ai-crossborder-page { flex:1; min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 32px; }
+.ai-crossborder-page { flex:1; min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:safe center; padding:40px 32px; overflow-y:auto; }
 /* 运营知识库：内嵌 MaxKB 全屏展示 */
 .ops-knowledge-page { flex:1; min-height:0; display:flex; flex-direction:column; }
 .ops-knowledge-page iframe { flex:1; width:100%; border:0; background:#fff; }

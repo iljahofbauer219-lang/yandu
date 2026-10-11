@@ -21,6 +21,7 @@ import {
   BEST_PRACTICES,
   SCENE_ENTRIES,
   agentNameBySlug,
+  type AgentProfile,
   type BestPractice,
   type SceneEntry
 } from '../shared/agentCategories'
@@ -29,9 +30,13 @@ import type { ProductLibraryItem } from '../shared/productLibrary'
 type Props = {
   /** 进入某个员工工作台 */
   onEnterAgent: (agentName: string, prefillQuery?: string) => void
+  /** 部门卡片里非员工工作台的顶级页（AI美工/AI视频）直达路由 */
+  onOpenPage?: (page: string) => void
+  /** 部门卡片权限门禁（灰态不可点） */
+  agentAccess?: (agent: AgentProfile) => boolean
 }
 
-export default function AIEmployeeHub({ onEnterAgent }: Props) {
+export default function AIEmployeeHub({ onEnterAgent, onOpenPage, agentAccess }: Props) {
   const [query, setQuery] = useState('')
   // 模态状态：技能选择器（已实现），商品库占位
   const [showSkillModal, setShowSkillModal] = useState(false)
@@ -136,7 +141,14 @@ export default function AIEmployeeHub({ onEnterAgent }: Props) {
       {/* 跨境智能体（部门分组卡片，位于「场景入口」之前） */}
       <section className="ai-employee-hub-agents" aria-label="跨境智能体">
         <h2 className="ai-employee-hub-section-title">跨境智能体</h2>
-        <CrossborderAgentGrid onSelect={agent => onEnterAgent(agent.name)} />
+        <CrossborderAgentGrid
+          onSelect={agent => {
+            // 带 targetPage 的卡片直达对应顶级页（视觉传媒部）；其余走员工工作台路由
+            if (agent.targetPage) onOpenPage?.(agent.targetPage)
+            else onEnterAgent(agent.name)
+          }}
+          accessCheck={agentAccess}
+        />
       </section>
 
       {/* 场景入口 */}

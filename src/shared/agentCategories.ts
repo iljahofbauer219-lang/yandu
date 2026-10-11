@@ -22,6 +22,7 @@ export type AgentCategoryId =
   | 'finance'            // 财务
   | 'marketing'          // 营销
   | 'consulting'         // 参谋
+  | 'visual-media'       // 视觉传媒（AI美工 / AI视频；2026-10-11 自侧边栏移入 Hub 部门卡片）
 
 export type AgentReadiness = 'live' | 'beta' | 'coming-soon'
 
@@ -47,6 +48,10 @@ export interface AgentProfile {
   modelId: string
   /** 模型是否可用（与 .env 配置相关，由 listModels() 计算） */
   available: boolean
+  /** 进入对应顶级页所需权限码（部门卡片网格灰态门禁用；员工工作台类留空） */
+  perm?: string
+  /** 卡片直达的顶级页 key（视觉传媒部等「非员工工作台」成员）；留空走员工工作台路由 */
+  targetPage?: string
 }
 
 /** 一级类目 */
@@ -312,6 +317,58 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
         available: false
       }
     ]
+  },
+  {
+    id: 'visual-media',
+    name: '视觉传媒',
+    icon: '🎬',
+    color: '#ef4444',
+    description: '商品视觉生成 · 短视频解析与创作',
+    defaultOpen: false,
+    agents: [
+      {
+        id: 'art-studio',
+        name: '产品美图员',
+        shortName: '美',
+        icon: '🖼',
+        color: '#e11d48',
+        categoryId: 'visual-media',
+        description: '商品主图/细节图 AI 生成直达',
+        readiness: 'live',
+        modelId: '',
+        available: true,
+        perm: 'menu.art.studio',
+        targetPage: 'image-studio'
+      },
+      {
+        id: 'art-realshift',
+        name: '设计洗图员',
+        shortName: '洗',
+        icon: '🪄',
+        color: '#9333ea',
+        categoryId: 'visual-media',
+        description: 'AI 洗图自然化处理直达',
+        readiness: 'live',
+        modelId: '',
+        available: true,
+        perm: 'menu.art.realshift',
+        targetPage: 'realshift'
+      },
+      {
+        id: 'ai-video',
+        name: 'AI视频',
+        shortName: '视',
+        icon: '🎬',
+        color: '#ef4444',
+        categoryId: 'visual-media',
+        description: '短视频脚本 · 解析与生成',
+        readiness: 'live',
+        modelId: '',
+        available: true,
+        perm: 'menu.video',
+        targetPage: 'ai-video'
+      }
+    ]
   }
 ]
 
@@ -422,6 +479,12 @@ export const CROSSBORDER_DEPARTMENTS: CrossborderDepartment[] = [
     name: '二、产品优化部',
     color: '#f59e0b',
     agents: ['listing']
+  },
+  {
+    id: 'cb-visual-media',
+    name: '三、视觉传媒部',
+    color: '#ef4444',
+    agents: ['art-studio', 'art-realshift', 'ai-video']
   }
 ]
 

@@ -10,8 +10,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = (rel) => readFileSync(path.join(root, rel), 'utf8')
 
 const checks = [
-  { file: 'src/renderer/App.tsx', must: ['isExcludedSupply', 'activeSelectionItems', 'candidate-heading-title-row', 'const activeItems = items.filter', '__BUILD_STAMP__'], mustNot: ['eliminate-dialog-meta', 'candidate-controls-row'] },
-  { file: 'src/renderer/erp/PalletWarehousePage.tsx', must: ['pallet-heading-title-row', "key: 'PRODUCT_URL'"], mustNot: [] },
+  { file: 'src/renderer/App.tsx', must: ['isExcludedSupply', 'activeSelectionItems', 'candidate-heading-title-row', 'const activeItems = items.filter', '__BUILD_STAMP__', "method === 'PRODUCT_URL'"], mustNot: ['eliminate-dialog-meta', 'candidate-controls-row'] },
+  { file: 'src/renderer/erp/PalletWarehousePage.tsx', must: ['pallet-heading-title-row'], mustNot: [] }, // 采集方式分段字面量已随用户 v1.0.16+ 重构移入 App.tsx，标记同步迁移
   { file: 'src/renderer/styles.css', must: ['candidate-heading-title-row', 'pallet-heading-title-row', '.build-stamp'], mustNot: ['candidate-controls-row'] },
   { file: 'src/renderer/eliminated-products.css', must: [], mustNot: ['eliminate-dialog-meta'] },
   { file: 'package.json', must: ['rebuild:clean', 'verify:markers'], mustNot: [] },
