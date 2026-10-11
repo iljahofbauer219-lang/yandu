@@ -675,6 +675,7 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .erp-banner { margin:12px 0; padding:10px 14px; border-radius:10px; font-size:13px; line-height:1.5; }
 .erp-banner-info { background:var(--erp-banner-info-bg); color:var(--erp-banner-info); border:1px solid var(--erp-banner-info-border); }
 .erp-banner-error { background:var(--erp-danger-bg); color:var(--erp-danger); border:1px solid var(--erp-danger-border); }
+.erp-banner-error button { margin-left:10px; padding:4px 12px; color:var(--erp-danger); background:#fff; border:1px solid var(--erp-danger-border); border-radius:8px; font-size:12px; font-weight:650; cursor:pointer; }
 
 .erp-collect-workbench, .erp-warehouse-workbench { display:flex; flex-direction:column; gap:4px; }
 .erp-collect-panel { display:flex; flex-direction:column; gap:12px; margin-top:8px; }

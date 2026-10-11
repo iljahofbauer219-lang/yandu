@@ -2661,7 +2661,11 @@ ipcMain.handle('warehouse:download', async (_event, warehouseProductId: string, 
   }
 })
 ipcMain.handle('warehouse:download-list', () => database?.listSupplyDownloads() ?? [])
-ipcMain.handle('warehouse:delisted-pallet', () => database?.listDelistedPalletItems() ?? [])
+// 验收钩子：CODEX_UI_TEST 下可以 YANDU_DROP_IPC 声明单通道缺席，复现旧主进程缺通道场景验证中文兜底横幅
+const droppedIpcChannel = process.env.CODEX_UI_TEST === '1' ? (process.env.YANDU_DROP_IPC || '') : ''
+if (droppedIpcChannel !== 'warehouse:delisted-pallet') {
+  ipcMain.handle('warehouse:delisted-pallet', () => database?.listDelistedPalletItems() ?? [])
+}
 ipcMain.handle('warehouse:open-download', async (_event, warehouseProductId: string) => {
   const record = database?.listSupplyDownloads().find(item => item.warehouseProductId === warehouseProductId)
   if (!record?.pageUrl) throw new Error('该商品还没有服务器详情页')
@@ -2678,6 +2682,7 @@ ipcMain.handle('pallet:remove', async (_event, ids: string[], accessToken: strin
 ipcMain.handle('my-pallet:list', () => database?.listMyPalletItems() ?? [])
 ipcMain.handle('my-pallet:ids', () => database?.listMyPalletWarehouseIds() ?? [])
 ipcMain.handle('my-pallet:add', (_event, warehouseProductIds: string[]) => {
+  if (droppedIpcChannel === 'my-pallet:add') throw new Error('No handler registered for \'my-pallet:add\'')
   if (!database) throw new Error('数据库尚未初始化')
   return database.addMyPalletItems(Array.isArray(warehouseProductIds) ? warehouseProductIds : [])
 })

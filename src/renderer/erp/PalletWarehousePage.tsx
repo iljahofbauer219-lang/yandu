@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { PanelCollapseButton, PanelExpandRail, usePanelCollapse } from '../panel-collapse'
 import type { DelistedPalletItem, InboundProcessingItem, InboundSnapshot, PalletWarehouseItem, SupplyProductDownload } from '../../shared/contracts'
 import { fetchErpCapabilities, fetchErpProducts, type ErpCapabilities } from './erpApi'
+import { describeDesktopError } from '../../shared/desktopErrorText'
 import { runWithSessionRetry } from '../serverApi'
 import { MOCK_CATEGORIES, MOCK_TERTIARY_CATALOG, buildCatalogTree } from './warehouseCatalogData'
 
@@ -106,6 +107,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
   const [items, setItems] = useState<PalletWarehouseItem[]>([])
   const [delistedItems, setDelistedItems] = useState<DelistedPalletItem[]>([])
   const [notice, setNotice] = useState('')
+  const [noticeRetry, setNoticeRetry] = useState<(() => void) | null>(null)
   const [inboundItems, setInboundItems] = useState<InboundProcessingItem[]>([])
   const [inboundFilter, setInboundFilter] = useState<InboundFilter>('PENDING')
   const [selectedRegion, setSelectedRegion] = useState('')
@@ -126,7 +128,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
 
   useEffect(() => {
     void reloadItems()
-      .catch(reason => setNotice(reason instanceof Error ? reason.message : (scope === 'mine' ? '我的货盘加载失败' : '货盘仓库加载失败')))
+      .catch(reason => failNotice(reason, scope === 'mine' ? '我的货盘加载' : '货盘仓库加载', retryLoad))
   }, [scope])
 
   // 我的货盘入选关系：总货盘卡片据此显示「已加入」态；我的货盘页移除后同步清态
@@ -143,7 +145,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
     let alive = true
     window.desktop.warehouses.delistedPallet()
       .then(list => { if (alive) setDelistedItems(list) })
-      .catch(reason => { if (alive) setNotice(reason instanceof Error ? reason.message : '下架产品加载失败') })
+      .catch(reason => { if (alive) failNotice(reason, '下架产品加载', retryLoad) })
     return () => { alive = false }
   }, [hubTab])
 
@@ -163,12 +165,12 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
     let alive = true
     fetchErpCapabilities()
       .then(result => { if (alive) setCaps(result) })
-      .catch(reason => { if (alive) setInboundNotice(reason instanceof Error ? reason.message : 'ERP 能力摘要获取失败，无法校验入库处理权限') })
+      .catch(reason => { if (alive) failInbound(reason, 'ERP 能力摘要获取') })
       .finally(() => { if (alive) setCapsLoaded(true) })
     return () => { alive = false }
   }, [hubTab, capsLoaded])
 
-  const reloadInbound = () => window.desktop.inbound.list().then(setInboundItems).catch(reason => setInboundNotice(reason instanceof Error ? reason.message : '入库队列加载失败'))
+  const reloadInbound = () => window.desktop.inbound.list().then(setInboundItems).catch(reason => failInbound(reason, '入库队列加载'))
 
   // 进入 tab 且具备 canEdit：先同步服务器采集池（COLLECTED）快照，再加载本地队列
   useEffect(() => {
@@ -193,7 +195,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
         }
       })), token)))
       .then(list => { if (alive) setInboundItems(list) })
-      .catch(reason => { if (alive) { setInboundOk(''); setInboundNotice(reason instanceof Error ? reason.message : '入库处理同步失败'); void reloadInbound() } })
+      .catch(reason => { if (alive) { failInbound(reason, '入库处理同步'); void reloadInbound() } })
     return () => { alive = false }
   }, [hubTab, caps])
 
@@ -201,7 +203,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
     if (!ids.length) return
     void runWithSessionRetry(token => window.desktop.pallet.remove(ids, token))
       .then(list => { setItems(list); setCheckedKeys(new Set()) })
-      .catch(reason => setNotice(reason instanceof Error ? reason.message : '删除失败'))
+      .catch(reason => failNotice(reason, '删除'))
   }
 
   const syncMyPallet = (list: PalletWarehouseItem[]) => {
@@ -213,14 +215,14 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
     if (!warehouseProductIds.length) return
     void window.desktop.myPallet.add(warehouseProductIds)
       .then(syncMyPallet)
-      .catch(reason => setNotice(reason instanceof Error ? reason.message : '加入我的货盘失败'))
+      .catch(reason => failNotice(reason, '加入我的货盘'))
   }
 
   const removeFromMyPallet = (warehouseProductIds: string[]) => {
     if (!warehouseProductIds.length) return
     void window.desktop.myPallet.remove(warehouseProductIds)
       .then(syncMyPallet)
-      .catch(reason => setNotice(reason instanceof Error ? reason.message : '移出我的货盘失败'))
+      .catch(reason => failNotice(reason, '移出我的货盘'))
   }
 
   const checkedWarehouseIds = () => visible.filter(item => checkedKeys.has(item.id)).map(item => item.warehouseProductId)
@@ -235,7 +237,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
   const patchSnapshot = (item: InboundProcessingItem, next: InboundSnapshot, okMessage: string) => {
     void runWithSessionRetry(token => window.desktop.inbound.reedit(item.id, next, token))
       .then(list => { setInboundItems(list); setInboundEdit(null); setInboundNotice(''); setInboundOk(okMessage) })
-      .catch(reason => { setInboundOk(''); setInboundNotice(reason instanceof Error ? reason.message : '保存失败') })
+      .catch(reason => failInbound(reason, '保存'))
   }
 
   const activeInbound = inboundItems.find(item => item.id === activeInboundId) || null
@@ -264,21 +266,21 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
         return reloadItems()
       })
       .then(list => { setItems(list); setInboundNotice(''); setInboundOk('已确认转入正式入库与货盘仓库') })
-      .catch(reason => { setInboundOk(''); setInboundNotice(reason instanceof Error ? reason.message : '确认入库失败') })
+      .catch(reason => failInbound(reason, '确认入库'))
   }
 
   const rejectInbound = (id: string) => {
     if (!window.confirm('确认驳回该产品？驳回后不写入正式入库与货盘仓库。')) return
     void runWithSessionRetry(token => window.desktop.inbound.reject(id, token))
       .then(list => { setInboundItems(list); setInboundNotice(''); setInboundOk('已驳回') })
-      .catch(reason => { setInboundOk(''); setInboundNotice(reason instanceof Error ? reason.message : '驳回失败') })
+      .catch(reason => failInbound(reason, '驳回'))
   }
 
   const returnPalletItem = (item: PalletWarehouseItem) => {
     void Promise.resolve(onReturn?.(item))
       .then(() => reloadItems())
       .then(list => setItems(list))
-      .catch(reason => setNotice(reason instanceof Error ? reason.message : '退回入库处理失败'))
+      .catch(reason => failNotice(reason, '退回入库处理'))
   }
 
   const countCategory = (name: string) => items.filter(item => item.category === name).length
@@ -306,19 +308,19 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
     })
   }, [delistedItems, query, selected])
 
-  const reloadDelisted = () => window.desktop.warehouses.delistedPallet().then(setDelistedItems).catch(reason => setNotice(reason instanceof Error ? reason.message : '下架产品加载失败'))
+  const reloadDelisted = () => window.desktop.warehouses.delistedPallet().then(setDelistedItems).catch(reason => failNotice(reason, '下架产品加载', retryLoad))
 
   const restoreDelisted = (warehouseProductId: string) => {
     void runWithSessionRetry(token => window.desktop.warehouses.restore(warehouseProductId, token))
       .then(() => Promise.all([reloadDelisted(), reloadItems()]))
       .then(() => { setNotice(''); setInboundOk('已恢复到正式入库') })
-      .catch(reason => { setInboundOk(''); setNotice(reason instanceof Error ? reason.message : '恢复失败') })
+      .catch(reason => failNotice(reason, '恢复'))
   }
 
   const updateDelisted = (item: PalletWarehouseItem) => {
     void runWithSessionRetry(token => window.desktop.warehouses.download(item.warehouseProductId, token))
       .then(() => { setNotice(''); setInboundOk(`「${item.title}」图文已更新`) })
-      .catch(reason => { setInboundOk(''); setNotice(reason instanceof Error ? reason.message : '更新产品失败') })
+      .catch(reason => failNotice(reason, '更新产品'))
   }
 
   const deleteDelisted = (item: PalletWarehouseItem) => {
@@ -326,11 +328,29 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
     void runWithSessionRetry(token => window.desktop.warehouses.deleteProduct(item.warehouseProductId, token))
       .then(() => reloadDelisted())
       .then(() => { setNotice(''); setInboundOk('产品已永久删除') })
-      .catch(reason => { setInboundOk(''); setNotice(reason instanceof Error ? reason.message : '删除产品失败') })
+      .catch(reason => failNotice(reason, '删除产品'))
   }
 
   const regionGroups = [...new Set(items.map(entry => entry.region).filter((region): region is string => Boolean(region)))]
   const activeRegion = selectedRegion && regionGroups.includes(selectedRegion) ? selectedRegion : regionGroups[0] || ''
+
+  // 错误横幅：中文全文；加载类失败附重试动作；不直显英文技术串
+  const failNotice = (reason: unknown, context: string, retry?: () => void) => {
+    setInboundOk('')
+    setNotice(describeDesktopError(reason, context))
+    setNoticeRetry(retry || null)
+  }
+  const failInbound = (reason: unknown, context: string) => {
+    setInboundOk('')
+    setInboundNotice(describeDesktopError(reason, context))
+  }
+  const retryLoad = () => {
+    setNotice('')
+    setNoticeRetry(null)
+    void reloadItems().catch(reason => failNotice(reason, scope === 'mine' ? '我的货盘加载' : '货盘仓库加载', retryLoad))
+    void window.desktop.myPallet.ids().then(ids => setMyPalletIds(new Set(ids))).catch(reason => failNotice(reason, '我的货盘入选关系加载', retryLoad))
+    if (hubTab === '下架产品') void reloadDelisted()
+  }
 
   const toggleKey = (id: string) => setCheckedKeys(current => {
     const next = new Set(current)
@@ -380,7 +400,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
         </dl>
         <div className="product-actions candidate-next-actions">
           {item.warehouseProductId && warehouseDownloads[item.warehouseProductId]?.status === 'DOWNLOADED' ? (
-            <button onClick={() => void window.desktop.warehouses.openDownload(item.warehouseProductId).catch(reason => { setInboundOk(''); setInboundNotice(reason instanceof Error ? reason.message : '打开下载图文页失败') })}>查看页面</button>
+            <button onClick={() => void window.desktop.warehouses.openDownload(item.warehouseProductId).catch(reason => { failInbound(reason, '打开下载图文页') })}>查看页面</button>
           ) : null}
           {delisted ? <>
             <button disabled={!canEdit} onClick={() => updateDelisted(item)}>更新产品</button>
@@ -494,7 +514,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
         </div>
         {inboundOk ? <div className="erp-banner erp-banner-ok">{inboundOk}</div> : null}
         {inboundNotice ? <div className="erp-banner erp-banner-error">{inboundNotice}</div> : null}
-        {notice ? <div className="erp-banner erp-banner-error">{notice}</div> : null}
+        {notice ? <div className="erp-banner erp-banner-error"><span>{notice}</span>{noticeRetry ? <button type="button" onClick={() => noticeRetry()}>重试</button> : null}</div> : null}
         {hubTab === '入库处理' ? (
           caps !== null && !caps.canEdit ? (
             <div className="empty-state"><span>◎</span><h2>无入库处理权限</h2><p>当前账号缺少 ERP 仓库编辑权限（erp.warehouse.edit），无法同步采集池与确认入库，请联系管理员开通。</p></div>
@@ -568,7 +588,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
                     </>}
                     {item.status === 'REJECTED' && <button onClick={() => setInboundEdit({ id: item.id, draft: { ...snapshot } })}>重新编辑</button>}
                     {item.warehouseProductId && warehouseDownloads[item.warehouseProductId]?.status === 'DOWNLOADED' ? (
-                      <button onClick={() => void window.desktop.warehouses.openDownload(item.warehouseProductId as string).catch(reason => { setInboundOk(''); setInboundNotice(reason instanceof Error ? reason.message : '打开下载图文页失败') })}>查看页面</button>
+                      <button onClick={() => void window.desktop.warehouses.openDownload(item.warehouseProductId as string).catch(reason => { failInbound(reason, '打开下载图文页') })}>查看页面</button>
                     ) : null}
                   </div>
                 </div>
