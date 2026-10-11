@@ -145,6 +145,7 @@ const ownerProfile = {
     assert('正式入库展示种子商品卡', await card.count() === 1)
     assert('ACTIVE 卡提供地区货盘下拉', await card.locator('.warehouse-region-select select').count() === 1)
     assert('ACTIVE 卡提供抄送货盘', await card.getByRole('button', { name: '抄送货盘', exact: true }).count() === 1)
+    assert('抄送前按钮无 copied 标记', await card.getByRole('button', { name: '抄送货盘', exact: true }).evaluate(el => !el.classList.contains('copied')))
     assert('ACTIVE 卡提供下架产品', await card.getByRole('button', { name: '下架产品', exact: true }).count() === 1)
     assert('ACTIVE 卡提供下载图文按钮', await card.getByRole('button', { name: '下载图文', exact: true }).count() === 1)
     assert('ACTIVE 卡提供查看页面按钮', await card.getByRole('button', { name: '查看页面', exact: true }).count() === 1)
@@ -172,6 +173,19 @@ const ownerProfile = {
     await page.waitForTimeout(500)
     await page.locator('.warehouse-product-grid article', { hasText: FIXTURE_TITLE }).getByRole('button', { name: '抄送货盘', exact: true }).click()
     await page.waitForFunction(async () => (await window.desktop.inbound.list()).some(entry => entry.origin === 'WAREHOUSE'), null, { timeout: 15000 })
+    const copiedBtn = page.locator('.warehouse-product-grid article', { hasText: FIXTURE_TITLE }).getByRole('button', { name: '已抄送', exact: true })
+    assert('抄送后按钮变文案已抄送且带 copied 变色', await copiedBtn.count() === 1 && await copiedBtn.evaluate(el => el.classList.contains('copied')))
+    await page.reload()
+    await page.waitForTimeout(1200)
+    if (!(await page.locator('.selection-module-nav.warehouse-flow-nav').count())) {
+      await page.locator('.sidebar').getByRole('button', { name: '货盘采集', exact: true }).click()
+      await page.waitForTimeout(700)
+      await page.locator('.ai-collect-card', { hasText: '大健云仓' }).click()
+      await page.waitForTimeout(700)
+    }
+    await page.locator('.selection-module-nav.warehouse-flow-nav').getByRole('button', { name: '正式入库' }).click()
+    await page.waitForTimeout(700)
+    assert('刷新后已抄送状态保持', await page.locator('.warehouse-product-grid article', { hasText: FIXTURE_TITLE }).getByRole('button', { name: '已抄送', exact: true }).count() === 1)
 
     // 货盘仓库入库处理：抄送行带来源与地区徽标；地区货盘分组可见
     await page.locator('.sidebar').getByRole('button', { name: '货盘仓库', exact: true }).click()

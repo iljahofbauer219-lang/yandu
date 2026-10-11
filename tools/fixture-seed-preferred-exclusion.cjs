@@ -127,7 +127,7 @@ const selection = {
   productId: preferred.productId, platformCode: 'GIGACLOUD', title: preferred.title, imageUrl: '',
   priceText: preferred.price, score: 94, category: '家具', subcategory: '卧室家具', tertiaryCategory: '床架及底座',
   decision: 'PENDING', reason: '已进入选品库，待结合利润和风险完成决策。', recommendation: '待完成供应链比价',
-  riskFlags: [], updatedAt: now
+  riskFlags: ['类目待核实', '库存待补采'], updatedAt: now
 }
 db.prepare('INSERT INTO selection_records (id, task_id, ozon_url, comparison_id, decision, reason, payload, updated_at) VALUES (?, ?, ?, NULL, ?, ?, ?, ?)')
   .run(selection.id, task.id, preferred.url, selection.decision, selection.reason, JSON.stringify(selection), now)
