@@ -3195,6 +3195,20 @@ export class AppDatabase {
     return this.listInbound()
   }
 
+  /** 候选回联的采集描述文本（详情页正文）：供店铺类目树归类使用；缺 descriptionText 时退化为去标签的 descriptionHtml，截断防超限 */
+  candidateDescription(sourceUrl: string): string {
+    if (!sourceUrl) return ''
+    const row = this.database.prepare(`SELECT payload FROM supply_candidates WHERE url = ? AND deleted_at IS NULL ORDER BY rowid DESC LIMIT 1`).get(sourceUrl) as { payload: string } | undefined
+    if (!row) return ''
+    try {
+      const payload = JSON.parse(row.payload) as { descriptionText?: unknown; descriptionHtml?: unknown }
+      const text = typeof payload.descriptionText === 'string' ? payload.descriptionText.trim() : ''
+      if (text) return text.slice(0, 4000)
+      const html = typeof payload.descriptionHtml === 'string' ? payload.descriptionHtml : ''
+      return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 4000)
+    } catch { return '' }
+  }
+
   /** 货架要素映射：候选回联真值 + 选品得分回退（与正式入库卡徽章同口径），带规则版本标记 */
   private shelfElements(sourceUrl: string, selectionId: string, warehouse: { category: string; subcategory: string; tertiaryCategory: string }): Partial<InboundSnapshot> {
     const candidateRow = this.database.prepare(`SELECT payload FROM supply_candidates WHERE url = ? AND deleted_at IS NULL ORDER BY rowid DESC LIMIT 1`).get(sourceUrl) as { payload: string } | undefined

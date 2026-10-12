@@ -5,6 +5,7 @@ export interface PalletCategoryMatchInput {
   category: string
   subcategory: string
   tertiaryCategory: string
+  description?: string
 }
 
 export interface PalletCategoryMatch {
@@ -37,7 +38,7 @@ const tokens = (value: string) => norm(value).split(' ').filter(Boolean).map(fol
 /**
  * 货盘商品 → 店铺类目树自动归类（送入时与编辑器『自动分类』共用）。
  * 三级策略：①源三级类目名自细向粗与树节点名相等/包含（取最深节点）；
- * ②标题 token 与节点路径 token 交集 ≥2（单复数归一）；③无匹配返回 null（落未分类，手工选）。
+ * ②标题+描述文本 token 与节点路径 token 交集 ≥2（单复数归一）；③无匹配返回 null（落未分类，手工选）。
  */
 export function matchPalletCategory(input: PalletCategoryMatchInput, tree: EbayStoreCategory[]): PalletCategoryMatch | null {
   if (!tree.length) return null
@@ -63,7 +64,7 @@ export function matchPalletCategory(input: PalletCategoryMatchInput, tree: EbayS
     }
     if (hit) return { categoryId: hit.categoryId, categoryName: hit.name, score: 100 }
   }
-  const titleTokens = new Set(tokens(input.title))
+  const titleTokens = new Set([...tokens(input.title), ...tokens((input.description || '').slice(0, 2000))])
   let best: PalletCategoryMatch | null = null
   for (const node of tree) {
     const pathTokens = new Set(pathOf(node).flatMap(tokens))

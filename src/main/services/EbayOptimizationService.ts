@@ -246,12 +246,12 @@ export class EbayOptimizationService {
     private readonly model='deepseek-v4-flash'
   ) {}
 
-  async classifyCategory(input:{title:string;sourceCategory:string;nodes:Array<{categoryId:string;path:string}>}):Promise<{categoryId:string|null;reason:string}> {
+  async classifyCategory(input:{title:string;sourceCategory:string;nodes:Array<{categoryId:string;path:string}>;description?:string}):Promise<{categoryId:string|null;reason:string}> {
     if(!this.apiKey)return {categoryId:null,reason:'未配置 DeepSeek API Key，语义归类不可用'}
     if(!input.nodes.length)return {categoryId:null,reason:'店铺类目树为空'}
     const messages=[
-      {role:'system',content:'你是跨境电商工作台的商品归类助手。根据商品标题与源类目，从候选类目路径中选择最合适的一个（可选任意层级节点）。没有合适类目时 categoryId 返回 NONE。只输出JSON：{"categoryId":"候选id","reason":"简短中文理由"}'},
-      {role:'user',content:JSON.stringify({title:input.title,sourceCategory:input.sourceCategory,candidates:input.nodes})}
+      {role:'system',content:'你是跨境电商工作台的商品归类助手。根据商品标题、源类目与描述文本摘要，从候选类目路径中选择最合适的一个（可选任意层级节点）。没有合适类目时 categoryId 返回 NONE。只输出JSON：{"categoryId":"候选id","reason":"简短中文理由"}'},
+      {role:'user',content:JSON.stringify({title:input.title,sourceCategory:input.sourceCategory,description:(input.description||'').slice(0,1200),candidates:input.nodes})}
     ]
     try {
       const response=await fetch(`${this.baseUrl.replace(/\/$/,'')}/chat/completions`,{

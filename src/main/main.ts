@@ -120,7 +120,7 @@ import { reloadLinduoChatModels, shutdownAdvisorRuntime } from './advisor/Adviso
 import { auditEbayTitle } from '../shared/ebayTitleAudit'
 import type { BrowserBounds, BrowserTranslationMode, CandidateUpdateRequest, CollectedOzonProduct, CollectedSupplyProduct, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, CollectorPluginProduct, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonUpdateRequest, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceDocumentDraft, ComplianceEnforcementStatus, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReviewStatus, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceTaskStatus, EbayAcceptanceBatch, EbayAcceptanceCheck, EbayAcceptanceItemResult, EbayAcceptanceRunRequest, EbayAcceptanceScenarioResult, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReviewRequest, EbayImageGroundingRequest, EbayImageInspection, EbayImageInspectionReport, EbayImageRoleSuggestionRequest, EbayImageStage, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductMedia, EbayLocalProductMediaUploadInput, EbayLocalProductSnapshotInput, EbayLocalProductUpdateInput, EbayMarketKeywordStat, EbayMarketResearchDecisionRequest, EbayMarketResearchFinding, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayProductDetails, EbayPublishAuditEvent, EbayPublishComparisonItem, EbayPublishTask, EbaySellerHubAcceptanceSnapshot, EbayStageGroundingRequest, EbayStageStoryboardRequest, EbayTitleDecisionInput, EbayTitleOptimizationRequest, EbayVideoStudioRequest, EliminateRequest, ImageGenerationRequest, ImageModelProfile, ImportedProductImage, ImportedProductSource, InboundErpIntakeInput, InboundSnapshot, MarketplaceCredentialInput, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePublishDraftUpdate, NetworkStrategy, Platform, RealShiftRequest, SelectionDecision, SelectionImportRequest, SelectionTask, SelectionTaskDraft, SupplyPlatformCode, TaskProgress } from '../shared/contracts'
 
-import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
+import type { EbayStoreCategory, EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
 import type { AiEmployeeAskRequest } from '../shared/aiEmployee'
 import { buildListingCsv } from '../shared/listingArchive'
 import { escapeHtml, renderMarkdownForWord, wordDocumentCss } from '../shared/wordExport'
@@ -545,6 +545,25 @@ async function downloadEbayLocalProduct(storeId:string,listingId:string):Promise
   return database.saveEbayLocalProductSnapshot(completeEbayLocalSnapshot({listing:updated,details:mergedDetails,media,capturedAt}))
 }
 
+/** 店铺类目树两层归类（规则→LLM），送入本地产品与编辑器『自动分类』共用；未匹配返回 null 类目（落未分类） */
+async function classifyAgainstStoreTree(input: { title: string; sourceCategory: string; description: string; tree: EbayStoreCategory[] }): Promise<{ engine: 'rule' | 'llm' | 'none'; categoryId: string | null; categoryName: string; reason: string }> {
+  const rule = matchPalletCategory({ title: input.title, category: input.sourceCategory, subcategory: '', tertiaryCategory: '', description: input.description }, input.tree)
+  if (rule) return { engine: 'rule', categoryId: rule.categoryId, categoryName: rule.categoryName, reason: '' }
+  if (!input.tree.length) return { engine: 'none', categoryId: null, categoryName: '', reason: '店铺类目树未同步，无法归类' }
+  const byId = new Map(input.tree.map(node => [node.categoryId, node]))
+  const nodes = input.tree.map(node => {
+    const chain: string[] = []
+    let current: EbayStoreCategory | undefined = node
+    while (current) { chain.unshift(current.name); current = byId.get(current.parentCategoryId) }
+    return { categoryId: node.categoryId, path: chain.join(' > ') }
+  })
+  const llm = await ebayOptimizationService.classifyCategory({ title: input.title, sourceCategory: input.sourceCategory, nodes, description: input.description })
+  if (!llm.categoryId) return { engine: 'llm', categoryId: null, categoryName: '', reason: llm.reason }
+  const node = byId.get(llm.categoryId)
+  if (!node) return { engine: 'llm', categoryId: null, categoryName: '', reason: '模型返回的类目不在店铺类目树内' }
+  return { engine: 'llm', categoryId: node.categoryId, categoryName: node.name, reason: llm.reason }
+}
+
 async function sendMyPalletToEbay(storeId: string | undefined, warehouseProductId: string): Promise<EbayLocalProduct> {
   if (!database) throw new Error('数据库尚未初始化')
   const stores = database.getEbayStores()
@@ -555,10 +574,15 @@ async function sendMyPalletToEbay(storeId: string | undefined, warehouseProductI
   const marketplaceId = store.marketplaceId || 'EBAY_US'
   const capturedAt = new Date().toISOString()
   const { listing, details } = palletItemToEbayLocalInput(item, store.id, marketplaceId, capturedAt)
-  const categoryMatch = matchPalletCategory({ title: item.title, category: item.category || '', subcategory: item.subcategory || '', tertiaryCategory: item.tertiaryCategory || '' }, database.getEbayCategoryWorkspace(store.id).categories)
-  if (categoryMatch) {
-    listing.categoryId = categoryMatch.categoryId
-    listing.categoryName = categoryMatch.categoryName
+  const description = database.candidateDescription(item.sourceUrl)
+  if (description) details.descriptionText = description
+  const match = await classifyAgainstStoreTree({ title: item.title, sourceCategory: item.category || '', description, tree: database.getEbayCategoryWorkspace(store.id).categories })
+  if (match.categoryId) {
+    listing.categoryId = match.categoryId
+    listing.categoryName = match.categoryName
+  } else {
+    listing.categoryId = ''
+    listing.categoryName = '未分类'
   }
   const existing = database.getEbayLocalProducts(store.id).find(row => row.listingId === listing.listingId)
   if (existing) return existing
@@ -2797,26 +2821,11 @@ ipcMain.handle('ebay:local-products:auto-classify', async (_event, localProductI
   const product=database.getEbayLocalProducts().find(item=>item.id===localProductId)
   if(!product)throw new Error('本地产品不存在')
   const tree=database.getEbayCategoryWorkspace(product.storeId).categories
-  const source={title:product.title,category:product.snapshot.sourceListing.categoryName||'',subcategory:'',tertiaryCategory:''}
-  const rule=matchPalletCategory(source,tree)
-  if(rule){
-    const updated=database.setEbayLocalProductCategory(product.id,rule.categoryId,rule.categoryName)
-    return {product:updated,engine:'rule',categoryId:rule.categoryId,categoryName:rule.categoryName,reason:''}
-  }
-  if(!tree.length)return {product,engine:'none',categoryId:null,categoryName:'',reason:'店铺类目树未同步，无法归类'}
-  const byId=new Map(tree.map(node=>[node.categoryId,node]))
-  const nodes=tree.map(node=>{
-    const chain:string[]=[]
-    let current:typeof node|undefined=node
-    while(current){chain.unshift(current.name);current=byId.get(current.parentCategoryId)}
-    return {categoryId:node.categoryId,path:chain.join(' > ')}
-  })
-  const llm=await ebayOptimizationService.classifyCategory({title:product.title,sourceCategory:source.category,nodes})
-  if(!llm.categoryId)return {product,engine:'llm',categoryId:null,categoryName:'',reason:llm.reason}
-  const node=byId.get(llm.categoryId)
-  if(!node)return {product,engine:'llm',categoryId:null,categoryName:'',reason:'模型返回的类目不在店铺类目树内'}
-  const updated=database.setEbayLocalProductCategory(product.id,node.categoryId,node.name)
-  return {product:updated,engine:'llm',categoryId:node.categoryId,categoryName:node.name,reason:llm.reason}
+  const description=product.snapshot.details?.descriptionText || database.candidateDescription(product.snapshot.sourceListing.viewUrl || '')
+  const result=await classifyAgainstStoreTree({ title:product.title, sourceCategory:product.snapshot.sourceListing.categoryName||'', description, tree })
+  if(!result.categoryId)return {product,engine:result.engine,categoryId:null,categoryName:'',reason:result.reason||'无合适类目，保持未分类'}
+  const updated=database.setEbayLocalProductCategory(product.id,result.categoryId,result.categoryName)
+  return {product:updated,engine:result.engine,categoryId:result.categoryId,categoryName:result.categoryName,reason:result.reason}
 })
 ipcMain.handle('ebay:local-products:media-data', (_event, localProductId:string, mediaId:string) => readEbayLocalProductMedia(localProductId,mediaId))
 ipcMain.handle('ebay:local-products:media-add', (_event, localProductId:string, input:EbayLocalProductMediaUploadInput) => addEbayLocalProductMedia(localProductId,input))

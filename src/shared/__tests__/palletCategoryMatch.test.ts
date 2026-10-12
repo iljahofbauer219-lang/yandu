@@ -34,6 +34,11 @@ describe('matchPalletCategory', () => {
     expect(sofa?.categoryId).toBe('c-sofas')
   })
 
+  it('标题模糊时描述文本 token 兜底命中', () => {
+    const hit = matchPalletCategory({ title: 'Universal Accessory Kit', category: '', subcategory: '', tertiaryCategory: '', description: 'Fits most sofa and loveseat frames, living room cushion holder' }, tree)
+    expect(hit?.categoryId).toBe('c-sofas')
+  })
+
   it('无匹配返回 null（落未分类手工选）', () => {
     const hit = matchPalletCategory({ title: '2PC Universal Bucket Racing Seats Stitch Red PVC Leather', category: '汽车用品', subcategory: '座椅', tertiaryCategory: '赛车座椅' }, tree)
     expect(hit).toBeNull()
