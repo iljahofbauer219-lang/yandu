@@ -1,5 +1,6 @@
 import type { EbayContentBenefit, EbayContentFactKind, EbayContentOptimizationRequest, EbayContentOptimizationResult, EbayContentScenario, EbayContentSection, EbayContentSourceFact, EbayTitleOptimizationRequest, EbayTitleOptimizationResult } from '../../shared/contracts'
 import { buildEbayMarketDecisionReport } from '../../shared/ebayMarketDecision'
+import { parseCategoryClassifyReply } from '../../shared/palletCategoryMatch'
 
 interface ChatResponse {
   choices?:Array<{finish_reason?:string;message?:{content?:string|null;reasoning_content?:string|null}}>
@@ -244,6 +245,28 @@ export class EbayOptimizationService {
     private readonly baseUrl='https://api.deepseek.com',
     private readonly model='deepseek-v4-flash'
   ) {}
+
+  async classifyCategory(input:{title:string;sourceCategory:string;nodes:Array<{categoryId:string;path:string}>}):Promise<{categoryId:string|null;reason:string}> {
+    if(!this.apiKey)return {categoryId:null,reason:'未配置 DeepSeek API Key，语义归类不可用'}
+    if(!input.nodes.length)return {categoryId:null,reason:'店铺类目树为空'}
+    const messages=[
+      {role:'system',content:'你是跨境电商工作台的商品归类助手。根据商品标题与源类目，从候选类目路径中选择最合适的一个（可选任意层级节点）。没有合适类目时 categoryId 返回 NONE。只输出JSON：{"categoryId":"候选id","reason":"简短中文理由"}'},
+      {role:'user',content:JSON.stringify({title:input.title,sourceCategory:input.sourceCategory,candidates:input.nodes})}
+    ]
+    try {
+      const response=await fetch(`${this.baseUrl.replace(/\/$/,'')}/chat/completions`,{
+        method:'POST',headers:{Authorization:`Bearer ${this.apiKey}`,'Content-Type':'application/json'},signal:AbortSignal.timeout(20_000),
+        body:JSON.stringify({model:this.model,temperature:0,max_tokens:200,thinking:{type:'disabled'},response_format:{type:'json_object'},messages})
+      })
+      const payload=await response.json() as ChatResponse
+      if(!response.ok)return {categoryId:null,reason:`语义归类请求失败：HTTP ${response.status}`}
+      const content=payload.choices?.[0]?.message?.content?.trim()||''
+      if(!content)return {categoryId:null,reason:'语义归类返回为空'}
+      return parseCategoryClassifyReply(content,new Set(input.nodes.map(node=>node.categoryId)))
+    } catch (error) {
+      return {categoryId:null,reason:error instanceof Error&&error.name==='TimeoutError'?'语义归类超时':'语义归类请求异常'}
+    }
+  }
 
   async optimizeTitle(request:EbayTitleOptimizationRequest):Promise<EbayTitleOptimizationResult> {
     if(!this.apiKey)throw new Error('未配置 DeepSeek API Key，暂时无法生成 eBay 标题')

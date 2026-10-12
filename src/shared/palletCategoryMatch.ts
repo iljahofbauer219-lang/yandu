@@ -13,6 +13,23 @@ export interface PalletCategoryMatch {
   score: number
 }
 
+/** 大模型归类回复解析：命中树内节点返回 id；NONE/坏 JSON/树外 id 一律 null + 中文原因 */
+export function parseCategoryClassifyReply(content: string, validIds: ReadonlySet<string>): { categoryId: string | null; reason: string } {
+  const clean = content.trim().replace(/^```json\s*|\s*```$/g, '')
+  const start = clean.indexOf('{')
+  const end = clean.lastIndexOf('}')
+  if (start < 0 || end <= start) return { categoryId: null, reason: '模型返回不是有效 JSON' }
+  try {
+    const parsed = JSON.parse(clean.slice(start, end + 1)) as { categoryId?: unknown; reason?: unknown }
+    const raw = String(parsed.categoryId ?? '').trim()
+    if (!raw || raw.toUpperCase() === 'NONE') return { categoryId: null, reason: String(parsed.reason || '模型判断无合适类目') }
+    if (!validIds.has(raw)) return { categoryId: null, reason: '模型返回的类目不在店铺类目树内' }
+    return { categoryId: raw, reason: String(parsed.reason || '') }
+  } catch {
+    return { categoryId: null, reason: '模型返回 JSON 解析失败' }
+  }
+}
+
 const norm = (value: string) => value.toLowerCase().replace(/[^a-z0-9一-龥]+/g, ' ').trim()
 const fold = (token: string) => (token.length > 3 && token.endsWith('s') ? token.slice(0, -1) : token)
 const tokens = (value: string) => norm(value).split(' ').filter(Boolean).map(fold).filter(token => token.length >= 2)

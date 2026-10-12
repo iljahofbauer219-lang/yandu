@@ -12,7 +12,6 @@ import { evaluateEbayCompliance } from '../shared/ebayComplianceKnowledge'
 import { complianceCheckFingerprint } from '../shared/complianceFingerprint'
 import { buildEbayMarketDecisionReport } from '../shared/ebayMarketDecision'
 import { auditEbayTitle } from '../shared/ebayTitleAudit'
-import { matchPalletCategory } from '../shared/palletCategoryMatch'
 import type { EbayTitleDecision } from '../shared/contracts'
 import { badgeFallbackScore } from '../shared/badgeScore'
 import { shouldAutoEnterGigaLogin } from '../shared/supplyAutoEnter'
@@ -3805,7 +3804,29 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet}:{initia
     setLocalEditorDraft(ebayLocalProductDraft(current))
   }
   const setLocalCategory=async(categoryId:string,categoryName:string)=>{if(!localEditorProductId)return;setEbayError('');try{const product=await window.desktop.ebay.setLocalCategory(localEditorProductId,categoryId,categoryName);setLocalProducts(current=>[product,...current.filter(item=>item.id!==product.id)]);setNotice(`本地产品类目已更新为『${categoryName||'未分类'}』。`)}catch(reason){setEbayError(readableError(reason,'更新本地产品类目失败'))}}
-  const autoClassifyLocal=async()=>{const product=localProducts.find(item=>item.id===localEditorProductId);if(!product)return;const match=matchPalletCategory({title:product.title,category:product.snapshot.sourceListing.categoryName||'',subcategory:'',tertiaryCategory:''},categoryWorkspace.categories);if(!match){setEbayError('未匹配到合适类目，请在类目下拉中手工选择。');return}await setLocalCategory(match.categoryId,match.categoryName)}
+  const autoClassifyLocal=async()=>{if(!localEditorProductId)return;setEbayError('');setBusy(`local-classify:${localEditorProductId}`);try{const result=await window.desktop.ebay.autoClassifyLocal(localEditorProductId);if(result.categoryId){setLocalProducts(current=>[result.product,...current.filter(item=>item.id!==result.product.id)]);setNotice(`已自动归入『${result.categoryName}』。`)}else{setEbayError(result.reason||'未匹配到合适类目，请在类目下拉中手工选择。')}}catch(reason){setEbayError(readableError(reason,'自动分类失败'))}finally{setBusy('')}}
+  const localCategoryBackfillAttempted=useRef<Set<string>>(new Set())
+  useEffect(()=>{
+    if(activeTab!=='local'||!activeStore)return
+    if(localCategoryBackfillAttempted.current.has(activeStore.id))return
+    if(!localProducts.length)return
+    const targets=localProducts.filter(item=>!item.categoryId).slice(0,10)
+    if(!targets.length)return
+    localCategoryBackfillAttempted.current.add(activeStore.id)
+    void (async()=>{
+      let hit=0
+      const reasons:string[]=[]
+      for(const target of targets){
+        try{
+          const result=await window.desktop.ebay.autoClassifyLocal(target.id)
+          if(result.categoryId){hit+=1;setLocalProducts(current=>[result.product,...current.filter(item=>item.id!==result.product.id)])}
+          else if(result.reason)reasons.push(result.reason)
+        }catch(reason){reasons.push(readableError(reason,'自动分类失败'))}
+      }
+      const miss=targets.length-hit
+      setNotice(`自动分类完成：${hit} 个产品已归入类目树${miss?`，${miss} 个无合适类目（可在本地详情手工选择）`:''}${reasons.length?`；${reasons[0]}`:''}`)
+    })()
+  },[activeTab,activeStore?.id,localProducts])
   const saveLocalEditor=async()=>{if(!localEditorProductId||!localEditorDraft)return;setBusy(`local-save:${localEditorProductId}`);setEbayError('');try{const product=await window.desktop.ebay.updateLocalProduct(localEditorProductId,localEditorDraft);setLocalProducts(current=>[product,...current.filter(item=>item.id!==product.id)]);setLocalEditorDraft(ebayLocalProductDraft(product));if(selectedLocalProductId===product.id)setSelectedLocalProductId(product.id);setNotice(`四项核心资料已保存为本地 V${product.versionCount}，完整度 ${product.snapshot.completeness}%。线上刊登未修改。`)}catch(reason){setEbayError(readableError(reason,'保存本地产品资料失败'))}finally{setBusy('')}}
   const prepareLocalEditorInSellerHub=async()=>{if(!localEditorProductId||!localEditorDraft)return;const productId=localEditorProductId;setBusy(`local-prepare:${productId}`);setEbayError('');try{const product=await window.desktop.ebay.updateLocalProduct(productId,localEditorDraft);setLocalProducts(current=>[product,...current.filter(item=>item.id!==product.id)]);setLocalEditorDraft(ebayLocalProductDraft(product));const result=await window.desktop.ebay.prepareLocalProductRevision(product.id);setLocalEditorProductId('');setLocalEditorDraft(null);setActiveTab('browser');const warning=result.skippedFields.length?`；${result.skippedFields.length} 项需人工处理`:' ';setNotice(`本地 V${product.versionCount} 已保存，并在 Seller Hub 准备标题、描述和价格共 ${result.filledFields.length} 项${warning}。图片仍由您在页面人工核对，系统没有提交。`)}catch(reason){setEbayError(readableError(reason,'本地版本已保留，但准备 eBay 修改页面失败'))}finally{setBusy('')}}
   const uploadLocalEditorMedia=async(files:File[])=>{if(!localEditorProductId||!localEditorDraft||!files.length)return;const remaining=Math.max(0,24-localEditorDraft.media.length);const selected=files.slice(0,remaining);if(!selected.length){setEbayError('eBay 商品图片最多保留 24 张');return}setBusy(`local-media:${localEditorProductId}`);setEbayError('');try{const uploaded:EbayLocalProductUpdateInput['media']=[];for(const file of selected){const base64=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||'').split(',')[1]||'');reader.onerror=()=>reject(reader.error||new Error('读取图片失败'));reader.readAsDataURL(file)});uploaded.push(await window.desktop.ebay.addLocalProductMedia(localEditorProductId,{fileName:file.name,mimeType:file.type||'image/jpeg',base64}))}setLocalEditorDraft(current=>current?({...current,media:[...current.media,...uploaded].slice(0,24).map((media,sortOrder)=>({...media,sortOrder}))}):current);setNotice(`已添加 ${uploaded.length} 张图片，保存新版本后写入本地产品。`)}catch(reason){setEbayError(readableError(reason,'添加本地商品图片失败'))}finally{setBusy('')}}

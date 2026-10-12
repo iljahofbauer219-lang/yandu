@@ -434,6 +434,7 @@ contextBridge.exposeInMainWorld('desktop', {
     listings: (storeId?:string):Promise<EbayListing[]> => ipcRenderer.invoke('ebay:listings:list',storeId),
     localProducts: (storeId?:string):Promise<EbayLocalProduct[]> => ipcRenderer.invoke('ebay:local-products:list',storeId),
     setLocalCategory: (localProductId:string, categoryId:string, categoryName:string):Promise<EbayLocalProduct> => ipcRenderer.invoke('ebay:local-products:set-category',localProductId,categoryId,categoryName),
+    autoClassifyLocal: (localProductId:string):Promise<{product:EbayLocalProduct;engine:'rule'|'llm'|'none';categoryId:string|null;categoryName:string;reason:string}> => ipcRenderer.invoke('ebay:local-products:auto-classify',localProductId),
     localProductSnapshots: (localProductId:string):Promise<EbayLocalProductSnapshot[]> => ipcRenderer.invoke('ebay:local-products:snapshots',localProductId),
     downloadLocalProduct: (storeId:string,listingId:string):Promise<EbayLocalProduct> => ipcRenderer.invoke('ebay:local-products:download',storeId,listingId),
     readProductByUrl: (storeId:string,url:string):Promise<EbayLocalProduct> => ipcRenderer.invoke('ebay:product:read-url',storeId,url),

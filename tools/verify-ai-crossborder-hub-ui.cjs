@@ -88,6 +88,11 @@ const RECT_PROBE = () => {
     await page.reload()
     await page.waitForTimeout(1200)
 
+    // 旧包排查：顶栏构建戳必须为最新构建（10-09 旧打包版戳为 2026-10-09 01:49）
+    const stamp = await page.locator('.build-stamp').innerText()
+    assert('顶栏构建戳为最新构建而非10-09旧包', /2026-10-1[12]/.test(stamp) && !stamp.includes('2026-10-09'))
+    assert('侧边栏无AI美工/AI视频独立入口', await page.locator('.sidebar').getByRole('button', { name: 'AI美工' }).count() === 0 && await page.locator('.sidebar').getByRole('button', { name: 'AI视频' }).count() === 0)
+
     // 进入 AI跨境 hub 页
     await page.locator('.sidebar').getByRole('button', { name: 'AI跨境', exact: true }).click()
     await page.locator('.ai-crossborder-grid').waitFor({ state: 'visible', timeout: 8000 })
@@ -205,6 +210,7 @@ const RECT_PROBE = () => {
     await page.getByRole('button', { name: '自动分类' }).click()
     await page.waitForTimeout(500)
     assert('自动分类重跑仍命中高架床', await page.locator('.ebay-revise-category-section header span').innerText() === '高架床')
+    assert('自动分类成功 notice 中文全文', await page.locator('.ebay-success-notice').getByText('已自动归入『高架床』').count() === 1)
     await page.locator('.ebay-revise-category-row select').selectOption('vf-2')
     await page.waitForTimeout(500)
     assert('手工改类到卧室家具', await page.locator('.ebay-revise-category-section header span').innerText() === '卧室家具')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchPalletCategory } from '../palletCategoryMatch'
+import { matchPalletCategory, parseCategoryClassifyReply } from '../palletCategoryMatch'
 import type { EbayStoreCategory } from '../contracts'
 
 const node = (categoryId: string, name: string, level: number, parentCategoryId = '', sortOrder = 0): EbayStoreCategory => ({
@@ -41,5 +41,24 @@ describe('matchPalletCategory', () => {
 
   it('空树返回 null', () => {
     expect(matchPalletCategory({ title: 'Bed Frame', category: '家具', subcategory: '', tertiaryCategory: '' }, [])).toBeNull()
+  })
+})
+
+describe('parseCategoryClassifyReply', () => {
+  const valid = new Set(['c-beds', 'c-sofas'])
+  it('命中树内节点', () => {
+    expect(parseCategoryClassifyReply('```json\n{"categoryId":"c-beds","reason":"座椅类"}\n```', valid).categoryId).toBe('c-beds')
+  })
+  it('NONE 与空 id 返回 null', () => {
+    expect(parseCategoryClassifyReply('{"categoryId":"NONE"}', valid).categoryId).toBeNull()
+    expect(parseCategoryClassifyReply('{"categoryId":""}', valid).categoryId).toBeNull()
+  })
+  it('树外 id 与坏 JSON 返回 null 且带中文原因', () => {
+    const outside = parseCategoryClassifyReply('{"categoryId":"c-xxx"}', valid)
+    expect(outside.categoryId).toBeNull()
+    expect(outside.reason).includes('不在店铺类目树内')
+    const broken = parseCategoryClassifyReply('not json at all', valid)
+    expect(broken.categoryId).toBeNull()
+    expect(broken.reason).includes('JSON')
   })
 })

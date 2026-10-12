@@ -2792,6 +2792,32 @@ ipcMain.handle('ebay:local-products:download', (_event, storeId:string, listingI
 ipcMain.handle('ebay:product:read-url', (_event, storeId:string, url:string) => readEbayProductByUrl(storeId,url))
 ipcMain.handle('ebay:local-products:update', (_event, localProductId:string, changes:EbayLocalProductUpdateInput) => updateEbayLocalProduct(localProductId,changes))
 ipcMain.handle('ebay:local-products:set-category', (_event, localProductId:string, categoryId:string, categoryName:string) => database?.setEbayLocalProductCategory(localProductId, categoryId, categoryName))
+ipcMain.handle('ebay:local-products:auto-classify', async (_event, localProductId:string) => {
+  if(!database)throw new Error('数据库尚未初始化')
+  const product=database.getEbayLocalProducts().find(item=>item.id===localProductId)
+  if(!product)throw new Error('本地产品不存在')
+  const tree=database.getEbayCategoryWorkspace(product.storeId).categories
+  const source={title:product.title,category:product.snapshot.sourceListing.categoryName||'',subcategory:'',tertiaryCategory:''}
+  const rule=matchPalletCategory(source,tree)
+  if(rule){
+    const updated=database.setEbayLocalProductCategory(product.id,rule.categoryId,rule.categoryName)
+    return {product:updated,engine:'rule',categoryId:rule.categoryId,categoryName:rule.categoryName,reason:''}
+  }
+  if(!tree.length)return {product,engine:'none',categoryId:null,categoryName:'',reason:'店铺类目树未同步，无法归类'}
+  const byId=new Map(tree.map(node=>[node.categoryId,node]))
+  const nodes=tree.map(node=>{
+    const chain:string[]=[]
+    let current:typeof node|undefined=node
+    while(current){chain.unshift(current.name);current=byId.get(current.parentCategoryId)}
+    return {categoryId:node.categoryId,path:chain.join(' > ')}
+  })
+  const llm=await ebayOptimizationService.classifyCategory({title:product.title,sourceCategory:source.category,nodes})
+  if(!llm.categoryId)return {product,engine:'llm',categoryId:null,categoryName:'',reason:llm.reason}
+  const node=byId.get(llm.categoryId)
+  if(!node)return {product,engine:'llm',categoryId:null,categoryName:'',reason:'模型返回的类目不在店铺类目树内'}
+  const updated=database.setEbayLocalProductCategory(product.id,node.categoryId,node.name)
+  return {product:updated,engine:'llm',categoryId:node.categoryId,categoryName:node.name,reason:llm.reason}
+})
 ipcMain.handle('ebay:local-products:media-data', (_event, localProductId:string, mediaId:string) => readEbayLocalProductMedia(localProductId,mediaId))
 ipcMain.handle('ebay:local-products:media-add', (_event, localProductId:string, input:EbayLocalProductMediaUploadInput) => addEbayLocalProductMedia(localProductId,input))
 ipcMain.handle('ebay:local-products:inspect-visual', async (_event, localProductId:string):Promise<EbayImageVisualInspectionReport> => {
