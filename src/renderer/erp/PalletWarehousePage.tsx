@@ -383,7 +383,6 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
     const scoreGrade = scoreValue === null ? null : Math.round(scoreValue) >= 80 ? 'A' : Math.round(scoreValue) >= 65 ? 'B' : 'C'
     const inventoryText = item.sellableInventory !== null && item.sellableInventory !== undefined ? item.sellableInventory.toLocaleString('zh-CN') : item.salesText?.replace(/^(?:Available\s*Stock|可售库存|库存)\s*[:：]?\s*/i, '') || '待补采'
     const sourceCatalogText = item.sourceCategory ? `${item.sourceCategory} / ${item.sourceSubcategory || '—'} / ${item.sourceTertiaryCategory || '—'}` : '类目待核实'
-    const origin = item.origin || 'WAREHOUSE'
     return <article className={`product-card candidate-product-card supply-source-card${delisted ? ' delisted-product-card' : ''}`} key={item.id}>
       <div className="candidate-card-tools">{batchMode ? <label title="选择商品"><input type="checkbox" checked={checkedKeys.has(item.id)} onChange={() => toggleKey(item.id)}/></label> : null}</div>
       <button type="button" className="product-image" aria-label={`查看商品图片：${item.title}`}>
@@ -393,14 +392,14 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
       </button>
       <div className="product-info supply-source-info">
         <small>
-          <span className={`inbound-origin-badge ${origin === 'SELECTION' ? 'origin-selection' : origin === 'WAREHOUSE' ? 'origin-warehouse' : 'origin-erp'}`}>{origin === 'SELECTION' ? '选品审批' : origin === 'WAREHOUSE' ? '正式入库抄送' : '服务器采集池'}</span>
           {item.region ? <span className="inbound-origin-badge origin-region">{item.region}</span> : null}
           {item.warehouseCode === 'GIGACLOUD' ? '大健云仓' : item.warehouseCode} · Item Code {item.itemCode || '—'}
         </small>
         <b title={item.title}>{item.title}</b>
         <strong>{item.priceText || '价格待核验'}</strong>
         <dl className="candidate-source-facts">
-          <div><dt>目标仓/货位</dt><dd title={`${item.category} / ${item.subcategory} / ${item.tertiaryCategory}`}>{item.warehouseCode} / {item.category || '—'} / {item.subcategory || '—'} / {item.tertiaryCategory || '—'}</dd></div>
+          <div><dt>原货盘</dt><dd>{item.warehouseCode === 'GIGACLOUD' ? '大健云仓' : item.warehouseCode} · Item Code {item.itemCode || '—'}</dd></div>
+          <div><dt>地区货盘</dt><dd>{item.region || '—'}</dd></div>
           <div><dt>物流费</dt><dd>{item.shippingFeeText || '待补采'}</dd></div>
           <div><dt>可售库存</dt><dd>{inventoryText}</dd></div>
           <div><dt>原始类目</dt><dd title={sourceCatalogText}>{sourceCatalogText}</dd></div>
