@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import type { EbayLocalProduct, EbayLocalProductUpdateInput } from '../shared/contracts'
+import type { EbayLocalProduct, EbayLocalProductUpdateInput, EbayStoreCategory } from '../shared/contracts'
 import './ebay-local-listing-editor.css'
 import './ebay-local-listing-pricing.css'
 import './ebay-local-listing-validation.css'
@@ -10,11 +10,14 @@ type Props={
   saving:boolean
   uploading:boolean
   preparing:boolean
+  categories:EbayStoreCategory[]
   onChange:(draft:EbayLocalProductUpdateInput)=>void
   onSave:()=>void
   onClose:()=>void
   onUpload:(files:File[])=>void
   onPrepare:()=>void
+  onSetCategory:(categoryId:string,categoryName:string)=>void
+  onAutoClassify:()=>void
 }
 
 type ValidationIssue={level:'ERROR'|'WARNING';section:string;message:string}
@@ -42,7 +45,7 @@ function mediaUrl(localPath:string,remoteUrl:string) {
   return localPath?`cross-media://local/${encodeURIComponent(localPath)}`:remoteUrl
 }
 
-export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,onChange,onSave,onClose,onUpload,onPrepare}:Props) {
+export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify}:Props) {
   const fileInput=useRef<HTMLInputElement>(null)
   const [draggedId,setDraggedId]=useState('')
   const [descriptionMode,setDescriptionMode]=useState<'TEXT'|'HTML'>('TEXT')
@@ -84,6 +87,17 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
         <section className={`ebay-revise-validation ${errors.length?'blocked':'ready'}`}>
           <div><strong>{errors.length?`${errors.length} 项必须修改`:'四项核心资料已通过'}</strong><span>{warnings.length} 项建议优化 · 本地产品只保留四个核心部分</span></div>
           {issues.length>0&&<details><summary>查看检查明细</summary><div>{issues.map((issue,index)=><button type="button" key={`${issue.section}-${index}`} className={issue.level.toLowerCase()} onClick={()=>document.getElementById(`ebay-revise-${issue.section}`)?.scrollIntoView({behavior:'smooth',block:'start'})}><b>{issue.level==='ERROR'?'必须修改':'建议优化'}</b><span>{issue.message}</span></button>)}</div></details>}
+        </section>
+
+        <section className="ebay-revise-section ebay-revise-category-section">
+          <header><div><h2>类目</h2><p>送入时按标题与原类目自动归入店铺类目树；未匹配可在此重跑自动分类或手工选择。</p></div><span>{product.categoryName||'未分类'}</span></header>
+          <div className="ebay-revise-category-row">
+            <select aria-label="本地产品类目" value={product.categoryId} onChange={event=>{const found=categories.find(item=>item.categoryId===event.target.value);if(found)onSetCategory(found.categoryId,found.name)}}>
+              <option value="">未分类</option>
+              {categories.map(item=><option key={item.categoryId} value={item.categoryId}>{'　'.repeat(Math.max(0,item.level-1))}{item.name}</option>)}
+            </select>
+            <button type="button" onClick={onAutoClassify}>自动分类</button>
+          </div>
         </section>
 
         <section id="ebay-revise-media" className="ebay-revise-section ebay-revise-media-section">

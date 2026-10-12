@@ -395,7 +395,8 @@ contextBridge.exposeInMainWorld('desktop', {
     list: (): Promise<PalletWarehouseItem[]> => ipcRenderer.invoke('my-pallet:list'),
     ids: (): Promise<string[]> => ipcRenderer.invoke('my-pallet:ids'),
     add: (warehouseProductIds: string[]): Promise<PalletWarehouseItem[]> => ipcRenderer.invoke('my-pallet:add', warehouseProductIds),
-    remove: (warehouseProductIds: string[]): Promise<PalletWarehouseItem[]> => ipcRenderer.invoke('my-pallet:remove', warehouseProductIds)
+    remove: (warehouseProductIds: string[]): Promise<PalletWarehouseItem[]> => ipcRenderer.invoke('my-pallet:remove', warehouseProductIds),
+    sendToEbay: (storeId: string | undefined, warehouseProductId: string): Promise<EbayLocalProduct> => ipcRenderer.invoke('my-pallet:send-to-ebay', storeId, warehouseProductId)
   },
   inbound: {
     list: (): Promise<InboundProcessingItem[]> => ipcRenderer.invoke('inbound:list'),
@@ -432,6 +433,7 @@ contextBridge.exposeInMainWorld('desktop', {
     importReport: (storeId:string):Promise<EbayReportImportResult|null> => ipcRenderer.invoke('ebay:report:import',storeId),
     listings: (storeId?:string):Promise<EbayListing[]> => ipcRenderer.invoke('ebay:listings:list',storeId),
     localProducts: (storeId?:string):Promise<EbayLocalProduct[]> => ipcRenderer.invoke('ebay:local-products:list',storeId),
+    setLocalCategory: (localProductId:string, categoryId:string, categoryName:string):Promise<EbayLocalProduct> => ipcRenderer.invoke('ebay:local-products:set-category',localProductId,categoryId,categoryName),
     localProductSnapshots: (localProductId:string):Promise<EbayLocalProductSnapshot[]> => ipcRenderer.invoke('ebay:local-products:snapshots',localProductId),
     downloadLocalProduct: (storeId:string,listingId:string):Promise<EbayLocalProduct> => ipcRenderer.invoke('ebay:local-products:download',storeId,listingId),
     readProductByUrl: (storeId:string,url:string):Promise<EbayLocalProduct> => ipcRenderer.invoke('ebay:product:read-url',storeId,url),

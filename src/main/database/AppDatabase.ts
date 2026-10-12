@@ -2255,6 +2255,27 @@ export class AppDatabase {
     return updated
   }
 
+  setEbayLocalProductCategory(localProductId: string, categoryId: string, categoryName: string): EbayLocalProduct {
+    const row = this.database.prepare(`SELECT latest_snapshot_id FROM ebay_local_products WHERE id=?`).get(localProductId) as { latest_snapshot_id: string } | undefined
+    if (!row) throw new Error('本地产品不存在')
+    const now = new Date().toISOString()
+    this.database.exec('BEGIN IMMEDIATE')
+    try {
+      this.database.prepare(`UPDATE ebay_local_products SET category_id=?, category_name=?, updated_at=? WHERE id=?`).run(categoryId, categoryName, now, localProductId)
+      const snap = this.database.prepare(`SELECT payload FROM ebay_local_product_snapshots WHERE id=?`).get(row.latest_snapshot_id) as { payload: string } | undefined
+      if (snap) {
+        const payload = JSON.parse(snap.payload) as EbayLocalProductSnapshot
+        payload.sourceListing = { ...payload.sourceListing, categoryId, categoryName }
+        this.database.prepare(`UPDATE ebay_local_product_snapshots SET payload=? WHERE id=?`).run(JSON.stringify(payload), row.latest_snapshot_id)
+      }
+      this.database.exec('COMMIT')
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
+    return this.getEbayLocalProducts().find(item => item.id === localProductId)!
+  }
+
   saveEbayLocalProductSnapshot(input:EbayLocalProductSnapshotInput):EbayLocalProduct {
     const listing=input.listing
     const existing=this.database.prepare(`SELECT id,version_count FROM ebay_local_products WHERE store_id=? AND marketplace_id=? AND listing_id=?`).get(listing.storeId,listing.marketplaceId,listing.listingId) as {id:string;version_count:number}|undefined

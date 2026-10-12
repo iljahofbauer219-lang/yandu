@@ -10,6 +10,7 @@ const path = require('node:path')
 const fs = require('node:fs')
 const os = require('node:os')
 const http = require('node:http')
+const { spawnSync } = require('node:child_process')
 
 function startMockServer(routes) {
   const server = http.createServer((req, res) => {
@@ -50,6 +51,16 @@ const RECT_PROBE = () => {
 ;(async () => {
   const executablePath = path.resolve(__dirname, '../node_modules/electron/dist/Electron.app/Contents/MacOS/Electron')
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ac-hub-ui-'))
+
+  // 货盘 fixture 种子：供『我的货盘 → 送eBay → 本地产品』端到端断言
+  const seed = spawnSync(executablePath, [path.resolve(__dirname, 'fixture-seed-pallet-warehouse.cjs'), path.join(userDataDir, 'sourcing-data.sqlite'), 'pallet'], {
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8'
+  })
+  if (seed.status !== 0) {
+    console.error('fixture 种子失败：', seed.stdout, seed.stderr)
+    process.exit(1)
+  }
+  console.log(seed.stdout.trim())
 
   const mockServer = await startMockServer({
     '/api/auth/me': ownerProfile,
@@ -124,6 +135,85 @@ const RECT_PROBE = () => {
     assert('eBay 卡直连平台登录工作台', await page.locator('section.ebay-platform-page').count() === 1)
     assert('直连后不再渲染中转页 section', await page.locator('section.ai-crossborder-page').count() === 0)
     await page.screenshot({ path: path.join(ARTIFACTS, 'ebay-login.png') })
+
+    // 采集链前端已移除：建测试店铺进入左栏工作台区核对
+    await page.locator('.ebay-add-store-card').click()
+    await page.locator('.ebay-store-dialog input').nth(0).fill('验收测试店')
+    await page.locator('.ebay-store-dialog input').nth(1).fill('qa@example.test')
+    await page.locator('.ebay-store-dialog input').nth(2).fill('qa-password-123')
+    await page.locator('.ebay-store-dialog').getByRole('button', { name: '确认添加' }).click()
+    await page.locator('.ebay-login-workbench').waitFor({ state: 'visible', timeout: 15000 })
+    await page.waitForTimeout(1200)
+    assert('左栏无待确认采集商品卡', await page.locator('.ebay-collection-draft-card').count() === 0 && await page.locator('main').getByText('待确认采集商品').count() === 0)
+    assert('左栏无采集执行卡', await page.locator('.ebay-collection-execution').count() === 0 && await page.locator('main').getByText('采集执行', { exact: true }).count() === 0)
+    assert('浏览器区无采集插件状态条', await page.locator('.ebay-browser-heading .built-in-collector-trigger').count() === 0)
+    assert('01 平台与登录身份卡保留', await page.locator('main').getByText('平台与登录身份').count() === 1)
+    // 种子类目树：供送入自动归类与手工改类断言（写入运行中实例的 WAL 库）
+    const { DatabaseSync } = require('node:sqlite')
+    const seedDb = new DatabaseSync(path.join(userDataDir, 'sourcing-data.sqlite'))
+    const seedStoreId = seedDb.prepare('SELECT id FROM ebay_stores LIMIT 1').get().id
+    const nowIso = new Date().toISOString()
+    const insCat = seedDb.prepare(`INSERT INTO ebay_store_categories (store_id,category_id,name,parent_category_id,level,child_count,listing_count,sort_order,status,synced_at,updated_at) VALUES (?,?,?,?,?,?,?,?,'ACTIVE',?,?)`)
+    insCat.run(seedStoreId, 'vf-1', '家具', '', 1, 0, 0, 0, nowIso, nowIso)
+    insCat.run(seedStoreId, 'vf-2', '卧室家具', 'vf-1', 2, 0, 0, 0, nowIso, nowIso)
+    insCat.run(seedStoreId, 'vf-3', '高架床', 'vf-2', 3, 0, 0, 0, nowIso, nowIso)
+    seedDb.close()
+    const tabOrder = (await page.locator('.ebay-business-nav button b').allInnerTexts()).join(',')
+    assert('页签顺序为店铺采集/本地产品/AI优化/优品仓库/线上发布/线上产品', tabOrder === '店铺采集,本地产品,AI优化,优品仓库,线上发布,线上产品')
+    assert('默认仍停留店铺采集页签', await page.locator('.ebay-business-nav button.active b').innerText() === '店铺采集')
+    await page.screenshot({ path: path.join(ARTIFACTS, 'ebay-workbench-no-collect.png') })
+    await page.locator('.ebay-business-nav').getByRole('button', { name: '线上产品' }).click()
+    await page.waitForTimeout(600)
+    assert('线上产品页签可进入且同步按钮在工具栏', await page.locator('.ebay-toolbar').getByRole('button', { name: '同步目录' }).count() === 1 && await page.locator('.ebay-toolbar').getByRole('button', { name: '同步产品' }).count() === 1)
+    await page.screenshot({ path: path.join(ARTIFACTS, 'ebay-library-tab.png') })
+
+    // 瘦身：页头横条删除、Omkar chip 移店铺栏、小字说明删除
+    assert('页头横条已删除', await page.locator('.ebay-page-heading').count() === 0)
+    assert('Omkar chip 移至店铺栏右端', await page.locator('.ebay-store-bar .ebay-omkar-chip').count() === 1)
+    assert('店铺栏小字说明已删除', await page.locator('.ebay-store-bar small').count() === 0)
+    const sendError = await page.evaluate(() => window.desktop.myPallet.sendToEbay(undefined, 'not-in-pallet').then(() => '').catch(reason => String(reason && reason.message ? reason.message : reason)))
+    assert('送入 IPC 已注册且缺货盘商品时中文全文报错', sendError.includes('我的货盘'))
+    await page.locator('.ebay-business-nav').getByRole('button', { name: '本地产品' }).click()
+    await page.waitForTimeout(500)
+    assert('本地产品空态引导改为我的货盘送入', await page.locator('main').getByText('请在『我的货盘』选择产品点击“送eBay”').count() === 1)
+    assert('本地目录小字说明已删除', await page.locator('main').getByText('沿用线上商品类目 · 独立持久化').count() === 0)
+    await page.getByRole('button', { name: '前往我的货盘' }).click()
+    await page.waitForTimeout(600)
+    assert('空态动作跳转我的货盘页', await page.locator('.sidebar button.nav-active').innerText() === '我的货盘')
+    await page.screenshot({ path: path.join(ARTIFACTS, 'my-pallet-entry.png') })
+
+    // 端到端：fixture 货盘商品入我的货盘 → 点『送eBay』→ 直达 eBay 本地产品且可见
+    const palletIds = await page.evaluate(() => window.desktop.pallet.list().then(items => items.filter(item => item.title.includes('FIXTURE Pallet Alpha')).map(item => item.warehouseProductId)))
+    assert('fixture 货盘商品存在', palletIds.length === 1)
+    await page.evaluate(ids => window.desktop.myPallet.add(ids), palletIds)
+    await page.locator('.sidebar').getByRole('button', { name: '货盘仓库', exact: true }).click()
+    await page.waitForTimeout(400)
+    await page.locator('.sidebar').getByRole('button', { name: '我的货盘', exact: true }).click()
+    const sendBtn = page.locator('main').getByRole('button', { name: '送eBay', exact: true }).first()
+    await sendBtn.waitFor({ state: 'visible', timeout: 8000 })
+    await sendBtn.click()
+    await page.locator('.ebay-business-nav button.active b').waitFor({ state: 'visible', timeout: 10000 })
+    assert('送入后直达 eBay 工作台本地产品页签', await page.locator('.sidebar button.nav-active').innerText() === 'AI跨境' && await page.locator('.ebay-business-nav button.active b').innerText() === '本地产品')
+    await page.locator('main').getByText('FIXTURE Pallet Alpha Loft Bed 300001').first().waitFor({ state: 'visible', timeout: 8000 })
+    assert('本地产品列表可见送入的 fixture 商品', await page.locator('main').getByText('FIXTURE Pallet Alpha Loft Bed 300001').count() >= 1)
+    assert('本地卡展示货盘送入来源徽章', await page.locator('.ebay-local-source-chip').count() === 1)
+    const catalogText = (await page.locator('.ebay-product-catalog').innerText()).replace(/\n/g, ' ')
+    assert('送入时按源三级类目自动归入高架床', /高架\s*床?\s*1|高架床\s*1/.test(catalogText) && /未分类\s*0/.test(catalogText))
+    await page.locator('.ebay-local-card-actions').getByRole('button', { name: '本地详情' }).click()
+    await page.locator('.ebay-revise-overlay').waitFor({ state: 'visible', timeout: 8000 })
+    assert('编辑器类目区显示自动分类结果', await page.locator('.ebay-revise-category-section header span').innerText() === '高架床')
+    await page.getByRole('button', { name: '自动分类' }).click()
+    await page.waitForTimeout(500)
+    assert('自动分类重跑仍命中高架床', await page.locator('.ebay-revise-category-section header span').innerText() === '高架床')
+    await page.locator('.ebay-revise-category-row select').selectOption('vf-2')
+    await page.waitForTimeout(500)
+    assert('手工改类到卧室家具', await page.locator('.ebay-revise-category-section header span').innerText() === '卧室家具')
+    await page.locator('.ebay-revise-overlay').getByRole('button', { name: '关闭编辑器' }).click()
+    await page.waitForTimeout(500)
+    const catalogAfter = (await page.locator('.ebay-product-catalog').innerText()).replace(/\n/g, ' ')
+    assert('手工改类后树计数迁移', /卧室家具\s*1/.test(catalogAfter) && /高架床\s*0/.test(catalogAfter))
+    await page.screenshot({ path: path.join(ARTIFACTS, 'ebay-local-category.png') })
+    await page.screenshot({ path: path.join(ARTIFACTS, 'ebay-local-sent.png') })
 
     assert('无渲染进程异常', pageErrors.length === 0)
     if (pageErrors.length) console.error(pageErrors.join('\n'))

@@ -87,12 +87,13 @@ export function recommendCatalogPath(source: { title?: string; category?: string
 
 const DAY_MS = 86400000
 
-export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'warehouse', onSendToCrossborder }: {
+export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'warehouse', onSendToEbay }: {
   canEdit?: boolean
   onReturn?: (item: PalletWarehouseItem) => Promise<void> | void
   /** warehouse = 总货盘；mine = 我的货盘（个人入选视图，界面与总货盘一致） */
   scope?: 'warehouse' | 'mine'
-  onSendToCrossborder?: () => void
+  /** 我的货盘：送入 eBay 工作台本地产品（成功后由调用方跳转） */
+  onSendToEbay?: (warehouseProductId: string) => Promise<void> | void
 }) {
   const catalogPanel = usePanelCollapse('pallet-catalog')
   const [hubTab, setHubTab] = useState<HubTab>('全部产品')
@@ -344,6 +345,16 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
     setInboundOk('')
     setInboundNotice(describeDesktopError(reason, context))
   }
+  const sendToEbay = async (warehouseProductId: string) => {
+    if (!onSendToEbay) return
+    setNotice('')
+    setNoticeRetry(null)
+    try {
+      await onSendToEbay(warehouseProductId)
+    } catch (reason) {
+      failNotice(reason, '送入eBay工作台失败', () => void sendToEbay(warehouseProductId))
+    }
+  }
   const retryLoad = () => {
     setNotice('')
     setNoticeRetry(null)
@@ -412,7 +423,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
                 ? <button className="my-pallet-added" title="点击移出我的货盘" onClick={() => removeFromMyPallet([item.warehouseProductId])}>已加入</button>
                 : <button onClick={() => addToMyPallet([item.warehouseProductId])}>加入我的货盘</button>
             ) : <>
-              <button className="primary" onClick={() => onSendToCrossborder?.()}>送AI跨境</button>
+              <button className="primary" title="送入 eBay 工作台本地产品" onClick={() => void sendToEbay(item.warehouseProductId)}>送eBay</button>
               <button className="candidate-delete" onClick={() => removeFromMyPallet([item.warehouseProductId])}>移除</button>
             </>}
             {scope === 'warehouse' && canEdit && <button onClick={() => returnPalletItem(item)}>退回入库处理</button>}
@@ -428,8 +439,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
     </div>
     <section className={`candidate-page${catalogPanel.collapsed?' side-collapsed':''}`}>
       {catalogPanel.collapsed?<PanelExpandRail panel={catalogPanel} label="产品目录库"/>:<aside className="catalog-panel collapsible-aside">
-        <PanelCollapseButton panel={catalogPanel}/>
-        <div className="catalog-heading"><h2>产品目录库</h2></div>
+        <div className="catalog-heading catalog-heading-row"><h2>产品目录库</h2><PanelCollapseButton panel={catalogPanel}/></div>
         <button className={`catalog-all ${selected === 'ALL' ? 'active' : ''}`} onClick={() => { setSelected('ALL'); setSelectedSubcategory('') }}><span>全部产品</span><em>{items.length}</em></button>
         <div className="catalog-tree">
           {catalogTree.categories.map(group => {

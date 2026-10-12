@@ -335,6 +335,7 @@ declare global {
         ids(): Promise<string[]>
         add(warehouseProductIds: string[]): Promise<PalletWarehouseItem[]>
         remove(warehouseProductIds: string[]): Promise<PalletWarehouseItem[]>
+        sendToEbay(storeId: string | undefined, warehouseProductId: string): Promise<EbayLocalProduct>
       }
       inbound: {
         list(): Promise<InboundProcessingItem[]>
@@ -371,6 +372,7 @@ declare global {
         importReport(storeId:string):Promise<EbayReportImportResult|null>
         listings(storeId?:string):Promise<EbayListing[]>
         localProducts(storeId?:string):Promise<EbayLocalProduct[]>
+        setLocalCategory(localProductId:string, categoryId:string, categoryName:string):Promise<EbayLocalProduct>
         localProductSnapshots(localProductId:string):Promise<EbayLocalProductSnapshot[]>
         downloadLocalProduct(storeId:string,listingId:string):Promise<EbayLocalProduct>
         readProductByUrl(storeId:string,url:string):Promise<EbayLocalProduct>

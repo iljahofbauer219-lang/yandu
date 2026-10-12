@@ -43,6 +43,8 @@ import { ArticleCrawlerService } from './services/ArticleCrawlerService'
 import type { GuardianSkillInput } from '../shared/kbGuardian'
 import type { AmazonDataSourceSearchResult } from '../shared/amazonScraper'
 import { describeOmkarCloudError } from '../shared/omkarCloud'
+import { palletItemToEbayLocalInput } from '../shared/palletToEbayLocal'
+import { matchPalletCategory } from '../shared/palletCategoryMatch'
 
 const execFileAsync = promisify(execFile)
 const bundledToolsRoot = () => app.isPackaged ? path.join(process.resourcesPath,'.tools') : path.join(app.getAppPath(),'.tools')
@@ -541,6 +543,48 @@ async function downloadEbayLocalProduct(storeId:string,listingId:string):Promise
   const downloadedCount=media.filter(item=>item.downloadStatus==='DOWNLOADED').length
   if(!downloadedCount)throw new Error(`商品图片全部下载失败。${failures.slice(0,3).join('；')}`)
   return database.saveEbayLocalProductSnapshot(completeEbayLocalSnapshot({listing:updated,details:mergedDetails,media,capturedAt}))
+}
+
+async function sendMyPalletToEbay(storeId: string | undefined, warehouseProductId: string): Promise<EbayLocalProduct> {
+  if (!database) throw new Error('数据库尚未初始化')
+  const stores = database.getEbayStores()
+  const store = stores.find(item => item.id === storeId) || stores[0]
+  if (!store) throw new Error('请先在 eBay 工作台添加店铺，再从我的货盘送入产品')
+  const item = database.listMyPalletItems().find(row => row.warehouseProductId === warehouseProductId)
+  if (!item) throw new Error('该产品已不在我的货盘，请重新选择后送入')
+  const marketplaceId = store.marketplaceId || 'EBAY_US'
+  const capturedAt = new Date().toISOString()
+  const { listing, details } = palletItemToEbayLocalInput(item, store.id, marketplaceId, capturedAt)
+  const categoryMatch = matchPalletCategory({ title: item.title, category: item.category || '', subcategory: item.subcategory || '', tertiaryCategory: item.tertiaryCategory || '' }, database.getEbayCategoryWorkspace(store.id).categories)
+  if (categoryMatch) {
+    listing.categoryId = categoryMatch.categoryId
+    listing.categoryName = categoryMatch.categoryName
+  }
+  const existing = database.getEbayLocalProducts(store.id).find(row => row.listingId === listing.listingId)
+  if (existing) return existing
+  const media: EbayLocalProductMedia[] = []
+  if (listing.imageUrl) {
+    const directory = path.join(app.getPath('userData'), 'ebay-local-products', safeLocalSegment(store.id), safeLocalSegment(listing.listingId), capturedAt.replace(/[:.]/g, '-'))
+    fs.mkdirSync(directory, { recursive: true })
+    const id = crypto.randomUUID()
+    try {
+      const response = await fetch(listing.imageUrl, { signal: AbortSignal.timeout(15_000), headers: { 'User-Agent': 'Mozilla/5.0' } })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const buffer = Buffer.from(await response.arrayBuffer())
+      if (!buffer.length) throw new Error('图片内容为空')
+      const mimeType = (response.headers.get('content-type') || '').split(';')[0].toLowerCase()
+      const selected = ebayImageFormat(mimeType)
+      if (!selected) throw new Error(`不支持的图片类型：${mimeType || '未知'}`)
+      const dimensions = imageDimensions(buffer, selected.format)
+      if (!dimensions.width || !dimensions.height) throw new Error('无法识别图片尺寸')
+      const localPath = path.join(directory, '01.' + selected.extension)
+      fs.writeFileSync(localPath, buffer)
+      media.push({ id, mediaType: 'IMAGE', sortOrder: 0, remoteUrl: listing.imageUrl, localPath, mimeType, width: dimensions.width, height: dimensions.height, fileSize: buffer.length, sha256: createHash('sha256').update(buffer).digest('hex'), downloadStatus: 'DOWNLOADED' })
+    } catch {
+      media.push({ id, mediaType: 'IMAGE', sortOrder: 0, remoteUrl: listing.imageUrl, localPath: '', mimeType: '', width: 0, height: 0, fileSize: 0, sha256: '', downloadStatus: 'FAILED' })
+    }
+  }
+  return database.saveEbayLocalProductSnapshot(completeEbayLocalSnapshot({ listing, details, media, capturedAt }))
 }
 
 async function readEbayProductByUrl(storeId:string,rawUrl:string):Promise<EbayLocalProduct> {
@@ -2690,6 +2734,7 @@ ipcMain.handle('my-pallet:remove', (_event, warehouseProductIds: string[]) => {
   if (!database) throw new Error('数据库尚未初始化')
   return database.removeMyPalletItems(Array.isArray(warehouseProductIds) ? warehouseProductIds : [])
 })
+ipcMain.handle('my-pallet:send-to-ebay', (_event, storeId: string | undefined, warehouseProductId: string) => sendMyPalletToEbay(storeId, warehouseProductId))
 ipcMain.handle('inbound:list', () => database?.listInbound() ?? [])
 ipcMain.handle('erp:intake', async (_event, rows: InboundErpIntakeInput[], accessToken: string) => {
   if (!database) throw new Error('数据库尚未初始化')
@@ -2746,6 +2791,7 @@ ipcMain.handle('ebay:local-products:snapshots', (_event, localProductId:string) 
 ipcMain.handle('ebay:local-products:download', (_event, storeId:string, listingId:string) => downloadEbayLocalProduct(storeId,listingId))
 ipcMain.handle('ebay:product:read-url', (_event, storeId:string, url:string) => readEbayProductByUrl(storeId,url))
 ipcMain.handle('ebay:local-products:update', (_event, localProductId:string, changes:EbayLocalProductUpdateInput) => updateEbayLocalProduct(localProductId,changes))
+ipcMain.handle('ebay:local-products:set-category', (_event, localProductId:string, categoryId:string, categoryName:string) => database?.setEbayLocalProductCategory(localProductId, categoryId, categoryName))
 ipcMain.handle('ebay:local-products:media-data', (_event, localProductId:string, mediaId:string) => readEbayLocalProductMedia(localProductId,mediaId))
 ipcMain.handle('ebay:local-products:media-add', (_event, localProductId:string, input:EbayLocalProductMediaUploadInput) => addEbayLocalProductMedia(localProductId,input))
 ipcMain.handle('ebay:local-products:inspect-visual', async (_event, localProductId:string):Promise<EbayImageVisualInspectionReport> => {
