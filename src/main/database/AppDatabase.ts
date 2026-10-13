@@ -1815,10 +1815,11 @@ export class AppDatabase {
   decideEbayMarketResearchTerm(request:EbayMarketResearchDecisionRequest):EbayMarketResearchSnapshot {
     const snapshot=this.getEbayMarketResearch(request.storeId,request.listingId)
     if(!snapshot)throw new Error('尚未获取当前商品的 eBay 市场数据')
-    const key=request.kind==='KEYWORD'?'keywords':'combinations'
-    const index=snapshot[key].findIndex(item=>item.term===request.term)
+    const key=request.kind==='KEYWORD'?'keywords':request.kind==='COMBINATION'?'combinations':'coreVariants'
+    const list=key==='coreVariants'?(snapshot.coreVariants||(snapshot.coreVariants=[])):snapshot[key]
+    const index=list.findIndex(item=>item.term===request.term)
     if(index<0)throw new Error('当前市场词不存在，请重新获取市场数据')
-    snapshot[key][index]={...snapshot[key][index],factStatus:request.status,factSource:request.status==='CONFIRMED'?'人工确认：与当前商品事实一致':request.status==='EXCLUDED'?'人工排除：不得用于当前商品标题':'市场成交词，需结合商品事实人工确认'}
+    list[index]={...list[index],factStatus:request.status,factSource:request.status==='CONFIRMED'?'人工确认：与当前商品事实一致':request.status==='EXCLUDED'?'人工排除：不得用于当前商品标题':request.kind==='VARIANT'?'核心词短语变体 · 已成交样本回数，需结合商品事实人工确认':'市场成交词，需结合商品事实人工确认'}
     return this.saveEbayMarketResearch({...snapshot,id:crypto.randomUUID()})
   }
 

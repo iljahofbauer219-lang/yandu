@@ -46,6 +46,7 @@ import { describeOmkarCloudError } from '../shared/omkarCloud'
 import { palletItemToEbayLocalInput } from '../shared/palletToEbayLocal'
 import { matchPalletCategory } from '../shared/palletCategoryMatch'
 import { parseResearchQueryReply } from '../shared/ebayResearchQueryLlm'
+import { backCoreTermVariants, parseCoreTermVariants } from '../shared/ebayMarketVariants'
 import { parseEstimatedTotal } from '../shared/supplyEstimatedTotal'
 
 const execFileAsync = promisify(execFile)
@@ -584,6 +585,44 @@ async function suggestResearchQueryViaLlm(input: { title: string; categoryName: 
   if (!query) return { query: null, reason: '千问回复无法解析' }
   researchQueryLlmCache.set(cacheKey, query)
   return { query, reason: '' }
+}
+
+/** 千问按核心商品词拟定候选市场词短语变体（8至14条），再由已成交样本统计佐证 */
+const coreVariantCache = new Map<string, string[]>()
+async function draftCoreTermVariants(input: { query: string; productTitle: string; sampleTitles: string[] }): Promise<{ variants: string[]; reason: string }> {
+  const cacheKey = `${input.query}|${input.sampleTitles.length}`
+  const cached = coreVariantCache.get(cacheKey)
+  if (cached) return { variants: cached, reason: '' }
+  const key = String(process.env.BAILIAN_API_KEY || '').trim()
+  if (!key) return { variants: [], reason: '未配置百炼 API Key' }
+  const baseUrl = (String(process.env.BAILIAN_BASE_URL || '').trim() || 'https://dashscope.aliyuncs.com/compatible-mode/v1').replace(/\/+$/, '')
+  let content = ''
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(20_000),
+      body: JSON.stringify({
+        model: process.env.BAILIAN_QUERY_MODEL || 'qwen-plus',
+        temperature: 0,
+        max_tokens: 300,
+        messages: [
+          { role: 'system', content: '你是 eBay 美国站检索专家。基于核心商品词与已成交样本标题，拟定 8 至 14 个以核心商品词为中心的英文检索短语变体。要求：每个变体必须包含核心商品词的全部单词（允许单复数与词序变化），最多再添加 1 个样本高频词；每个变体 2 至 6 个单词；不得重复；只输出 JSON 字符串数组，不要输出任何其他字符。' },
+          { role: 'user', content: JSON.stringify({ coreQuery: input.query, productTitle: input.productTitle, sampleTitles: input.sampleTitles }) }
+        ]
+      })
+    })
+    const payload = await response.json() as { choices?: { message?: { content?: string } }[]; error?: { message?: string }; message?: string }
+    if (!response.ok) return { variants: [], reason: `百炼请求失败：${payload.error?.message || payload.message || `HTTP ${response.status}`}`.slice(0, 120) }
+    content = payload.choices?.[0]?.message?.content || ''
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') return { variants: [], reason: '千问响应超时' }
+    return { variants: [], reason: `百炼连接失败：${error instanceof Error ? error.message : String(error)}`.slice(0, 120) }
+  }
+  const variants = parseCoreTermVariants(content)
+  if (!variants.length) return { variants: [], reason: '千问回复无法解析' }
+  coreVariantCache.set(cacheKey, variants)
+  return { variants, reason: '' }
 }
 
 async function classifyAgainstStoreTree(input: { title: string; sourceCategory: string; description: string; tree: EbayStoreCategory[]; subcategory?: string; tertiaryCategory?: string }): Promise<{ engine: 'rule' | 'llm' | 'none'; categoryId: string | null; categoryName: string; reason: string }> {
@@ -1181,6 +1220,18 @@ async function researchEbayMarket(request:EbayMarketResearchRequest):Promise<Eba
   const conditionFact=(listing.condition||'').split(/[:.]/)[0].trim().slice(0,40)
   const factText=[listing.originalTitle,listing.title,listing.categoryName,conditionFact,...(listing.itemSpecifics||[]).flatMap(item=>[item.name,item.value])].filter(Boolean).join(' ')
   const titles=analysisSamples.map(item=>item.title).filter(Boolean)
+  const drafted=await draftCoreTermVariants({query,productTitle:listing.title,sampleTitles:titles.slice(0,60)})
+  marketResearchLog(`variants query="${query}" drafted=${drafted.variants.length} reason=${drafted.reason||'ok'}`)
+  const forbiddenVariant=/^(?:free shipping|best price|hot sale|lowest price|clearance)$/i
+  let coreVariants:EbayMarketKeywordStat[]=[]
+  let coreVariantsFallback=false
+  if(drafted.variants.length){
+    coreVariants=backCoreTermVariants(drafted.variants,query,titles).filter(item=>!forbiddenVariant.test(item.term)).map(item=>({term:item.term,count:item.count,coverage:item.coverage,factStatus:'REVIEW' as const,factSource:'核心词短语变体 · 已成交样本回数，需结合商品事实人工确认'}))
+  }
+  if(!coreVariants.length){
+    coreVariantsFallback=true
+    coreVariants=[...buildEbayMarketStats(analysisSamples,factText,1),...buildEbayMarketStats(analysisSamples,factText,2)]
+  }
   const availableMetrics=evidence.metrics.filter(item=>item.available)
   const metric=(key:EbayMarketResearchSnapshot['metrics'][number]['key'])=>evidence.metrics.find(item=>item.key===key)
   const findings:EbayMarketResearchFinding[]=[
@@ -1232,7 +1283,7 @@ async function researchEbayMarket(request:EbayMarketResearchRequest):Promise<Eba
       {label:'原始结果',value:`读取 ${analysis.rawSampleCount} 个，去重后 ${analysis.rankedSamples.length} 个`},
       {label:'标题分析池',value:`前 ${analysis.analysisSampleCount} 个有效样本`},
       {label:'排序依据',value:analysis.rankingBasis==='SOLD_QUANTITY'?'页面已售数量':'eBay 成交结果顺序（无充足销量字段）'}
-    ],findings,keywords:buildEbayMarketStats(analysisSamples,factText,1),combinations:buildEbayMarketStats(analysisSamples,factText,2)
+    ],findings,keywords:buildEbayMarketStats(analysisSamples,factText,1),combinations:buildEbayMarketStats(analysisSamples,factText,2),coreVariants,coreVariantsFallback
   }
   return database.recordEbayMarketResearch(snapshot)
 }

@@ -317,6 +317,8 @@ export interface EbayMarketResearchSnapshot {
   findings?:EbayMarketResearchFinding[]
   keywords:EbayMarketKeywordStat[]
   combinations:EbayMarketKeywordStat[]
+  coreVariants?:EbayMarketKeywordStat[]
+  coreVariantsFallback?:boolean
 }
 
 export interface EbayMarketResearchRequest {
@@ -329,7 +331,7 @@ export interface EbayMarketResearchRequest {
 export interface EbayMarketResearchDecisionRequest {
   storeId:string
   listingId:string
-  kind:'KEYWORD'|'COMBINATION'
+  kind:'KEYWORD'|'COMBINATION'|'VARIANT'
   term:string
   status:'CONFIRMED'|'REVIEW'|'EXCLUDED'
 }

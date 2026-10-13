@@ -72,18 +72,29 @@ const RECT_PROBE = () => {
     '/api/auth/me': ownerProfile,
     '/api/erp/capabilities': { canViewSource: true, canCollect: true, canEdit: true, canPricing: true, canResolveChanges: true },
     '/api/erp/products': { items: [], total: 0, page: 1, pageSize: 100 },
-    // 百炼 mock：生图模型清单 + 千问核心商品词（非 qwen-mt 模型返回确定名词短语，qwen-mt 返回译文）
+    // 百炼 mock：生图模型清单 + 千问核心商品词/候选变体（按请求体分流），qwen-mt 返回译文
     '/models': { data: [{ id: 'qwen-image-2.0' }] },
     '/chat/completions': raw => {
       const body = JSON.parse(raw || '{}')
+      const userContent = String(body.messages?.[1]?.content || '')
+      if (userContent.includes('"coreQuery"')) {
+        const core = JSON.parse(userContent).coreQuery || 'racing seat'
+        return { choices: [{ message: { content: JSON.stringify([`${core} pair`, `${core} set`, `bucket ${core}`]) } }] }
+      }
       const content = String(body.model || '').includes('qwen-mt') ? '2件装 通用型桶形赛车座椅 红色缝线 PVC皮革' : 'Loft Bed Frame'
       return { choices: [{ message: { content } }] }
-    }
+    },
+    // Omkar 检索 mock：12 条成交样本，覆盖 racing seat pair/set 与 bucket racing seat 变体
+    '/ebay/items/search': { listings: [
+      ...[0, 1, 2, 3, 4, 5].map(i => ({ name: `Black Racing Seat Pair Adjustable ${i}`, price: { amount: '120.00' }, url: `https://www.ebay.com/itm/vp${i}`, listing_id: `vp${i}`, condition: 'New', units_sold: '5', delivery_info: { raw: 'Free shipping' } })),
+      ...[0, 1, 2, 3].map(i => ({ name: `Racing Seat Set Recline Suede ${i}`, price: { amount: '98.50' }, url: `https://www.ebay.com/itm/vs${i}`, listing_id: `vs${i}`, condition: 'New', units_sold: '3', delivery_info: { raw: 'Free shipping' } })),
+      ...[0, 1].map(i => ({ name: `Bucket Racing Seat Pair Carbon ${i}`, price: { amount: '150.00' }, url: `https://www.ebay.com/itm/vb${i}`, listing_id: `vb${i}`, condition: 'New', units_sold: '8', delivery_info: { raw: 'Free shipping' } }))
+    ] }
   })
   const mockUrl = `http://127.0.0.1:${mockServer.address().port}`
   fs.writeFileSync(path.join(userDataDir, 'server-config.json'), JSON.stringify({ serverUrl: mockUrl }, null, 2))
 
-  const app = await electron.launch({ executablePath, args: ['.', `--user-data-dir=${userDataDir}`], cwd: path.resolve(__dirname, '..'), env: { ...process.env, CODEX_UI_TEST: '1', YANDU_HOT_DIR: path.join(userDataDir, 'no-hot'), BAILIAN_BASE_URL: mockUrl } })
+  const app = await electron.launch({ executablePath, args: ['.', `--user-data-dir=${userDataDir}`], cwd: path.resolve(__dirname, '..'), env: { ...process.env, CODEX_UI_TEST: '1', YANDU_HOT_DIR: path.join(userDataDir, 'no-hot'), BAILIAN_BASE_URL: mockUrl, EBAY_SCRAPER_API_URL: `${mockUrl}/ebay/items/search` } })
   let failures = 0
   const assert = (name, cond) => { if (cond) console.log(`  ✔ ${name}`); else { failures += 1; console.error(`  ✘ ${name}`) } }
   try {
@@ -100,6 +111,9 @@ const RECT_PROBE = () => {
     }, { profile: ownerProfile, serverUrl: mockUrl })
     await page.reload()
     await page.waitForTimeout(1200)
+
+    // 存 Omkar 测试 Key（主进程加密落盘），检索走 mock Omkar 通道
+    await page.evaluate(() => window.desktop.aiEmployee.amazonDataSource.save({ apiKey: 'verify-omkar-key', site: 'US', pages: 1, maxSamples: 24, cacheHours: 1 }))
 
     // 旧包排查：顶栏构建戳必须为最新构建（10-09 旧打包版戳为 2026-10-09 01:49）
     const stamp = await page.locator('.build-stamp').innerText()
@@ -261,6 +275,11 @@ const RECT_PROBE = () => {
       return r.height > 0 && r.bottom > hr.top + 1 && r.top < hr.bottom - 1
     })
     assert('检索反馈条在滚动视口内可见（未被裁切）', feedbackVisible)
+    // 候选市场词=核心词短语变体+成交佐证：展开核对区断言变体与回数，且无关单词不再出现
+    await page.locator('.ebay-market-keyword-review summary').click()
+    const reviewText = await page.locator('.ebay-market-keyword-review').innerText()
+    assert('候选市场词为核心词短语变体（含成交佐证）', reviewText.includes('racing seat pair') && reviewText.includes('bucket racing seat'))
+    assert('候选市场词不再出现 black 等无关单词', !reviewText.includes('black'))
     await page.screenshot({ path: path.join(ARTIFACTS, 'ebay-market-research.png') })
 
     assert('无渲染进程异常', pageErrors.length === 0)

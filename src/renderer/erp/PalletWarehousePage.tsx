@@ -445,14 +445,14 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
           {catalogTree.categories.map(group => {
             const open = expanded === group.name
             return <div className="catalog-group" key={group.name}>
-              <button className={treeActiveClass(group.name, '')} onClick={() => {
+              <button className={treeActiveClass(group.name, '')} title={group.name} onClick={() => {
                 if (activeInbound) { setExpanded(group.name); assignCatalog(activeInbound, { category: group.name, subcategory: '', tertiaryCategory: '' }, '已选一级类目，请继续选择二级类目', false); return }
                 setSelected(group.name); setExpanded(open ? '' : group.name); setSelectedSubcategory(open ? '' : group.children[0] || '')
               }}>
                 <i>{open ? '⌄' : '›'}</i><span>{group.name}</span><em>{countCategory(group.name)}</em>
               </button>
               {open && <div>
-                {group.children.map(child => <button key={child} className={treeActiveClass(child, group.name)} onClick={() => {
+                {group.children.map(child => <button key={child} className={treeActiveClass(child, group.name)} title={child} onClick={() => {
                   if (activeInbound) {
                     const hasTertiary = (MOCK_TERTIARY_CATALOG[child] || []).length > 0
                     setSelectedSubcategory(child)
