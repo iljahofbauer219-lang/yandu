@@ -45,6 +45,8 @@ import type { AmazonDataSourceSearchResult } from '../shared/amazonScraper'
 import { describeOmkarCloudError } from '../shared/omkarCloud'
 import { palletItemToEbayLocalInput } from '../shared/palletToEbayLocal'
 import { matchPalletCategory } from '../shared/palletCategoryMatch'
+import { parseResearchQueryReply } from '../shared/ebayResearchQueryLlm'
+import { parseEstimatedTotal } from '../shared/supplyEstimatedTotal'
 
 const execFileAsync = promisify(execFile)
 const bundledToolsRoot = () => app.isPackaged ? path.join(process.resourcesPath,'.tools') : path.join(app.getAppPath(),'.tools')
@@ -546,8 +548,46 @@ async function downloadEbayLocalProduct(storeId:string,listingId:string):Promise
 }
 
 /** 店铺类目树两层归类（规则→LLM），送入本地产品与编辑器『自动分类』共用；未匹配返回 null 类目（落未分类） */
-async function classifyAgainstStoreTree(input: { title: string; sourceCategory: string; description: string; tree: EbayStoreCategory[] }): Promise<{ engine: 'rule' | 'llm' | 'none'; categoryId: string | null; categoryName: string; reason: string }> {
-  const rule = matchPalletCategory({ title: input.title, category: input.sourceCategory, subcategory: '', tertiaryCategory: '', description: input.description }, input.tree)
+/** 千问核心商品词提取：AI优化『核心商品词』预填建议；失败返回中文 reason 由渲染器回落规则 */
+const researchQueryLlmCache = new Map<string, string>()
+async function suggestResearchQueryViaLlm(input: { title: string; categoryName: string }): Promise<{ query: string | null; reason: string }> {
+  const cacheKey = `${input.title}|${input.categoryName}`
+  const cached = researchQueryLlmCache.get(cacheKey)
+  if (cached) return { query: cached, reason: '' }
+  const key = String(process.env.BAILIAN_API_KEY || '').trim()
+  if (!key) return { query: null, reason: '未配置百炼 API Key' }
+  const baseUrl = (String(process.env.BAILIAN_BASE_URL || '').trim() || 'https://dashscope.aliyuncs.com/compatible-mode/v1').replace(/\/+$/, '')
+  let content = ''
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(15_000),
+      body: JSON.stringify({
+        model: process.env.BAILIAN_QUERY_MODEL || 'qwen-plus',
+        temperature: 0,
+        max_tokens: 40,
+        messages: [
+          { role: 'system', content: '你是 eBay 美国站检索专家。从商品标题与类目中提取一个最核心的英文商品名词短语（核心商品词），用于检索 eBay 已成交数据。要求：保留商品核心名词与最关键限定名词（如 Bucket Racing Seats）；去掉品牌、数量、颜色、材质、营销词与括号补充；名词短语 2 至 5 个单词；只输出名词短语本身，不要输出任何其他字符。' },
+          { role: 'user', content: JSON.stringify({ title: input.title, category: input.categoryName }) }
+        ]
+      })
+    })
+    const payload = await response.json() as { choices?: { message?: { content?: string } }[]; error?: { message?: string }; message?: string }
+    if (!response.ok) return { query: null, reason: `百炼请求失败：${payload.error?.message || payload.message || `HTTP ${response.status}`}`.slice(0, 120) }
+    content = payload.choices?.[0]?.message?.content || ''
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') return { query: null, reason: '千问响应超时' }
+    return { query: null, reason: `百炼连接失败：${error instanceof Error ? error.message : String(error)}`.slice(0, 120) }
+  }
+  const query = parseResearchQueryReply(content)
+  if (!query) return { query: null, reason: '千问回复无法解析' }
+  researchQueryLlmCache.set(cacheKey, query)
+  return { query, reason: '' }
+}
+
+async function classifyAgainstStoreTree(input: { title: string; sourceCategory: string; description: string; tree: EbayStoreCategory[]; subcategory?: string; tertiaryCategory?: string }): Promise<{ engine: 'rule' | 'llm' | 'none'; categoryId: string | null; categoryName: string; reason: string }> {
+  const rule = matchPalletCategory({ title: input.title, category: input.sourceCategory, subcategory: input.subcategory || '', tertiaryCategory: input.tertiaryCategory || '', description: input.description }, input.tree)
   if (rule) return { engine: 'rule', categoryId: rule.categoryId, categoryName: rule.categoryName, reason: '' }
   if (!input.tree.length) return { engine: 'none', categoryId: null, categoryName: '', reason: '店铺类目树未同步，无法归类' }
   const byId = new Map(input.tree.map(node => [node.categoryId, node]))
@@ -576,7 +616,7 @@ async function sendMyPalletToEbay(storeId: string | undefined, warehouseProductI
   const { listing, details } = palletItemToEbayLocalInput(item, store.id, marketplaceId, capturedAt)
   const description = database.candidateDescription(item.sourceUrl)
   if (description) details.descriptionText = description
-  const match = await classifyAgainstStoreTree({ title: item.title, sourceCategory: item.category || '', description, tree: database.getEbayCategoryWorkspace(store.id).categories })
+  const match = await classifyAgainstStoreTree({ title: item.title, sourceCategory: item.category || '', description, tree: database.getEbayCategoryWorkspace(store.id).categories, subcategory: item.subcategory || '', tertiaryCategory: item.tertiaryCategory || '' })
   if (match.categoryId) {
     listing.categoryId = match.categoryId
     listing.categoryName = match.categoryName
@@ -1053,31 +1093,59 @@ function prepareEbayMarketAnalysis(samples:EbayMarketResearchSnapshot['samples']
   return {rankedSamples,rawSampleCount:samples.length,analysisSampleCount:Math.min(50,rankedSamples.length),rankingBasis,soldQuantityEvidenceCount}
 }
 
+/** 市场检索全程日志（脱敏：不写 Key）：userData/logs/market-research.log */
+function marketResearchLog(line: string) {
+  try {
+    const dir = path.join(app.getPath('userData'), 'logs')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.appendFileSync(path.join(dir, 'market-research.log'), `${new Date().toISOString()} ${line}\n`)
+  } catch { /* 日志失败不影响主流程 */ }
+}
+
+/** Omkar 失败原因中文化：额度/鉴权类给出可行动指引，其余保留原文 */
+function omkarFailureMessage(detail: string): string {
+  const text = String(detail || '').trim()
+  if (/run out of credit|out of credit|insufficient credit|no credit/i.test(text)) return 'Omkar API Key 额度已用完，请充值或更换 Key 后到 Amazon 数据源配置重存，再重新检索'
+  if (/invalid api key|missing api key|unauthorized|forbidden/i.test(text)) return 'Omkar API Key 无效或未被授权，请到 Amazon 数据源配置重存后重试'
+  return `Omkar eBay Scraper 返回错误：${text || '未知错误'}`
+}
+
 async function researchEbayMarket(request:EbayMarketResearchRequest):Promise<EbayMarketResearchSnapshot> {
   if(!database)throw new Error('数据库尚未初始化')
   const store=database.getEbayStores().find(item=>item.id===request.storeId)
+  if(!store)throw new Error('eBay 店铺不存在')
   const listing=database.getEbayListings(request.storeId).find(item=>item.listingId===request.listingId)
-  if(!store||!listing)throw new Error('eBay 店铺或线上产品不存在')
+    ??database.getEbayLocalProducts(request.storeId).find(item=>item.listingId===request.listingId)?.snapshot.sourceListing
+  if(!listing)throw new Error('线上产品或本地产品不存在，请重新送入或同步后再检索')
   const query=request.query.replace(/\s+/g,' ').trim()
   if(!query)throw new Error('请先填写能代表当前商品的核心商品词')
   const omkarSettings=readAmazonDataSource()
   const omkarKey=omkarSettings.encryptedApiKey&&secretStorageAvailable()?decryptSecret(omkarSettings.encryptedApiKey):''
+  marketResearchLog(`start store=${store.id} listing=${request.listingId} query="${query}" period=${request.periodDays} channel=${omkarKey?'omkar':'browser'}`)
   const marketWorkspace=workspace
   const readEvidence=async(searchQuery:string)=>{
+    let omkarError:Error|null=null
     if(omkarKey){
+      try{
       const url=new URL(ebayScraperSearchEndpoint())
       url.searchParams.set('keyword',searchQuery);url.searchParams.set('marketplace','ebay.com');url.searchParams.set('page','1')
+      const started=Date.now()
       const response=await fetch(url,{headers:{'API-Key':omkarKey},signal:AbortSignal.timeout(30_000)})
       const body=await response.json().catch(()=>({})) as {listings?:Array<Record<string,unknown>>;detail?:string;message?:string}
-      if(!response.ok)throw new Error(`Omkar eBay Scraper 返回错误：${body.detail||body.message||`HTTP ${response.status}`}`)
+      marketResearchLog(`omkar response query="${searchQuery}" status=${response.status} samples=${Array.isArray(body.listings)?body.listings.length:-1} ms=${Date.now()-started} detail=${String(body.detail||body.message||'').slice(0,120)}`)
+      if(!response.ok)throw new Error(omkarFailureMessage(body.detail||body.message||`HTTP ${response.status}`))
       if(!Array.isArray(body.listings))throw new Error('Omkar eBay Scraper 返回格式异常')
       const numberValue=(value:unknown)=>{const parsed=Number(String(value??'').replace(/[^0-9.]/g,''));return Number.isFinite(parsed)?parsed:0}
       const samples:EbayMarketResearchSnapshot['samples']=body.listings.map(item=>{const price=item.price&&typeof item.price==='object'?item.price as Record<string,unknown>:{};const delivery=item.delivery_info&&typeof item.delivery_info==='object'?item.delivery_info as Record<string,unknown>:{};return {title:String(item.name||item.title||'').trim(),price:String(price.amount??item.price??''),currency:'USD',soldDate:'',url:String(item.url||''),imageUrl:String(item.image||''),itemId:String(item.listing_id||''),shipping:String(delivery.raw||delivery.extracted||''),condition:String(item.condition||''),soldQuantity:String(item.units_sold||'')}}).filter(item=>item.title&&item.url)
       const prices=samples.map(item=>numberValue(item.price)).filter(value=>value>0),sold=samples.reduce((total,item)=>total+numberValue(item.soldQuantity),0),shipping=samples.map(item=>numberValue(item.shipping)).filter(value=>value>0),freeShipping=samples.filter(item=>/free/i.test(item.shipping||'')).length
       const metric=(key:EbayMarketResearchSnapshot['metrics'][number]['key'],label:string,value:string,available:boolean):EbayMarketResearchSnapshot['metrics'][number]=>({key,label,value,available})
       return {source:'OMKAR_EBAY_SCRAPER' as const,sourceUrl:`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(searchQuery)}`,samples,metrics:[metric('TOTAL_SOLD','样本已售数',sold?String(sold):'',sold>0),metric('AVERAGE_SOLD_PRICE','样本平均价',prices.length?`USD ${(prices.reduce((a,b)=>a+b,0)/prices.length).toFixed(2)}`:'',prices.length>0),metric('SOLD_PRICE_RANGE','样本价格范围',prices.length?`USD ${Math.min(...prices).toFixed(2)} – ${Math.max(...prices).toFixed(2)}`:'',prices.length>0),metric('AVERAGE_SHIPPING','平均运费',shipping.length?`USD ${(shipping.reduce((a,b)=>a+b,0)/shipping.length).toFixed(2)}`:'',shipping.length>0),metric('FREE_SHIPPING_RATE','免运费样本',samples.length?`${Math.round(freeShipping/samples.length*100)}%`:'',samples.length>0),metric('SELL_THROUGH_RATE','售出率','',false),metric('SELLER_COUNT','卖家数','',false)]}
+      }catch(error){
+        omkarError=error instanceof Error?error:new Error(String(error))
+        marketResearchLog(`omkar failed query="${searchQuery}" error=${omkarError.message.slice(0,160)}；fallback=browser`)
+      }
     }
-    if(!marketWorkspace)throw new Error('请先在 AI总部配置 Omkar API Key，或打开 eBay 店铺浏览器')
+    if(!marketWorkspace){if(omkarError)throw omkarError;throw new Error('请先在 AI总部配置 Omkar API Key，或打开 eBay 店铺浏览器')}
     const read=()=>marketWorkspace.readEbayMarketResearch(`ebay:${store.id}`,{
       query:searchQuery,
       categoryId:listing.categoryId,
@@ -1088,9 +1156,9 @@ async function researchEbayMarket(request:EbayMarketResearchRequest):Promise<Eba
     try {
       return await read()
     } catch(error) {
-      if(!(error instanceof Error&&/登录会话已失效/.test(error.message)))throw error
-      await ensureEbayStoreLogin(request.storeId)
-      return read()
+      if(error instanceof Error&&/登录会话已失效/.test(error.message)){await ensureEbayStoreLogin(request.storeId);return read()}
+      if(omkarError)throw new Error(`Omkar 通道失败：${omkarError.message}；浏览器通道兜底失败：${error instanceof Error?error.message:String(error)}`)
+      throw error
     }
   }
   let evidence=await readEvidence(query)
@@ -1527,10 +1595,26 @@ function registerMediaProtocol() {
 let revealMainWindow: () => void = () => undefined
 let mainWindowRevealed = false
 
+// 存量下载档案无预估总额（列后加）：启动时逐条拉公开详情页正则回填；失败静默跳过，下次启动重试
+async function backfillDownloadEstimatedTotals(): Promise<void> {
+  const db = database
+  if (!db) return
+  const missing = db.listSupplyDownloads().filter(item => item.status === 'DOWNLOADED' && item.pageUrl && !item.estimatedTotal)
+  for (const record of missing.slice(0, 20)) {
+    try {
+      const response = await fetch(record.pageUrl, { signal: AbortSignal.timeout(10_000) })
+      if (!response.ok) continue
+      const value = parseEstimatedTotal(await response.text())
+      if (value) db.setSupplyDownloadEstimatedTotal(record.warehouseProductId, value)
+    } catch { /* 网络不可达静默跳过 */ }
+  }
+}
+
 function createWindow() {
   registerMediaProtocol()
   database ??= new AppDatabase()
   scheduleComplianceSourceSync()
+  void backfillDownloadEstimatedTotals()
   mainWindow = new BaseWindow({
     show: false,
     width: 1440,
@@ -2816,6 +2900,8 @@ ipcMain.handle('ebay:local-products:download', (_event, storeId:string, listingI
 ipcMain.handle('ebay:product:read-url', (_event, storeId:string, url:string) => readEbayProductByUrl(storeId,url))
 ipcMain.handle('ebay:local-products:update', (_event, localProductId:string, changes:EbayLocalProductUpdateInput) => updateEbayLocalProduct(localProductId,changes))
 ipcMain.handle('ebay:local-products:set-category', (_event, localProductId:string, categoryId:string, categoryName:string) => database?.setEbayLocalProductCategory(localProductId, categoryId, categoryName))
+ipcMain.handle('ebay:research-query:suggest', async (_event, request: { title: string; categoryName: string }) => suggestResearchQueryViaLlm(request))
+
 ipcMain.handle('ebay:local-products:auto-classify', async (_event, localProductId:string) => {
   if(!database)throw new Error('数据库尚未初始化')
   const product=database.getEbayLocalProducts().find(item=>item.id===localProductId)
@@ -2864,7 +2950,17 @@ ipcMain.handle('ebay:listings:details:sync', (_event, storeId:string, listingId:
 ipcMain.handle('ebay:market-research:get', (_event, storeId:string, listingId:string) => database?.getEbayMarketResearch(storeId,listingId))
 ipcMain.handle('ebay:market-research:history', (_event, storeId:string, listingId:string) => database?.getEbayMarketResearchHistory(storeId,listingId) ?? [])
 ipcMain.handle('ebay:market-research:open', (_event, request:EbayMarketResearchRequest) => openEbayMarketResearch(request.storeId,request))
-ipcMain.handle('ebay:market-research:run', (_event, request:EbayMarketResearchRequest) => researchEbayMarket(request))
+ipcMain.handle('ebay:market-research:run', async (_event, request:EbayMarketResearchRequest) => {
+  const started=Date.now()
+  try {
+    const snapshot=await researchEbayMarket(request)
+    marketResearchLog(`done listing=${request.listingId} query="${request.query}" samples=${snapshot.sampleCount} source=${snapshot.source} ms=${Date.now()-started}`)
+    return snapshot
+  } catch (error) {
+    marketResearchLog(`fail listing=${request.listingId} query="${request.query}" ms=${Date.now()-started} error=${error instanceof Error?error.message:String(error)}`)
+    throw error
+  }
+})
 ipcMain.handle('ebay:market-research:decide', (_event, request:EbayMarketResearchDecisionRequest) => database?.decideEbayMarketResearchTerm(request))
 ipcMain.handle('ebay:title-decision:get', (_event, storeId:string, listingId:string) => database?.getEbayTitleDecision(storeId,listingId))
 ipcMain.handle('ebay:title-decision:confirm', (_event, input:EbayTitleDecisionInput) => {

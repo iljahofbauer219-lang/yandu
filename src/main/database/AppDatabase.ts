@@ -1328,6 +1328,7 @@ export class AppDatabase {
     ensureColumn('compliance_check_runs', 'review_note', 'TEXT')
     ensureColumn('supply_product_downloads', 'page_id', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_product_downloads', 'page_url', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('supply_product_downloads', 'estimated_total', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_warehouse_products', 'region', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('pallet_warehouse_items', 'promotion_text', 'TEXT')
     ensureColumn('pallet_warehouse_items', 'shipping_fee_text', 'TEXT')
@@ -3513,20 +3514,25 @@ export class AppDatabase {
   }
 
   getSupplyDownload(warehouseProductId: string): SupplyProductDownload | null {
-    const row = this.database.prepare(`SELECT warehouse_product_id, page_id, page_url, image_count, failed_count, status, error, downloaded_at FROM supply_product_downloads WHERE warehouse_product_id=?`).get(warehouseProductId) as Record<string,unknown> | undefined
-    return row ? { warehouseProductId:String(row.warehouse_product_id), pageId:String(row.page_id ?? ''), pageUrl:String(row.page_url ?? ''), imageCount:Number(row.image_count), failedCount:Number(row.failed_count), status:row.status as SupplyProductDownload['status'], error:String(row.error), downloadedAt:String(row.downloaded_at) } : null
+    const row = this.database.prepare(`SELECT warehouse_product_id, page_id, page_url, image_count, failed_count, status, error, estimated_total, downloaded_at FROM supply_product_downloads WHERE warehouse_product_id=?`).get(warehouseProductId) as Record<string,unknown> | undefined
+    return row ? { warehouseProductId:String(row.warehouse_product_id), pageId:String(row.page_id ?? ''), pageUrl:String(row.page_url ?? ''), imageCount:Number(row.image_count), failedCount:Number(row.failed_count), status:row.status as SupplyProductDownload['status'], error:String(row.error), estimatedTotal:String(row.estimated_total ?? ''), downloadedAt:String(row.downloaded_at) } : null
   }
 
   listSupplyDownloads(): SupplyProductDownload[] {
-    const rows = this.database.prepare(`SELECT warehouse_product_id, page_id, page_url, image_count, failed_count, status, error, downloaded_at FROM supply_product_downloads ORDER BY downloaded_at DESC`).all() as unknown as Array<Record<string,unknown>>
-    return rows.map(row => ({ warehouseProductId:String(row.warehouse_product_id), pageId:String(row.page_id ?? ''), pageUrl:String(row.page_url ?? ''), imageCount:Number(row.image_count), failedCount:Number(row.failed_count), status:row.status as SupplyProductDownload['status'], error:String(row.error), downloadedAt:String(row.downloaded_at) }))
+    const rows = this.database.prepare(`SELECT warehouse_product_id, page_id, page_url, image_count, failed_count, status, error, estimated_total, downloaded_at FROM supply_product_downloads ORDER BY downloaded_at DESC`).all() as unknown as Array<Record<string,unknown>>
+    return rows.map(row => ({ warehouseProductId:String(row.warehouse_product_id), pageId:String(row.page_id ?? ''), pageUrl:String(row.page_url ?? ''), imageCount:Number(row.image_count), failedCount:Number(row.failed_count), status:row.status as SupplyProductDownload['status'], error:String(row.error), estimatedTotal:String(row.estimated_total ?? ''), downloadedAt:String(row.downloaded_at) }))
   }
 
   upsertSupplyDownload(record: SupplyProductDownload): SupplyProductDownload {
-    this.database.prepare(`INSERT INTO supply_product_downloads (warehouse_product_id, page_id, page_url, image_count, failed_count, status, error, downloaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(warehouse_product_id) DO UPDATE SET page_id=excluded.page_id, page_url=excluded.page_url, image_count=excluded.image_count, failed_count=excluded.failed_count, status=excluded.status, error=excluded.error, downloaded_at=excluded.downloaded_at`)
-      .run(record.warehouseProductId, record.pageId, record.pageUrl, record.imageCount, record.failedCount, record.status, record.error, record.downloadedAt)
+    this.database.prepare(`INSERT INTO supply_product_downloads (warehouse_product_id, page_id, page_url, image_count, failed_count, status, error, estimated_total, downloaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(warehouse_product_id) DO UPDATE SET page_id=excluded.page_id, page_url=excluded.page_url, image_count=excluded.image_count, failed_count=excluded.failed_count, status=excluded.status, error=excluded.error, estimated_total=excluded.estimated_total, downloaded_at=excluded.downloaded_at`)
+      .run(record.warehouseProductId, record.pageId, record.pageUrl, record.imageCount, record.failedCount, record.status, record.error, record.estimatedTotal, record.downloadedAt)
     return record
+  }
+
+  /** 存量下载档案补修：回填服务器详情页的预估总额(含物流费) */
+  setSupplyDownloadEstimatedTotal(warehouseProductId: string, estimatedTotal: string): void {
+    this.database.prepare(`UPDATE supply_product_downloads SET estimated_total=? WHERE warehouse_product_id=?`).run(estimatedTotal, warehouseProductId)
   }
 
   getMarketplaceSelections(marketplaceCode: MarketplacePlatformCode): MarketplaceSelectionProduct[] {

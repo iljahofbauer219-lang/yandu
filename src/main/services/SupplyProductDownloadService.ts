@@ -134,6 +134,7 @@ export class SupplyProductDownloadService {
         failedCount,
         status: 'FAILED',
         error: `商品图片全部下载失败。${failures.slice(0, 3).join('；')}`,
+        estimatedTotal: extracted.estimatedTotal ?? '',
         downloadedAt: capturedAt
       }
       this.database.upsertSupplyDownload(record)
@@ -209,6 +210,7 @@ export class SupplyProductDownloadService {
       failedCount,
       status: 'DOWNLOADED',
       error: failedCount ? `部分图片失败：${failures.slice(0, 3).join('；')}` : '',
+      estimatedTotal: extracted.estimatedTotal ?? '',
       downloadedAt: capturedAt
     }
     this.database.upsertSupplyDownload(record)

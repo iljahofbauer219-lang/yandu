@@ -150,9 +150,9 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
     return () => { alive = false }
   }, [hubTab])
 
-  // 入库卡/存放卡「查看页面」门控：与正式入库卡同口径，仅 DOWNLOADED 图文档案可开服务器详情页
+  // 入库卡/存放卡「查看页面」与主图点击门控：与正式入库卡同口径，仅 DOWNLOADED 图文档案可开服务器详情页
   useEffect(() => {
-    if (hubTab !== '入库处理' && hubTab !== '全部产品' && hubTab !== '新品速递') return
+    if (!['入库处理', '全部产品', '新品速递', '地区货盘', '下架产品'].includes(hubTab)) return
     let alive = true
     window.desktop.warehouses.downloads()
       .then(list => { if (alive) setWarehouseDownloads(Object.fromEntries(list.map(item => [item.warehouseProductId, item]))) })
@@ -383,35 +383,36 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
     const scoreGrade = scoreValue === null ? null : Math.round(scoreValue) >= 80 ? 'A' : Math.round(scoreValue) >= 65 ? 'B' : 'C'
     const inventoryText = item.sellableInventory !== null && item.sellableInventory !== undefined ? item.sellableInventory.toLocaleString('zh-CN') : item.salesText?.replace(/^(?:Available\s*Stock|可售库存|库存)\s*[:：]?\s*/i, '') || '待补采'
     const sourceCatalogText = item.sourceCategory ? `${item.sourceCategory} / ${item.sourceSubcategory || '—'} / ${item.sourceTertiaryCategory || '—'}` : '类目待核实'
+    const currentCatalogText = item.category ? `${item.category} / ${item.subcategory || '—'} / ${item.tertiaryCategory || '—'}` : '—'
+    const estimatedTotalText = (item.warehouseProductId ? warehouseDownloads[item.warehouseProductId]?.estimatedTotal : '') || ''
+    // 主图与「查看页面」共用同一下载图文页链路：仅 DOWNLOADED 档案可点开
+    const downloadId = item.warehouseProductId && warehouseDownloads[item.warehouseProductId]?.status === 'DOWNLOADED' ? item.warehouseProductId : ''
+    const openStoredDownload = () => { if (!downloadId) return; void window.desktop.warehouses.openDownload(downloadId).catch(reason => failInbound(reason, '打开下载图文页')) }
     return <article className={`product-card candidate-product-card supply-source-card${delisted ? ' delisted-product-card' : ''}`} key={item.id}>
       <div className="candidate-card-tools">{batchMode ? <label title="选择商品"><input type="checkbox" checked={checkedKeys.has(item.id)} onChange={() => toggleKey(item.id)}/></label> : null}</div>
-      <button type="button" className="product-image" aria-label={`查看商品图片：${item.title}`}>
+      <button type="button" className="product-image" aria-label={downloadId ? `查看下载图文页：${item.title}` : `查看商品图片：${item.title}`} title={downloadId ? '点击查看下载图文页' : undefined} onClick={downloadId ? () => openStoredDownload() : undefined}>
         {item.imageUrl ? <img src={item.imageUrl} alt={item.title}/> : <span>无图</span>}
         {item.promotionText ? <span className="candidate-promotion">{item.promotionText}</span> : null}
         <span className={`score-badge${scoreValue === null ? ' pending' : ''}`} title={scoreValue === null ? 'GIGA Index 未采集，待重读补采' : `评分依据：GIGA Index ${item.gigaIndex}`}>{scoreValue === null ? '待评分' : `${Math.round(scoreValue)}分 · ${scoreGrade}级`}</span>
       </button>
       <div className="product-info supply-source-info">
-        <small>
-          {item.region ? <span className="inbound-origin-badge origin-region">{item.region}</span> : null}
-          {item.warehouseCode === 'GIGACLOUD' ? '大健云仓' : item.warehouseCode} · Item Code {item.itemCode || '—'}
-        </small>
         <b title={item.title}>{item.title}</b>
         <strong>{item.priceText || '价格待核验'}</strong>
         <dl className="candidate-source-facts">
           <div><dt>原货盘</dt><dd>{item.warehouseCode === 'GIGACLOUD' ? '大健云仓' : item.warehouseCode} · Item Code {item.itemCode || '—'}</dd></div>
           <div><dt>地区货盘</dt><dd>{item.region || '—'}</dd></div>
+          <div><dt>预估总额</dt><dd title={estimatedTotalText ? `${estimatedTotalText} (含物流费)` : ''}>{estimatedTotalText ? `${estimatedTotalText} (含物流费)` : '待补采'}</dd></div>
           <div><dt>物流费</dt><dd>{item.shippingFeeText || '待补采'}</dd></div>
           <div><dt>可售库存</dt><dd>{inventoryText}</dd></div>
           <div><dt>原始类目</dt><dd title={sourceCatalogText}>{sourceCatalogText}</dd></div>
+          <div><dt>现在类目</dt><dd title={currentCatalogText}>{currentCatalogText}</dd></div>
           <div><dt>GIGA Index</dt><dd>{item.gigaIndexText ?? item.gigaIndex ?? '待补采'}</dd></div>
           <div><dt>采集时间</dt><dd>{(item.collectedAt || '').slice(0, 10) || '—'}</dd></div>
           {delisted && <div><dt>下架原因</dt><dd title={delisted.reason}>{delisted.reason || '—'}</dd></div>}
           {delisted && <div><dt>下架时间</dt><dd>{delisted.at ? new Date(delisted.at).toLocaleString('zh-CN') : '—'}</dd></div>}
         </dl>
         <div className="product-actions candidate-next-actions">
-          {item.warehouseProductId && warehouseDownloads[item.warehouseProductId]?.status === 'DOWNLOADED' ? (
-            <button onClick={() => void window.desktop.warehouses.openDownload(item.warehouseProductId).catch(reason => { failInbound(reason, '打开下载图文页') })}>查看页面</button>
-          ) : null}
+          {downloadId ? <button onClick={() => openStoredDownload()}>查看页面</button> : null}
           {delisted ? <>
             <button disabled={!canEdit} onClick={() => updateDelisted(item)}>更新产品</button>
             <button className="primary" disabled={!canEdit} onClick={() => restoreDelisted(item.warehouseProductId)}>重新上架</button>
@@ -436,7 +437,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
     <div className="selection-module-nav warehouse-flow-nav">
       {hubTabsForScope(scope).map(tab => <button key={tab} className={hubTab === tab ? 'active' : ''} onClick={() => { setHubTab(tab); setBatchMode(false); setCheckedKeys(new Set()); setActiveInboundId('') }}><span>{tab}</span></button>)}
     </div>
-    <section className={`candidate-page${catalogPanel.collapsed?' side-collapsed':''}`}>
+    <section className={`candidate-page pallet-catalog-page${catalogPanel.collapsed?' side-collapsed':''}`}>
       {catalogPanel.collapsed?<PanelExpandRail panel={catalogPanel} label="产品目录库"/>:<aside className="catalog-panel collapsible-aside">
         <div className="catalog-heading catalog-heading-row"><h2>产品目录库</h2><PanelCollapseButton panel={catalogPanel}/></div>
         <button className={`catalog-all ${selected === 'ALL' ? 'active' : ''}`} onClick={() => { setSelected('ALL'); setSelectedSubcategory('') }}><span>全部产品</span><em>{items.length}</em></button>
@@ -538,44 +539,47 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
               const scoreGrade = scoreValue === null ? null : Math.round(scoreValue) >= 80 ? 'A' : Math.round(scoreValue) >= 65 ? 'B' : 'C'
               const inventoryText = snapshot.sellableInventory !== null && snapshot.sellableInventory !== undefined ? snapshot.sellableInventory.toLocaleString('zh-CN') : snapshot.salesText?.replace(/^(?:Available\s*Stock|可售库存|库存)\s*[:：]?\s*/i, '') || '待补采'
               const sourceCatalogText = snapshot.sourceCategory ? `${snapshot.sourceCategory} / ${snapshot.sourceSubcategory || '—'} / ${snapshot.sourceTertiaryCategory || '—'}` : '类目待核实'
+              const currentCatalogText = snapshot.category ? `${snapshot.category} / ${snapshot.subcategory || '—'} / ${snapshot.tertiaryCategory || '—'}` : '—'
+              // 入库卡与存放卡同口径：主图与「查看页面」共用下载图文页链路
+              const downloadId = item.warehouseProductId && warehouseDownloads[item.warehouseProductId]?.status === 'DOWNLOADED' ? item.warehouseProductId : ''
+              const openInboundDownload = () => { if (!downloadId) return; void window.desktop.warehouses.openDownload(downloadId).catch(reason => failInbound(reason, '打开下载图文页')) }
+              const estimatedTotalText = (downloadId ? warehouseDownloads[downloadId]?.estimatedTotal : '') || ''
               return (
               <article className={`product-card candidate-product-card supply-source-card${activeInboundId === item.id ? ' inbound-card-active' : ''}`} key={item.id} onClick={event => { if ((event.target as HTMLElement).closest('button, input, select, textarea, a')) return; setActiveInboundId(activeInboundId === item.id ? '' : item.id) }}>
-                <button type="button" className="product-image" aria-label={`查看商品图片：${snapshot.title}`}>
+                <button type="button" className="product-image" aria-label={downloadId ? `查看下载图文页：${snapshot.title}` : `查看商品图片：${snapshot.title}`} title={downloadId ? '点击查看下载图文页' : undefined} onClick={downloadId ? () => openInboundDownload() : undefined}>
                   {snapshot.imageUrl ? <img src={snapshot.imageUrl} alt={snapshot.title}/> : <span>无图</span>}
                   {snapshot.promotionText ? <span className="candidate-promotion">{snapshot.promotionText}</span> : null}
                   <span className={`score-badge${scoreValue === null ? ' pending' : ''}`} title={scoreValue === null ? 'GIGA Index 未采集，待重读补采' : `评分依据：GIGA Index ${snapshot.gigaIndex}`}>{scoreValue === null ? '待评分' : `${Math.round(scoreValue)}分 · ${scoreGrade}级`}</span>
                 </button>
                 <div className="product-info supply-source-info">
-                  <small>
-                    <span className={`inbound-origin-badge ${item.origin === 'SELECTION' ? 'origin-selection' : item.origin === 'WAREHOUSE' ? 'origin-warehouse' : 'origin-erp'}`}>{item.origin === 'SELECTION' ? '选品审批' : item.origin === 'WAREHOUSE' ? '正式入库抄送' : '服务器采集池'}</span>
-                    {item.region ? <span className="inbound-origin-badge origin-region">{item.region}</span> : null}
-                    {snapshot.platformCode === 'GIGACLOUD' ? '大健云仓' : snapshot.platformCode} · Item Code {snapshot.itemCode || '—'} · {INBOUND_FILTERS.find(filter => filter.key === item.status)?.label}
-                  </small>
                   <b title={snapshot.title}>{snapshot.title}</b>
                   <strong>{snapshot.priceText || '价格待核验'}</strong>
                   <dl className="candidate-source-facts">
-                    <div><dt>目标仓/货位</dt><dd title={`${snapshot.category} / ${snapshot.subcategory} / ${snapshot.tertiaryCategory}`}>{snapshot.warehouseCode} / {snapshot.category || '—'} / {snapshot.subcategory || '—'} / {snapshot.tertiaryCategory || '—'}</dd></div>
+                    <div><dt>原货盘</dt><dd>{snapshot.platformCode === 'GIGACLOUD' ? '大健云仓' : snapshot.platformCode} · Item Code {snapshot.itemCode || '—'}</dd></div>
+                    <div><dt>地区货盘</dt><dd>{item.region || '—'}</dd></div>
+                    <div><dt>预估总额</dt><dd title={estimatedTotalText ? `${estimatedTotalText} (含物流费)` : ''}>{estimatedTotalText ? `${estimatedTotalText} (含物流费)` : '待补采'}</dd></div>
                     <div><dt>物流费</dt><dd>{snapshot.shippingFeeText || '待补采'}</dd></div>
                     <div><dt>可售库存</dt><dd>{inventoryText}</dd></div>
                     <div><dt>原始类目</dt><dd title={sourceCatalogText}>{sourceCatalogText}</dd></div>
+                    <div><dt>现在类目</dt><dd title={currentCatalogText}>{currentCatalogText}</dd></div>
                     <div><dt>GIGA Index</dt><dd>{snapshot.gigaIndexText ?? snapshot.gigaIndex ?? '待补采'}</dd></div>
                     <div><dt>采集时间</dt><dd>{(snapshot.collectedAt || '').slice(0, 10) || '—'}</dd></div>
                     {item.status === 'REJECTED' && <div><dt>驳回时间</dt><dd>{(item.updatedAt || '').slice(0, 10)}</dd></div>}
                     {item.status === 'CONFIRMED' && <div><dt>确认时间</dt><dd>{(item.confirmedAt || '').slice(0, 10)}</dd></div>}
                   </dl>
+                  {!assignedInCatalog || activeInboundId === item.id ? (
                   <div className="inbound-category-row">
-                    {assignedInCatalog ? (
-                      <span className="path">已选：{catalogPathText({ category: snapshot.category, subcategory: snapshot.subcategory, tertiaryCategory: snapshot.tertiaryCategory })}</span>
-                    ) : rec ? (
+                    {!assignedInCatalog && rec ? (
                       <>
                         <span className="path recommend">推荐：{catalogPathText(rec)}</span>
                         <button type="button" onClick={() => assignCatalog(item, rec, `已采纳推荐类目：${catalogPathText(rec)}`, false)}>采纳推荐</button>
                       </>
-                    ) : (
+                    ) : !assignedInCatalog ? (
                       <span className="path empty">未匹配到推荐类目，请手动选择</span>
-                    )}
+                    ) : null}
                     {activeInboundId === item.id ? <span className="hint">请在左侧目录树点选类目</span> : null}
                   </div>
+                  ) : null}
                   {edit ? (
                     <div className="inbound-edit-form">
                       <label>标题<input value={edit.title} onChange={event => setInboundEdit({ id: item.id, draft: { ...edit, title: event.target.value } })}/></label>
@@ -596,9 +600,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
                       <button className="candidate-delete" onClick={() => rejectInbound(item.id)}>驳回</button>
                     </>}
                     {item.status === 'REJECTED' && <button onClick={() => setInboundEdit({ id: item.id, draft: { ...snapshot } })}>重新编辑</button>}
-                    {item.warehouseProductId && warehouseDownloads[item.warehouseProductId]?.status === 'DOWNLOADED' ? (
-                      <button onClick={() => void window.desktop.warehouses.openDownload(item.warehouseProductId as string).catch(reason => { failInbound(reason, '打开下载图文页') })}>查看页面</button>
-                    ) : null}
+                    {downloadId ? <button onClick={() => openInboundDownload()}>查看页面</button> : null}
                   </div>
                 </div>
               </article>

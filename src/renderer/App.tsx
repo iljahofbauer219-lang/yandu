@@ -2193,7 +2193,7 @@ export function App() {
       {/* 阶段 3.9：RAGFlow → MaxKB 30 天迁移公告 banner（截止 2026-09-23 隐藏） */}
       <MigrationBanner />
       {/* 导航功能统一直接渲染工作区，不使用占用顶部空间的全局页面头部。 */}
-      {page==='ebay'&&pageAllowed('ebay')&&<EbayPlatformWorkspace initialTab={ebayEntryTab} onOpenMyPallet={()=>setPage('ai-hub-my-pallet')}/>}
+      {page==='ebay'&&pageAllowed('ebay')&&<EbayPlatformWorkspace initialTab={ebayEntryTab} onOpenMyPallet={()=>setPage('ai-hub-my-pallet')} onOpenAmazonDataSource={()=>setPage('amazon-data-source')}/>}
       {page==='ai-crossborder'&&canMenu('menu.crossborder')&&<section className="ai-crossborder-page">
         <div className="ai-crossborder-header"><h2>AI跨境</h2><p>7大跨境电商平台智能运营中心</p></div>
         <div className="ai-crossborder-grid">
@@ -3212,7 +3212,7 @@ function hasCurrentEbayTitleVariants(variants:Array<{id:string}>|undefined) {
   return (variants?.length||0)>=currentEbayTitleStrategyIds.length&&currentEbayTitleStrategyIds.every(id=>ids.has(id))
 }
 
-function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet}:{initialTab?:EbayWorkspaceTab;lockTitleMode?:boolean;onOpenMyPallet?:()=>void}={}) {
+function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAmazonDataSource}:{initialTab?:EbayWorkspaceTab;lockTitleMode?:boolean;onOpenMyPallet?:()=>void;onOpenAmazonDataSource?:()=>void}={}) {
   const [activeTab,setActiveTab]=useState<EbayWorkspaceTab>(initialTab||'browser')
   useEffect(()=>{if(initialTab)setActiveTab(initialTab)},[initialTab])
   const ebayWorkbenchPanel=usePanelCollapse('ebay-login-workbench',{active:activeTab==='browser'})
@@ -3243,16 +3243,32 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet}:{initia
   const [busy,setBusy]=useState('')
   const [notice,setNotice]=useState('')
   const [ebayError,setEbayError]=useState('')
+  const [ebayErrorAction,setEbayErrorAction]=useState<{label:string;run:()=>void}|null>(null)
+  const [ebayErrorActionFor,setEbayErrorActionFor]=useState('')
   const ebayErrorRef=useRef<HTMLDivElement>(null)
   useEffect(()=>{
     const el=ebayErrorRef.current
     if(!ebayError||!el)return
+    const host=el.closest('.ebay-workspace')
     const r=el.getBoundingClientRect()
-    if(r.bottom<0||r.top>window.innerHeight)el.scrollIntoView({behavior:'smooth',block:'center'})
+    const hr=host?.getBoundingClientRect()
+    const hidden=hr?r.bottom<=hr.top||r.top>=hr.bottom:r.bottom<0||r.top>window.innerHeight
+    if(hidden)el.scrollIntoView({behavior:'smooth',block:'center'})
   },[ebayError])
   const [downloadToast,setDownloadToast]=useState<{kind:'progress'|'success'|'warning'|'error';message:string}|null>(null)
   const [search,setSearch]=useState('')
   const [selectedCategoryId,setSelectedCategoryId]=useState('ALL')
+  const [activeLocalAssignId,setActiveLocalAssignId]=useState('')
+  const [localPalletByWp,setLocalPalletByWp]=useState<Record<string,PalletWarehouseItem>>({})
+  const [localDownloadsByWp,setLocalDownloadsByWp]=useState<Record<string,SupplyProductDownload>>({})
+  // 本地产品卡与入库卡同口径：货盘事实与下载档案按 PALLET-<warehouseProductId> 反查
+  useEffect(()=>{
+    if(activeTab!=='local')return
+    let alive=true
+    window.desktop.pallet.list().then(list=>{if(alive)setLocalPalletByWp(Object.fromEntries(list.map(item=>[item.warehouseProductId,item])))}).catch(()=>undefined)
+    window.desktop.warehouses.downloads().then(list=>{if(alive)setLocalDownloadsByWp(Object.fromEntries(list.map(item=>[item.warehouseProductId,item])))}).catch(()=>undefined)
+    return ()=>{alive=false}
+  },[activeTab])
   const [premiumCategoryId,setPremiumCategoryId]=useState('ALL')
   const [premiumSearch,setPremiumSearch]=useState('')
   const [premiumStatus,setPremiumStatus]=useState<'ALL'|'READY'|'REVIEW'|'INCOMPLETE'>('ALL')
@@ -3684,10 +3700,21 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet}:{initia
     setMarketResearch(null)
     setMarketResearchHistory([])
     setTitleDecision(null)
+    let cancelled=false
     const preference=activeStore&&selectedListing?readEbayResearchQueryPreference(activeStore.id,selectedListing.listingId):undefined
     const suggestion=selectedListing?ebayResearchQuerySuggestion(selectedListing):{query:'',source:'CATEGORY' as const}
     setResearchQuery(preference?.query||suggestion.query)
-    if(!activeStore||!selectedListing)return
+    if(!preference&&selectedListing&&activeStore){
+      const listingId=selectedListing.listingId
+      const storeId=activeStore.id
+      void window.desktop.ebay.suggestResearchQuery(selectedListing.originalTitle||selectedListing.title,selectedListing.categoryName||'').then(result=>{
+        if(cancelled)return
+        if(readEbayResearchQueryPreference(storeId,listingId))return
+        if(result.query)setResearchQuery(result.query)
+        else setNotice(`千问核心商品词提取不可用（${result.reason}），已回落规则建议词，可手工修改核心商品词后检索。`)
+      }).catch(()=>{})
+    }
+    if(!activeStore||!selectedListing)return ()=>{cancelled=true}
     void Promise.all([
       window.desktop.ebay.marketResearch(activeStore.id,selectedListing.listingId),
       window.desktop.ebay.marketResearchHistory(activeStore.id,selectedListing.listingId),
@@ -3713,6 +3740,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet}:{initia
         if(decision)setNotice('检测到旧版3套标题方案，请点击“依据市场决策重新生成”生成新版6套方案。')
       }
     }).catch(reason=>setEbayError(readableError(reason,'市场数据读取失败')))
+    return ()=>{cancelled=true}
   },[activeStore?.id,selectedListing?.id])
   useEffect(()=>{
     if(contentResult&&contentResultTitle&&contentResultTitle!==selectedTitle){
@@ -3806,6 +3834,19 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet}:{initia
   const setLocalCategory=async(categoryId:string,categoryName:string)=>{if(!localEditorProductId)return;setEbayError('');try{const product=await window.desktop.ebay.setLocalCategory(localEditorProductId,categoryId,categoryName);setLocalProducts(current=>[product,...current.filter(item=>item.id!==product.id)]);setNotice(`本地产品类目已更新为『${categoryName||'未分类'}』。`)}catch(reason){setEbayError(readableError(reason,'更新本地产品类目失败'))}}
   const autoClassifyLocal=async()=>{if(!localEditorProductId)return;setEbayError('');setBusy(`local-classify:${localEditorProductId}`);try{const result=await window.desktop.ebay.autoClassifyLocal(localEditorProductId);if(result.categoryId){setLocalProducts(current=>[result.product,...current.filter(item=>item.id!==result.product.id)]);setNotice(`已自动归入『${result.categoryName}』。`)}else{setEbayError(result.reason||'未匹配到合适类目，请在类目下拉中手工选择。')}}catch(reason){setEbayError(readableError(reason,'自动分类失败'))}finally{setBusy('')}}
   const localCategoryBackfillAttempted=useRef<Set<string>>(new Set())
+  const storeCategoryNameOf=(categoryId:string)=>categoryWorkspace.categories.find(item=>item.categoryId===categoryId)?.name||''
+  const storePathText=(categoryId:string)=>{const chain:string[]=[];let current=categoryWorkspace.categories.find(item=>item.categoryId===categoryId);while(current){chain.unshift(current.name);current=categoryWorkspace.categories.find(item=>item.categoryId===current!.parentCategoryId)}return chain.join(' / ')}
+  const assignLocalCategoryFromTree=(categoryId:string)=>{
+    const target=localProducts.find(item=>item.id===activeLocalAssignId)
+    if(!target){setSelectedCategoryId(categoryId);return}
+    setActiveLocalAssignId('')
+    const categoryName=storeCategoryNameOf(categoryId)
+    setEbayError('')
+    void window.desktop.ebay.setLocalCategory(target.id,categoryId,categoryName)
+      .then(product=>{setLocalProducts(current=>[product,...current.filter(item=>item.id!==product.id)]);setNotice(`本地产品类目已更新为『${categoryName||'未分类'}』。`)})
+      .catch(reason=>setEbayError(readableError(reason,'更新本地产品类目失败')))
+  }
+  const autoClassifyLocalCard=(productId:string)=>{setEbayError('');setBusy(`local-classify:${productId}`);window.desktop.ebay.autoClassifyLocal(productId).then(result=>{if(result.categoryId){setLocalProducts(current=>[result.product,...current.filter(item=>item.id!==result.product.id)]);setNotice(`已自动归入『${result.categoryName}』。`)}else{setEbayError(result.reason||'未匹配到合适类目，请在本地详情手工选择。')}}).catch(reason=>setEbayError(readableError(reason,'自动分类失败'))).finally(()=>setBusy(''))}
   useEffect(()=>{
     if(activeTab!=='local'||!activeStore)return
     if(localCategoryBackfillAttempted.current.has(activeStore.id))return
@@ -3841,7 +3882,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet}:{initia
     void syncListingDetails(selectedListing)
   },[activeTab,optimizeMode,selectedListing?.id,selectedListing?.updatedAt])
   const updateResearchQuery=(value:string)=>{if(!selectedListing||!activeStore)return;setResearchQuery(value);saveEbayResearchQueryPreference(activeStore.id,selectedListing.listingId,{query:value.replace(/\s+/g,' ').trim().slice(0,120),source:'MANUAL',locked:false})}
-  const runMarketResearch=async()=>{if(!selectedListing||!activeStore)return;if(!researchQuery.trim()){setEbayError('请输入能代表该商品的核心商品词');return}setBusy('market-research');setEbayError('');try{const snapshot=await window.desktop.ebay.runMarketResearch({storeId:activeStore.id,listingId:selectedListing.listingId,query:researchQuery.trim(),periodDays:researchPeriod});setMarketResearch(snapshot);setMarketResearchHistory(current=>[snapshot,...current.filter(item=>item.id!==snapshot.id)].slice(0,30));setResearchQuery(snapshot.query);setResearchPeriod(snapshot.periodDays===30||snapshot.periodDays===365?snapshot.periodDays:90);setTitleResult(null);setSelectedTitle('');setTitleDecision(null);const source=snapshot.source==='OMKAR_EBAY_SCRAPER'?'Omkar eBay Scraper':snapshot.source==='EBAY_PRODUCT_RESEARCH'?'eBay Product Research':'eBay Sold & Completed';setNotice(`市场检索完成：通过 ${source} 读取 ${snapshot.sampleCount} 个真实结果。已保留最新结论与建议关键词，请核对后生成六套标题方案。`)}catch(reason){setEbayError(readableError(reason,'eBay 市场检索失败'))}finally{setBusy('')}}
+  const runMarketResearch=async()=>{if(!selectedListing||!activeStore)return;if(!researchQuery.trim()){setEbayError('请输入能代表该商品的核心商品词');return}setBusy('market-research');setEbayError('');try{const snapshot=await window.desktop.ebay.runMarketResearch({storeId:activeStore.id,listingId:selectedListing.listingId,query:researchQuery.trim(),periodDays:researchPeriod});setMarketResearch(snapshot);setMarketResearchHistory(current=>[snapshot,...current.filter(item=>item.id!==snapshot.id)].slice(0,30));setResearchQuery(snapshot.query);setResearchPeriod(snapshot.periodDays===30||snapshot.periodDays===365?snapshot.periodDays:90);setTitleResult(null);setSelectedTitle('');setTitleDecision(null);const source=snapshot.source==='OMKAR_EBAY_SCRAPER'?'Omkar eBay Scraper':snapshot.source==='EBAY_PRODUCT_RESEARCH'?'eBay Product Research':'eBay Sold & Completed';if(snapshot.sampleCount>0){setNotice(`市场检索完成：通过 ${source} 读取 ${snapshot.sampleCount} 个真实结果。已保留最新结论与建议关键词，请核对后生成六套标题方案。`)}else{setNotice(`市场检索完成但通过 ${source} 读取 0 个已成交样本。请更换核心商品词或扩大时间范围后重新检索。`)}setEbayErrorAction(null);setEbayErrorActionFor('')}catch(reason){const message=readableError(reason,'eBay 市场检索失败');setEbayError(message);if(/401|403|invalid_api_key|missing_api_key|authentication|api key/i.test(message)){setEbayErrorActionFor(message);setEbayErrorAction({label:'去 Amazon 数据源配置重存 Key',run:()=>onOpenAmazonDataSource?.()})}else{setEbayErrorAction(null);setEbayErrorActionFor('')}}finally{setBusy('')}}
   const decideMarketTerm=async(kind:'KEYWORD'|'COMBINATION',term:string,status:'CONFIRMED'|'REVIEW'|'EXCLUDED')=>{if(!selectedListing||!activeStore)return;const key=`market-decision:${kind}:${term}`;setBusy(key);setEbayError('');try{const snapshot=await window.desktop.ebay.decideMarketResearch({storeId:activeStore.id,listingId:selectedListing.listingId,kind,term,status});setMarketResearch(snapshot);setTitleResult(null);setSelectedTitle('');setTitleDecision(null);setNotice(status==='CONFIRMED'?`已确认“${term}”与当前商品事实一致。`:status==='EXCLUDED'?`已排除“${term}”，生成标题时不会使用。`:`“${term}”已恢复为待核对。`)}catch(reason){setEbayError(readableError(reason,'市场词决策保存失败'))}finally{setBusy('')}}
   const optimizeTitle=async()=>{if(!selectedListing)return;if(!selectedOriginalTitleVerified){setEbayError('当前商品尚未取得 eBay 可验证原标题，请返回“店铺采集”，在店铺商品列表页重新采集。');return}if(!marketResearchCurrent||!marketResearch){setEbayError('市场调研条件已变化，请按当前关键词、时间、类目和 Condition 重新获取数据。');return}if(!confirmedMarketTerms){setEbayError('请至少确认一个与当前商品事实一致的市场词，再生成标题。');return}setBusy('optimize-title');setEbayError('');try{const result=await window.desktop.ebay.optimizeTitle({listingId:selectedListing.listingId,title:selectedOriginalTitle,categoryName:selectedListing.categoryName,marketplaceId:selectedListing.marketplaceId,sku:selectedListing.sku,itemSpecifics:selectedListing.itemSpecifics||[],condition:selectedListing.condition||'',verifiedDescription:selectedLocalProduct?.snapshot.details.descriptionText||'',marketResearch,marketResearchHistory});setTitleResult(result);setTitleDecision(null);setSelectedTitle(result.variants.find(item=>item.id==='BALANCED')?.title||result.optimizedTitle);setNotice('新版六套标题方案已生成，中文直译正在同步。')}catch(reason){const message=readableError(reason,'AI优化生成失败');setEbayError(/insufficient balance/i.test(message)?'AI服务余额不足，标题、属性和描述生成暂不可用；产品合规检查仍可正常使用。':message)}finally{setBusy('')}}
   const confirmTitleDecision=async()=>{if(!activeStore||!selectedListing||!marketResearch||!titleResult||!selectedTitle||!selectedTitleAudit)return;const variant=titleResult.variants.find(item=>item.title===selectedTitle);if(!variant){setEbayError('请选择本次生成的一个标题方案');return}if(!selectedTitleAudit.passed){setEbayError('当前标题未通过字符、重复词、商品事实或市场词检查，请改选其他方案。');return}setBusy('confirm-title');setEbayError('');try{const decision=await window.desktop.ebay.confirmTitleDecision({storeId:activeStore.id,listingId:selectedListing.listingId,researchSnapshotId:marketResearch.id,originalTitle:selectedOriginalTitle,selectedTitle,selectedVariantId:variant.id,variants:titleResult.variants,verifiedFacts:selectedTitleVerifiedFacts});setTitleDecision(decision);setNotice('标题审核结果和证据快照已保存；不会在当前环节打开或写入 eBay，将在最终发布确认时统一交付。')}catch(reason){setEbayError(readableError(reason,'标题审核保存失败'))}finally{setBusy('')}}
@@ -4169,7 +4210,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet}:{initia
       {ebayDeliveryButton}
       {downloadToast&&<div className={`ebay-download-toast ${downloadToast.kind}`} role={downloadToast.kind==='error'?'alert':'status'} aria-live={downloadToast.kind==='error'?'assertive':'polite'}><span aria-hidden="true">{downloadToast.kind==='progress'?'↻':downloadToast.kind==='success'?'✓':downloadToast.kind==='warning'?'!':'×'}</span><div><b>{downloadToast.kind==='progress'?'正在下载':downloadToast.kind==='success'?'下载成功':downloadToast.kind==='warning'?'下载部分完成':'下载失败'}</b><p>{downloadToast.message}</p></div>{downloadToast.kind!=='progress'&&<button type="button" aria-label="关闭下载通知" onClick={()=>setDownloadToast(null)}>×</button>}</div>}
       {notice&&<div className="ebay-success-notice">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
-      {ebayError&&<div ref={ebayErrorRef} className="ebay-error-notice">{ebayError}<button onClick={()=>setEbayError('')}>×</button></div>}
+      {ebayError&&<div ref={ebayErrorRef} className="ebay-error-notice">{ebayError}{ebayErrorAction&&ebayErrorActionFor===ebayError&&<button type="button" onClick={()=>{const action=ebayErrorAction;setEbayError('');setEbayErrorAction(null);setEbayErrorActionFor('');action.run()}}>{ebayErrorAction.label}</button>}<button onClick={()=>{setEbayError('');setEbayErrorAction(null);setEbayErrorActionFor('')}}>×</button></div>}
       {activeTab==='browser'&&activeStore&&<div className={`ebay-auto-login-banner status-${(ebayLogin?.status||'CHECKING').toLowerCase()}`}><i/><div><b>{activeStore.name} · {ebayLoginLabel}</b><small>{ebayLogin?.message||'正在检查登录状态'}</small></div><button type="button" disabled={ebayLogin?.status==='AUTO_LOGIN_RUNNING'||ebayLogin?.status==='CHECKING'} onClick={()=>void ensureEbayLogin()}>一键登录</button></div>}
       {activeTab==='browser'&&(activeStore?<div className={`ebay-browser-layout${ebayWorkbenchPanel.collapsed?' side-collapsed':''}`}>{ebayWorkbenchPanel.collapsed?<PanelExpandRail panel={ebayWorkbenchPanel} label="eBay店铺工作台"/>:<aside className="ebay-login-workbench collapsible-aside"><PanelCollapseButton panel={ebayWorkbenchPanel}/><div className="ebay-workbench-heading"><small>EBAY WORKBENCH</small><h2>eBay店铺工作台</h2><p>登录身份与浏览会话按店铺独立保存</p></div><section><header><span>01</span><div><b>平台与登录身份</b><small>查看登录状态和管理登录凭据</small></div></header><div className="ebay-login-status"><i/><div><b>{activeStore.name} · {activeStore.passwordSaved?'凭据已保存':'待配置'}</b><small>{activeStore.loginUsername||'尚未设置登录账号'}</small></div></div><CredentialPanel accountId={`ebay:${activeStore.id}`} platformCode="EBAY"/></section></aside>}<main className="ebay-browser-panel"><div className="ebay-browser-heading"><div><small>WORKSPACE BROWSER</small><b>eBay浏览器</b></div><div className="browser-heading-actions"><div className="browser-translation"><button className={`translation-trigger ${ebayTranslationActive?'active':''}`} disabled={ebayTranslating} onClick={()=>ebayTranslationActive?setEbayTranslationMenuOpen(open=>!open):void translateEbayPage('BILINGUAL')}><span>{ebayTranslating?'翻译中…':ebayTranslationActive?`中文 ✓${ebayTranslationCount?` · ${ebayTranslationCount}`:''}`:'译 · 中文'}</span><i>{ebayTranslationMenuOpen?'⌃':'⌄'}</i></button>{ebayTranslationMenuOpen&&<div className="translation-menu"><b>网页翻译</b><small>Qwen-MT Flash · 自动识别语种</small><button className={ebayTranslationMode==='BILINGUAL'?'active':''} onClick={()=>{setEbayTranslationMenuOpen(false);void translateEbayPage('BILINGUAL')}}><span>原文 + 中文</span><em>推荐</em></button><button className={ebayTranslationMode==='CHINESE'?'active':''} onClick={()=>{setEbayTranslationMenuOpen(false);void translateEbayPage('CHINESE')}}><span>仅显示中文</span></button><button onClick={()=>void translateEbayPage(ebayTranslationMode)}><span>翻译新增内容</span></button><button className="restore" onClick={()=>void restoreEbayTranslation()}><span>恢复原网页</span></button></div>}</div></div></div><div className="tabs ebay-browser-tabs"><div className="tab-scroll">{ebayBrowserTabs.map(tab=><button key={tab.id} className={tab.active?'active':''} onClick={()=>void activateEbayBrowserTab(tab)}><span className={`ebay-tab-icon${tab.faviconUrl?' has-site-logo':''}`}>{tab.faviconUrl?<img src={tab.faviconUrl} alt="" onError={event=>{event.currentTarget.hidden=true}}/>:'e'}</span><b>{tab.title}</b>{tab.closable&&<i onClick={event=>{event.stopPropagation();void closeEbayBrowserTab(tab.id)}}>×</i>}</button>)}</div><button className="new-browser-tab" title="新建eBay浏览页" aria-label="新建eBay浏览页" onClick={()=>void createEbayBrowserTab()}>＋</button>{ebayBrowserState?.loading&&<span className="run-state loading"><i/>页面加载中</span>}</div><form className="address-bar ebay-address-bar" onSubmit={navigateEbay}><button type="button" title="后退" disabled={!ebayBrowserState?.canGoBack} onClick={()=>void window.desktop.browser.back('web')}>←</button><button type="button" title="前进" disabled={!ebayBrowserState?.canGoForward} onClick={()=>void window.desktop.browser.forward('web')}>→</button><button type="button" title="刷新" onClick={()=>void window.desktop.browser.reload('web')}>↻</button><input aria-label="eBay网页地址" value={ebayAddress} onChange={event=>setEbayAddress(event.target.value)}/><button className="address-go" type="submit">打开 <span>↗</span></button></form><div ref={ebayBrowserSlot} className="browser-slot ebay-browser-slot"><div className="browser-placeholder">正在打开 {activeStore.name} 的 eBay 独立浏览会话…</div></div></main></div>:<EbayEmpty title="尚未添加 eBay 店铺" description="点击顶部“添加店铺”，保存店名、登录账号和密码后进入独立浏览会话。" action="添加第一个店铺" onAction={addStore}/>)}
       {activeTab!=='browser'&&!lockTitleMode&&!configuration?.marketDataConfigured&&<div className="ebay-config-notice"><b>eBay 市场数据尚未配置 Omkar API Key</b><span>请在 AI总部的“Amazon 数据源配置”中保存 Key；同一 Key 同时用于 Amazon 和 eBay Scraper。</span></div>}
@@ -4213,19 +4254,36 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet}:{initia
         {ebayCatalogPanel.collapsed?<PanelExpandRail panel={ebayCatalogPanel} label="本地产品目录"/>:<aside className="ebay-product-catalog collapsible-aside">
           <PanelCollapseButton panel={ebayCatalogPanel}/>
           <header><b>本地产品目录</b></header>
-          <button className={selectedCategoryId==='ALL'?'active':''} onClick={()=>setSelectedCategoryId('ALL')}>全部产品 <em>{localProducts.length}</em></button>
-          {categoryWorkspace.categories.length?<EbayStoreCategoryTree categories={categoryWorkspace.categories} listings={localListings} selected={selectedCategoryId} onSelect={setSelectedCategoryId}/>:<p className="ebay-category-empty">请先同步 eBay 店铺目录</p>}
-          <div className="ebay-catalog-filters"><b>快照状态</b><button className={selectedCategoryId==='UNCLASSIFIED'?'active':''} onClick={()=>setSelectedCategoryId('UNCLASSIFIED')}>未分类 <em>{localListings.filter(item=>!activeCategoryIds.has(item.categoryId)).length}</em></button><button className={selectedCategoryId==='MISSING_IMAGE'?'active':''} onClick={()=>setSelectedCategoryId('MISSING_IMAGE')}>缺少本地图片 <em>{localProducts.filter(product=>!product.snapshot.media.some(media=>media.downloadStatus==='DOWNLOADED')).length}</em></button></div>
+          <button className={selectedCategoryId==='ALL'?'active':''} onClick={()=>{setSelectedCategoryId('ALL');setActiveLocalAssignId('')}}>全部产品 <em>{localProducts.length}</em></button>
+          {categoryWorkspace.categories.length?<EbayStoreCategoryTree categories={categoryWorkspace.categories} listings={localListings} selected={selectedCategoryId} onSelect={assignLocalCategoryFromTree}/>:<p className="ebay-category-empty">请先同步 eBay 店铺目录</p>}
+          <div className="ebay-catalog-filters"><b>快照状态</b><button className={selectedCategoryId==='UNCLASSIFIED'?'active':''} onClick={()=>{setSelectedCategoryId('UNCLASSIFIED');setActiveLocalAssignId('')}}>未分类 <em>{localListings.filter(item=>!activeCategoryIds.has(item.categoryId)).length}</em></button><button className={selectedCategoryId==='MISSING_IMAGE'?'active':''} onClick={()=>{setSelectedCategoryId('MISSING_IMAGE');setActiveLocalAssignId('')}}>缺少本地图片 <em>{localProducts.filter(product=>!product.snapshot.media.some(media=>media.downloadStatus==='DOWNLOADED')).length}</em></button></div>
         </aside>}
         <section>
           <div className="ebay-toolbar"><input value={search} onChange={event=>setSearch(event.target.value)} placeholder="搜索本地产品标题、SKU、Item ID"/><span className="ebay-local-library-note">AI优化仅使用这里保存的快照</span></div>
-          {visibleLocalProducts.length?<div className="ebay-listing-grid">{visibleLocalProducts.map(product=>{const item=product.snapshot.sourceListing;const localMedia=product.snapshot.media.find(media=>media.downloadStatus==='DOWNLOADED');const imageUrl=ebayLocalMediaUrl(localMedia?.localPath||'',localMedia?.remoteUrl||item.imageUrl);const currencyCode=(item.currency||'').trim().toUpperCase();const priceNumber=ebayMoneyNumber(item.price);const cnyPrice=currencyCode==='CNY'||currencyCode==='RMB'||priceNumber<=0?0:priceNumber*readEbayProfitAssumptions(product.id).exchangeRate;return <article className="ebay-market-card ebay-local-product-card" key={product.id}>
-            <div className="ebay-market-card-media">{imageUrl?<img src={imageUrl} alt={product.title} loading="lazy" onError={event=>{if(event.currentTarget.dataset.fallback)return;event.currentTarget.dataset.fallback='1';event.currentTarget.src=localMedia?.remoteUrl||item.imageUrl}}/>:<span>无本地主图</span>}<span className={`ebay-local-completeness ${product.status.toLowerCase()}`}>{product.snapshot.completeness}%</span></div>
+          {visibleLocalProducts.length?<div className="ebay-listing-grid">{visibleLocalProducts.map(product=>{const item=product.snapshot.sourceListing;const localMedia=product.snapshot.media.find(media=>media.downloadStatus==='DOWNLOADED');const imageUrl=ebayLocalMediaUrl(localMedia?.localPath||'',localMedia?.remoteUrl||item.imageUrl);const currencyCode=(item.currency||'').trim().toUpperCase();const priceNumber=ebayMoneyNumber(item.price);const cnyPrice=currencyCode==='CNY'||currencyCode==='RMB'||priceNumber<=0?0:priceNumber*readEbayProfitAssumptions(product.id).exchangeRate;const wpId=product.listingId.startsWith('PALLET-')?product.listingId.slice('PALLET-'.length):'';const palletItem=wpId?localPalletByWp[wpId]:undefined;const dlRecord=wpId?localDownloadsByWp[wpId]:undefined;const downloadable=Boolean(dlRecord&&dlRecord.status==='DOWNLOADED'&&dlRecord.pageUrl);const estimatedTotalText=dlRecord?.estimatedTotal||'';const scoreValue=palletItem?(palletItem.gigaIndex??palletItem.score??null):null;const scoreGrade=scoreValue===null?null:Math.round(scoreValue)>=80?'A':Math.round(scoreValue)>=65?'B':'C';const inventoryText=palletItem&&(palletItem.sellableInventory!==null&&palletItem.sellableInventory!==undefined)?palletItem.sellableInventory.toLocaleString('zh-CN'):palletItem?.salesText?.replace(/^(?:Available\s*Stock|可售库存|库存)\s*[:：]?\s*/i,'')||'待补采';const sourceCatalogText=palletItem?.sourceCategory?`${palletItem.sourceCategory} / ${palletItem.sourceSubcategory||'—'} / ${palletItem.sourceTertiaryCategory||'—'}`:'类目待核实';const currentStoreText=product.categoryId&&activeCategoryIds.has(product.categoryId)?storePathText(product.categoryId):'未分类';const mediaInner=<>{imageUrl?<img src={imageUrl} alt={product.title} loading="lazy" onError={event=>{if(event.currentTarget.dataset.fallback)return;event.currentTarget.dataset.fallback='1';event.currentTarget.src=localMedia?.remoteUrl||item.imageUrl}}/>:<span>无本地主图</span>}{palletItem?.promotionText?<span className="candidate-promotion">{palletItem.promotionText}</span>:null}{palletItem?<span className={`score-badge${scoreValue===null?' pending':''}`} title={scoreValue===null?'GIGA Index 未采集，待重读补采':`评分依据：GIGA Index ${palletItem.gigaIndex}`}>{scoreValue===null?'待评分':`${Math.round(scoreValue)}分 · ${scoreGrade}级`}</span>:null}</>;return <article className={`ebay-market-card ebay-local-product-card${activeLocalAssignId===product.id?' ebay-local-card-active':''}`} key={product.id} onClick={event=>{if((event.target as HTMLElement).closest('button, input, select, textarea, a'))return;setActiveLocalAssignId(activeLocalAssignId===product.id?'':product.id)}}>
+            {downloadable?<button type="button" className="ebay-market-card-media ebay-local-media-link" title="点击查看下载图文页" aria-label={`查看下载图文页：${product.title}`} onClick={()=>void window.desktop.warehouses.openDownload(wpId).catch(reason=>setEbayError(readableError(reason,'打开下载图文页')))}>{mediaInner}</button>:<div className="ebay-market-card-media">{mediaInner}</div>}
             <div className="ebay-market-card-body">
               <b title={product.title}>{product.title}</b>
-              {product.listingId.startsWith('PALLET-')&&<em className="ebay-local-source-chip">货盘送入</em>}
               <div className="ebay-local-price-row"><strong>{ebayDisplayPrice(item.currency,item.price)}</strong>{cnyPrice>0&&<em>{ebayDisplayPrice('RMB',cnyPrice.toFixed(2))}</em>}</div>
-              <div className="ebay-card-actions ebay-local-card-actions"><button type="button" className="primary" onClick={()=>selectForOptimization(product)}>AI优化</button><button type="button" disabled={busy===`local-detail:${product.id}`} onClick={()=>void openLocalEditor(product)}>{busy===`local-detail:${product.id}`?'读取中…':'本地详情'}</button>{item.viewUrl&&<button type="button" onClick={()=>void openOriginalProduct(item)}>原商品 ↗</button>}<button type="button" className="danger" disabled={busy===`remove-local:${product.id}`} onClick={()=>void removeLocalProduct(product)}>{busy===`remove-local:${product.id}`?'删除中…':'删除本地'}</button></div>
+              {palletItem?<dl className="candidate-source-facts">
+                <div><dt>原货盘</dt><dd>{palletItem.warehouseCode==='GIGACLOUD'?'大健云仓':palletItem.warehouseCode} · Item Code {palletItem.itemCode||'—'}</dd></div>
+                <div><dt>地区货盘</dt><dd>{palletItem.region||'—'}</dd></div>
+                <div><dt>预估总额</dt><dd title={estimatedTotalText?`${estimatedTotalText} (含物流费)`:''}>{estimatedTotalText?`${estimatedTotalText} (含物流费)`:'待补采'}</dd></div>
+                <div><dt>物流费</dt><dd>{palletItem.shippingFeeText||'待补采'}</dd></div>
+                <div><dt>可售库存</dt><dd>{inventoryText}</dd></div>
+                <div><dt>原始类目</dt><dd title={sourceCatalogText}>{sourceCatalogText}</dd></div>
+                <div><dt>现在类目</dt><dd title={currentStoreText}>{currentStoreText}</dd></div>
+                <div><dt>GIGA Index</dt><dd>{palletItem.gigaIndexText??palletItem.gigaIndex??'待补采'}</dd></div>
+                <div><dt>采集时间</dt><dd>{(palletItem.collectedAt||'').slice(0,10)||'—'}</dd></div>
+              </dl>:null}
+              <div className="inbound-category-row" onClick={event=>{event.stopPropagation();if((event.target as HTMLElement).closest('button'))return;setActiveLocalAssignId(activeLocalAssignId===product.id?'':product.id)}}>
+                {product.categoryId?<span className="path">已选：{storePathText(product.categoryId)||product.categoryName||'未分类'}</span>:<>
+                  <span className="path empty">未匹配类目，请手动选择</span>
+                  <button type="button" disabled={busy===`local-classify:${product.id}`} onClick={()=>autoClassifyLocalCard(product.id)}>{busy===`local-classify:${product.id}`?'分类中…':'自动分类'}</button>
+                </>}
+                {activeLocalAssignId===product.id?<span className="hint">请在左侧本地产品目录点选类目</span>:null}
+              </div>
+              <div className="ebay-card-actions ebay-local-card-actions"><button type="button" className="primary" onClick={()=>{if(!product.categoryId){setEbayError('进入 AI优化 前请先选好该产品的「现在类目」：点击卡上类目行进入指派模式后在左侧本地产品目录点选，或点击类目行中的「自动分类」；归类完成后即可进入 AI优化。');return}setEbayError('');selectForOptimization(product)}}>AI优化</button><button type="button" disabled={busy===`local-detail:${product.id}`} onClick={()=>void openLocalEditor(product)}>{busy===`local-detail:${product.id}`?'读取中…':'本地详情'}</button>{item.viewUrl&&<button type="button" onClick={()=>void openOriginalProduct(item)}>原商品 ↗</button>}<button type="button" className="danger" disabled={busy===`remove-local:${product.id}`} onClick={()=>void removeLocalProduct(product)}>{busy===`remove-local:${product.id}`?'删除中…':'删除本地'}</button></div>
             </div>
           </article>})}</div>:<EbayEmpty title="本地产品库暂无商品" description="请在『我的货盘』选择产品点击“送eBay”，系统会保存标题、价格与主图快照；也可继续从线上产品下载。" action="前往我的货盘" onAction={()=>onOpenMyPallet?.()}/>}
         </section>

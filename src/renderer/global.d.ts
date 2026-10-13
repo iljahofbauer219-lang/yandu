@@ -374,6 +374,7 @@ declare global {
         localProducts(storeId?:string):Promise<EbayLocalProduct[]>
         setLocalCategory(localProductId:string, categoryId:string, categoryName:string):Promise<EbayLocalProduct>
         autoClassifyLocal(localProductId:string):Promise<{product:EbayLocalProduct;engine:'rule'|'llm'|'none';categoryId:string|null;categoryName:string;reason:string}>
+        suggestResearchQuery(title:string,categoryName:string):Promise<{query:string|null;reason:string}>
         localProductSnapshots(localProductId:string):Promise<EbayLocalProductSnapshot[]>
         downloadLocalProduct(storeId:string,listingId:string):Promise<EbayLocalProduct>
         readProductByUrl(storeId:string,url:string):Promise<EbayLocalProduct>

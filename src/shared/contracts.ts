@@ -1897,6 +1897,7 @@ export interface SupplyProductDownload {
   failedCount: number
   status: SupplyProductDownloadStatus
   error: string
+  estimatedTotal: string
   downloadedAt: string
 }
 

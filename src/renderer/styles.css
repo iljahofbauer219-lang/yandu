@@ -97,7 +97,7 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .candidate-promotion { position:absolute; left:9px; bottom:9px; padding:5px 8px; color:white; background:#c74536; border-radius:7px; font-size:10px; font-weight:800; }
 .score-badge.pending { color:#65716c; background:#edf0ef; }
 .candidate-source-facts { margin:0 0 7px; display:grid; gap:4px; font-size:10px; }
-.candidate-source-facts>div { min-width:0; display:grid; grid-template-columns:57px minmax(0,1fr); align-items:center; gap:6px; }
+.candidate-source-facts>div { min-width:0; display:grid; grid-template-columns:57px minmax(0,1fr); align-items:baseline; gap:6px; }
 .candidate-source-facts dt { color:#8a948f; }
 .candidate-source-facts dd { min-width:0; margin:0; overflow:hidden; color:#4d5b55; font-weight:650; white-space:nowrap; text-overflow:ellipsis; }
 .supply-source-card .product-tags { margin:8px 0; }
@@ -153,9 +153,10 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .candidate-catalog-main { min-width:0; min-height:0; overflow:auto; padding:14px; background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:0 5px 20px rgba(0,0,0,.035); }
 .candidate-catalog-main>.product-grid { overflow:visible; }
 .warehouse-catalog-layout { flex:1; min-height:0; display:grid; grid-template-columns:330px minmax(0,1fr); gap:10px; padding:10px; overflow:hidden; }
+.pallet-catalog-page { grid-template-columns:220px minmax(0,1fr); }
 .warehouse-catalog-main { min-width:0; min-height:0; overflow:hidden; }
 .warehouse-catalog-main>.supply-warehouse-page,.warehouse-catalog-main>.market-warehouse-page { height:100%; padding:14px; border:1px solid var(--line); border-radius:14px; }
-@media (max-width:1200px) { .candidate-page,.warehouse-catalog-layout { grid-template-columns:270px minmax(0,1fr); } }
+@media (max-width:1200px) { .candidate-page,.warehouse-catalog-layout { grid-template-columns:270px minmax(0,1fr); } .pallet-catalog-page { grid-template-columns:220px minmax(0,1fr); } }
 .giga-filter-note { margin:8px 0 0; color:#6f8585; font-size:8px; line-height:13px; }
 
 /* Secure marketplace credentials */
@@ -225,9 +226,6 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .inbound-edit-form label { display:grid; gap:2px; font-size:12px; color:#5b6b6f; }
 .inbound-edit-form input { border:1px solid #d8e0e2; border-radius:8px; padding:6px 8px; font:inherit; background:#fff; }
 .inbound-edit-form select { border:1px solid #d8e0e2; border-radius:8px; padding:6px 8px; font:inherit; background:#fff; }
-.inbound-origin-badge { display:inline-block; margin-right:6px; padding:1px 6px; border-radius:999px; font-size:11px; }
-.inbound-origin-badge.origin-selection { background:color-mix(in srgb, var(--accent, #0d9488) 14%, transparent); color:var(--accent, #0d9488); }
-.inbound-origin-badge.origin-erp { background:rgba(100, 116, 139, .14); color:#64748b; }
 .inbound-status-filter { margin:0 0 10px; }
 .inbound-category-row { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:8px 0 0; padding:6px 8px; border:1px dashed #cfd9db; border-radius:8px; font-size:12px; color:#5b6b6f; }
 .inbound-category-row .path { font-weight:600; color:var(--accent, #0d9488); }
@@ -830,5 +828,3 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .warehouse-card-select input { width:15px; height:15px; margin:0; accent-color:var(--tiffany, #0fbdb2); cursor:pointer; }
 .warehouse-region-select { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--erp-text-muted, #6b7280); }
 .warehouse-region-select select { padding:4px 6px; border:1px solid var(--erp-border, #e5e7eb); border-radius:8px; background:#fff; font-size:12px; }
-.inbound-origin-badge.origin-region { background:#eef7ff; color:#1d6fd6; }
-.inbound-origin-badge.origin-warehouse { background:#f3e8ff; color:#7c3aed; }

@@ -15,10 +15,16 @@ const { spawnSync } = require('node:child_process')
 function startMockServer(routes) {
   const server = http.createServer((req, res) => {
     const pathname = new URL(req.url, 'http://local').pathname
-    const body = routes[pathname]
-    res.setHeader('content-type', 'application/json')
-    if (!body) { res.statusCode = 404; res.end(JSON.stringify({ message: 'not mocked' })); return }
-    res.end(JSON.stringify(body))
+    const chunks = []
+    req.on('data', chunk => chunks.push(chunk))
+    req.on('end', () => {
+      const raw = Buffer.concat(chunks).toString('utf8')
+      const route = routes[pathname]
+      res.setHeader('content-type', 'application/json')
+      if (!route) { res.statusCode = 404; res.end(JSON.stringify({ message: 'not mocked' })); return }
+      const payload = typeof route === 'function' ? route(raw) : route
+      res.end(JSON.stringify(payload))
+    })
   })
   return new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve(server)))
 }
@@ -65,12 +71,19 @@ const RECT_PROBE = () => {
   const mockServer = await startMockServer({
     '/api/auth/me': ownerProfile,
     '/api/erp/capabilities': { canViewSource: true, canCollect: true, canEdit: true, canPricing: true, canResolveChanges: true },
-    '/api/erp/products': { items: [], total: 0, page: 1, pageSize: 100 }
+    '/api/erp/products': { items: [], total: 0, page: 1, pageSize: 100 },
+    // 百炼 mock：生图模型清单 + 千问核心商品词（非 qwen-mt 模型返回确定名词短语，qwen-mt 返回译文）
+    '/models': { data: [{ id: 'qwen-image-2.0' }] },
+    '/chat/completions': raw => {
+      const body = JSON.parse(raw || '{}')
+      const content = String(body.model || '').includes('qwen-mt') ? '2件装 通用型桶形赛车座椅 红色缝线 PVC皮革' : 'Loft Bed Frame'
+      return { choices: [{ message: { content } }] }
+    }
   })
   const mockUrl = `http://127.0.0.1:${mockServer.address().port}`
   fs.writeFileSync(path.join(userDataDir, 'server-config.json'), JSON.stringify({ serverUrl: mockUrl }, null, 2))
 
-  const app = await electron.launch({ executablePath, args: ['.', `--user-data-dir=${userDataDir}`], cwd: path.resolve(__dirname, '..'), env: { ...process.env, CODEX_UI_TEST: '1', YANDU_HOT_DIR: path.join(userDataDir, 'no-hot') } })
+  const app = await electron.launch({ executablePath, args: ['.', `--user-data-dir=${userDataDir}`], cwd: path.resolve(__dirname, '..'), env: { ...process.env, CODEX_UI_TEST: '1', YANDU_HOT_DIR: path.join(userDataDir, 'no-hot'), BAILIAN_BASE_URL: mockUrl } })
   let failures = 0
   const assert = (name, cond) => { if (cond) console.log(`  ✔ ${name}`); else { failures += 1; console.error(`  ✘ ${name}`) } }
   try {
@@ -90,7 +103,7 @@ const RECT_PROBE = () => {
 
     // 旧包排查：顶栏构建戳必须为最新构建（10-09 旧打包版戳为 2026-10-09 01:49）
     const stamp = await page.locator('.build-stamp').innerText()
-    assert('顶栏构建戳为最新构建而非10-09旧包', /2026-10-1[12]/.test(stamp) && !stamp.includes('2026-10-09'))
+    assert('顶栏构建戳为最新构建而非10-09旧包', /2026-10-1[2-9]/.test(stamp) && !stamp.includes('2026-10-09'))
     assert('侧边栏无AI美工/AI视频独立入口', await page.locator('.sidebar').getByRole('button', { name: 'AI美工' }).count() === 0 && await page.locator('.sidebar').getByRole('button', { name: 'AI视频' }).count() === 0)
 
     // 进入 AI跨境 hub 页
@@ -201,9 +214,10 @@ const RECT_PROBE = () => {
     assert('送入后直达 eBay 工作台本地产品页签', await page.locator('.sidebar button.nav-active').innerText() === 'AI跨境' && await page.locator('.ebay-business-nav button.active b').innerText() === '本地产品')
     await page.locator('main').getByText('FIXTURE Pallet Alpha Loft Bed 300001').first().waitFor({ state: 'visible', timeout: 8000 })
     assert('本地产品列表可见送入的 fixture 商品', await page.locator('main').getByText('FIXTURE Pallet Alpha Loft Bed 300001').count() >= 1)
-    assert('本地卡展示货盘送入来源徽章', await page.locator('.ebay-local-source-chip').count() === 1)
+    assert('本地卡展示货盘送入来源事实块', await page.locator('.ebay-local-product-card').getByText('原货盘').count() === 1)
     const catalogText = (await page.locator('.ebay-product-catalog').innerText()).replace(/\n/g, ' ')
     assert('送入时按源三级类目自动归入高架床', /高架\s*床?\s*1|高架床\s*1/.test(catalogText) && /未分类\s*0/.test(catalogText))
+    await page.screenshot({ path: path.join(ARTIFACTS, 'ebay-local-sent.png') })
     await page.locator('.ebay-local-card-actions').getByRole('button', { name: '本地详情' }).click()
     await page.locator('.ebay-revise-overlay').waitFor({ state: 'visible', timeout: 8000 })
     assert('编辑器类目区显示自动分类结果', await page.locator('.ebay-revise-category-section header span').innerText() === '高架床')
@@ -219,7 +233,35 @@ const RECT_PROBE = () => {
     const catalogAfter = (await page.locator('.ebay-product-catalog').innerText()).replace(/\n/g, ' ')
     assert('手工改类后树计数迁移', /卧室家具\s*1/.test(catalogAfter) && /高架床\s*0/.test(catalogAfter))
     await page.screenshot({ path: path.join(ARTIFACTS, 'ebay-local-category.png') })
-    await page.screenshot({ path: path.join(ARTIFACTS, 'ebay-local-sent.png') })
+
+    // PALLET 产品市场检索：不得再报『线上产品不存在』，且必须有可见结果或可见错误（非无反应）
+    await page.locator('.ebay-local-card-actions').getByRole('button', { name: 'AI优化' }).click()
+    await page.waitForTimeout(800)
+    // 千问核心商品词：验收 mock 百炼返回确定名词短语 Loft Bed Frame，应预填进输入框（取代规则截断词）
+    const llmPrefilled = await page.waitForFunction(() => { const el = document.querySelector('.ebay-market-controls input'); return Boolean(el) && el.value === 'Loft Bed Frame' }, null, { timeout: 20000 }).then(() => true).catch(() => false)
+    assert('千问提取核心商品词预填输入框（mock 名词短语）', llmPrefilled)
+    assert('核心商品词输入框预填非空建议词', (await page.locator('.ebay-market-controls input').inputValue()).trim().length > 0)
+    await page.locator('.ebay-market-controls input').fill('racing seat')
+    // 复现根因场景：先把工作区滚动到底，反馈条若仍被裁切即回归
+    await page.evaluate(() => { const ws = document.querySelector('.ebay-workspace'); if (ws) ws.scrollTop = ws.scrollHeight })
+    await page.getByRole('button', { name: '检索已成交市场数据' }).click()
+    await Promise.race([
+      page.locator('.ebay-success-notice').getByText('市场检索完成').waitFor({ timeout: 45000 }).catch(() => null),
+      page.locator('.ebay-error-notice').waitFor({ timeout: 45000 }).catch(() => null)
+    ])
+    const researchError = await page.locator('.ebay-error-notice').count() ? await page.locator('.ebay-error-notice').innerText() : ''
+    assert('PALLET 产品检索不再报线上产品不存在', !researchError.includes('线上产品不存在'))
+    assert('检索有可见结果或可见错误（非无反应）', Boolean(researchError) || await page.locator('.ebay-success-notice').getByText('市场检索完成').count() === 1)
+    const feedbackVisible = await page.evaluate(() => {
+      const el = document.querySelector('.ebay-error-notice') || document.querySelector('.ebay-success-notice')
+      if (!el) return false
+      const host = el.closest('.ebay-workspace')
+      const r = el.getBoundingClientRect()
+      const hr = host ? host.getBoundingClientRect() : { top: 0, bottom: window.innerHeight }
+      return r.height > 0 && r.bottom > hr.top + 1 && r.top < hr.bottom - 1
+    })
+    assert('检索反馈条在滚动视口内可见（未被裁切）', feedbackVisible)
+    await page.screenshot({ path: path.join(ARTIFACTS, 'ebay-market-research.png') })
 
     assert('无渲染进程异常', pageErrors.length === 0)
     if (pageErrors.length) console.error(pageErrors.join('\n'))
