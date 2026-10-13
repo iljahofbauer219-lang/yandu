@@ -121,6 +121,7 @@ import { isLocalServerUrl, readServerUrl, writeServerUrl } from './serverConfig'
 import { autoUpdater } from 'electron-updater'
 import { reloadLinduoChatModels, shutdownAdvisorRuntime } from './advisor/AdvisorRuntime'
 import { auditEbayTitle } from '../shared/ebayTitleAudit'
+import { confirmedEbayMarketTerms } from '../shared/ebayMarketDecision'
 import type { BrowserBounds, BrowserTranslationMode, CandidateUpdateRequest, CollectedOzonProduct, CollectedSupplyProduct, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, CollectorPluginProduct, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonUpdateRequest, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceDocumentDraft, ComplianceEnforcementStatus, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReviewStatus, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceTaskStatus, EbayAcceptanceBatch, EbayAcceptanceCheck, EbayAcceptanceItemResult, EbayAcceptanceRunRequest, EbayAcceptanceScenarioResult, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReviewRequest, EbayImageGroundingRequest, EbayImageInspection, EbayImageInspectionReport, EbayImageRoleSuggestionRequest, EbayImageStage, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductMedia, EbayLocalProductMediaUploadInput, EbayLocalProductSnapshotInput, EbayLocalProductUpdateInput, EbayMarketKeywordStat, EbayMarketResearchDecisionRequest, EbayMarketResearchFinding, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayProductDetails, EbayPublishAuditEvent, EbayPublishComparisonItem, EbayPublishTask, EbaySellerHubAcceptanceSnapshot, EbayStageGroundingRequest, EbayStageStoryboardRequest, EbayTitleDecisionInput, EbayTitleOptimizationRequest, EbayVideoStudioRequest, EliminateRequest, ImageGenerationRequest, ImageModelProfile, ImportedProductImage, ImportedProductSource, InboundErpIntakeInput, InboundSnapshot, MarketplaceCredentialInput, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePublishDraftUpdate, NetworkStrategy, Platform, RealShiftRequest, SelectionDecision, SelectionImportRequest, SelectionTask, SelectionTaskDraft, SupplyPlatformCode, TaskProgress } from '../shared/contracts'
 
 import type { EbayStoreCategory, EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
@@ -3018,13 +3019,15 @@ ipcMain.handle('ebay:title-decision:confirm', (_event, input:EbayTitleDecisionIn
   if(!database)throw new Error('数据库尚未初始化')
   const snapshot=database.getEbayMarketResearch(input.storeId,input.listingId)
   if(!snapshot||snapshot.id!==input.researchSnapshotId)throw new Error('市场证据已变化，请重新生成并审核标题')
-  const listing=database.getEbayListings(input.storeId).find(item=>item.listingId===input.listingId)
-  if(!listing)throw new Error('原商品已不存在，请返回产品库刷新')
+  const onlineListing=database.getEbayListings(input.storeId).find(item=>item.listingId===input.listingId)
+  const localProduct=database.getEbayLocalProducts(input.storeId).find(item=>item.listingId===input.listingId)
+  const listing=onlineListing??localProduct?.snapshot.sourceListing
+  if(!listing)throw new Error('原商品已不在产品库中（线上与本地都没有这条记录），本条标题未保存；请返回产品库刷新后重新同步或送入')
   const variant=input.variants.find(item=>item.id===input.selectedVariantId&&item.title===input.selectedTitle)
   if(!variant)throw new Error('所选标题不属于本次生成方案')
-  const originalTitle=(listing.originalTitleVerified&&listing.originalTitle?.trim())?listing.originalTitle.trim():listing.title.trim()
+  const originalTitle=(listing.originalTitle?.trim()&&(listing.originalTitleVerified||localProduct))?listing.originalTitle.trim():listing.title.trim()
   if(originalTitle!==input.originalTitle.trim())throw new Error('eBay 原标题已变化，请重新生成标题方案')
-  const confirmedTerms=[...snapshot.keywords,...snapshot.combinations].filter(item=>item.factStatus==='CONFIRMED')
+  const confirmedTerms=confirmedEbayMarketTerms(snapshot)
   const audit=auditEbayTitle(input.selectedTitle,originalTitle,confirmedTerms,input.verifiedFacts||[])
   if(!audit.passed)throw new Error('所选标题未通过字符、重复词、商品事实或市场词检查')
   return database.saveEbayTitleDecision({...input,originalTitle},audit)

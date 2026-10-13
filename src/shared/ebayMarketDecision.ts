@@ -1,4 +1,9 @@
-import type { EbayMarketDecisionReport, EbayMarketDecisionSignal, EbayMarketResearchMetric, EbayMarketResearchSnapshot } from './contracts'
+import type { EbayMarketDecisionReport, EbayMarketDecisionSignal, EbayMarketKeywordStat, EbayMarketResearchMetric, EbayMarketResearchSnapshot } from './contracts'
+
+// 已确认市场词的唯一口径：候选高频词、组合词与核心词短语变体都算，生成/审计/决策三处必须一致
+export function confirmedEbayMarketTerms(snapshot:EbayMarketResearchSnapshot):EbayMarketKeywordStat[] {
+  return [...snapshot.keywords,...snapshot.combinations,...(snapshot.coreVariants||[])].filter(item=>item.factStatus==='CONFIRMED')
+}
 
 function sameConditions(left:EbayMarketResearchSnapshot,right:EbayMarketResearchSnapshot) {
   return left.query.trim().toLowerCase()===right.query.trim().toLowerCase()
@@ -36,9 +41,7 @@ export function buildEbayMarketDecisionReport(current:EbayMarketResearchSnapshot
   const analysisSampleCount=Math.min(current.analysisSampleCount??30,current.sampleCount)
   const soldQuantityEvidenceCount=current.soldQuantityEvidenceCount??0
   const rankingBasis=current.rankingBasis||'EBAY_RESULT_ORDER'
-  const confirmed=[...current.keywords,...current.combinations]
-    .filter(item=>item.factStatus==='CONFIRMED')
-    .sort((a,b)=>b.count-a.count||b.coverage-a.coverage)
+  const confirmed=confirmedEbayMarketTerms(current).sort((a,b)=>b.count-a.count||b.coverage-a.coverage)
   const confidence:EbayMarketDecisionReport['confidence']=available>=5&&analysisSampleCount>=20?'HIGH':analysisSampleCount>=20||available>=3&&analysisSampleCount>=10?'MEDIUM':'LOW'
   const readiness:EbayMarketDecisionReport['titleReadiness']=!current.sampleCount||!confirmed.length?'BLOCKED':confidence==='LOW'?'REVIEW':'READY'
   const missingMetrics=current.metrics.filter(item=>!item.available).map(item=>item.label)

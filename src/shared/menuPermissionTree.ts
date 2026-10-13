@@ -140,7 +140,15 @@ export const MENU_PERMISSION_TREE: MenuPermNode[] = [
       { code: 'menu.collect.depdrop', label: 'Depdrop' },
       { code: 'menu.collect.dropping', label: 'Dropping' },
       { code: 'menu.collect.dropibr', label: 'Dropi' },
-      { code: 'menu.collect.nocnoc', label: 'Nocnoc' }
+      { code: 'menu.collect.nocnoc', label: 'Nocnoc' },
+      { code: 'menu.collect.carparts', label: 'carparts' },
+      { code: 'menu.collect.madeinchina', label: '中国制造网' },
+      { code: 'menu.collect.yiwugo', label: '义乌购' },
+      { code: 'menu.collect.vidaxl', label: 'vidaXL' },
+      { code: 'menu.collect.dublaa', label: 'Dublaa' },
+      { code: 'menu.collect.saaz', label: 'SAAZ' },
+      { code: 'menu.collect.triplea', label: 'Triple-A' },
+      { code: 'menu.collect.emex', label: 'eMEX' }
     ]
   },
   {

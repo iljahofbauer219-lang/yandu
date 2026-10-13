@@ -280,6 +280,51 @@ const RECT_PROBE = () => {
     const reviewText = await page.locator('.ebay-market-keyword-review').innerText()
     assert('候选市场词为核心词短语变体（含成交佐证）', reviewText.includes('racing seat pair') && reviewText.includes('bucket racing seat'))
     assert('候选市场词不再出现 black 等无关单词', !reviewText.includes('black'))
+    // 确认一个候选词后：本地产品无采集原标题也应以快照标题回落，生成按钮可用且无原标题占位
+    await page.locator('.ebay-market-keyword-review article').first().getByRole('button', { name: '确认使用' }).click()
+    await page.waitForTimeout(1000)
+    const genBtn = page.getByRole('button', { name: /生成六套标题方案|换一批六套标题方案/ })
+    assert('确认候选词后生成六套标题方案按钮可用', await genBtn.count() === 1 && !(await genBtn.isDisabled()))
+    assert('本地产品不再显示原标题尚未取得占位', await page.getByText('原标题尚未取得').count() === 0)
+    // 确认采用此标题：PALLET- 合成 listing 不在线上产品表，主进程必须回落本地快照，不得误报『原商品已不存在』
+    const confirmOutcome = await page.evaluate(async () => {
+      const connectors = new Set(['a', 'an', 'and', 'by', 'for', 'from', 'in', 'of', 'on', 'the', 'to', 'with'])
+      const words = (value) => String(value || '').toLowerCase().replace(/&/g, ' and ').match(/[a-z0-9]+/g) || []
+      const message = (reason) => String(reason && reason.message ? reason.message : reason)
+      try {
+        const stores = await window.desktop.ebay.stores()
+        const storeId = stores.length ? stores[0].id : ''
+        const products = storeId ? await window.desktop.ebay.localProducts(storeId) : []
+        const product = products.find((item) => String(item.listingId).startsWith('PALLET-'))
+        if (!product) return { ok: false, message: '验收前置数据缺失：没有 PALLET 本地产品' }
+        const snapshot = await window.desktop.ebay.marketResearch(storeId, product.listingId)
+        if (!snapshot) return { ok: false, message: '验收前置数据缺失：该产品没有市场快照' }
+        const source = product.snapshot.sourceListing
+        const originalTitle = String(source.originalTitle || '').trim() || String(source.title || '').trim()
+        const confirmed = [...snapshot.keywords, ...snapshot.combinations, ...(snapshot.coreVariants || [])].filter((item) => item.factStatus === 'CONFIRMED')
+        if (!confirmed.length) return { ok: false, message: '验收前置数据缺失：没有已确认市场词' }
+        const termWords = words(confirmed[0].term)
+        const used = new Set(termWords)
+        let title = confirmed[0].term
+        for (const word of words(originalTitle).filter((item) => !used.has(item) && !connectors.has(item))) {
+          if ((`${title} ${word}`).length > 78) break
+          title += ` ${word}`
+        }
+        const payload = { storeId, listingId: product.listingId, researchSnapshotId: snapshot.id, originalTitle, selectedTitle: title, selectedVariantId: 'BALANCED', variants: [{ id: 'BALANCED', name: '综合推荐型', title, keywords: [], rationale: '验收脚本构造' }], verifiedFacts: [] }
+        try {
+          const decision = await window.desktop.ebay.confirmTitleDecision(payload)
+          const stored = await window.desktop.ebay.titleDecision(storeId, product.listingId)
+          return { ok: true, message: '', title, storedTitle: stored ? stored.selectedTitle : '', auditPassed: Boolean(decision && decision.audit && decision.audit.passed) }
+        } catch (reason) {
+          return { ok: false, message: message(reason), title }
+        }
+      } catch (reason) {
+        return { ok: false, message: `验收前置数据异常：${message(reason)}` }
+      }
+    })
+    assert('本地货盘产品确认采用此标题保存成功（不再误报原商品已不存在）', confirmOutcome.ok === true)
+    assert('确认后的标题决策可回读', Boolean(confirmOutcome.ok && confirmOutcome.storedTitle === confirmOutcome.title))
+    if (!confirmOutcome.ok) console.error(`确认采用此标题失败：${confirmOutcome.message}`)
     await page.screenshot({ path: path.join(ARTIFACTS, 'ebay-market-research.png') })
 
     assert('无渲染进程异常', pageErrors.length === 0)
