@@ -148,7 +148,8 @@ export const MENU_PERMISSION_TREE: MenuPermNode[] = [
       { code: 'menu.collect.dublaa', label: 'Dublaa' },
       { code: 'menu.collect.saaz', label: 'SAAZ' },
       { code: 'menu.collect.triplea', label: 'Triple-A' },
-      { code: 'menu.collect.emex', label: 'eMEX' }
+      { code: 'menu.collect.emex', label: 'eMEX' },
+      { code: 'menu.collect.1688global', label: '1688跨境专供' }
     ]
   },
   {
