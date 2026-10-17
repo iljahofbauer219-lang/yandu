@@ -3,11 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>砚都跨境 · AI员工 Web 工作台</title>
+<!-- 空 icon 声明：抑制浏览器自动请求 /favicon.ico（服务器无该文件会产生 404 控制台报错） -->
+<link rel="icon" href="data:,">
+<title>砚都跨境 · Web 工作台</title>
 <style>
   :root { --brand:#0abab5; --brand-dark:#079d98; --ink:#1f2329; --muted:#646a73; --line:#e5e8eb; --bg:#f5f6f8; --danger:#a33d36; }
   * { box-sizing:border-box; }
-  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); margin:0; color:var(--ink); height:100vh; display:flex; flex-direction:column; }
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); margin:0; color:var(--ink); height:100vh; display:flex; flex-direction:row; }
+  /* 左侧一级栏目导航栏：尺寸与配色对齐桌面 APP（68px 竖排图标+11px 标签，选中态内嵌 3px Tiffany 竖条） */
+  .rail { flex:none; width:68px; padding:8px 4px 6px; display:flex; flex-direction:column; background:#fbfbfc; border-right:1px solid #e6e6e8; }
+  .rail nav { flex:1; min-height:0; display:flex; flex-direction:column; gap:2px; overflow-y:auto; scrollbar-width:none; }
+  .rail nav::-webkit-scrollbar { display:none; }
+  .rail nav button { position:relative; min-height:66px; flex:0 0 66px; color:#5f6368; background:transparent; border:0; padding:4px 2px; border-radius:9px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; transition:background .16s,color .16s; }
+  .rail nav button:hover { color:#176a67; background:#edf9f8; }
+  .rail nav button.nav-active { color:#075955; background:#e1f8f6; box-shadow:inset 3px 0 0 var(--brand); }
+  .rail nav button:focus-visible { outline:2px solid var(--brand); outline-offset:-2px; }
+  .nav-icon { width:32px; height:32px; display:grid; place-items:center; border-radius:9px; }
+  .nav-icon svg { width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .nav-label { font-size:11px; font-weight:650; line-height:16px; white-space:nowrap; }
+  .page { flex:1; min-width:0; display:flex; flex-direction:column; }
   header { flex:none; background:#fff; border-bottom:1px solid var(--line); padding:12px 20px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
   .brand { display:flex; align-items:center; gap:10px; }
   .brand-mark { display:grid; place-items:center; width:34px; height:34px; border-radius:11px; background:var(--brand); color:#fff; font-weight:900; font-size:16px; }
@@ -85,13 +99,28 @@
   .login-card button:hover { background:var(--brand-dark); }
   .login-card button:disabled { opacity:.5; cursor:not-allowed; }
   .login-card p.foot { font-size:11px; color:#98a0a8; margin:14px 0 0; line-height:1.7; }
+  /* 非 AI员工 模块：中文说明态（不空白、不报错），卡片样式对齐 APP 的 ai-crossborder 页头 */
+  .view-employee { flex:1; min-height:0; display:flex; flex-direction:column; }
+  .view-module { flex:1; min-height:0; overflow-y:auto; padding:22px 24px; display:flex; flex-direction:column; gap:16px; }
+  .view-employee[hidden], .view-module[hidden] { display:none; }
+  .module-header h2 { margin:0; font-size:20px; letter-spacing:-.02em; }
+  .module-header p { margin:5px 0 0; color:var(--muted); font-size:12px; }
+  .module-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px 20px; box-shadow:0 5px 20px rgba(0,0,0,.035); display:flex; flex-direction:column; gap:12px; max-width:760px; }
+  .module-card .tag { align-self:flex-start; font-size:11px; font-weight:700; color:#8a5a12; background:#fdf3e2; border:1px solid #f3ddb6; border-radius:7px; padding:4px 9px; }
+  .module-card .tag.web { color:#075955; background:#e1f8f6; border-color:#8adfd9; }
+  .module-card p { margin:0; font-size:13px; line-height:1.8; color:#3c4248; }
+  .module-card ul { margin:0; padding-left:20px; font-size:12.5px; line-height:1.9; color:var(--muted); }
+  .module-actions { display:flex; gap:10px; flex-wrap:wrap; }
+  .module-actions a, .module-actions button { border:1px solid var(--line); background:#fff; border-radius:9px; padding:9px 16px; font-size:13px; color:#333438; cursor:pointer; text-decoration:none; }
+  .module-actions .primary { color:#063c3a; background:#79d8d2; border-color:#68ccc6; font-weight:650; }
+  .module-actions a:hover, .module-actions button:hover { border-color:#a7deda; }
 </style>
 </head>
 <body>
 <div class="login-wrap" id="loginWrap">
   <form class="login-card" id="loginForm">
     <div class="brand-mark">砚</div>
-    <h1>AI员工 · Web 工作台</h1>
+    <h1>砚都跨境 · Web 工作台</h1>
     <p class="sub">使用桌面 APP 账号登录（手机号 + 密码）</p>
     <input id="loginPhone" maxlength="11" autocomplete="username" placeholder="手机号" required>
     <input id="loginPwd" type="password" autocomplete="current-password" placeholder="密码" required>
@@ -100,13 +129,16 @@
     <p class="foot">没有账号？请在桌面 APP 注册并等待管理员审核。<br>报告方案类工作浏览器直接使用，无需安装 APP。</p>
   </form>
 </div>
+<aside class="rail"><nav id="railNav" aria-label="一级栏目"></nav></aside>
+<div class="page">
 <header>
-  <div class="brand"><span class="brand-mark">砚</span><div><b>AI员工 · Web 工作台</b><small>报告方案类工作浏览器直接使用，无需安装 APP</small></div></div>
+  <div class="brand"><span class="brand-mark">砚</span><div><b>砚都跨境 · Web 工作台</b><small id="brandSub">与桌面 APP 同一账号、同一权限</small></div></div>
   <div class="agents" id="agents"></div>
   <div class="spacer"></div>
   <div class="user-chip" id="userChip"><b id="userName"></b><button id="logoutBtn" type="button">退出</button></div>
   <a class="link" href="/download/" target="_blank">APP 下载页 ↗</a>
 </header>
+<div class="view-employee" id="viewEmployee">
 <main>
   <div id="chat"><div class="empty" id="empty">选择上方 AI 员工，输入需求即可生成报告。<br>例如：「帮我分析美国站宠物美容刷市场，给出选品报告」</div></div>
 </main>
@@ -125,6 +157,9 @@
   </div>
 </footer>
 <div class="tip">报告生成约需 1~6 分钟，期间请勿关闭页面。桌面快捷方式下载：<a href="/web/yandu-web.url">Windows</a> · <a href="/web/yandu-web.webloc">macOS</a></div>
+</div>
+<div class="view-module" id="viewModule" hidden></div>
+</div>
 <script src="/web/marked.min.js"></script>
 <script src="/web/purify.min.js"></script>
 <script>
@@ -133,6 +168,31 @@ const AGENTS = [
   { id: 'a80d0348932d11f1b36bf39ef484774d', name: 'Listing精造师', placeholder: '例如：把以下中文商品资料生成 eBay 美国站英文 Listing：…' }
 ]
 const AUTH_KEY = 'yw_auth'
+// ─── 一级栏目：与桌面 APP（src/renderer/App.tsx 的 aiModuleNav）可见项与权限码一一对应，图标同 NavButton ───
+const NAV_ICONS = {
+  'ie-browser': '<g stroke-width="1.6"><rect x="3" y="5" width="18" height="14" rx="2" fill="#4da3e8" stroke="#2b3445"/><path d="M3 9.5h18" stroke="#2b3445"/><rect x="6" y="12.5" width="7" height="4" rx="1" fill="#ffffff" stroke="none"/><circle cx="16.8" cy="14.5" r="1.6" fill="#f7b500" stroke="none"/><circle cx="5.6" cy="7.3" r=".9" fill="#ffffff" stroke="none"/><circle cx="8.2" cy="7.3" r=".9" fill="#f2635f" stroke="none"/></g>',
+  'ai-collect': '<g stroke-width="1.6"><circle cx="12" cy="12" r="8.6" fill="#f2635f" stroke="#2b3445"/><circle cx="12" cy="12" r="5.2" fill="#ffffff" stroke="#2b3445"/><circle cx="12" cy="12" r="2" fill="#f2635f" stroke="none"/><path d="M12 1.8v2.4M12 19.8v2.4M1.8 12h2.4M19.8 12h2.4" stroke="#2b3445"/></g>',
+  archive: '<g stroke-width="1.6"><rect x="3" y="4" width="18" height="4.6" rx="1" fill="#f7b500" stroke="#2b3445"/><path d="M5 8.6V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.6z" fill="#ffffff" stroke="#2b3445"/><rect x="10" y="12" width="4" height="2.2" rx="1.1" fill="#f7b500" stroke="#2b3445" stroke-width="1.2"/></g>',
+  'my-pallet': '<g stroke-width="1.6"><rect x="3" y="4" width="18" height="4.6" rx="1" fill="#38c1ae" stroke="#2b3445"/><path d="M5 8.6V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.6z" fill="#ffffff" stroke="#2b3445"/><path d="M12 16.8l-2.6-2.5a1.75 1.75 0 0 1 2.6-2.35 1.75 1.75 0 0 1 2.6 2.35z" fill="#f2635f" stroke="#2b3445" stroke-width="1.2"/></g>',
+  'ai-crossborder': '<g stroke-width="1.6"><circle cx="12" cy="12" r="8.6" fill="#38c1ae" stroke="#2b3445"/><path d="M3.4 12h17.2" stroke="#ffffff"/><path d="M12 3.4c2.3 2.4 3.6 5.3 3.6 8.6s-1.3 6.2-3.6 8.6c-2.3-2.4-3.6-5.3-3.6-8.6s1.3-6.2 3.6-8.6z" fill="none" stroke="#ffffff"/></g>',
+  'ai-advisor': '<g stroke-width="1.6"><path d="M12 3a6 6 0 0 0-3.4 10.9c.7.5 1.2 1.3 1.4 2.1h4c.2-.8.7-1.6 1.4-2.1A6 6 0 0 0 12 3z" fill="#f7b500" stroke="#2b3445"/><path d="M9.8 18.5h4.4" stroke="#2b3445"/><path d="M10.6 21h2.8" stroke="#2b3445"/><path d="M12 7.5v3M10.5 9h3" stroke="#ffffff"/></g>',
+  'ai-employee': '<g stroke-width="1.6"><circle cx="12" cy="7.6" r="3.6" fill="#f7b500" stroke="#2b3445"/><path d="M5.2 20.5v-.8a5.6 5.6 0 0 1 5.6-5.6h2.4a5.6 5.6 0 0 1 5.6 5.6v.8z" fill="#4da3e8" stroke="#2b3445"/></g>',
+  'ai-planet': '<g stroke-width="1.6"><circle cx="12" cy="12" r="5" fill="#f7b500" stroke="#2b3445"/><path d="M3.6 15.2c4.6 1.6 11.6-.5 16.4-4.8" fill="none" stroke="#4da3e8" stroke-width="2"/><circle cx="18.6" cy="6.2" r="1.6" fill="#f2635f" stroke="#2b3445"/></g>',
+  'ai-hq': '<g stroke-width="1.6"><rect x="6.5" y="2.8" width="11" height="18.4" rx="1.2" fill="#4da3e8" stroke="#2b3445"/><rect x="9" y="6" width="2.4" height="2.2" rx=".5" fill="#ffffff" stroke="none"/><rect x="12.6" y="6" width="2.4" height="2.2" rx=".5" fill="#ffffff" stroke="none"/><rect x="9" y="10" width="2.4" height="2.2" rx=".5" fill="#ffffff" stroke="none"/><rect x="12.6" y="10" width="2.4" height="2.2" rx=".5" fill="#ffffff" stroke="none"/><rect x="9" y="14" width="2.4" height="2.2" rx=".5" fill="#ffffff" stroke="none"/><rect x="12.6" y="14" width="2.4" height="2.2" rx=".5" fill="#ffffff" stroke="none"/><rect x="10.4" y="17.6" width="3.2" height="3.6" fill="#f7b500" stroke="#2b3445" stroke-width="1.2"/><path d="M3.5 21.2h17" stroke="#2b3445"/></g>'
+}
+const MODULES = [
+  { page: 'ie-browser', label: 'IE浏览', icon: 'ie-browser', perm: 'menu.ie-browser', desc: '内嵌多标签浏览器，直连货盘与平台站点', note: 'IE浏览复用桌面 APP 的内嵌浏览器会话，可登录 1688、大健云仓、eBay 等平台并在页面内读取商品事实；浏览器版无法共享该会话。', points: ['多标签内嵌浏览器，新窗口链接自动开新 TAB', '平台登录页与验证码、扫码等风控需人工完成', '采集与商品事实读取依赖本机浏览器'] },
+  { page: 'ai-collect', label: '货盘采集', icon: 'ai-collect', perm: 'menu.collect', desc: '80 多个货源站点按地区与国家采集候选商品', note: '货盘采集依赖桌面 APP 的内嵌浏览器与「采集助手」浏览器扩展，候选商品直接写入本机数据库。', points: ['按地区/国家分区浏览货源站点与候选数量', '关键词搜索、查重后录入候选池', 'AI 优选数量与候选淘汰'] },
+  { page: 'ai-hub-warehouse', label: '货盘仓库', icon: 'archive', perm: 'menu.warehouse.hub', desc: '正式入库货盘与地区货盘台账', note: '货盘仓库的数据存放在本机 SQLite 数据库，Web 版不直连本地库，因此只能在桌面 APP 查看与操作。', points: ['入库/在架/下架阶段视图与计数', '存放卡事实区：原货盘、地区货盘、物流费', '批量送入 eBay 产品与发布流程'] },
+  { page: 'ai-hub-my-pallet', label: '我的货盘', icon: 'my-pallet', perm: 'menu.warehouse.hub', desc: '已送入发布流程的自有货盘', note: '我的货盘跟随本机数据库，Web 版无法读写，请在桌面 APP 查看。', points: ['货盘送 eBay 的标题与图片优化', '发布问题与审核台账', '本地商品快照与原货盘回溯'] },
+  { page: 'ai-crossborder', label: 'AI跨境', icon: 'ai-crossborder', perm: 'menu.crossborder', desc: '7 大跨境电商平台智能运营中心', note: '平台运营能力（含 eBay 工作区）依赖桌面 APP 的本地授权与数据库，Web 版暂未开放。', points: ['eBay 平台工作区：市场检索与标题决策', '主图合规检查与 AI 生图、AI 洗图', '刊登、店铺同步与发布问题处理'] },
+  { page: 'ai-advisor', label: 'AI参谋', icon: 'ai-advisor', perm: 'menu.advisor', desc: '在线参谋对话与报告样例库', note: 'AI参谋对话与报告样例库运行在桌面 APP 内，Web 版暂未开放。', points: ['与 AI 参谋的多轮经营对话', '报告样例库检索与复用', '参谋建议落入选品分析任务'] },
+  { page: 'ai-employee', label: 'AI员工', icon: 'ai-employee', perm: 'menu.employee', desc: 'AI 员工智能体：选品报告与 Listing 生成', web: true, note: '本栏目已在 Web 版开放：选品分析师与 Listing精造师直连服务端智能体，无需安装 APP。', points: ['选品分析师：市场机会与选品报告', 'Listing精造师：多语言 Listing 生成与优化', '示例问题卡、平台快捷选择与 .txt/.md 文本附件'] },
+  { page: 'ai-planet', label: 'AI星球', icon: 'ai-planet', perm: 'menu.planet', desc: '聚合 AI 能力入口：知识库与行业资讯', note: 'AI星球的知识库与 CB资讯入口部署在桌面 APP，Web 版暂未开放。', points: ['智能体知识库与自定义知识库', 'CB资讯：跨境行业资讯聚合', '合规知识库问答'] },
+  { page: 'ai-hq', label: 'AI总部', icon: 'ai-hq', perm: 'menu.hq', desc: '管理与服务功能入口', note: 'AI总部的管理与配置项（含系统授权）需在桌面 APP 完成，Web 版只读取权限结果。', points: ['大模型 API Key 与模型广场', '系统管理：成员、角色与模块权限分配', 'AI财务 / AI客服 / AI飞书 / 文章抓取'] }
+]
+const NO_PERM_MODULE = { page: 'none', label: '暂无可用模块', icon: 'ai-employee', desc: '当前账号未分配模块权限', note: '你的账号尚未被分配任何模块权限，请联系主帐号在桌面 APP 的「AI总部 · 系统管理」中完成授权后再回到本页。', points: ['授权完成后重新登录即可看到左侧栏目', 'AI员工的报告能力开通后即可直接使用'] }
+
 const PLATFORMS = ['Amazon', 'eBay', 'Ozon', 'Temu', 'TikTok', 'eMAG', 'Lazada']
 const PLATFORM_TEXT_RE = /(在\s*)(亚马逊|Amazon|eBay|Ozon|Temu|TikTok|eMAG|Lazada)/
 function applyPlatformToRequest(text, platform) {
@@ -168,6 +228,10 @@ const loginErr = document.getElementById('loginErr')
 const loginBtn = document.getElementById('loginBtn')
 const userChip = document.getElementById('userChip')
 const userNameEl = document.getElementById('userName')
+const railNav = document.getElementById('railNav')
+const viewEmployee = document.getElementById('viewEmployee')
+const viewModule = document.getElementById('viewModule')
+const brandSub = document.getElementById('brandSub')
 
 // ─── 登录态（sessionStorage，关浏览器即失效） ─────────────────────────────
 function loadAuth() { try { return JSON.parse(sessionStorage.getItem(AUTH_KEY)) } catch { return null } }
@@ -185,6 +249,114 @@ function enterWorkbench() {
   loginWrap.style.display = 'none'
   userNameEl.textContent = auth?.name || '已登录'
   userChip.style.display = 'flex'
+  void syncPermissions()
+}
+
+// ─── 左侧一级栏目（按登录账号的模块权限过滤，与 APP 的 hasPermission 同口径） ───────────
+let section = 'ai-employee'
+
+function hasPerm(code) {
+  const auth = loadAuth()
+  if (!auth) return false
+  if (auth.owner) return true
+  return Array.isArray(auth.perms) && auth.perms.includes(code)
+}
+
+const visibleModules = () => MODULES.filter(item => hasPerm(item.perm))
+
+function renderRail() {
+  railNav.innerHTML = ''
+  for (const item of visibleModules()) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    if (item.page === section) button.className = 'nav-active'
+    button.innerHTML = `<span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true">${NAV_ICONS[item.icon] || ''}</svg></span><span class="nav-label"></span>`
+    button.querySelector('.nav-label').textContent = item.label
+    button.onclick = () => selectSection(item.page)
+    railNav.appendChild(button)
+  }
+}
+
+function selectSection(page) {
+  const item = MODULES.find(module => module.page === page)
+  section = page
+  const employee = Boolean(item?.web)
+  viewEmployee.hidden = !employee
+  viewModule.hidden = employee
+  agentsEl.style.display = employee ? 'flex' : 'none'
+  brandSub.textContent = employee ? '报告方案类工作浏览器直接使用，无需安装 APP' : (item?.desc || '当前账号未分配模块权限')
+  document.title = employee ? '砚都跨境 · Web 工作台' : `砚都跨境 · ${item?.label || 'Web 工作台'}`
+  renderModuleView(employee ? item : (item || NO_PERM_MODULE))
+  renderRail()
+}
+
+function renderModuleView(item) {
+  viewModule.innerHTML = ''
+  const header = document.createElement('div')
+  header.className = 'module-header'
+  const title = document.createElement('h2')
+  title.textContent = item.label
+  const subtitle = document.createElement('p')
+  subtitle.textContent = item.desc
+  header.append(title, subtitle)
+  const card = document.createElement('div')
+  card.className = 'module-card'
+  const tag = document.createElement('span')
+  tag.className = item.web ? 'tag web' : 'tag'
+  tag.textContent = item.web ? 'Web 版已开放' : '桌面 APP 功能'
+  const note = document.createElement('p')
+  note.textContent = item.note
+  const list = document.createElement('ul')
+  for (const point of item.points) {
+    const li = document.createElement('li')
+    li.textContent = point
+    list.appendChild(li)
+  }
+  card.append(tag, note, list)
+  if (item.web) {
+    const tip = document.createElement('p')
+    tip.textContent = '选择上方 AI 员工并在下方输入需求即可生成报告。'
+    card.appendChild(tip)
+  } else {
+    const actions = document.createElement('div')
+    actions.className = 'module-actions'
+    const download = document.createElement('a')
+    download.href = '/download/'
+    download.target = '_blank'
+    download.className = 'primary'
+    download.textContent = '下载桌面 APP ↗'
+    actions.appendChild(download)
+    if (hasPerm('menu.employee')) {
+      const back = document.createElement('button')
+      back.type = 'button'
+      back.textContent = '返回 AI员工'
+      back.onclick = () => selectSection('ai-employee')
+      actions.appendChild(back)
+    }
+    card.appendChild(actions)
+  }
+  viewModule.append(header, card)
+}
+
+function defaultSection() {
+  const items = visibleModules()
+  if (items.some(item => item.web)) return items.find(item => item.web).page
+  return items[0]?.page || 'none'
+}
+
+async function syncPermissions() {
+  const auth = loadAuth()
+  if (!auth) return
+  if (!auth.owner && !Array.isArray(auth.perms)) {
+    try {
+      const response = await authorizedFetch('/api/auth/me', { method: 'GET' })
+      const profile = response.ok ? await response.json().catch(() => null) : null
+      if (profile) saveAuth({ ...loadAuth(), owner: Boolean(profile.isOwner), perms: Array.isArray(profile.permissions) ? profile.permissions : [] })
+      else if (loadAuth()) showLogin('登录已过期，请重新登录')
+    } catch { /* 已过期场景由 authorizedFetch 回登录页；网络失败保留上次登录态 */ }
+    if (loginWrap.style.display !== 'none') return
+  }
+  selectSection(defaultSection())
 }
 
 loginForm.addEventListener('submit', async event => {
@@ -202,7 +374,13 @@ loginForm.addEventListener('submit', async event => {
     })
     const body = await response.json().catch(() => ({}))
     if (!response.ok) { loginErr.textContent = body?.message || `登录失败（${response.status}）`; return }
-    saveAuth({ access: body.tokens.accessToken, refresh: body.tokens.refreshToken, name: body.user?.name || phone })
+    saveAuth({
+      access: body.tokens.accessToken,
+      refresh: body.tokens.refreshToken,
+      name: body.user?.name || phone,
+      owner: Boolean(body.user?.isOwner),
+      perms: Array.isArray(body.user?.permissions) ? body.user.permissions : (body.user?.permissions === 'ALL' ? [] : null)
+    })
     enterWorkbench()
   } catch {
     loginErr.textContent = '网络异常，请稍后重试'
@@ -221,22 +399,19 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
     }).catch(() => undefined)
   }
   clearAuth()
+  railNav.innerHTML = ''
   document.getElementById('loginPhone').value = ''
   document.getElementById('loginPwd').value = ''
   loginErr.textContent = ''
   showLogin('')
 })
 
-// 带鉴权的智能体请求：401 时静默 refresh 一次，仍失败回登录页
-async function chatFetch(payload) {
+// 带鉴权的请求：401 时静默 refresh 一次，仍失败回登录页（智能体对话与 /api/auth/me 共用）
+async function authorizedFetch(path, init) {
   let auth = loadAuth()
   if (!auth) { showLogin('请先登录'); throw new Error('UNAUTHORIZED') }
-  const doFetch = token => fetch('/web/api/agents/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(payload)
-  })
-  let response = await doFetch(auth.access)
+  const send = token => fetch(path, { ...init, headers: { ...(init?.headers || {}), Authorization: `Bearer ${token}` } })
+  let response = await send(auth.access)
   if (response.status === 401) {
     const refreshRes = await fetch('/api/auth/refresh', {
       method: 'POST',
@@ -247,12 +422,18 @@ async function chatFetch(payload) {
     if (refreshBody?.tokens) {
       auth = { ...auth, access: refreshBody.tokens.accessToken, refresh: refreshBody.tokens.refreshToken }
       saveAuth(auth)
-      response = await doFetch(auth.access)
+      response = await send(auth.access)
     }
   }
   if (response.status === 401) { clearAuth(); showLogin('登录已过期，请重新登录'); throw new Error('UNAUTHORIZED') }
   return response
 }
+
+const chatFetch = payload => authorizedFetch('/web/api/agents/chat/completions', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(payload)
+})
 
 function renderAgentChips() {
   agentsEl.innerHTML = ''
