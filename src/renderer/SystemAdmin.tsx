@@ -2,7 +2,7 @@
  * 系统管理页：成员管理 + 组织信息。
  * 仅主帐号/拥有 member.manage 权限者可见（服务端亦有权限校验兜底）。
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { MemberView, RoleView } from './serverApi'
 import { ApiError, approveMember, changePassword, createMember, deleteMember, fetchLinduoTiers, fetchMembers, fetchPendingMembers, fetchRoles, rejectMember, resetMemberPassword, setLinduoMemberTier, updateMember, updateMemberPermissions } from './serverApi'
@@ -11,33 +11,69 @@ import { LinduoExceptionModal } from './LinduoExceptionModal'
 import { fetchAllLinduoChatModels, fetchLinduoMemberTier } from './serverApi'
 import { useSession } from './SessionGate'
 import { Button, EmptyState, LoadingState, Notice, StatusBadge } from './ui/primitives'
-import { MENU_PERMISSION_TREE, menuCheckState, summarizeMenuPermissions, toggleMenu, toggleMenuCard } from '../shared/menuPermissionTree'
+import { MENU_PERM_GROUPS, MENU_PERMISSION_TREE, checkedLevel1Codes, expandMenuSelection, menuCheckState } from '../shared/menuPermissionTree'
+import type { MenuPermNode } from '../shared/menuPermissionTree'
 import { mergePermissionsForSubmit } from './memberPermissionMerge'
 
 type AdminTab = 'members' | 'review' | 'crawler' | 'org'
 
-/** 两级使用权限勾选树：一级三态（未选/半选/全选），二级与一级联动 */
+interface PermSummaryPart { label: string; cards: string[] }
+
+/** 结构化权限摘要：供 chips 渲染（收起态取前 3 个一级，展开态全量） */
+function permSummaryParts(selected: string[]): PermSummaryPart[] {
+  const set = new Set(selected)
+  const parts: PermSummaryPart[] = []
+  for (const node of MENU_PERMISSION_TREE) {
+    const state = menuCheckState(selected, node)
+    if (state === 'none') continue
+    if (state === 'all') { parts.push({ label: node.label, cards: [] }); continue }
+    parts.push({ label: node.label, cards: node.cards.filter(c => set.has(c.code)).map(c => c.label) })
+  }
+  return parts
+}
+
+/**
+ * 使用权限勾选：只暴露一级栏目勾选框（按侧边栏 / 栏目内入口两组分列）。
+ * 二级不再单独勾选——勾选一级即连带授予该栏目全部二级入口，提交时由 expandMenuSelection 补齐码。
+ */
 function MenuPermTree(props: { selected: string[]; onChange: (next: string[]) => void; disabled?: boolean }) {
   const { selected, onChange, disabled } = props
+  const renderNode = (node: MenuPermNode) => <label className="role-check menu-perm-level1" key={node.code}>
+    <input type="checkbox" disabled={disabled} checked={selected.includes(node.code)}
+      onChange={e => onChange(e.target.checked ? [...new Set([...selected, node.code])] : selected.filter(code => code !== node.code))} />
+    <b>{node.label}</b>
+  </label>
   return <div className="menu-perm-tree">
-    {MENU_PERMISSION_TREE.map(node => {
-      const state = menuCheckState(selected, node)
-      return <div className="menu-perm-node" key={node.code}>
-        <label className="role-check menu-perm-level1">
-          <input type="checkbox" disabled={disabled} checked={state === 'all'}
-            ref={el => { if (el) el.indeterminate = state === 'some' }}
-            onChange={e => onChange(toggleMenu(selected, node, e.target.checked))} />
-          <b>{node.label}</b>
-        </label>
-        {node.cards.length > 0 && <div className="menu-perm-cards">
-          {node.cards.map(card => <label key={card.code} className="role-check">
-            <input type="checkbox" disabled={disabled} checked={selected.includes(card.code)}
-              onChange={e => onChange(toggleMenuCard(selected, node, card.code, e.target.checked))} />
-            {card.label}
-          </label>)}
-        </div>}
+    {MENU_PERM_GROUPS.map(section => {
+      const nodes = MENU_PERMISSION_TREE.filter(node => node.group === section.key)
+      if (nodes.length === 0) return null
+      return <div className="menu-perm-section" key={section.key}>
+        <div className="menu-perm-section-head">
+          <b>{section.label}</b>
+          <span className="menu-perm-section-count">{nodes.length} 栏</span>
+        </div>
+        <div className="menu-perm-level1-list">{nodes.map(renderNode)}</div>
       </div>
     })}
+  </div>
+}
+
+/** 「使用权限」列展示：收起态前 3 个一级 chip +「+N」；点击展开全量 chips */
+function PermSummaryChips({ selected }: { selected: string[] }) {
+  const [expanded, setExpanded] = useState(false)
+  const parts = useMemo(() => permSummaryParts(selected), [selected])
+  if (parts.length === 0) return <>—</>
+  const visible = expanded ? parts : parts.slice(0, 3)
+  const hiddenCount = parts.length - visible.length
+  return <div className={`perm-summary${expanded ? ' expanded' : ''}`}>
+    <span className="perm-summary-chips">
+      {visible.map((part, i) => <span className="perm-summary-chip" key={i}>
+        {part.label}
+        {part.cards.length > 0 && <em>{part.cards.join('/')}</em>}
+      </span>)}
+      {hiddenCount > 0 && <button type="button" className="perm-summary-more" onClick={() => setExpanded(true)}>+{hiddenCount}</button>}
+    </span>
+    {expanded && parts.length > 3 && <button type="button" className="perm-summary-collapse" onClick={() => setExpanded(false)}>收起</button>}
   </div>
 }
 
@@ -62,7 +98,7 @@ function PendingRow(props: {
     if (perms.length === 0) { setMessage('请勾选使用权限'); return }
     setBusy(true); setMessage('')
     try {
-      await approveMember(member.id, perms)
+      await approveMember(member.id, expandMenuSelection(perms))
       onChanged()
     } catch (err) { setMessage(errorText(err, '操作失败')); setBusy(false) }
   }
@@ -131,7 +167,7 @@ function MemberRow(props: {
   const startEdit = () => {
     setEditing(true)
     setName(member.name)
-    setEditPerms(modulePerms)
+    setEditPerms(checkedLevel1Codes(modulePerms))
     setNewPassword('')
     setMessage('')
   }
@@ -140,14 +176,17 @@ function MemberRow(props: {
     if (editPerms.length === 0) { setMessage('请至少勾选一个使用权限'); return }
     setBusy(true); setMessage('')
     try {
-      const permsChanged = [...editPerms].sort().join() !== [...modulePerms].sort().join()
+      // 一级勾选展开为「一级 + 其全部二级」后再与成员现有 menu 码比对：
+      // 只持部分二级的老成员回显为已勾选，保存即补齐该栏目全部二级（有意粗粒度化）
+      const submitted = expandMenuSelection(editPerms)
+      const permsChanged = [...submitted].sort().join() !== [...modulePerms].sort().join()
       if (name.trim() && name.trim() !== member.name) {
         await updateMember(member.id, { name: name.trim() })
       }
       if (permsChanged) {
         // PUT /permissions 是全量替换契约：必须把 UI 未展示的非 menu 权限（erp.* 等）
         // 与编辑后的 menu 权限一并提交，否则保存菜单权限会静默清掉它们（plan #1）
-        await updateMemberPermissions(member.id, mergePermissionsForSubmit(allPerms, editPerms))
+        await updateMemberPermissions(member.id, mergePermissionsForSubmit(allPerms, submitted))
       }
       setEditing(false)
       setMessage('已保存')
@@ -213,74 +252,94 @@ function MemberRow(props: {
     }
   }
 
-  return <tr className={`sysadmin-member-row${member.status === 'DISABLED' ? ' disabled' : ''}`}>
-    <td>
-      <b>{member.name}</b>
-      {member.isOwner && <StatusBadge className="owner-badge" tone="info">主帐号</StatusBadge>}
-      {member.mustChangePassword && <StatusBadge className="pwd-badge" tone="warning">待改密</StatusBadge>}
-    </td>
+  return <>
+    <tr className={`sysadmin-member-row${member.status === 'DISABLED' ? ' disabled' : ''}`}>
+      <td>
+        <b>{member.name}</b>
+        {member.isOwner && <StatusBadge className="owner-badge" tone="info">主帐号</StatusBadge>}
+        {member.mustChangePassword && <StatusBadge className="pwd-badge" tone="warning">待改密</StatusBadge>}
+      </td>
     <td className="mono">{member.email}</td>
     <td>{member.roles.map(r => r.name).join('、') || '—'}</td>
-    <td>{summarizeMenuPermissions(modulePerms) || '—'}</td>
+    <td><PermSummaryChips selected={modulePerms} /></td>
     <td><StatusBadge tone={member.status === 'ACTIVE' ? 'success' : 'warning'}>{member.status === 'ACTIVE' ? '✓ 正常' : '! 已禁用'}</StatusBadge></td>
     <td className="muted">{member.lastLoginAt ? new Date(member.lastLoginAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '从未登录'}</td>
     <td className="sysadmin-actions">
-      {member.isOwner ? (
-        changingPwd ? <>
-          <button disabled={busy} onClick={() => void doChangeOwnPassword()}>确认修改</button>
-          <button disabled={busy} onClick={() => { setChangingPwd(false); setMessage('') }}>取消</button>
-        </> : <>
-          <button onClick={() => { setChangingPwd(true); setOldPassword(''); setNewPassword(''); setMessage('') }}>修改密码</button>
-          <label className="linduo-tier-select" title="主帐号默认全开组，不可修改">
-            <span className="linduo-tier-label">Linduo 等级</span>
-            <select value={currentMemberTier?.id ?? ''} disabled>
-              {linduoTiers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-          </label>
-          <span className="member-action-note">全开组(主帐号)</span>
-        </>
-      ) : editing ? <>
-        <button disabled={busy} onClick={() => void saveEdit()}>保存</button>
-        <button disabled={busy} onClick={() => setEditing(false)}>取消</button>
-      </> : <>
-        <button onClick={startEdit}>编辑</button>
-        <label className="linduo-tier-select" title="选「无」后该成员只能依赖例外 (GRANT/REVOKE)">
-          <span className="linduo-tier-label">Linduo 等级</span>
-          <select
-            value={currentMemberTier?.id ?? ''}
-            onChange={e => void handleTierChange(e)}
-            disabled={tierSaving || busy}
-          >
-            <option value="">无(仅依赖例外)</option>
-            {linduoTiers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
-        </label>
-        <button disabled={busy || tierSaving} onClick={onOpenLinduoException}>Linduo 例外</button>
-        {member.status === 'ACTIVE'
-          ? <button className="danger" disabled={busy} onClick={() => void toggleStatus()}>禁用</button>
-          : <button disabled={busy} onClick={() => void toggleStatus()}>启用</button>}
-        <button className="danger" disabled={busy} onClick={() => void doDelete()}>删除</button>
-      </>}
-    </td>
-    {editing && !member.isOwner && <td colSpan={7} className="sysadmin-edit-panel">
-      <div className="edit-panel-grid">
-        <label>姓名<input value={name} onChange={e => setName(e.target.value)} maxLength={30} /></label>
-        <fieldset><legend>使用权限</legend>
-          <MenuPermTree selected={editPerms} onChange={setEditPerms} />
-        </fieldset>
-        <label>重置密码<input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="至少8位含字母数字" /><button disabled={busy} onClick={() => void doResetPassword()}>重置</button></label>
+      <div className="member-actions-cell">
+        {member.isOwner ? (
+          changingPwd ? <div className="member-actions-row">
+            <button disabled={busy} onClick={() => void doChangeOwnPassword()}>确认修改</button>
+            <button disabled={busy} onClick={() => { setChangingPwd(false); setMessage('') }}>取消</button>
+          </div> : <>
+            <div className="member-actions-row">
+              <button onClick={() => { setChangingPwd(true); setOldPassword(''); setNewPassword(''); setMessage('') }}>修改密码</button>
+            </div>
+            <div className="member-actions-row">
+              <label className="linduo-tier-select" title="主帐号默认全开组，不可修改">
+                <span className="linduo-tier-label">Linduo 等级</span>
+                <select value={currentMemberTier?.id ?? ''} disabled>
+                  {linduoTiers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </label>
+              <span className="member-action-note">全开组(主帐号)</span>
+            </div>
+          </>
+        ) : editing ? <div className="member-actions-row">
+          <button disabled={busy} onClick={() => void saveEdit()}>保存</button>
+          <button disabled={busy} onClick={() => setEditing(false)}>取消</button>
+        </div> : <>
+          <div className="member-actions-row">
+            <label className="linduo-tier-select" title="选「无」后该成员只能依赖例外 (GRANT/REVOKE)">
+              <span className="linduo-tier-label">Linduo 等级</span>
+              <select
+                value={currentMemberTier?.id ?? ''}
+                onChange={e => void handleTierChange(e)}
+                disabled={tierSaving || busy}
+              >
+                <option value="">无(仅依赖例外)</option>
+                {linduoTiers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </label>
+            <button disabled={busy || tierSaving} onClick={onOpenLinduoException}>Linduo 例外</button>
+          </div>
+          <div className="member-actions-row">
+            <button className="primary" onClick={startEdit}>编辑</button>
+            {member.status === 'ACTIVE'
+              ? <button className="danger" disabled={busy} onClick={() => void toggleStatus()}>禁用</button>
+              : <button disabled={busy} onClick={() => void toggleStatus()}>启用</button>}
+            <button className="danger" disabled={busy} onClick={() => void doDelete()}>删除</button>
+          </div>
+        </>}
       </div>
-      {message && <p className="sysadmin-msg">{message}</p>}
-    </td>}
-    {changingPwd && member.isOwner && <td colSpan={7} className="sysadmin-edit-panel">
+    </td>
+    </tr>
+    {editing && !member.isOwner && <tr className="sysadmin-edit-row"><td colSpan={7} className="sysadmin-edit-panel">
+      <div className="edit-panel-wrap">
+        <div className="edit-panel-grid">
+          <label>姓名<input value={name} onChange={e => setName(e.target.value)} maxLength={30} /></label>
+          <label>重置密码<input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="至少8位含字母数字" /><button disabled={busy} onClick={() => void doResetPassword()}>重置</button></label>
+        </div>
+        <fieldset className="edit-panel-perms"><legend>使用权限</legend>
+          <div className="edit-panel-perms-scroll">
+            <MenuPermTree selected={editPerms} onChange={setEditPerms} />
+          </div>
+        </fieldset>
+        <div className="edit-panel-footer">
+          <button className="primary" disabled={busy} onClick={() => void saveEdit()}>保存修改</button>
+          <button disabled={busy} onClick={() => setEditing(false)}>取消</button>
+          {message && <p className="sysadmin-msg">{message}</p>}
+        </div>
+      </div>
+    </td></tr>}
+    {changingPwd && member.isOwner && <tr className="sysadmin-edit-row"><td colSpan={7} className="sysadmin-edit-panel">
       <div className="edit-panel-grid">
         <label>原密码<input type="password" value={oldPassword} onChange={e => setOldPassword(e.target.value)} /></label>
         <label>新密码<input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="至少8位含字母数字" /></label>
       </div>
       {message && <p className="sysadmin-msg">{message}</p>}
-    </td>}
-    {!editing && !changingPwd && message && <td colSpan={7} className="sysadmin-msg-cell"><p className="sysadmin-msg">{message}</p></td>}
-  </tr>
+    </td></tr>}
+    {!editing && !changingPwd && message && <tr><td colSpan={7} className="sysadmin-msg-cell"><p className="sysadmin-msg">{message}</p></td></tr>}
+  </>
 }
 
 // ---------------------------------------------------------------- 文章抓取配置
@@ -540,7 +599,7 @@ export default function SystemAdmin() {
     if (cPermissions.length === 0) { setCreateMsg('请为子帐号选择使用权限'); return }
     setCreating(true); setCreateMsg('')
     try {
-      await createMember({ email: cPhone.trim(), name: cName.trim(), password: cPassword, permissions: cPermissions })
+      await createMember({ email: cPhone.trim(), name: cName.trim(), password: cPassword, permissions: expandMenuSelection(cPermissions) })
       setShowCreate(false); setCPhone(''); setCName(''); setCPassword(''); setCPermissions([])
       setCreateMsg('')
       await load()

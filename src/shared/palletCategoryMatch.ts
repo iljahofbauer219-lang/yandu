@@ -6,6 +6,7 @@ export interface PalletCategoryMatchInput {
   subcategory: string
   tertiaryCategory: string
   description?: string
+  coreTerm?: string
 }
 
 export interface PalletCategoryMatch {
@@ -52,7 +53,7 @@ export function matchPalletCategory(input: PalletCategoryMatchInput, tree: EbayS
     }
     return chain
   }
-  const sources = [input.tertiaryCategory, input.subcategory, input.category].map(norm).filter(Boolean)
+  const sources = [input.tertiaryCategory, input.subcategory, input.category, input.coreTerm || ''].map(norm).filter(Boolean)
   for (const source of sources) {
     let hit: EbayStoreCategory | null = null
     for (const node of tree) {

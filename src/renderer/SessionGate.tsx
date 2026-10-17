@@ -322,6 +322,41 @@ export function SessionGate() {
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired)
   }, [])
 
+  // 已登录时持续拉取本人信息：主帐号在系统管理页改了使用权限/店铺授权后，成员端免退出重登即时生效。
+  // 定时 60s + 窗口重新获得焦点或从后台切回各拉一次；focus 在本机被千牛/微信等频繁抢焦点，故 15s 节流。
+  // 回复与缓存逐字节相同则保持同一 state 引用，避免无谓整树重渲染。
+  useEffect(() => {
+    if (state.kind !== 'authed') return
+    let cancelled = false
+    let lastPullAt = 0
+    const pull = (force: boolean) => {
+      const now = Date.now()
+      if (!force && now - lastPullAt < 15_000) return
+      lastPullAt = now
+      void raceTimeout(fetchProfile(), 10_000, 'PROFILE_REFRESH_TIMEOUT')
+        .then(next => {
+          if (cancelled) return
+          setState(current => {
+            if (current.kind !== 'authed') return current
+            return JSON.stringify(current.profile) === JSON.stringify(next) ? current : { kind: 'authed', profile: next }
+          })
+        })
+        // 服务器瞬时不可达不打断已登录会话（会话真失效由 SESSION_EXPIRED_EVENT 兜底）
+        .catch(() => undefined)
+    }
+    const timer = window.setInterval(() => pull(true), 60_000)
+    const onFocus = () => pull(false)
+    const onVisibility = () => { if (document.visibilityState === 'visible') pull(false) }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [state.kind])
+
   const sessionValue = useMemo<SessionValue | null>(() => {
     if (state.kind !== 'authed') return null
     return {

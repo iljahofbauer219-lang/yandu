@@ -200,6 +200,8 @@ export interface EbayLocalProduct {
   listingId:string
   categoryId:string
   categoryName:string
+  coreTermZh:string
+  coreTermEn:string
   title:string
   status:'READY'|'INCOMPLETE'
   versionCount:number
@@ -445,6 +447,7 @@ export interface EbayContentOptimizationRequest {
   condition?:string
   itemSpecifics:EbayItemSpecific[]
   sourceDescription?:string
+  sourceDescriptionLabel?:string
   sellerNotes?:string
 }
 
@@ -1412,6 +1415,10 @@ export interface ImageGenerationRequest {
 export interface ImageGenerationResult {
   taskId: string
   imageUrls: string[]
+  /** 实际完成生成的模型 id（发生同厂商降级时与请求模型不同） */
+  model?: string
+  /** 重试/降级的中文说明（渲染器提示条展示） */
+  notice?: string
 }
 
 export interface ImageMarketingTranslationRequest {
@@ -1826,6 +1833,8 @@ export interface PalletWarehouseItem {
   collectedAt?: string
   region?: string
   origin?: InboundOrigin
+  coreTermZh?: string
+  coreTermEn?: string
 }
 
 /** 下架卡数据：DELISTED 仓行 + pallet 同源事实（无 pallet 同源行时由仓行合成），供下架卡与存放卡同构渲染 */

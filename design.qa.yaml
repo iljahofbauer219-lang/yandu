@@ -1,0 +1,216 @@
+# Design QA 配置 —— 砚都跨境（Electron 渲染层）
+# 说明：UI 只跑在 Electron 渲染进程，没有可达 HTTP 地址。插件自带的 chromium.launch 宿主两条路都渲染不出
+# 本渲染器（2026-10-16 探针 tools/probe-renderer-in-chromium.mjs 取证）：
+#   file:// → origin null，CSS/JS 模块被 CORS 拦截，#root 子节点 0；
+#   http:// （vite dev）→ 「Module "node:fs" has been externalized for browser compatibility」，同样 0 子节点。
+# 因此分两屏取证：
+#   app-shell        活体窗口：tools/design-qa-cdp.mjs 直连运行中的实例（CDP 9225）截帧 + 跑 axe，写插件同名 schema；
+#                    该屏 url 只作记录，插件自带的 capture/a11y 循环跑不了它（compare-images 只看 PNG，不受影响）。
+#   shell-snapshot   静态快照：tools/design-qa-snapshot.mjs 把同一真实帧的 DOM 序列化 + 页内实际加载的构建 CSS 内联，
+#                    由 127.0.0.1:4390 宿主提供；插件原生 capture/compare/DOM 测量在 this 屏上都能真跑，
+#                    uiAlignment.anchors 全部挂这一屏（每页都在的外壳选择器 + DESIGN.md token 期望值）。
+# 顺序：design-qa-snapshot（建快照）→ 宿主常驻 → design-qa-cdp（--baseline 一次、之后取 actual）
+#       → compare-images → audit-ui-alignment --skip-sibling-audits --skip-app-start（复用 visual-comparison.json，勿设 forceVisualRefresh）
+#       → generate-design-qa-report。
+project:
+  name: 砚都跨境
+  outputDir: .design-qa
+  # 静态快照宿主；screenUrl 用它拼相对 app.url。
+  baseUrl: 'http://127.0.0.1:4390'
+
+design:
+  designMd: DESIGN.md
+  screenSpec: SCREEN_SPEC.md
+  runOfficialLint: false
+
+screens:
+  - name: app-shell
+    mode: regression
+    app:
+      # 仅作记录：插件的 export-figma-frame/capture-ui-screenshot 用不了这个地址（见上），
+      # 实际取景由 tools/design-qa-cdp.mjs 直连运行中的实例；viewport 以实机 innerWidth/Height 为准。
+      url: 'file:///Users/zyc/yandu-hot/renderer/index.html'
+      fullPage: false
+      viewport:
+        width: 1440
+        height: 866
+    compare:
+      threshold: 0.1
+      maxDiffPixelRatio: 0.004
+      # 外壳（标题栏 + 侧边导航）是设计系统承载面；业务内容与构建时间戳随会话/构建变动，逐帧隐藏后再比对。
+      ignoreSelectors:
+        - 'main'
+        - '.build-stamp'
+        - '.update-pill'
+  - name: shell-snapshot
+    mode: regression
+    app:
+      url: '/harness/shell-snapshot.html'
+      waitUntil: load
+      waitForSelector: '.sidebar nav button'
+      # 与建快照时的实机窗口一致，几何类锚点才有意义；窗口改尺寸后需重建快照并同步这里。
+      viewport:
+        width: 1440
+        height: 866
+      deviceScaleFactor: 1
+      fullPage: false
+    compare:
+      # 冻结帧逐像素可复现（同帧两次截屏 md5 一致），所以取 0：pixelmatch 默认 threshold 0.1 会把
+      # #ffffff→#f5f5f7 这类约 4% 的色差当噪声丢掉（2026-10-17 负控实测 0 像素差异），
+      # 而 token 级色偏正是这一层要抓的东西。活体屏 app-shell 保留 0.1（hover/亚像素噪声不可复现）。
+      threshold: 0
+      maxDiffPixelRatio: 0.004
+      # 快照屏是冻结帧：同一 DOM 两次截屏 md5 完全一致（2026-10-17 实测 diffPixels=0），
+      # 所以像素预算收到 0——任何一处外壳 token 漂移都必须判失败，而不是被 0.4% 比例闸口吞掉
+      # （地址栏按钮 8px→13px 这类小面积改动原先只差 146 px，比例闸口照样「通过」）。
+      maxDiffPixels: 0
+      ignoreSelectors:
+        - '.build-stamp'
+        - '.update-pill'
+        # 与 app-shell 同口径：业务内容随登录会话/当前页面变化，重冻结快照时活体可能停在任意页，
+        # 不遮 main 的话 maxDiffPixels: 0 会把「换了个页面」误报成设计漂移。外壳才是设计系统承载面；
+        # main 内部的对比度与字号由 a11y 层（tools/design-qa-snapshot.mjs --axe）与 DOM 锚点负责。
+        - 'main'
+
+
+uiAlignment:
+  enabled: true
+  runVisualComparison: true
+  runComponentAudit: true
+  runDebtAudit: true
+  # 必须保持 false：置 true 会让 audit-ui-alignment 重新调起 audit-a11y.mjs（chromium.launch），
+  # 用空白页扫描覆盖掉 design-qa-cdp 产出的真实 a11y.json。
+  # a11y 结论照样进入总报告——generate-design-qa-report.mjs 直接读 reports/a11y.json。
+  runA11yAudit: false
+  defaultTolerancePx: 6
+  positionTolerancePx: 4
+  sizeTolerancePx: 4
+  fontSizeTolerancePx: 1
+  lineHeightTolerancePx: 2
+  colorTolerance: 8
+  requireSelectors: false
+  # 锚点只挂 shell-snapshot（静态快照屏）：app-shell 是 file:// 活体屏，插件的 DOM 测量会在
+  # collectDomMeasurements 里 chromium.launch 后拿不到页面，只会产出假的 target-missing。
+  # 选择器一律为每页都存在的外壳节点，业务页专属类（.yd-card/.yd-button 等）不作锚点。
+  # 期望值只从 DESIGN.md 规范层 token 取，不由实测值反推，否则这层就只是自我确认。
+  # 两点口径：
+  #   1) px 型期望走 ±tolerance，默认 defaultTolerancePx=6 会把 9px/11px、10px/8px 这类真漂移判过，
+  #      故逐条显式写 tolerance（fontSizeTolerancePx/sizeTolerancePx 等键不参与 DOM 比对）。
+  #   2) 颜色走字符串全等（getComputedStyle 返回 rgb()），所以期望必须写成 rgb() 而不是 hex。
+  anchors:
+    - name: 标题栏表面色
+      screens: [shell-snapshot]
+      selector: '.app-titlebar'
+      severity: major
+      recommendation: '标题栏底色应引用 {colors.surface}（--yd-surface #ffffff），当前为历史层值。'
+      expected:
+        backgroundColor: 'rgb(255, 255, 255)'
+    - name: 标题栏按钮排版
+      screens: [shell-snapshot]
+      selector: '.app-titlebar-actions button'
+      severity: major
+      recommendation: '按钮文字按 {typography.button-md} 为 13px / 650；命中高度取 Layout 节 Button 36px 档。'
+      expected:
+        fontSize: { value: '13px', tolerance: 0 }
+        fontWeight: '650'
+        borderRadius: { value: '8px', tolerance: 0 }
+        minHeight: '36px'
+    - name: 侧栏宽度
+      screens: [shell-snapshot]
+      selector: '.sidebar'
+      severity: minor
+      recommendation: 'Layout 节规定图标侧栏固定 68px。'
+      expected:
+        width: { value: '68px', tolerance: 0 }
+    - name: 侧栏导航项
+      screens: [shell-snapshot]
+      # 选择器必须排除选中项：.sidebar nav button 的首个匹配随当前页变化（活体停在首个栏目时，
+      # querySelector 取到的是 .nav-active，会把未选中期望测到选中态上）；选中态由下一条锚点单独覆盖。
+      selector: '.sidebar nav button:not(.nav-active)'
+      severity: major
+      recommendation: '圆角走 {rounded.control}（--yd-radius-control 8px），未选中文字走 {colors.text-secondary}（#66716c）。'
+      expected:
+        fontSize: { value: '13px', tolerance: 0 }
+        borderRadius: { value: '8px', tolerance: 0 }
+        color: 'rgb(102, 113, 108)'
+    - name: 侧栏选中态
+      screens: [shell-snapshot]
+      selector: '.sidebar nav .nav-active'
+      severity: major
+      recommendation: '选中态前景 {colors.brand-contrast}（#075955）、底色 {colors.brand-soft}（#e1f8f6），应改为引用变量。'
+      expected:
+        color: 'rgb(7, 89, 85)'
+        backgroundColor: 'rgb(225, 248, 246)'
+    - name: 构建时间戳字号
+      screens: [shell-snapshot]
+      selector: '.build-stamp'
+      severity: major
+      recommendation: '非正文短文本最低 {typography.caption} 11px；9px 低于文档下限且是 a11y 对比度告警来源。'
+      expected:
+        fontSize: { value: '11px', tolerance: 0 }
+        # 前景须用 {colors.text-secondary}（#66716c，对 {colors.surface} 5.07:1）；
+        # 旧值 --text-muted #92979c 在纯白标题栏上只有 2.94:1，axe 判 serious。
+        color: 'rgb(102, 113, 108)'
+    - name: 内容区画布色
+      screens: [shell-snapshot]
+      selector: 'main'
+      severity: major
+      recommendation: '内容区底色应引用 {colors.canvas}（--yd-canvas #f5f6f7），当前历史层写的是 #f5f5f7。'
+      expected:
+        backgroundColor: 'rgb(245, 246, 247)'
+  elements: []
+  checks: []
+
+code:
+  include:
+    - src/renderer/**/*.{ts,tsx,css}
+  exclude:
+    - node_modules/**
+    - dist/**
+    - out/**
+    - release/**
+    - src/main/**
+    - src/preload/**
+    - src/shared/**
+    - extension/**
+    - tools/**
+    - '**/__tests__/**'
+    - '**/*.test.ts'
+    - '**/*.test.tsx'
+    - .design-qa/**
+
+components:
+  # 规范层：src/renderer/ui/primitives.tsx + ui/components.css（.yd-*）+ ui/tokens.css（--yd-*）。
+  # 原始 button/input/select/textarea/dialog 不再算基线，改判为绕过设计系统（迁移信号）。
+  libraryImportPatterns:
+    - 'ui/primitives'
+    - './ui/primitives'
+  rawElementPolicy:
+    button: prefer-design-system
+    input: prefer-design-system
+    select: prefer-design-system
+    textarea: prefer-design-system
+    dialog: prefer-design-system
+  allowedRawElementFiles:
+    - 'src/renderer/ui/**'
+
+a11y:
+  disabledRules: []
+  includeSelectors: []
+  excludeSelectors:
+    - '[data-a11y-ignore]'
+
+debt:
+  # 以下三项是预算口径（审计脚本只输出计数、不自动判定阈值，也不做「只降不升」校验），
+  # 数值为 2026-10-16 首次基线：src/renderer/** 共 89 文件、未截断合计 15861 条
+  #   hard-coded-color 4307 / functional-color 518 / px-magic-number 10679
+  #   inline-style 70 / custom-shadow 287 / tailwind-arbitrary 0（本项目无 Tailwind）
+  # 注意 audit-design-debt.mjs 把 findings 截断到 1000 条，报告里的 912 并非真值。
+  # 收敛目标是把这三类降到 0；在此之前按「只降不升」人工对账。
+  maxHardCodedColors: 4307
+  maxArbitraryTailwindValues: 0
+  maxInlineStyles: 70
+  allowedColorValues:
+    - '#000'
+    - '#fff'
+    - 'transparent'

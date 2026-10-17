@@ -106,6 +106,11 @@ if (seedMode === 'review' || seedMode === 'review-page') {
     const sourceUrl = `https://www.gigab2b.com/fixture/${item.code}`
     insertWarehouse.run(item.id, 'GIGACLOUD', `sel-${item.id}`, sourceUrl, item.code, item.title, image, item.price, 'FIXTURE Seller', '家具', '卧室家具', item.tertiary, now, now)
     insertPallet.run(`pallet-${item.id}`, item.id, 'GIGACLOUD', item.code, item.title, image, item.price, '家具', '卧室家具', item.tertiary, sourceUrl, item.storedAt)
+    if (item.id === 'wh-fixture-p1') {
+      // 服务器详情页档案：供『生成详情内容方案』读取产品页事实的验收
+      db.prepare(`INSERT INTO supply_product_downloads (warehouse_product_id, page_id, page_url, image_count, failed_count, status, error, downloaded_at) VALUES (?, ?, ?, ?, 0, 'DOWNLOADED', '', ?)`)
+        .run(item.id, 'pp-verify-1', '/product-pages/pp-verify-1', 12, now)
+    }
     // 闸口 v2：种子行补 CONFIRMED 选品快照对应行（与正式入库行同源 sel-），启动迁移/回填跳过（基线 2 卡不变）
     const snapshot = { platformCode: 'GIGACLOUD', warehouseCode: 'GIGACLOUD', itemCode: item.code, title: item.title, imageUrl: image, priceText: item.price, category: '家具', subcategory: '卧室家具', tertiaryCategory: item.tertiary, sourceUrl, tags: [], collectedAt: item.storedAt }
     db.prepare(`INSERT OR IGNORE INTO inbound_processing_items (id, origin, source_id, selection_id, status, snapshot_json, created_at, updated_at, confirmed_at) VALUES (?, 'SELECTION', ?, ?, 'CONFIRMED', ?, ?, ?, ?)`).run(`inbound-${item.id}`, `sel-${item.id}`, `sel-${item.id}`, JSON.stringify(snapshot), item.storedAt, item.storedAt, item.storedAt)

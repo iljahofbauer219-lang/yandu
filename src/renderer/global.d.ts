@@ -1,5 +1,7 @@
 import type { BrowserBounds, BrowserState, BrowserTab, BrowserTranslationMode, BrowserTranslationStatus, BuiltInCollectorState, CandidateUpdateRequest, CandidateWorkspace, CollectedOzonProduct, CollectedSupplyProduct, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonRecordView, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, DelistedPalletItem, EbayAcceptanceBatch, EbayAcceptanceRunRequest, EbayBrowserPluginState, EbayCategoryWorkspace, EbayCollectionImportResult, EbayConfigurationStatus, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentOptimizationResult, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDeliveryLocationResult, EbayDirectoryProductSyncCheckpoint, EbayDirectoryProductSyncProgress, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReview, EbayImageCandidateReviewRequest, EbayImageGroundingPlan, EbayImageGroundingRequest, EbayImageRoleSuggestionRequest, EbayImageRoleSuggestionResult, EbayListing, EbayLocalProduct, EbayLocalProductSnapshot, EbayLocalProductUpdateInput, EbayLoginResult, EbayMarketResearchDecisionRequest, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayOptimizationExportResult, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayReportImportResult, EbayStore, EbaySyncResult, EbayTitleOptimizationRequest, EbayTitleOptimizationResult, EbayVideoStudioConfiguration, EbayVideoStudioProgress, EbayVideoStudioProject, EbayVideoStudioRequest, EliminatedProductRecord, EliminateRequest, ImageGenerationRequest, ImageGenerationResult, ImageMarketingTranslationRequest, ImageMarketingTranslationResult, ImageModelConnection, ImportedProductSource, InboundErpIntakeInput, InboundProcessingItem, InboundSnapshot, MarketplaceAccountProfile, MarketplaceCredentialInput, MarketplaceCredentialStatus, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, Platform, RealShiftRequest, RealShiftResult, SelectionCatalogItem, SelectionDecision, SelectionImportRequest, SelectionTask, SelectionTaskDraft, SupplyActivationResult, SupplyProductDownload, SupplyWarehouseProduct, TaskProgress, WorkflowCounts } from '../shared/contracts'
 import type { ComplianceBatchRecheckResult } from '../shared/contracts'
+import type { EbayMarketingFacts } from '../shared/ebayImageCategoryPlan'
+import type { InboundCategorySuggestion } from '../shared/inboundCategorySuggestion'
 import type { EbayImageInspectionReport, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayLocalProductMedia, EbayLocalProductMediaUploadInput } from '../shared/contracts'
 import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
 import type { EbayLocalListingRequirements, EbayLocalRevisionPreparationResult } from '../shared/contracts'
@@ -329,6 +331,10 @@ declare global {
       pallet: {
         list(): Promise<PalletWarehouseItem[]>
         remove(ids: string[], accessToken: string): Promise<PalletWarehouseItem[]>
+        coreTerms(warehouseProductId: string): Promise<{ item: { warehouseProductId: string; coreTermZh: string; coreTermEn: string }; reason: string }>
+        saveCoreTerms(payload: { warehouseProductId: string; coreTermZh: string; coreTermEn: string }): Promise<{ warehouseProductId: string; coreTermZh: string; coreTermEn: string }>
+        translateCoreTerm(zh: string): Promise<{ en: string; reason: string }>
+        autoClassify(payload: { warehouseProductId: string; sourceCategory?: string; tree: { categories: { name: string; children: string[] }[]; tertiary: Record<string, { name: string }[]> } }): Promise<{ suggestion: InboundCategorySuggestion | null; reason: string; coreTermZh: string; coreTermEn: string }>
       }
       myPallet: {
         list(): Promise<PalletWarehouseItem[]>
@@ -374,6 +380,7 @@ declare global {
         localProducts(storeId?:string):Promise<EbayLocalProduct[]>
         setLocalCategory(localProductId:string, categoryId:string, categoryName:string):Promise<EbayLocalProduct>
         autoClassifyLocal(localProductId:string):Promise<{product:EbayLocalProduct;engine:'rule'|'llm'|'none';categoryId:string|null;categoryName:string;reason:string}>
+        localCoreTerms(localProductId:string):Promise<{product:EbayLocalProduct;reason:string}>
         suggestResearchQuery(title:string,categoryName:string):Promise<{query:string|null;reason:string}>
         localProductSnapshots(localProductId:string):Promise<EbayLocalProductSnapshot[]>
         downloadLocalProduct(storeId:string,listingId:string):Promise<EbayLocalProduct>
@@ -408,7 +415,7 @@ declare global {
         syncDirectoryProducts(request:EbayDirectoryProductSyncRequest):Promise<EbayDirectoryProductSyncResult>
         confirmCollection(storeId:string):Promise<EbayCollectionImportResult>
         optimizeTitle(request:EbayTitleOptimizationRequest):Promise<EbayTitleOptimizationResult>
-        optimizeContent(request:EbayContentOptimizationRequest):Promise<EbayContentOptimizationResult>
+        optimizeContent(request:EbayContentOptimizationRequest,accessToken?:string):Promise<EbayContentOptimizationResult>
         contentOptimization(storeId:string,listingId:string):Promise<EbayContentOptimizationRecord|undefined>
         saveContentOptimization(input:EbayContentOptimizationRecordInput):Promise<EbayContentOptimizationRecord>
         translateContent(request:EbayContentTranslationRequest):Promise<EbayContentTranslationResult>
@@ -439,6 +446,7 @@ declare global {
         reviewCandidate(request:EbayImageCandidateReviewRequest):Promise<EbayImageCandidateReview>
         suggestRoles(request:EbayImageRoleSuggestionRequest):Promise<EbayImageRoleSuggestionResult>
         stageGrounding(request:EbayStageGroundingRequest):Promise<EbayStageFactCard>
+        marketingFacts(request:{title:string;description:string;itemSpecifics:Array<{name:string;value:string}>}):Promise<EbayMarketingFacts|null>
         stageStoryboard(request:EbayStageStoryboardRequest):Promise<EbayStageStoryboardCard[]>
         stageModelRecommend(stage:EbayImageStage):Promise<EbayStageModelRecommendation>
         realshift(request: RealShiftRequest): Promise<RealShiftResult>

@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import type { ImageGenerationRequest, ImageGenerationResult, ImageModelConnection, ImageModelProfile } from '../../shared/contracts'
 
 const supportedModels: Record<string, Omit<ImageModelProfile, 'id'>> = {
@@ -115,6 +116,14 @@ export class BailianImageService {
     // maxReferenceImages 为 0 表示纯文生图模型（qwen-image-2.0 / qwen-image-2.0-pro），不支持参照图输入
     const referenceLimit = supportedModels[request.model].maxReferenceImages ?? (isWan ? 8 : (isQwenImage ? 3 : 1))
     const references = referenceLimit > 0 ? this.dedupReferences(request, referenceLimit) : []
+
+    // 生图 payload 诊断：CODEX_IMAGE_PROMPT_DEBUG=1 时按行落盘 model/prompt/参照清单，供流程问题取证
+    if (process.env.CODEX_IMAGE_PROMPT_DEBUG === '1') {
+      const logPath = process.env.CODEX_IMAGE_PAYLOAD_LOG || '/tmp/image-payload.log'
+      try {
+        fs.appendFileSync(logPath, `${JSON.stringify({ at: new Date().toISOString(), model: request.model, size: resolvedSize, count, promptExtend: request.promptExtend ?? true, referenceCount: references.length, references, prompt: request.prompt })}\n`)
+      } catch { /* 诊断日志失败不影响生图 */ }
+    }
 
     // 构建 content 数组
     const content: Array<Record<string, unknown>> = []

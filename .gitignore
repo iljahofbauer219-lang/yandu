@@ -26,3 +26,9 @@ release/
 artifacts/
 .tmp-ui-verify/
 server/data/
+
+# 交叉打包用的 win 版 Electron 运行时（370MB 二进制，每次可从镜像重下）
+.cache/
+
+# Design QA 审计产物（design-review 插件生成）
+.design-qa/

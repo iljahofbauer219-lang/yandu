@@ -19,6 +19,9 @@
 [data-theme="dark"] body { background:var(--bg-app); color:var(--text-primary); }
 [data-theme="dark"] .app-shell { background:var(--bg-app); }
 [data-theme="dark"] .sidebar { color:var(--text-secondary); background:var(--bg-sidebar); border-right:1px solid var(--border-soft); }
+/* 浅色层 .app-titlebar 已改引用 --yd-surface（#ffffff），暗色下该 token 是实心 #151f1b，
+   会顶掉原先「黑色应用底上 4% 白磨砂」的效果，故此处定点还原为原值，暗色外观零回归。 */
+[data-theme="dark"] .app-titlebar { background:rgba(255,255,255,.04); }
 [data-theme="dark"] nav button { color:var(--text-muted); }
 [data-theme="dark"] nav button:hover { color:var(--accent-contrast); background:rgba(255,255,255,.07); }
 [data-theme="dark"] nav .nav-active { color:var(--accent-contrast); background:var(--accent-soft); box-shadow:inset 3px 0 0 var(--accent); }
@@ -188,10 +191,24 @@
 [data-theme="dark"] .sysadmin-actions button { background:transparent; border-color:var(--border-soft); color:var(--text-muted); }
 [data-theme="dark"] .sysadmin-actions button:hover { border-color:rgba(0,224,138,.4); color:var(--accent-contrast); }
 [data-theme="dark"] .sysadmin-actions button.danger { color:#ff6b5b; border-color:rgba(255,107,91,.35); }
+[data-theme="dark"] .sysadmin-actions button.primary { background:var(--accent); border-color:var(--accent); color:#06231c; }
+[data-theme="dark"] .sysadmin-actions button.primary:hover { background:var(--accent-contrast); border-color:var(--accent-contrast); color:#06231c; }
 [data-theme="dark"] .sysadmin-edit-panel { background:rgba(255,255,255,.04); }
 [data-theme="dark"] .edit-panel-grid input[type=text],[data-theme="dark"] .edit-panel-grid input[type=password],[data-theme="dark"] .edit-panel-grid input:not([type]) { background:rgba(255,255,255,.06); border-color:var(--border-soft); color:var(--text-primary); }
 [data-theme="dark"] .edit-panel-grid fieldset,[data-theme="dark"] .create-form-grid fieldset { border-color:var(--border-soft); }
+[data-theme="dark"] .edit-panel-perms { border-color:var(--border-soft); }
+[data-theme="dark"] .edit-panel-perms legend { color:var(--text-tertiary); }
+[data-theme="dark"] .edit-panel-footer { border-top-color:var(--border-soft); }
+[data-theme="dark"] .edit-panel-footer button:not(.primary) { background:transparent; border-color:var(--border-soft); color:var(--text-muted); }
+[data-theme="dark"] .perm-summary-chip { background:rgba(255,255,255,.08); color:var(--text-secondary); }
+[data-theme="dark"] .perm-summary-chip em { color:var(--text-muted); }
+[data-theme="dark"] .perm-summary-more { background:var(--accent-soft); color:var(--accent-contrast); }
+[data-theme="dark"] .perm-summary-more:hover,[data-theme="dark"] .perm-summary-collapse:hover { background:rgba(0,224,138,.2); }
+[data-theme="dark"] .perm-summary-collapse { color:var(--accent-contrast); }
 [data-theme="dark"] .role-check { color:var(--text-secondary); }
+[data-theme="dark"] .menu-perm-section-head { border-bottom-color:var(--border-soft); }
+[data-theme="dark"] .menu-perm-section-head b { color:var(--text-primary); }
+[data-theme="dark"] .menu-perm-section-count { background:rgba(255,255,255,.08); color:var(--text-muted); }
 [data-theme="dark"] .review-perms { border-color:var(--border); }
 [data-theme="dark"] .review-perms legend { color:var(--text-tertiary); }
 [data-theme="dark"] .sysadmin-org-info .org-item { background:rgba(255,255,255,.04); border-color:var(--border-soft); }

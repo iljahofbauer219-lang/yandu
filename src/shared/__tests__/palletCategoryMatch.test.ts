@@ -47,6 +47,14 @@ describe('matchPalletCategory', () => {
   it('空树返回 null', () => {
     expect(matchPalletCategory({ title: 'Bed Frame', category: '家具', subcategory: '', tertiaryCategory: '' }, [])).toBeNull()
   })
+
+  it('中文核心商品词命中树节点名（源类目失配时可救回）', () => {
+    const cnTree: EbayStoreCategory[] = [node('c-auto', '汽车用品', 1, '', 0), node('c-seat', '赛车座椅', 2, 'c-auto', 0)]
+    const title = '2PC Universal Bucket Racing Seats Stitch Red PVC Leather'
+    expect(matchPalletCategory({ title, category: '汽配座椅', subcategory: '', tertiaryCategory: '' }, cnTree)).toBeNull()
+    const hit = matchPalletCategory({ title, category: '汽配座椅', subcategory: '', tertiaryCategory: '', coreTerm: '赛车座椅' }, cnTree)
+    expect(hit?.categoryId).toBe('c-seat')
+  })
 })
 
 describe('parseCategoryClassifyReply', () => {

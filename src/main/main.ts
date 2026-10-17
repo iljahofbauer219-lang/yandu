@@ -9,7 +9,7 @@ import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
 import { hotFile } from './hotPaths'
-import { decryptSecret, encryptSecret, secretStorageAvailable, warmSecretStorage } from './secureVault'
+import { decryptSecret, encryptSecret, secretStorageAvailable, tryDecryptSecret, warmSecretStorage } from './secureVault'
 import { BrowserWorkspace, EBAY_STORE_VIEW_REQUIRED } from './browser/BrowserWorkspace'
 import { AppDatabase } from './database/AppDatabase'
 import { BailianImageService } from './services/BailianImageService'
@@ -46,6 +46,8 @@ import { describeOmkarCloudError } from '../shared/omkarCloud'
 import { palletItemToEbayLocalInput } from '../shared/palletToEbayLocal'
 import { matchPalletCategory } from '../shared/palletCategoryMatch'
 import { parseResearchQueryReply } from '../shared/ebayResearchQueryLlm'
+import { parseCoreTermTranslationReply, parseCoreTermsReply, type LocalCoreTerms } from '../shared/localCoreTerms'
+import { buildCategoryPromptTree, parseInboundCategorySuggestionReply, type CatalogBranch, type InboundCategorySuggestion } from '../shared/inboundCategorySuggestion'
 import { backCoreTermVariants, parseCoreTermVariants } from '../shared/ebayMarketVariants'
 import { parseEstimatedTotal } from '../shared/supplyEstimatedTotal'
 
@@ -122,9 +124,11 @@ import { autoUpdater } from 'electron-updater'
 import { reloadLinduoChatModels, shutdownAdvisorRuntime } from './advisor/AdvisorRuntime'
 import { auditEbayTitle } from '../shared/ebayTitleAudit'
 import { confirmedEbayMarketTerms } from '../shared/ebayMarketDecision'
+import { cleanPageDescriptionText, parseProductPageFacts } from '../shared/productPageFacts'
+import { resolveContentPlanSource } from '../shared/contentPlanSource'
 import type { BrowserBounds, BrowserTranslationMode, CandidateUpdateRequest, CollectedOzonProduct, CollectedSupplyProduct, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, CollectorPluginProduct, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonUpdateRequest, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceDocumentDraft, ComplianceEnforcementStatus, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReviewStatus, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceTaskStatus, EbayAcceptanceBatch, EbayAcceptanceCheck, EbayAcceptanceItemResult, EbayAcceptanceRunRequest, EbayAcceptanceScenarioResult, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReviewRequest, EbayImageGroundingRequest, EbayImageInspection, EbayImageInspectionReport, EbayImageRoleSuggestionRequest, EbayImageStage, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductMedia, EbayLocalProductMediaUploadInput, EbayLocalProductSnapshotInput, EbayLocalProductUpdateInput, EbayMarketKeywordStat, EbayMarketResearchDecisionRequest, EbayMarketResearchFinding, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayProductDetails, EbayPublishAuditEvent, EbayPublishComparisonItem, EbayPublishTask, EbaySellerHubAcceptanceSnapshot, EbayStageGroundingRequest, EbayStageStoryboardRequest, EbayTitleDecisionInput, EbayTitleOptimizationRequest, EbayVideoStudioRequest, EliminateRequest, ImageGenerationRequest, ImageModelProfile, ImportedProductImage, ImportedProductSource, InboundErpIntakeInput, InboundSnapshot, MarketplaceCredentialInput, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePublishDraftUpdate, NetworkStrategy, Platform, RealShiftRequest, SelectionDecision, SelectionImportRequest, SelectionTask, SelectionTaskDraft, SupplyPlatformCode, TaskProgress } from '../shared/contracts'
 
-import type { EbayStoreCategory, EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
+import type { EbayStore, EbayStoreCategory, EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
 import type { AiEmployeeAskRequest } from '../shared/aiEmployee'
 import { buildListingCsv } from '../shared/listingArchive'
 import { escapeHtml, renderMarkdownForWord, wordDocumentCss } from '../shared/wordExport'
@@ -252,7 +256,9 @@ let openaiImageService = new OpenAIImageService(
 )
 let linduoImageService = new LinduoImageService(
   process.env.LINDUO_API_KEY || '',
-  process.env.LINDUO_BASE_URL || 'https://api000.com/v1'
+  process.env.LINDUO_BASE_URL || 'https://api000.com/v1',
+  undefined,
+  path.join(app.getPath('userData'), 'ebay-local-products', 'generated')
 )
 // 零度API 价格抓取 + 登录态 IPC 桥（转发到 Fastify 服务端 /api/linduo/*；playwright 跑在服务端）
 const linduoLoginService = new LinduoLoginService()
@@ -295,7 +301,7 @@ function refreshLlmBoundServices(envName: string): void {
   } else if (envName === 'OPENAI_IMAGE_API_KEY') {
     openaiImageService = new OpenAIImageService(process.env.OPENAI_IMAGE_API_KEY || '', process.env.IMAGE_PROXY_URL || '')
   } else if (envName === 'LINDUO_API_KEY') {
-    linduoImageService = new LinduoImageService(process.env.LINDUO_API_KEY || '', process.env.LINDUO_BASE_URL || 'https://api000.com/v1')
+    linduoImageService = new LinduoImageService(process.env.LINDUO_API_KEY || '', process.env.LINDUO_BASE_URL || 'https://api000.com/v1', undefined, path.join(app.getPath('userData'), 'ebay-local-products', 'generated'))
   }
 }
 
@@ -468,11 +474,67 @@ function completeEbayLocalSnapshot(input:Omit<EbayLocalProductSnapshotInput,'com
   return {...input,completeness,missingFields,contentHash}
 }
 
+// 本地/货盘产品没有 eBay 原图链路：原图图集改读服务器已下载产品页的 assets 图集并合并进本地快照
+async function enrichLocalSnapshotWithProductPageImages(store:EbayStore,product:EbayLocalProduct):Promise<EbayLocalProduct> {
+  if(!database)return product
+  const warehouseProductId=product.listingId.startsWith('PALLET-')?product.listingId.slice('PALLET-'.length):''
+  const record=warehouseProductId?database.getSupplyDownload(warehouseProductId):null
+  if(!record||record.status!=='DOWNLOADED'||!record.pageUrl)return product
+  const pageId=(record.pageUrl.match(/\/product-pages\/([A-Za-z0-9_-]+)/)||[])[1]||''
+  if(!pageId)return product
+  const bundle=await fetchProductPageFacts(record.pageUrl,warehouseProductId,'')
+  const assets=bundle?.imageAssets||[]
+  if(!assets.length)return product
+  const serverUrl=readServerUrl().replace(/\/+$/,'')
+  const existingSha=new Set(product.snapshot.media.map(item=>item.sha256).filter(Boolean))
+  const addedSha=new Set<string>()
+  const existingUrls=new Set(product.snapshot.media.map(item=>item.remoteUrl).filter(Boolean))
+  const added:EbayLocalProductMedia[]=[]
+  const capturedAt=new Date().toISOString()
+  const directory=path.join(app.getPath('userData'),'ebay-local-products',safeLocalSegment(store.id),safeLocalSegment(product.listingId),capturedAt.replace(/[:.]/g,'-'))
+  for(const name of assets.slice(0,24)){
+    const remoteUrl=`${serverUrl}/product-pages/${pageId}/assets/${name}`
+    if(existingUrls.has(remoteUrl))continue
+    const sortOrder=product.snapshot.media.length+added.length
+    try{
+      const response=await fetch(remoteUrl,{signal:AbortSignal.timeout(20_000),headers:{'User-Agent':'Mozilla/5.0'}})
+      if(!response.ok)throw new Error(`HTTP ${response.status}`)
+      const buffer=Buffer.from(await response.arrayBuffer())
+      if(!buffer.length)throw new Error('图片内容为空')
+      const mimeType=(response.headers.get('content-type')||'').split(';')[0].toLowerCase()
+      const selected=ebayImageFormat(mimeType)
+      if(!selected)throw new Error(`不支持的图片类型：${mimeType||'未知'}`)
+      const dimensions=imageDimensions(buffer,selected.format)
+      if(!dimensions.width||!dimensions.height)throw new Error('无法识别图片尺寸')
+      const sha256=createHash('sha256').update(buffer).digest('hex')
+      if(existingSha.has(sha256)||addedSha.has(sha256))continue
+      addedSha.add(sha256)
+      fs.mkdirSync(directory,{recursive:true})
+      const localPath=path.join(directory,`${String(sortOrder+1).padStart(2,'0')}.${selected.extension}`)
+      fs.writeFileSync(localPath,buffer)
+      added.push({id:crypto.randomUUID(),mediaType:'IMAGE',sortOrder,remoteUrl,localPath,mimeType,width:dimensions.width,height:dimensions.height,fileSize:buffer.length,sha256,downloadStatus:'DOWNLOADED'})
+    }catch{
+      added.push({id:crypto.randomUUID(),mediaType:'IMAGE',sortOrder,remoteUrl,localPath:'',mimeType:'',width:0,height:0,fileSize:0,sha256:'',downloadStatus:'FAILED'})
+    }
+  }
+  const downloaded=added.filter(item=>item.downloadStatus==='DOWNLOADED')
+  if(!downloaded.length)return product
+  const mergedMedia=[...product.snapshot.media,...added]
+  const mergedUrls=[...new Set([...(product.snapshot.sourceListing.imageUrls||[]),...downloaded.map(item=>item.remoteUrl)])]
+  const updatedListing={...product.snapshot.sourceListing,imageUrls:mergedUrls,imageUrl:product.snapshot.sourceListing.imageUrl||mergedUrls[0]||''}
+  return database.saveEbayLocalProductSnapshot(completeEbayLocalSnapshot({listing:updatedListing,details:product.snapshot.details,media:mergedMedia,capturedAt}))
+}
+
 async function downloadEbayLocalProduct(storeId:string,listingId:string):Promise<EbayLocalProduct> {
   if(!database)throw new Error('数据库尚未初始化')
   const store=database.getEbayStores().find(item=>item.id===storeId)
   const listing=database.getEbayListings(storeId).find(item=>item.listingId===listingId)
-  if(!store||!listing)throw new Error('eBay 店铺或线上产品不存在')
+  if(!store)throw new Error('eBay 店铺不存在')
+  if(!listing){
+    const existing=database.getEbayLocalProducts(storeId).find(item=>item.listingId===listingId)
+    if(existing)return enrichLocalSnapshotWithProductPageImages(store,existing)
+    throw new Error('线上与本地产品库都没有这条记录，本操作未执行；请先从我的货盘送入，或同步线上产品后再更新快照')
+  }
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
   const details:EbayProductDetails={
     url:listing.viewUrl,
@@ -588,6 +650,122 @@ async function suggestResearchQueryViaLlm(input: { title: string; categoryName: 
   return { query, reason: '' }
 }
 
+/** 千问按产品标题生成中文/英文核心商品词：未配置/超时/坏回复一律 null + 中文原因，不阻断主流程 */
+const localCoreTermsCache = new Map<string, LocalCoreTerms>()
+async function fetchLocalCoreTerms(title: string): Promise<{ terms: LocalCoreTerms | null; reason: string }> {
+  const cacheKey = title
+  const cached = localCoreTermsCache.get(cacheKey)
+  if (cached) return { terms: cached, reason: '' }
+  const key = String(process.env.BAILIAN_API_KEY || '').trim()
+  if (!key) return { terms: null, reason: '未配置百炼 API Key' }
+  const baseUrl = (String(process.env.BAILIAN_BASE_URL || '').trim() || 'https://dashscope.aliyuncs.com/compatible-mode/v1').replace(/\/+$/, '')
+  let content = ''
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(20_000),
+      body: JSON.stringify({
+        model: process.env.BAILIAN_QUERY_MODEL || 'qwen-plus',
+        temperature: 0,
+        max_tokens: 60,
+        messages: [
+          { role: 'system', content: '你是跨境电商商品专家。从商品标题中提取该商品最核心的商品名词（核心商品词），同时给出中文与英文两种表述。要求：去掉品牌、数量、颜色、材质、规格、营销词与括号补充；中文为 2 至 8 个汉字的名词短语（如 赛车座椅）；英文为 2 至 5 个单词的名词短语（如 Racing Seat）；只输出 JSON：{"zh":"中文核心商品词","en":"English core term"}，不要输出任何其他字符。' },
+          { role: 'user', content: JSON.stringify({ title }) }
+        ]
+      })
+    })
+    const payload = await response.json() as { choices?: { message?: { content?: string } }[]; error?: { message?: string }; message?: string }
+    if (!response.ok) return { terms: null, reason: `百炼请求失败：${payload.error?.message || payload.message || `HTTP ${response.status}`}`.slice(0, 120) }
+    content = payload.choices?.[0]?.message?.content || ''
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') return { terms: null, reason: '千问响应超时' }
+    return { terms: null, reason: `百炼连接失败：${error instanceof Error ? error.message : String(error)}`.slice(0, 120) }
+  }
+  const terms = parseCoreTermsReply(content)
+  if (!terms) return { terms: null, reason: '千问回复无法解析' }
+  localCoreTermsCache.set(cacheKey, terms)
+  return { terms, reason: '' }
+}
+
+/** 千问把「中文产品」名词译成英文商品名词短语：未配置/超时/坏回复一律空串 + 中文原因，调用方保留原英文 */
+const coreTermTranslationCache = new Map<string, string>()
+async function translateCoreTermViaLlm(zh: string): Promise<{ en: string; reason: string }> {
+  const term = String(zh || '').trim()
+  if (!term) return { en: '', reason: '请先填写中文产品' }
+  const cached = coreTermTranslationCache.get(term)
+  if (cached) return { en: cached, reason: '' }
+  const key = String(process.env.BAILIAN_API_KEY || '').trim()
+  if (!key) return { en: '', reason: '未配置百炼 API Key' }
+  const baseUrl = (String(process.env.BAILIAN_BASE_URL || '').trim() || 'https://dashscope.aliyuncs.com/compatible-mode/v1').replace(/\/+$/, '')
+  let content = ''
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(20_000),
+      body: JSON.stringify({
+        model: process.env.BAILIAN_QUERY_MODEL || 'qwen-plus',
+        temperature: 0,
+        max_tokens: 40,
+        messages: [
+          { role: 'system', content: '你是跨境电商商品名词翻译。把用户给出的中文商品名词翻译成地道的英文商品名词短语。要求：2 至 5 个单词；不得是整句、不含中文汉字、引号、句号与任何解释文字；只输出英文本身，不要任何其他字符。' },
+          { role: 'user', content: term }
+        ]
+      })
+    })
+    const payload = await response.json() as { choices?: { message?: { content?: string } }[]; error?: { message?: string }; message?: string }
+    if (!response.ok) return { en: '', reason: `百炼请求失败：${payload.error?.message || payload.message || `HTTP ${response.status}`}`.slice(0, 120) }
+    content = payload.choices?.[0]?.message?.content || ''
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') return { en: '', reason: '千问响应超时' }
+    return { en: '', reason: `百炼连接失败：${error instanceof Error ? error.message : String(error)}`.slice(0, 120) }
+  }
+  const en = parseCoreTermTranslationReply(content)
+  if (!en) return { en: '', reason: '千问回复无法解析' }
+  coreTermTranslationCache.set(term, en)
+  return { en, reason: '' }
+}
+
+/** 千问按核心商品词在产品目录库内检索最合适的一/二/三级类目；坏回复或库外名称一律 null + 中文原因 */
+const inboundCategoryCache = new Map<string, InboundCategorySuggestion>()
+async function suggestInboundCategoryViaLlm(input: { coreTerm: string; title: string; sourceCategory: string; branches: CatalogBranch[] }): Promise<{ suggestion: InboundCategorySuggestion | null; reason: string }> {
+  if (!input.branches.length) return { suggestion: null, reason: '产品目录库为空，请先在左侧目录库补充类目' }
+  const cacheKey = `${input.coreTerm || input.title}|${input.branches.length}`
+  const cached = inboundCategoryCache.get(cacheKey)
+  if (cached) return { suggestion: cached, reason: '' }
+  const key = String(process.env.BAILIAN_API_KEY || '').trim()
+  if (!key) return { suggestion: null, reason: '未配置百炼 API Key' }
+  const baseUrl = (String(process.env.BAILIAN_BASE_URL || '').trim() || 'https://dashscope.aliyuncs.com/compatible-mode/v1').replace(/\/+$/, '')
+  let content = ''
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(20_000),
+      body: JSON.stringify({
+        model: process.env.BAILIAN_QUERY_MODEL || 'qwen-plus',
+        temperature: 0,
+        max_tokens: 120,
+        messages: [
+          { role: 'system', content: '你是跨境货盘商品类目归档专家。请在给定的「产品目录库」中为商品选择最合适的一级/二级/三级类目路径。硬性要求：三个名称必须逐字来自目录库（不得改写、翻译、增删空格或标点）；二级必须属于所选一级，三级必须属于所选二级；目录库中找不到合适的三级时 tertiaryCategory 输出空字符串；确实无法归类时三个字段全部输出空字符串。只输出 JSON：{"category":"一级","subcategory":"二级","tertiaryCategory":"三级"}，不要输出任何其他字符。' },
+          { role: 'user', content: JSON.stringify({ 核心商品词: input.coreTerm, 商品标题: input.title, 采集原始类目: input.sourceCategory, 产品目录库: input.branches }) }
+        ]
+      })
+    })
+    const payload = await response.json() as { choices?: { message?: { content?: string } }[]; error?: { message?: string }; message?: string }
+    if (!response.ok) return { suggestion: null, reason: `百炼请求失败：${payload.error?.message || payload.message || `HTTP ${response.status}`}`.slice(0, 120) }
+    content = payload.choices?.[0]?.message?.content || ''
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') return { suggestion: null, reason: '千问响应超时' }
+    return { suggestion: null, reason: `百炼连接失败：${error instanceof Error ? error.message : String(error)}`.slice(0, 120) }
+  }
+  const suggestion = parseInboundCategorySuggestionReply(content, input.branches)
+  if (!suggestion) return { suggestion: null, reason: '千问未匹配到目录库类目，请手动选择' }
+  inboundCategoryCache.set(cacheKey, suggestion)
+  return { suggestion, reason: '' }
+}
+
 /** 千问按核心商品词拟定候选市场词短语变体（8至14条），再由已成交样本统计佐证 */
 const coreVariantCache = new Map<string, string[]>()
 async function draftCoreTermVariants(input: { query: string; productTitle: string; sampleTitles: string[] }): Promise<{ variants: string[]; reason: string }> {
@@ -626,8 +804,8 @@ async function draftCoreTermVariants(input: { query: string; productTitle: strin
   return { variants, reason: '' }
 }
 
-async function classifyAgainstStoreTree(input: { title: string; sourceCategory: string; description: string; tree: EbayStoreCategory[]; subcategory?: string; tertiaryCategory?: string }): Promise<{ engine: 'rule' | 'llm' | 'none'; categoryId: string | null; categoryName: string; reason: string }> {
-  const rule = matchPalletCategory({ title: input.title, category: input.sourceCategory, subcategory: input.subcategory || '', tertiaryCategory: input.tertiaryCategory || '', description: input.description }, input.tree)
+async function classifyAgainstStoreTree(input: { title: string; sourceCategory: string; description: string; tree: EbayStoreCategory[]; subcategory?: string; tertiaryCategory?: string; coreTerm?: string }): Promise<{ engine: 'rule' | 'llm' | 'none'; categoryId: string | null; categoryName: string; reason: string }> {
+  const rule = matchPalletCategory({ title: input.title, category: input.sourceCategory, subcategory: input.subcategory || '', tertiaryCategory: input.tertiaryCategory || '', description: input.description, coreTerm: input.coreTerm || '' }, input.tree)
   if (rule) return { engine: 'rule', categoryId: rule.categoryId, categoryName: rule.categoryName, reason: '' }
   if (!input.tree.length) return { engine: 'none', categoryId: null, categoryName: '', reason: '店铺类目树未同步，无法归类' }
   const byId = new Map(input.tree.map(node => [node.categoryId, node]))
@@ -637,7 +815,8 @@ async function classifyAgainstStoreTree(input: { title: string; sourceCategory: 
     while (current) { chain.unshift(current.name); current = byId.get(current.parentCategoryId) }
     return { categoryId: node.categoryId, path: chain.join(' > ') }
   })
-  const llm = await ebayOptimizationService.classifyCategory({ title: input.title, sourceCategory: input.sourceCategory, nodes, description: input.description })
+  const llmTitle = input.coreTerm ? `${input.coreTerm} ${input.title}` : input.title
+  const llm = await ebayOptimizationService.classifyCategory({ title: llmTitle, sourceCategory: input.sourceCategory, nodes, description: input.description })
   if (!llm.categoryId) return { engine: 'llm', categoryId: null, categoryName: '', reason: llm.reason }
   const node = byId.get(llm.categoryId)
   if (!node) return { engine: 'llm', categoryId: null, categoryName: '', reason: '模型返回的类目不在店铺类目树内' }
@@ -1862,7 +2041,7 @@ ipcMain.handle('browser:supply:activate', async (_event, platformCode: '1688' | 
   const row=database?.getMarketplaceCredential('supply:GIGACLOUD:default')
   const allowAutoLogin=row?.automation_mode==='AUTO_FILL'
   let password=''
-  if(row?.encrypted_password&&secretStorageAvailable())password=decryptSecret(row.encrypted_password)
+  if(row?.encrypted_password&&secretStorageAvailable())password=tryDecryptSecret(row.encrypted_password)
   return (await workspace.ensureGigaCloudLogin(row?.username||'',password,allowAutoLogin,activationVersion))
     ?? { platformCode, loginStatus:'UNKNOWN', message:'已取消过期的大健云仓登录检查', url:'', autoLoginAttempted:false }
 })
@@ -1875,7 +2054,7 @@ ipcMain.handle('browser:supply:ensure-login', async () => {
   const row=database?.getMarketplaceCredential('supply:GIGACLOUD:default')
   const allowAutoLogin=row?.automation_mode==='AUTO_FILL'
   let password=''
-  if(row?.encrypted_password&&secretStorageAvailable())password=decryptSecret(row.encrypted_password)
+  if(row?.encrypted_password&&secretStorageAvailable())password=tryDecryptSecret(row.encrypted_password)
   return (await workspace.ensureGigaCloudLogin(row?.username||'',password,allowAutoLogin,activationVersion))
     ?? { platformCode:'GIGACLOUD', loginStatus:'UNKNOWN', message:'已取消过期的大健云仓登录检查', url:'', autoLoginAttempted:false }
 })
@@ -2877,6 +3056,63 @@ ipcMain.handle('warehouse:open-download', async (_event, warehouseProductId: str
   return true
 })
 ipcMain.handle('pallet:list', () => database?.listPalletItems() ?? [])
+ipcMain.handle('pallet:core-terms', async (_event, warehouseProductId: string) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  const context = database.getCoreTermsContext(warehouseProductId)
+  if (!context) throw new Error('货盘商品不存在')
+  const shaped = { warehouseProductId, coreTermZh: context.coreTermZh, coreTermEn: context.coreTermEn }
+  if (context.coreTermZh || context.coreTermEn) return { item: shaped, reason: '' }
+  const local = database.getEbayLocalProducts().find(row => row.listingId === `PALLET-${warehouseProductId}` && (row.coreTermZh || row.coreTermEn))
+  if (local) {
+    database.setCoreTerms(warehouseProductId, local.coreTermZh, local.coreTermEn)
+    return { item: { warehouseProductId, coreTermZh: local.coreTermZh, coreTermEn: local.coreTermEn }, reason: '' }
+  }
+  const fetched = await fetchLocalCoreTerms(context.title)
+  if (!fetched.terms) return { item: shaped, reason: fetched.reason || '千问未返回核心商品词' }
+  database.setCoreTerms(warehouseProductId, fetched.terms.zh, fetched.terms.en)
+  return { item: { warehouseProductId, coreTermZh: fetched.terms.zh, coreTermEn: fetched.terms.en }, reason: '' }
+})
+ipcMain.handle('pallet:core-terms:save', (_event, payload: { warehouseProductId: string; coreTermZh: string; coreTermEn: string }) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  const warehouseProductId = String(payload?.warehouseProductId || '')
+  const coreTermZh = String(payload?.coreTermZh || '').trim()
+  const coreTermEn = String(payload?.coreTermEn || '').trim()
+  if (!warehouseProductId) throw new Error('该商品缺少货盘编号，无法保存中文产品')
+  // 中文产品允许清空（清空即不展示核心商品词），此处不做非空校验，避免保存被拦
+  database.setCoreTerms(warehouseProductId, coreTermZh, coreTermEn)
+  return { warehouseProductId, coreTermZh, coreTermEn }
+})
+ipcMain.handle('pallet:core-terms:translate', async (_event, zh: string) => translateCoreTermViaLlm(String(zh || '')))
+ipcMain.handle('pallet:auto-classify', async (_event, payload: { warehouseProductId: string; sourceCategory?: string; tree?: { categories?: { name: string; children?: string[] }[]; tertiary?: Record<string, { name: string }[]> } }) => {
+  if (!database) throw new Error('数据库尚未初始化')
+  const warehouseProductId = String(payload?.warehouseProductId || '')
+  const context = database.getCoreTermsContext(warehouseProductId)
+  if (!context) throw new Error('货盘商品不存在')
+  const branches = buildCategoryPromptTree({
+    categories: (payload?.tree?.categories || []).map(group => ({ name: String(group?.name || ''), children: (group?.children || []).map(child => String(child || '')) })),
+    tertiary: payload?.tree?.tertiary || {}
+  })
+  let coreTermZh = context.coreTermZh
+  let coreTermEn = context.coreTermEn
+  let termReason = ''
+  if (!coreTermZh) {
+    const local = database.getEbayLocalProducts().find(row => row.listingId === `PALLET-${warehouseProductId}` && (row.coreTermZh || row.coreTermEn))
+    if (local) {
+      coreTermZh = local.coreTermZh
+      coreTermEn = local.coreTermEn
+      database.setCoreTerms(warehouseProductId, coreTermZh, coreTermEn)
+    } else {
+      const fetched = await fetchLocalCoreTerms(context.title)
+      if (fetched.terms) {
+        coreTermZh = fetched.terms.zh
+        coreTermEn = fetched.terms.en
+        database.setCoreTerms(warehouseProductId, coreTermZh, coreTermEn)
+      } else termReason = fetched.reason
+    }
+  }
+  const { suggestion, reason } = await suggestInboundCategoryViaLlm({ coreTerm: coreTermZh || coreTermEn, title: context.title, sourceCategory: String(payload?.sourceCategory || ''), branches })
+  return { suggestion, reason: suggestion ? '' : (reason || termReason || '千问未返回类目建议'), coreTermZh, coreTermEn }
+})
 ipcMain.handle('pallet:remove', async (_event, ids: string[], accessToken: string) => {
   if (!database) throw new Error('数据库尚未初始化')
   await requireInboundEditPermission(accessToken)
@@ -2956,14 +3192,28 @@ ipcMain.handle('ebay:research-query:suggest', async (_event, request: { title: s
 
 ipcMain.handle('ebay:local-products:auto-classify', async (_event, localProductId:string) => {
   if(!database)throw new Error('数据库尚未初始化')
-  const product=database.getEbayLocalProducts().find(item=>item.id===localProductId)
-  if(!product)throw new Error('本地产品不存在')
+  const found=database.getEbayLocalProducts().find(item=>item.id===localProductId)
+  if(!found)throw new Error('本地产品不存在')
+  let product=found
+  if(!product.coreTermZh&&!product.coreTermEn){
+    const fetched=await fetchLocalCoreTerms(product.title)
+    if(fetched.terms)product=database.setEbayLocalProductCoreTerms(product.id,fetched.terms.zh,fetched.terms.en)
+  }
   const tree=database.getEbayCategoryWorkspace(product.storeId).categories
   const description=product.snapshot.details?.descriptionText || database.candidateDescription(product.snapshot.sourceListing.viewUrl || '')
-  const result=await classifyAgainstStoreTree({ title:product.title, sourceCategory:product.snapshot.sourceListing.categoryName||'', description, tree })
+  const result=await classifyAgainstStoreTree({ title:product.title, sourceCategory:product.snapshot.sourceListing.categoryName||'', description, tree, coreTerm:product.coreTermZh })
   if(!result.categoryId)return {product,engine:result.engine,categoryId:null,categoryName:'',reason:result.reason||'无合适类目，保持未分类'}
-  const updated=database.setEbayLocalProductCategory(product.id,result.categoryId,result.categoryName)
-  return {product:updated,engine:result.engine,categoryId:result.categoryId,categoryName:result.categoryName,reason:result.reason}
+  // 只返回建议不落库：与入库卡同语义，采纳/确定时才经 setLocalCategory 写店铺类目
+  return {product,engine:result.engine,categoryId:result.categoryId,categoryName:result.categoryName,reason:result.reason}
+})
+ipcMain.handle('ebay:local-products:core-terms', async (_event, localProductId:string) => {
+  if(!database)throw new Error('数据库尚未初始化')
+  const product=database.getEbayLocalProducts().find(item=>item.id===localProductId)
+  if(!product)throw new Error('本地产品不存在')
+  if(product.coreTermZh||product.coreTermEn)return {product,reason:''}
+  const fetched=await fetchLocalCoreTerms(product.title)
+  if(!fetched.terms)return {product,reason:fetched.reason||'千问未返回核心商品词'}
+  return {product:database.setEbayLocalProductCoreTerms(product.id,fetched.terms.zh,fetched.terms.en),reason:''}
 })
 ipcMain.handle('ebay:local-products:media-data', (_event, localProductId:string, mediaId:string) => readEbayLocalProductMedia(localProductId,mediaId))
 ipcMain.handle('ebay:local-products:media-add', (_event, localProductId:string, input:EbayLocalProductMediaUploadInput) => addEbayLocalProductMedia(localProductId,input))
@@ -3135,10 +3385,82 @@ ipcMain.handle('ebay:report:import', async (_event, storeId:string) => {
   return {storeId,fileName:path.basename(filePath),...result,failed:parsed.failed,errors:parsed.errors}
 })
 ipcMain.handle('ebay:optimize:title', (_event, request:EbayTitleOptimizationRequest) => ebayOptimizationService.optimizeTitle(request))
-ipcMain.handle('ebay:optimize:content', async (_event, request:EbayContentOptimizationRequest) => {
-  const result=await ebayOptimizationService.optimizeContent(request)
-  const translation=await translateEbayContent({segments:ebayContentTranslationSource(result.englishDescription)})
-  return {...result,translation,chineseReference:translation.segments.map(item=>item.chinese).filter(Boolean).join('\n')}
+interface ProductPageFactBundle { descriptionText:string; specs:Array<{key:string;value:string}>; features:string[]; imageAssets:string[] }
+const productPageFactsCache=new Map<string,ProductPageFactBundle>()
+
+async function fetchProductPageFacts(pageUrl:string,warehouseProductId:string,accessToken:string,refresh=false):Promise<ProductPageFactBundle|null> {
+  if(!refresh){
+    const cached=productPageFactsCache.get(warehouseProductId)
+    if(cached)return cached
+  }
+  const serverUrl=readServerUrl().replace(/\/+$/,'')
+  const pageId=(pageUrl.match(/\/product-pages\/([A-Za-z0-9_-]+)/)||[])[1]||''
+  let bundle:ProductPageFactBundle|null=null
+  if(accessToken){
+    try{
+      const response=await fetch(`${serverUrl}/api/product-pages`,{headers:{Authorization:`Bearer ${accessToken}`},signal:AbortSignal.timeout(20_000)})
+      if(response.ok){
+        const payload=await response.json() as {items?:Array<Record<string,unknown>>}
+        const meta=(payload.items||[]).find(item=>(pageId&&String(item.pageId||'')===pageId)||String(item.warehouseProductId||'')===warehouseProductId)
+        if(meta){
+          const specs=Array.isArray(meta.specs)?(meta.specs as Array<Record<string,unknown>>).map(row=>({key:String(row.key||'').trim(),value:String(row.value||'').trim()})).filter(row=>row.key&&row.value):[]
+          const features=Array.isArray(meta.features)?(meta.features as unknown[]).map(item=>String(item).trim()).filter(Boolean):[]
+          const imageAssets=Array.isArray(meta.images)?(meta.images as Array<Record<string,unknown>>).map(row=>String(row.name||'').trim()).filter(Boolean):[]
+          bundle={descriptionText:String(meta.descriptionText||'').trim(),specs,features,imageAssets}
+        }
+      }
+    }catch{ /* 登录态失效或服务器不可达时回落公开页 */ }
+  }
+  const usable=(value:ProductPageFactBundle|null)=>Boolean(value&&(value.descriptionText||value.specs.length||value.features.length||value.imageAssets.length))
+  if(!usable(bundle)){
+    try{
+      const url=/^https?:\/\//i.test(pageUrl)?pageUrl:`${serverUrl}${pageUrl.startsWith('/')?'':'/'}${pageUrl}`
+      const response=await fetch(url,{signal:AbortSignal.timeout(20_000)})
+      if(response.ok){
+        const parsed=parseProductPageFacts(await response.text())
+        bundle={descriptionText:parsed.descriptionText,specs:parsed.specs,features:parsed.features,imageAssets:parsed.imageAssets}
+      }
+    }catch{ /* 公开页不可达时保持无事实，由调用方给出中文指引 */ }
+  }
+  if(usable(bundle)){
+    const settled=bundle as ProductPageFactBundle
+    productPageFactsCache.set(warehouseProductId,settled)
+    return settled
+  }
+  return null
+}
+
+// 本地产品（货盘送入）没有 eBay 详情：事实源回落到中央服务器已下载产品页（我的货盘『查看页面』同源）
+async function enrichContentRequestWithProductPageFacts(request:EbayContentOptimizationRequest,accessToken:string):Promise<{request:EbayContentOptimizationRequest;palletFactsMissing:boolean}> {
+  const hasFacts=request.itemSpecifics.some(item=>item.name.trim()&&item.value.trim())||(request.sourceDescription||'').trim().length>0
+  const palletProductId=request.listingId.startsWith('PALLET-')?request.listingId.slice('PALLET-'.length):''
+  if(!database||!palletProductId)return {request,palletFactsMissing:false}
+  const record=database.getSupplyDownload(palletProductId)
+  if(!record||record.status!=='DOWNLOADED'||!record.pageUrl)return {request,palletFactsMissing:!hasFacts}
+  // 每次生成/重新生成都重读服务器产品页（最新一次下载图文），绕过进程内缓存与本地旧快照（可能残留修复前乱文）
+  const bundle=await fetchProductPageFacts(record.pageUrl,palletProductId,accessToken,true)
+  const descriptionText=bundle?cleanPageDescriptionText([bundle.descriptionText,...bundle.features].filter(Boolean).join('\n')):''
+  const specifics=bundle?bundle.specs.map(item=>({name:item.key,value:item.value})):[]
+  if(!descriptionText&&!specifics.length)return {request,palletFactsMissing:!hasFacts}
+  const resolved=resolveContentPlanSource({sourceDescription:request.sourceDescription||'',itemSpecifics:request.itemSpecifics},{sourceDescription:descriptionText,itemSpecifics:specifics})
+  const local=database.getEbayLocalProducts().find(item=>item.listingId===request.listingId)
+  if(local&&resolved.refreshed&&local.snapshot.details.descriptionText!==descriptionText){
+    const mergedDetails={...local.snapshot.details,descriptionText,itemSpecifics:local.snapshot.details.itemSpecifics?.length?local.snapshot.details.itemSpecifics:specifics}
+    database.saveEbayLocalProductSnapshot(completeEbayLocalSnapshot({listing:local.snapshot.sourceListing,details:mergedDetails,media:local.snapshot.media,capturedAt:new Date().toISOString()}))
+  }
+  return {request:{...request,...resolved.source,sourceDescriptionLabel:'服务器产品页原始详情'},palletFactsMissing:false}
+}
+
+ipcMain.handle('ebay:optimize:content', async (_event, request:EbayContentOptimizationRequest, accessToken?:string) => {
+  const enriched=await enrichContentRequestWithProductPageFacts(request,typeof accessToken==='string'?accessToken:'')
+  try{
+    const result=await ebayOptimizationService.optimizeContent(enriched.request)
+    const translation=await translateEbayContent({segments:ebayContentTranslationSource(result.englishDescription)})
+    return {...result,translation,chineseReference:translation.segments.map(item=>item.chinese).filter(Boolean).join('\n')}
+  }catch(error){
+    if(enriched.palletFactsMissing)throw new Error('本地快照与服务器产品页都没有可用的原始详情：请确认该货盘商品已在正式入库完成「下载图文」；若提示登录失效，请重新登录后重试')
+    throw error
+  }
 })
 ipcMain.handle('ebay:content-optimization:get', (_event, storeId:string,listingId:string) => database?.getEbayContentOptimizationRecord(storeId,listingId))
 ipcMain.handle('ebay:content-optimization:save', (_event, input:EbayContentOptimizationRecordInput) => {
@@ -3297,7 +3619,7 @@ ipcMain.handle('marketplace:credential:status', (_event, accountId: string) => {
   return { accountId, username:row?.username || '', passwordSaved:Boolean(row?.encrypted_password), mode:row?.automation_mode || 'SESSION_ONLY', updatedAt:row?.updated_at }
 })
 ipcMain.handle('marketplace:credential:save', (_event, input: MarketplaceCredentialInput) => {
-  if (!secretStorageAvailable()) throw new Error('当前系统安全存储不可用，未保存密码')
+  if (!secretStorageAvailable()) throw new Error('系统钥匙串当前不可用（可能已锁定或未授权），密码未保存：请重启应用，或在『钥匙串访问』中解锁登录钥匙串后重试')
   const encryptedPassword = input.password ? encryptSecret(input.password) : ''
   const row = database?.saveMarketplaceCredential({ accountId:input.accountId, platformCode:input.platformCode, username:input.username.trim(), encryptedPassword, mode:input.mode })
   return { accountId:input.accountId, username:row?.username || '', passwordSaved:Boolean(row?.encrypted_password), mode:row?.automation_mode || 'SESSION_ONLY', updatedAt:row?.updated_at }
@@ -3315,13 +3637,15 @@ ipcMain.handle('marketplace:credential:open-login', (_event, accountId: string, 
 })
 ipcMain.handle('marketplace:credential:fill', async (_event, accountId: string, submit = false) => {
   const row = database?.getMarketplaceCredential(accountId)
-  if (!row?.encrypted_password) throw new Error('当前账号未保存密码')
-  if (!secretStorageAvailable()) throw new Error('当前系统无法解密登录凭据')
-  const password = decryptSecret(row.encrypted_password)
+  if (!row?.encrypted_password) throw new Error('当前账号未保存密码：请先在『登录凭据』输入密码并点击『保存凭据』')
+  if (!secretStorageAvailable()) throw new Error('系统钥匙串当前不可用（可能已锁定或未授权），无法解密登录凭据：请重启应用，或在『钥匙串访问』中解锁登录钥匙串后重试')
+  let password = ''
+  try { password = decryptSecret(row.encrypted_password) } catch { throw new Error('登录凭据解密失败（密钥与保存时不一致，常见于应用重装或签名变更）：请在『登录凭据』重新输入密码并点击『保存凭据』后再填写') }
   return workspace?.fillActiveLogin(row.username,password,submit)
 })
 ipcMain.handle('image:models', async () => {
-  if(process.env.CODEX_UI_TEST==='1')return{connected:true,models:[{id:'phase7-mock',name:'阶段7验收模型',description:'批量验收专用',maxReferenceImages:4,costLabel:'¥0.20/张'}],message:'阶段7验收模型已连接'}
+  // 验收默认走 phase7-mock；YANDU_REAL_IMAGE_MODELS=1 时放行真实服务商连接，供验收脚本断言生图请求体（参照/提示词）
+  if(process.env.CODEX_UI_TEST==='1'&&process.env.YANDU_REAL_IMAGE_MODELS!=='1')return{connected:true,models:[{id:'phase7-mock',name:'阶段7验收模型',description:'批量验收专用',maxReferenceImages:4,costLabel:'¥0.20/张'}],message:'阶段7验收模型已连接'}
   // 聚合百炼 / 火山方舟 / OpenAI / 零度API 四个服务商的可用生图模型；单个服务商失败不影响其他模型列表
   const [bailian, volc, openai, linduo] = await Promise.allSettled([
     imageService.connection(),
@@ -3345,7 +3669,7 @@ ipcMain.handle('image:generate', (_event, request: ImageGenerationRequest) => {
   // 按模型 ID 路由到对应服务商；默认仍走百炼，保持已有 7 个百炼模型行为不变
   if (request.model.startsWith('doubao-seedream')) return volcImageService.generate(request)
   if (request.model === 'gpt-image-2') return openaiImageService.generate(request)
-  if (request.model === 'gpt-image-1' || request.model === 'gemini-2.5-flash-image-preview' || request.model === 'imagen-4.0') {
+  if (request.model === 'gpt-image-1' || request.model === 'gemini-2.5-flash-image-preview' || request.model === 'imagen-4.0' || request.model === 'nano-banana-2' || request.model === 'nano-banana-pro') {
     return linduoImageService.generate(request)
   }
   return imageService.generate(request)
@@ -3374,6 +3698,7 @@ ipcMain.handle('image:suggest-roles', (_event, request: EbayImageRoleSuggestionR
 
 // ─── 阶段式图片优化 IPC ─────────────────────────────────────────────────────
 ipcMain.handle('image:stage-grounding', (_event, request: EbayStageGroundingRequest) => ebayImageGroundingService.stageGround(request))
+ipcMain.handle('image:marketing-facts', (_event, request: { title: string; description: string; itemSpecifics: Array<{ name: string; value: string }> }) => ebayImageGroundingService.marketingFacts(request))
 ipcMain.handle('image:stage-storyboard', (_event, request: EbayStageStoryboardRequest) => ebayImageGroundingService.generateStageStoryboard(request))
 ipcMain.handle('image:stage-model-recommend', (_event, stage: EbayImageStage) => ebayImageGroundingService.recommendStageModels(stage))
 

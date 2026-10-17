@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { getTokens } from './serverApi'
+import { getTokens, SESSION_EXPIRED_EVENT } from './serverApi'
+import { refreshSession } from '../shared/serverHttp'
+import { unwrapIpcError } from './friendlyError'
 import type { LinduoLoginStatus, LinduoModelPricing } from '../shared/contracts'
 
 type LlmKeyStatus = { id: string; configured: boolean; maskedKey: string }
@@ -71,7 +73,22 @@ function LinduoLoginPanel({ configured }: { configured: boolean }) {
   const callWithToken = useCallback(async <T,>(fn: (token: string) => Promise<T>): Promise<T> => {
     const tokens = getTokens()
     if (!tokens?.accessToken) throw new Error('请先在顶部登录页完成砚都认证')
-    return fn(tokens.accessToken)
+    const isSessionExpired = (reason: unknown) => /未登录或登录已过期|UNAUTHORIZED|会话已过期/.test(unwrapIpcError(reason instanceof Error ? reason.message : String(reason)))
+    try {
+      return await fn(tokens.accessToken)
+    } catch (reason) {
+      if (!isSessionExpired(reason)) throw reason
+      // 访问令牌过期：静默刷新一次重试；刷新失败由 refreshSession 广播回登录页
+      const refreshed = await refreshSession(tokens.accessToken).catch(() => false)
+      const next = refreshed ? getTokens() : null
+      if (!refreshed || !next?.accessToken) throw new Error('砚都登录会话已过期且自动刷新失败：请重新登录砚都后再操作零度API')
+      try {
+        return await fn(next.accessToken)
+      } catch (retryReason) {
+        if (isSessionExpired(retryReason)) throw new Error('砚都登录会话已过期：请重新登录砚都后再操作零度API')
+        throw retryReason
+      }
+    }
   }, [])
 
   const refresh = useCallback(async () => {
@@ -86,7 +103,7 @@ function LinduoLoginPanel({ configured }: { configured: boolean }) {
       // 服务端已存凭据的判定：登录中 / 曾登录过（lastUsedAt 非空）。本地不持久化密码，仅依赖服务端 AES 存储。
       setHasSaved(Boolean(loginStatus.loggedIn || loginStatus.lastUsedAt))
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '读取零度API 登录态失败')
+      setError(unwrapIpcError(reason instanceof Error ? reason.message : '读取零度API 登录态失败'))
     }
   }, [callWithToken])
 
@@ -131,7 +148,7 @@ function LinduoLoginPanel({ configured }: { configured: boolean }) {
       // 登录成功后 800ms 自动关闭 Modal，让用户看到成功提示
       setTimeout(() => { if (message) closeModal() }, 800)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '登录失败')
+      setError(unwrapIpcError(reason instanceof Error ? reason.message : '登录失败'))
     } finally {
       setBusy('')
     }
@@ -147,7 +164,7 @@ function LinduoLoginPanel({ configured }: { configured: boolean }) {
       setMessage('已清除零度API 登录态')
       await refresh()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '登出失败')
+      setError(unwrapIpcError(reason instanceof Error ? reason.message : '登出失败'))
     } finally {
       setBusy('')
     }
@@ -164,7 +181,7 @@ function LinduoLoginPanel({ configured }: { configured: boolean }) {
       else setMessage(`已抓取 ${result.count} 个模型价格，用时 ${(result.durationMs / 1000).toFixed(1)}s`)
       await refresh()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '抓取失败')
+      setError(unwrapIpcError(reason instanceof Error ? reason.message : '抓取失败'))
     } finally {
       setBusy('')
     }
@@ -248,7 +265,7 @@ function LinduoLoginPanel({ configured }: { configured: boolean }) {
             <span>Cookie 失效时凭已保存凭据自动重登</span>
           </label>
           {hasSaved && <small className="linduo-credential-modal-hint">服务端已存凭据，修改密码请输入新值；留空则保持原状。</small>}
-          {error && <p className="credential-error">{error}</p>}
+          {error && <p className="credential-error">{error}{/重新登录|会话已过期/.test(error) && <button type="button" onClick={() => window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT))}>去重新登录</button>}</p>}
           {message && !error && <p>{message}</p>}
         </div>
         <footer>

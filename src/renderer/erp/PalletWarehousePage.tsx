@@ -5,13 +5,14 @@
  * 入库处理 tab = 本地待确认队列（inbound_processing_items）：选品审批与服务器采集池双 intake；
  * 确认入库双写正式入库与货盘存放（spec 2026-09-29-inbound-gate-before-warehouse）。
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { PanelCollapseButton, PanelExpandRail, usePanelCollapse } from '../panel-collapse'
 import type { DelistedPalletItem, InboundProcessingItem, InboundSnapshot, PalletWarehouseItem, SupplyProductDownload } from '../../shared/contracts'
 import { fetchErpCapabilities, fetchErpProducts, type ErpCapabilities } from './erpApi'
 import { describeDesktopError } from '../../shared/desktopErrorText'
 import { runWithSessionRetry } from '../serverApi'
 import { MOCK_CATEGORIES, MOCK_TERTIARY_CATALOG, buildCatalogTree } from './warehouseCatalogData'
+import type { InboundCategorySuggestion } from '../../shared/inboundCategorySuggestion'
 
 const HUB_TABS = ['入库处理', '全部产品', '地区货盘', '新品速递', '热销产品', '时节热品', '限时促销', '即将到货', '下架产品'] as const
 type HubTab = (typeof HUB_TABS)[number]
@@ -50,6 +51,10 @@ const CATEGORY_KEYWORDS: { category: string; subcategory?: string; keywords: str
 ]
 
 const nameHit = (a: string, b: string) => Boolean(a) && Boolean(b) && (a === b || a.includes(b) || b.includes(a))
+
+// 自动分类建议是否已被采纳：与入库快照一/二/三级逐级相等（三级空即只比到二级），故刷新与重启后状态不丢
+const isSuggestionAdopted = (snapshot: InboundSnapshot, suggestion: InboundCategorySuggestion) =>
+  snapshot.category === suggestion.category && (snapshot.subcategory || '') === suggestion.subcategory && (snapshot.tertiaryCategory || '') === suggestion.tertiaryCategory
 
 // 两级匹配：先按快照原始一/二/三级类目名对目录做包含匹配，再按标题关键词兜底；三级匹配不到只推荐到二级
 export function recommendCatalogPath(source: { title?: string; category?: string; subcategory?: string; tertiaryCategory?: string }): CatalogPath | null {
@@ -107,6 +112,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
   const [checkedKeys, setCheckedKeys] = useState<Set<string>>(new Set())
   const [items, setItems] = useState<PalletWarehouseItem[]>([])
   const [delistedItems, setDelistedItems] = useState<DelistedPalletItem[]>([])
+  const [coreTermsByWp, setCoreTermsByWp] = useState<Record<string, { zh: string; en: string }>>({})
   const [notice, setNotice] = useState('')
   const [noticeRetry, setNoticeRetry] = useState<(() => void) | null>(null)
   const [inboundItems, setInboundItems] = useState<InboundProcessingItem[]>([])
@@ -114,10 +120,16 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
   const [selectedRegion, setSelectedRegion] = useState('')
   const [inboundNotice, setInboundNotice] = useState('')
   const [inboundOk, setInboundOk] = useState('')
+  const [autoSuggestions, setAutoSuggestions] = useState<Record<string, InboundCategorySuggestion>>({})
+  const [autoClassifyBusy, setAutoClassifyBusy] = useState('')
   const [caps, setCaps] = useState<ErpCapabilities | null>(null)
   const [capsLoaded, setCapsLoaded] = useState(false)
   const [inboundEdit, setInboundEdit] = useState<{ id: string; draft: InboundSnapshot } | null>(null)
+  // 编辑区核心商品词草稿：enFrom 记录英文由哪个中文词译出，用于判断是否需要重新翻译
+  const [editTerms, setEditTerms] = useState<{ zh: string; en: string; enFrom: string; busy: boolean; reason: string } | null>(null)
   const [activeInboundId, setActiveInboundId] = useState('')
+  // 手动分类草稿：点选左侧目录树只改草稿，「确定」才把一/二/三级写入快照的货盘类目
+  const [manualPick, setManualPick] = useState<{ id: string; path: CatalogPath } | null>(null)
   const [warehouseDownloads, setWarehouseDownloads] = useState<Record<string, SupplyProductDownload>>({})
   const [myPalletIds, setMyPalletIds] = useState<Set<string>>(new Set())
   // 目录树名称单源入参：恒为总货盘商品（我的货盘侧复用总货盘结果，不按自身入选推导）
@@ -159,6 +171,41 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
       .catch(() => undefined)
     return () => { alive = false }
   }, [hubTab])
+
+  // 核心商品词补跑：存放/入库卡『中文产品/英文产品』两行取值；优先同源本地产品，回落千问按货盘标题生成（主进程落库）
+  const coreTermsAttempted = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (!['入库处理', '全部产品', '新品速递', '地区货盘', '下架产品'].includes(hubTab)) return
+    const pools: { warehouseProductId: string | null; coreTermZh?: string; coreTermEn?: string }[] = [...masterItems, ...inboundItems, ...delistedItems]
+    const unique = [...new Set(pools
+      .filter(entry => entry.warehouseProductId && !entry.coreTermZh && !entry.coreTermEn
+        && !coreTermsByWp[entry.warehouseProductId] && !coreTermsAttempted.current.has(entry.warehouseProductId))
+      .map(entry => String(entry.warehouseProductId)))].slice(0, 10)
+    if (!unique.length) return
+    unique.forEach(wp => coreTermsAttempted.current.add(wp))
+    let reason = ''
+    void Promise.all(unique.map(wp => window.desktop.pallet.coreTerms(wp)
+      .then(result => { if (result.reason && !reason) reason = result.reason; return result.item })
+      .catch(() => null)))
+      .then(updated => {
+        const byId = new Map(updated.filter((entry): entry is { warehouseProductId: string; coreTermZh: string; coreTermEn: string } => Boolean(entry)).map(entry => [entry.warehouseProductId, entry]))
+        if (byId.size) {
+          setCoreTermsByWp(prev => {
+            const next = { ...prev }
+            for (const [wp, entry] of byId) next[wp] = { zh: entry.coreTermZh || '', en: entry.coreTermEn || '' }
+            return next
+          })
+          const merge = <T extends { warehouseProductId: string }>(list: T[]) => list.map(entry => {
+            const refreshed = byId.get(entry.warehouseProductId)
+            return refreshed ? { ...entry, coreTermZh: refreshed.coreTermZh, coreTermEn: refreshed.coreTermEn } : entry
+          })
+          setMasterItems(merge)
+          setItems(merge)
+          setDelistedItems(merge)
+        }
+        if (reason) setNotice(`核心商品词提取未完成：${reason}`)
+      })
+  }, [hubTab, masterItems, inboundItems, delistedItems, coreTermsByWp])
 
   // ERP 能力摘要惰性加载：仅进入「入库处理」tab 才拉取；无 canEdit 不发起同步与队列加载
   useEffect(() => {
@@ -237,25 +284,100 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
 
   const patchSnapshot = (item: InboundProcessingItem, next: InboundSnapshot, okMessage: string) => {
     void runWithSessionRetry(token => window.desktop.inbound.reedit(item.id, next, token))
-      .then(list => { setInboundItems(list); setInboundEdit(null); setInboundNotice(''); setInboundOk(okMessage) })
+      .then(list => { setInboundItems(list); setInboundEdit(null); setEditTerms(null); setInboundNotice(''); setInboundOk(okMessage) })
       .catch(reason => failInbound(reason, '保存'))
   }
 
-  const activeInbound = inboundItems.find(item => item.id === activeInboundId) || null
+  // 入库卡核心商品词只认 coreTermsByWp（inbound 表不存 core_term，队列行不带该字段）
+  const coreOf = (item: InboundProcessingItem) => {
+    const wp = item.warehouseProductId || ''
+    const entry = wp ? coreTermsByWp[wp] : undefined
+    return { zh: entry?.zh || '', en: entry?.en || '' }
+  }
+
+  const openInboundEdit = (item: InboundProcessingItem) => {
+    const core = coreOf(item)
+    setInboundEdit({ id: item.id, draft: { ...item.snapshot } })
+    setEditTerms({ zh: core.zh, en: core.en, enFrom: core.zh, busy: false, reason: '' })
+    setInboundNotice(''); setInboundOk('')
+  }
+
+  const closeInboundEdit = () => { setInboundEdit(null); setEditTerms(null) }
+
+  // 中文产品改动 → 500ms 防抖自动翻译英文；英文只读，失败时保留上一版并给中文原因；清空中文产品时英文一并清空
+  useEffect(() => {
+    const zh = (editTerms?.zh || '').trim()
+    if (!editTerms) return
+    if (!zh) { setEditTerms(prev => (prev && !prev.zh.trim() ? { ...prev, en: '', enFrom: '', busy: false, reason: '' } : prev)); return }
+    if (editTerms.enFrom === zh) return
+    let alive = true
+    const timer = window.setTimeout(() => {
+      setEditTerms(prev => (prev && prev.zh.trim() === zh ? { ...prev, busy: true, reason: '' } : prev))
+      void window.desktop.pallet.translateCoreTerm(zh).then(result => {
+        if (!alive) return
+        setEditTerms(prev => (prev ? { ...prev, busy: false, en: result.en || prev.en, enFrom: result.en ? zh : prev.enFrom, reason: result.en ? '' : (result.reason || '英文翻译未完成') } : prev))
+      }).catch(reason => {
+        if (!alive) return
+        setEditTerms(prev => (prev ? { ...prev, busy: false, reason: describeDesktopError(reason, '英文翻译') } : prev))
+      })
+    }, 500)
+    return () => { alive = false; window.clearTimeout(timer) }
+  }, [editTerms?.zh])
+
+  // 保存＝标题写入库快照 + 中/英文产品写进货盘核心商品词；两步都成功才算保存完成
+  const saveInboundEdit = (item: InboundProcessingItem) => {
+    const draft = inboundEdit?.id === item.id ? inboundEdit.draft : null
+    if (!draft) return
+    const wp = item.warehouseProductId || ''
+    const zh = (editTerms?.zh || '').trim()
+    const en = (editTerms?.en || '').trim()
+    const core = coreOf(item)
+    const changed = !!editTerms && (zh !== core.zh || en !== core.en)
+    const saveTerms = () => {
+      if (!wp || !changed) return Promise.resolve()
+      return window.desktop.pallet.saveCoreTerms({ warehouseProductId: wp, coreTermZh: zh, coreTermEn: en }).then(() => {
+        setCoreTermsByWp(prev => ({ ...prev, [wp]: { zh, en } }))
+        const merge = <T extends { warehouseProductId: string }>(list: T[]) => list.map(entry => (entry.warehouseProductId === wp ? { ...entry, coreTermZh: zh, coreTermEn: en } : entry))
+        setMasterItems(merge); setItems(merge); setDelistedItems(merge)
+      })
+    }
+    // 标题写回时以卡片当前快照为底，避免编辑期间手动分类改过的类目被开卡时的旧草稿覆盖
+    void saveTerms().then(() => patchSnapshot(item, { ...item.snapshot, title: draft.title }, '已保存编辑：标题与中文产品')).catch(reason => failInbound(reason, '保存编辑'))
+  }
 
   const assignCatalog = (item: InboundProcessingItem, path: CatalogPath, okMessage: string, finish: boolean) => {
-    if (finish) { setActiveInboundId(''); setSelectedSubcategory('') }
+    if (finish) { setActiveInboundId(''); setSelectedSubcategory(''); setManualPick(null) }
     patchSnapshot(item, { ...item.snapshot, ...path }, okMessage)
   }
 
   const catalogPathText = (path: CatalogPath) => [path.category, path.subcategory, path.tertiaryCategory].filter(Boolean).join(' / ')
 
-  // 归位模式下树的高亮跟随当前产品的快照类目，而非目录筛选选中项
+  const enterManualPick = (item: InboundProcessingItem) => {
+    const snapshot = item.snapshot
+    // 草稿起点须是树里可继续点选的节点；库外旧类目（如采集原始「汽配」）不作起点，否则「确定」会原样写回并显示已选齐
+    const group = catalogTree.categories.find(entry => entry.name === snapshot.category)
+    const known = !!group && group.children.length > 0
+    setActiveInboundId(item.id)
+    setManualPick({ id: item.id, path: known ? { category: snapshot.category || '', subcategory: snapshot.subcategory || '', tertiaryCategory: snapshot.tertiaryCategory || '' } : { category: '', subcategory: '', tertiaryCategory: '' } })
+    setInboundNotice(''); setInboundOk('')
+  }
+
+  const exitManualPick = () => { setActiveInboundId(''); setManualPick(null); setSelectedSubcategory('') }
+
+  const setManualPath = (path: CatalogPath) => setManualPick(prev => (prev ? { ...prev, path } : prev))
+
+  const confirmManualPick = (item: InboundProcessingItem) => {
+    if (!manualPick || manualPick.id !== item.id) return
+    const path = manualPick.path
+    assignCatalog(item, path, `已按手动选择归位类目：${catalogPathText(path)}`, true)
+  }
+
+  // 手动分类时树的高亮与点选跟随草稿，而非目录筛选选中项
   const treeActiveClass = (name: string, parent: string, tertiary = false) => {
-    if (activeInbound) {
-      const snapshot = activeInbound.snapshot
-      if (tertiary) return snapshot.tertiaryCategory === name && snapshot.subcategory === parent ? 'active' : ''
-      return parent ? (snapshot.subcategory === name && snapshot.category === parent ? 'active' : '') : (snapshot.category === name ? 'active' : '')
+    if (manualPick) {
+      const path = manualPick.path
+      if (tertiary) return path.tertiaryCategory === name && path.subcategory === parent ? 'active' : ''
+      return parent ? (path.subcategory === name && path.category === parent ? 'active' : '') : (path.category === name ? 'active' : '')
     }
     return selected === name ? 'active' : ''
   }
@@ -372,6 +494,36 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
 
   const catalogTree = useMemo(() => buildCatalogTree(masterItems), [masterItems])
 
+  // 入库「自动分类」：千问按『中文产品』核心商品词在当前产品目录库内检索一/二/三级路径；建议只待采纳，采纳后才写入入库快照
+  const runAutoClassify = (item: InboundProcessingItem) => {
+    const warehouseProductId = item.warehouseProductId || ''
+    if (!warehouseProductId) { setInboundNotice('该入库商品缺少货盘编号，无法自动分类'); return }
+    const snapshot = item.snapshot
+    setAutoClassifyBusy(item.id)
+    setInboundNotice('')
+    setInboundOk('')
+    void window.desktop.pallet.autoClassify({
+      warehouseProductId,
+      sourceCategory: [snapshot.sourceCategory, snapshot.sourceSubcategory, snapshot.sourceTertiaryCategory].filter(Boolean).join(' / '),
+      tree: catalogTree
+    }).then(result => {
+      setAutoClassifyBusy('')
+      if (result.coreTermZh || result.coreTermEn) {
+        const zh = result.coreTermZh || ''
+        const en = result.coreTermEn || ''
+        setCoreTermsByWp(prev => ({ ...prev, [warehouseProductId]: { zh, en } }))
+        setInboundItems(list => list.map(entry => entry.warehouseProductId === warehouseProductId ? { ...entry, coreTermZh: zh, coreTermEn: en } : entry))
+      }
+      const suggestion = result.suggestion
+      if (suggestion) {
+        setAutoSuggestions(prev => ({ ...prev, [item.id]: suggestion }))
+        setInboundOk(`自动分类建议：${catalogPathText(suggestion)}，点「采纳建议」归位`)
+      } else {
+        setInboundNotice(result.reason || '千问未匹配到目录库类目，请手动选择')
+      }
+    }).catch(reason => { setAutoClassifyBusy(''); failInbound(reason, '自动分类') })
+  }
+
   const tertiaryOptions = useMemo(() => {
     if (!selectedSubcategory) return [] as { name: string; icon: string; count: number }[]
     return (catalogTree.tertiary[selectedSubcategory] || []).map(option => ({ ...option, count: items.filter(item => item.tertiaryCategory === option.name).length }))
@@ -380,6 +532,9 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
   // 存放卡渲染：全部产品/新品速递/地区货盘/下架产品共用，保证红框区口径一致；delisted 传入时附加下架追溯两行事实与下架操作按钮
   const renderStoredCard = (item: PalletWarehouseItem, delisted?: { reason: string; at: string | null }) => {
     const scoreValue = item.gigaIndex ?? item.score ?? null
+    const coreEntry = item.warehouseProductId ? coreTermsByWp[item.warehouseProductId] : undefined
+    const coreZh = coreEntry?.zh || item.coreTermZh || ''
+    const coreEn = coreEntry?.en || item.coreTermEn || ''
     const scoreGrade = scoreValue === null ? null : Math.round(scoreValue) >= 80 ? 'A' : Math.round(scoreValue) >= 65 ? 'B' : 'C'
     const inventoryText = item.sellableInventory !== null && item.sellableInventory !== undefined ? item.sellableInventory.toLocaleString('zh-CN') : item.salesText?.replace(/^(?:Available\s*Stock|可售库存|库存)\s*[:：]?\s*/i, '') || '待补采'
     const sourceCatalogText = item.sourceCategory ? `${item.sourceCategory} / ${item.sourceSubcategory || '—'} / ${item.sourceTertiaryCategory || '—'}` : '类目待核实'
@@ -405,9 +560,11 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
           <div><dt>物流费</dt><dd>{item.shippingFeeText || '待补采'}</dd></div>
           <div><dt>可售库存</dt><dd>{inventoryText}</dd></div>
           <div><dt>原始类目</dt><dd title={sourceCatalogText}>{sourceCatalogText}</dd></div>
-          <div><dt>现在类目</dt><dd title={currentCatalogText}>{currentCatalogText}</dd></div>
+          <div><dt>货盘类目</dt><dd title={currentCatalogText}>{currentCatalogText}</dd></div>
           <div><dt>GIGA Index</dt><dd>{item.gigaIndexText ?? item.gigaIndex ?? '待补采'}</dd></div>
           <div><dt>采集时间</dt><dd>{(item.collectedAt || '').slice(0, 10) || '—'}</dd></div>
+          <div><dt>中文产品</dt><dd title={coreZh || ''}>{coreZh || '—'}</dd></div>
+          <div><dt>英文产品</dt><dd title={coreEn || ''}>{coreEn || '—'}</dd></div>
           {delisted && <div><dt>下架原因</dt><dd title={delisted.reason}>{delisted.reason || '—'}</dd></div>}
           {delisted && <div><dt>下架时间</dt><dd>{delisted.at ? new Date(delisted.at).toLocaleString('zh-CN') : '—'}</dd></div>}
         </dl>
@@ -435,7 +592,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
 
   return <>
     <div className="selection-module-nav warehouse-flow-nav">
-      {hubTabsForScope(scope).map(tab => <button key={tab} className={hubTab === tab ? 'active' : ''} onClick={() => { setHubTab(tab); setBatchMode(false); setCheckedKeys(new Set()); setActiveInboundId('') }}><span>{tab}</span></button>)}
+      {hubTabsForScope(scope).map(tab => <button key={tab} className={hubTab === tab ? 'active' : ''} onClick={() => { setHubTab(tab); setBatchMode(false); setCheckedKeys(new Set()); setActiveInboundId(''); setManualPick(null) }}><span>{tab}</span></button>)}
     </div>
     <section className={`candidate-page pallet-catalog-page${catalogPanel.collapsed?' side-collapsed':''}`}>
       {catalogPanel.collapsed?<PanelExpandRail panel={catalogPanel} label="产品目录库"/>:<aside className="catalog-panel collapsible-aside">
@@ -446,17 +603,16 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
             const open = expanded === group.name
             return <div className="catalog-group" key={group.name}>
               <button className={treeActiveClass(group.name, '')} title={group.name} onClick={() => {
-                if (activeInbound) { setExpanded(group.name); assignCatalog(activeInbound, { category: group.name, subcategory: '', tertiaryCategory: '' }, '已选一级类目，请继续选择二级类目', false); return }
+                if (manualPick) { setExpanded(group.name); setSelectedSubcategory(''); setManualPath({ category: group.name, subcategory: '', tertiaryCategory: '' }); return }
                 setSelected(group.name); setExpanded(open ? '' : group.name); setSelectedSubcategory(open ? '' : group.children[0] || '')
               }}>
                 <i>{open ? '⌄' : '›'}</i><span>{group.name}</span><em>{countCategory(group.name)}</em>
               </button>
               {open && <div>
                 {group.children.map(child => <button key={child} className={treeActiveClass(child, group.name)} title={child} onClick={() => {
-                  if (activeInbound) {
-                    const hasTertiary = (MOCK_TERTIARY_CATALOG[child] || []).length > 0
-                    setSelectedSubcategory(child)
-                    assignCatalog(activeInbound, { category: group.name, subcategory: child, tertiaryCategory: '' }, hasTertiary ? '已选二级类目，请继续选择三级类目' : `类目已归位：${group.name} / ${child}`, !hasTertiary)
+                  if (manualPick) {
+                    setSelectedSubcategory((catalogTree.tertiary[child] || []).length ? child : '')
+                    setManualPath({ category: group.name, subcategory: child, tertiaryCategory: '' })
                     return
                   }
                   setSelected(child); setSelectedSubcategory(child)
@@ -471,7 +627,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
           <div><small>LEVEL 3 CATEGORY</small><b>{selectedSubcategory}</b><button onClick={() => setSelectedSubcategory('')}>×</button></div>
           <div className="tertiary-icon-grid">
             {tertiaryOptions.map(option => <button key={option.name} className={treeActiveClass(option.name, selectedSubcategory, true)} onClick={() => {
-              if (activeInbound) { assignCatalog(activeInbound, { category: activeInbound.snapshot.category, subcategory: activeInbound.snapshot.subcategory, tertiaryCategory: option.name }, `类目已归位：${activeInbound.snapshot.category} / ${activeInbound.snapshot.subcategory} / ${option.name}`, true); return }
+              if (manualPick) { setManualPath({ ...manualPick.path, tertiaryCategory: option.name }); return }
               setSelected(option.name); setSelectedSubcategory('')
             }}>
               <i>{option.icon.endsWith('.png') ? <img src={option.icon} alt={option.name}/> : option.icon}</i><span>{option.name}</span><em>{option.count}</em>
@@ -533,6 +689,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
             {inboundVisible.map(item => {
               const snapshot = item.snapshot
               const edit = inboundEdit?.id === item.id ? inboundEdit.draft : null
+              const termsDraft = inboundEdit?.id === item.id ? editTerms : null
               const assignedInCatalog = MOCK_CATEGORIES.some(group => group.name === snapshot.category)
               const rec = assignedInCatalog ? null : recommendCatalogPath(snapshot)
               const scoreValue = snapshot.gigaIndex ?? snapshot.score ?? null
@@ -544,8 +701,18 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
               const downloadId = item.warehouseProductId && warehouseDownloads[item.warehouseProductId]?.status === 'DOWNLOADED' ? item.warehouseProductId : ''
               const openInboundDownload = () => { if (!downloadId) return; void window.desktop.warehouses.openDownload(downloadId).catch(reason => failInbound(reason, '打开下载图文页')) }
               const estimatedTotalText = (downloadId ? warehouseDownloads[downloadId]?.estimatedTotal : '') || ''
+              const coreEntry = item.warehouseProductId ? coreTermsByWp[item.warehouseProductId] : undefined
+              const coreZh = coreEntry?.zh || ''
+              const coreEn = coreEntry?.en || ''
+              const autoSuggestion = autoSuggestions[item.id] || null
+              const autoAdopted = autoSuggestion ? isSuggestionAdopted(snapshot, autoSuggestion) : false
+              const manualActive = activeInboundId === item.id
+              const manualPath = manualPick && manualPick.id === item.id ? manualPick.path : null
+              const manualNeedsTertiary = !!(manualPath && (catalogTree.tertiary[manualPath.subcategory] || []).length)
+              const manualReady = !!(manualPath?.category && manualPath.subcategory && (!manualNeedsTertiary || manualPath.tertiaryCategory))
+              const manualHint = !manualPath?.category ? '请在左侧目录树点选一级类目' : !manualPath.subcategory ? '请继续点选二级类目' : manualNeedsTertiary && !manualPath.tertiaryCategory ? '该二级类目还有三级类目，请继续点选三级类目' : '类目已选齐，点「确定」写入货盘类目'
               return (
-              <article className={`product-card candidate-product-card supply-source-card${activeInboundId === item.id ? ' inbound-card-active' : ''}`} key={item.id} onClick={event => { if ((event.target as HTMLElement).closest('button, input, select, textarea, a')) return; setActiveInboundId(activeInboundId === item.id ? '' : item.id) }}>
+              <article className={`product-card candidate-product-card supply-source-card${manualActive ? ' inbound-card-active' : ''}`} key={item.id} onClick={event => { if ((event.target as HTMLElement).closest('button, input, select, textarea, a')) return; if (manualActive) exitManualPick(); else enterManualPick(item) }}>
                 <button type="button" className="product-image" aria-label={downloadId ? `查看下载图文页：${snapshot.title}` : `查看商品图片：${snapshot.title}`} title={downloadId ? '点击查看下载图文页' : undefined} onClick={downloadId ? () => openInboundDownload() : undefined}>
                   {snapshot.imageUrl ? <img src={snapshot.imageUrl} alt={snapshot.title}/> : <span>无图</span>}
                   {snapshot.promotionText ? <span className="candidate-promotion">{snapshot.promotionText}</span> : null}
@@ -561,15 +728,29 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
                     <div><dt>物流费</dt><dd>{snapshot.shippingFeeText || '待补采'}</dd></div>
                     <div><dt>可售库存</dt><dd>{inventoryText}</dd></div>
                     <div><dt>原始类目</dt><dd title={sourceCatalogText}>{sourceCatalogText}</dd></div>
-                    <div><dt>现在类目</dt><dd title={currentCatalogText}>{currentCatalogText}</dd></div>
+                    <div><dt>货盘类目</dt><dd title={currentCatalogText}>{currentCatalogText}</dd></div>
                     <div><dt>GIGA Index</dt><dd>{snapshot.gigaIndexText ?? snapshot.gigaIndex ?? '待补采'}</dd></div>
                     <div><dt>采集时间</dt><dd>{(snapshot.collectedAt || '').slice(0, 10) || '—'}</dd></div>
+                    <div><dt>中文产品</dt><dd title={coreZh || ''}>{coreZh || '—'}</dd></div>
+                    <div><dt>英文产品</dt><dd title={coreEn || ''}>{coreEn || '—'}</dd></div>
                     {item.status === 'REJECTED' && <div><dt>驳回时间</dt><dd>{(item.updatedAt || '').slice(0, 10)}</dd></div>}
                     {item.status === 'CONFIRMED' && <div><dt>确认时间</dt><dd>{(item.confirmedAt || '').slice(0, 10)}</dd></div>}
                   </dl>
-                  {!assignedInCatalog || activeInboundId === item.id ? (
+                  {autoSuggestion || !assignedInCatalog || manualActive ? (
                   <div className="inbound-category-row">
-                    {!assignedInCatalog && rec ? (
+                    {manualActive ? (
+                      <>
+                        <span className={`path ${manualReady ? 'recommend' : 'empty'}`}>手动选择：{manualPath ? (catalogPathText(manualPath) || '—') : '—'}</span>
+                        <span className="hint">{manualHint}</span>
+                        <button type="button" className="primary" disabled={!manualReady} onClick={() => confirmManualPick(item)}>确定</button>
+                        <button type="button" onClick={exitManualPick}>取消</button>
+                      </>
+                    ) : autoSuggestion ? (
+                      <>
+                        <span className="path recommend">自动分类：{catalogPathText(autoSuggestion)}</span>
+                        <button type="button" className={autoAdopted ? 'adopted' : ''} disabled={autoAdopted} onClick={() => assignCatalog(item, autoSuggestion, `已采纳自动分类建议：${catalogPathText(autoSuggestion)}`, false)}>{autoAdopted ? '已采纳' : '采纳建议'}</button>
+                      </>
+                    ) : !assignedInCatalog && rec ? (
                       <>
                         <span className="path recommend">推荐：{catalogPathText(rec)}</span>
                         <button type="button" onClick={() => assignCatalog(item, rec, `已采纳推荐类目：${catalogPathText(rec)}`, false)}>采纳推荐</button>
@@ -577,30 +758,28 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
                     ) : !assignedInCatalog ? (
                       <span className="path empty">未匹配到推荐类目，请手动选择</span>
                     ) : null}
-                    {activeInboundId === item.id ? <span className="hint">请在左侧目录树点选类目</span> : null}
                   </div>
                   ) : null}
                   {edit ? (
                     <div className="inbound-edit-form">
                       <label>标题<input value={edit.title} onChange={event => setInboundEdit({ id: item.id, draft: { ...edit, title: event.target.value } })}/></label>
-                      <label>价格<input value={edit.priceText} onChange={event => setInboundEdit({ id: item.id, draft: { ...edit, priceText: event.target.value } })}/></label>
-                      <label>目标仓<select value={edit.warehouseCode} onChange={event => setInboundEdit({ id: item.id, draft: { ...edit, warehouseCode: event.target.value as '1688' | 'GIGACLOUD' } })}>
-                        <option value="1688">1688</option><option value="GIGACLOUD">大健云仓</option>
-                      </select></label>
-                      <label>一级类目<input value={edit.category} onChange={event => setInboundEdit({ id: item.id, draft: { ...edit, category: event.target.value } })}/></label>
-                      <label>二级类目<input value={edit.subcategory} onChange={event => setInboundEdit({ id: item.id, draft: { ...edit, subcategory: event.target.value } })}/></label>
-                      <label>三级类目<input value={edit.tertiaryCategory} onChange={event => setInboundEdit({ id: item.id, draft: { ...edit, tertiaryCategory: event.target.value } })}/></label>
-                      <div className="product-actions candidate-next-actions"><button className="primary" onClick={() => patchSnapshot(item, edit, '已保存编辑')}>保存</button><button onClick={() => setInboundEdit(null)}>取消</button></div>
+                      <label>中文产品<input value={termsDraft?.zh ?? ''} placeholder="如 赛车座椅" onChange={event => setEditTerms(prev => (prev ? { ...prev, zh: event.target.value } : prev))}/></label>
+                      <label>英文产品（按中文自动翻译）<input value={termsDraft?.en ?? ''} readOnly placeholder={termsDraft?.busy ? '翻译中…' : '填写中文产品后自动生成'}/></label>
+                      {termsDraft?.busy ? <span className="edit-hint">正在根据中文产品翻译英文…</span> : null}
+                      {!termsDraft?.busy && termsDraft?.reason ? <span className="edit-hint warn">{termsDraft.reason}</span> : null}
+                      <div className="product-actions candidate-next-actions"><button className="primary" onClick={() => saveInboundEdit(item)}>保存</button><button onClick={closeInboundEdit}>取消</button></div>
                     </div>
                   ) : null}
                   <div className="product-actions candidate-next-actions">
                     {item.status === 'PENDING' && <>
-                      <button onClick={() => setInboundEdit(edit ? null : { id: item.id, draft: { ...snapshot } })}>{edit ? '收起编辑' : '重新编辑'}</button>
+                      <button onClick={() => { if (edit) closeInboundEdit(); else openInboundEdit(item) }}>{edit ? '收起编辑' : '重新编辑'}</button>
                       <button className="primary" onClick={() => confirmInbound(item.id)}>确认入库</button>
                       <button className="candidate-delete" onClick={() => rejectInbound(item.id)}>驳回</button>
                     </>}
-                    {item.status === 'REJECTED' && <button onClick={() => setInboundEdit({ id: item.id, draft: { ...snapshot } })}>重新编辑</button>}
+                    {item.status === 'REJECTED' && <button onClick={() => { if (edit) closeInboundEdit(); else openInboundEdit(item) }}>{edit ? '收起编辑' : '重新编辑'}</button>}
                     {downloadId ? <button onClick={() => openInboundDownload()}>查看页面</button> : null}
+                    <button onClick={() => runAutoClassify(item)} disabled={autoClassifyBusy === item.id}>{autoClassifyBusy === item.id ? '类目检索中…' : '自动分类'}</button>
+                    <button className={manualActive ? 'primary' : ''} onClick={() => { if (manualActive) exitManualPick(); else enterManualPick(item) }}>{manualActive ? '手动分类中' : '手动分类'}</button>
                   </div>
                 </div>
               </article>

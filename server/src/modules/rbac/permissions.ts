@@ -1,4 +1,10 @@
-export const PERMISSIONS = [
+import { MENU_PERMISSION_CODES, MENU_PERMISSION_LABELS } from './menuPermissions.generated.js'
+
+/**
+ * 操作类权限码（与侧边栏/栏目入口无关，服务端手工维护）。
+ * 菜单类权限码一律来自生成文件，见下。
+ */
+const OPERATION_PERMISSIONS = [
   'store.manage',
   'member.manage',
   'role.manage',
@@ -9,47 +15,6 @@ export const PERMISSIONS = [
   'compliance.manage',
   'report.view:all',
   'report.view:self',
-  // 两级使用权限：一级=侧边栏菜单 menu.<栏目>，二级=栏目内卡片 menu.<栏目>.<卡片>
-  'menu.crossborder',
-  'menu.crossborder.login',
-  'menu.crossborder.title',
-  'menu.crossborder.desc',
-  'menu.crossborder.image',
-  'menu.advisor',
-  'menu.advisor.online',
-  'menu.collect',
-  'menu.collect.gigacloud',
-  'menu.collect.1688',
-  'menu.collect.aliexpress',
-  'menu.collect.ozon',
-  'menu.art',
-  'menu.art.studio',
-  'menu.art.realshift',
-  'menu.video',
-  'menu.tasks',
-  'menu.employee',
-  'menu.planet',
-  'menu.planet.ops',
-  'menu.planet.compliance',
-  'menu.hq',
-  'menu.hq.finance',
-  'menu.hq.support',
-  'menu.hq.feishu',
-  'menu.hq.vpn',
-  'menu.hq.crossborder',
-  'menu.hq.crawler',
-  'menu.hq.admin',
-  // 阶段：左侧栏重排新增的三个占位入口（尚不执行业务代码）
-  'menu.cb-news',
-  'menu.ie-browser',
-  'menu.warehouse',
-  'menu.warehouse.hub',
-  // ERP 采集加工域：二级卡片权限
-  'menu.warehouse.pool',
-  'menu.warehouse.products',
-  'menu.warehouse.changes',
-  'menu.warehouse.patrol',
-  'menu.warehouse.pricing',
   // ERP 采集加工域：操作权限（erp.source.view 决定敏感字段投影，仅采集专员/主帐号持有）
   'erp.collect',
   'erp.source.view',
@@ -61,6 +26,14 @@ export const PERMISSIONS = [
   // K 阶段新增：团队工作台首页权限（首页默认页；所有角色可见）
   'dashboard.view'
 ] as const
+
+/**
+ * 两级使用权限：一级=侧边栏菜单 menu.<栏目>，二级=栏目内卡片 menu.<栏目>.<卡片>。
+ * 唯一真值源是前端 src/shared/menuPermissionTree.ts，由 tools/gen-server-menu-permissions.ts
+ * 生成 menuPermissions.generated.ts。本白名单是成员权限保存的过滤器，不在其中的码会被静默丢弃，
+ * 因此菜单码必须随树同步——漂移由 src/shared/__tests__/menuPermissionTree.serverSync.test.ts 拦截。
+ */
+export const PERMISSIONS = [...OPERATION_PERMISSIONS, ...MENU_PERMISSION_CODES] as const
 
 export type PermissionCode = (typeof PERMISSIONS)[number]
 
@@ -75,44 +48,6 @@ export const PERMISSION_LABELS: Record<PermissionCode, string> = {
   'compliance.manage': '合规知识库管理',
   'report.view:all': '查看全员用量与审计报表',
   'report.view:self': '查看本人用量报表',
-  'menu.crossborder': 'AI跨境',
-  'menu.crossborder.login': 'AI跨境·平台登录',
-  'menu.crossborder.title': 'AI跨境·标题优化',
-  'menu.crossborder.desc': 'AI跨境·描述优化',
-  'menu.crossborder.image': 'AI跨境·图片优化',
-  'menu.advisor': 'AI参谋',
-  'menu.advisor.online': 'AI参谋·在线参谋',
-  'menu.collect': '货盘采集',
-  'menu.collect.gigacloud': '货盘采集·大健云仓',
-  'menu.collect.1688': '货盘采集·1688',
-  'menu.collect.aliexpress': '货盘采集·AliExpress',
-  'menu.collect.ozon': '货盘采集·Ozon',
-  'menu.art': 'AI美工',
-  'menu.art.studio': 'AI美工·AI生图',
-  'menu.art.realshift': 'AI美工·AI洗图',
-  'menu.video': 'AI视频',
-  'menu.tasks': 'AI任务',
-  'menu.employee': 'AI员工',
-  'menu.planet': 'AI星球',
-  'menu.planet.ops': 'AI星球·运营知识库',
-  'menu.planet.compliance': 'AI星球·合规知识库',
-  'menu.hq': 'AI总部',
-  'menu.hq.finance': 'AI总部·AI财务',
-  'menu.hq.support': 'AI总部·AI客服',
-  'menu.hq.feishu': 'AI总部·AI飞书',
-  'menu.hq.vpn': 'AI总部·翻墙管理',
-  'menu.hq.crossborder': 'AI总部·跨境导航',
-  'menu.hq.crawler': 'AI总部·文章抓取',
-  'menu.hq.admin': 'AI总部·系统管理',
-  'menu.cb-news': 'CB资讯',
-  'menu.ie-browser': 'IE浏览',
-  'menu.warehouse': '货盘仓库',
-  'menu.warehouse.hub': '货盘仓库·货盘总览',
-  'menu.warehouse.pool': '货盘仓库·采集池',
-  'menu.warehouse.products': '货盘仓库·产品库',
-  'menu.warehouse.changes': '货盘仓库·待确认变更',
-  'menu.warehouse.patrol': '货盘仓库·巡盘日志',
-  'menu.warehouse.pricing': '货盘仓库·定价规则',
   'erp.collect': 'ERP 采集入库（内嵌浏览器/扩展采集写入）',
   'erp.source.view': 'ERP 货盘来源敏感字段可见（供应商/原始URL/货盘SKU/采集人）',
   'erp.source.manage': 'ERP 货盘与抓取规则管理',
@@ -120,7 +55,8 @@ export const PERMISSION_LABELS: Record<PermissionCode, string> = {
   'erp.warehouse.edit': 'ERP 产品加工操作（下载原图/AI加工/选图定稿）',
   'erp.pricing.manage': 'ERP 定价规则配置',
   'erp.changes.resolve': 'ERP 巡盘变更确认',
-  'dashboard.view': '团队工作台首页'
+  'dashboard.view': '团队工作台首页',
+  ...MENU_PERMISSION_LABELS
 }
 
 export const PERMISSION_CODE_SET: ReadonlySet<string> = new Set(PERMISSIONS)

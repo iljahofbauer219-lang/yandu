@@ -1,5 +1,6 @@
 import type { EbayImageCandidateReview, EbayImageCandidateReviewRequest, EbayImageGenerationPurpose, EbayImageGroundingPlan, EbayImageGroundingRequest, EbayImageGroundingSource, EbayImageRoleSuggestionRequest, EbayImageRoleSuggestionResult, EbayImageSourceRoleSuggestion, EbayImageStage, EbayStageFactCard, EbayStageGroundingRequest, EbayStageModelRecommendation, EbayStageStoryboardCard, EbayStageStoryboardRequest, ImagePackageTextExtractionRequest, ImagePackageTextExtractionResult, ImagePackageTextField, ImagePackageTextObservation } from '../../shared/contracts'
 import { ImageHashService } from './ImageHashService'
+import { parseMarketingFactsReply, type EbayMarketingFacts } from '../../shared/ebayImageCategoryPlan'
 
 const purposes: EbayImageGenerationPurpose[] = ['HERO', 'PRODUCT', 'PAIN_POINT', 'SCENE']
 
@@ -730,6 +731,20 @@ ${inheritNote}
     return {
       stage,
       recommendations: []  // 前端根据模型 strengths 自行排序，此字段保留扩展
+    }
+  }
+
+  /** 营销事实卡：仅依据商品详情资料产出 1 个购买理由 + 1~3 痛点 + 1~3 场景；失败返回 null 不阻断 */
+  async marketingFacts(request: { title: string; description: string; itemSpecifics: Array<{ name: string; value: string }> }): Promise<EbayMarketingFacts | null> {
+    if (!this.apiKey) return null
+    const specifics = (request.itemSpecifics || []).filter(item => item.name.trim() && item.value.trim()).slice(0, 40)
+      .map(item => `${item.name.trim()}: ${item.value.trim()}`).join('；')
+    const prompt = `MARKETING_FACTS_V1 你是电商营销文案事实审核员。仅依据以下商品资料写作，不得虚构品牌、材质、尺寸、性能、认证、配件或促销承诺；资料未提及的卖点一律不写。商品标题：${request.title.slice(0, 300)}。商品详情：${(request.description || '').slice(0, 6000)}。商品属性：${specifics || '无'}。输出JSON：{"purchaseReason":"给消费者的一条购买理由（<=60字）","painPoints":["它解决的客户痛点，1至3条，每条<=40字"],"scenarios":["真实应用场景，1至3条，每条<=40字"]}`
+    try {
+      const parsed = await this.chat([{ type: 'text', text: prompt }])
+      return parseMarketingFactsReply(JSON.stringify(parsed))
+    } catch {
+      return null
     }
   }
 }

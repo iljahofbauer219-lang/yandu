@@ -32,10 +32,22 @@ export function decryptSecret(cipherBase64: string): string {
   return plain
 }
 
+// 自动登录等非交互链路用：解密失败返回空串降级为人工登录，避免英文技术串抛到界面。
+export function tryDecryptSecret(cipherBase64: string): string {
+  try {
+    return decryptSecret(cipherBase64)
+  } catch (error) {
+    console.warn('[secure-vault] 解密失败，降级为空密码：', (error as Error).message)
+    return ''
+  }
+}
+
 // 启动时集中触碰一次钥匙串：若授权弹窗不可避免，让它出现在启动时刻而非业务流程中途，并顺带创建钥匙串项。
 export function warmSecretStorage(): void {
   try {
-    if (!safeStorage.isEncryptionAvailable()) return
+    const available = safeStorage.isEncryptionAvailable()
+    console.info(`[secure-vault] 启动钥匙串可用性=${available}`)
+    if (!available) return
     decryptSecret(encryptSecret(''))
   } catch (error) {
     console.warn('[secure-vault] 启动钥匙串预热失败（首次使用时重试）：', (error as Error).message)

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { BrowserBounds, BrowserState, BrowserTab, BrowserTranslationMode, BrowserTranslationStatus, BuiltInCollectorState, CandidateUpdateRequest, CandidateWorkspace, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, DelistedPalletItem, EbayAcceptanceBatch, EbayAcceptanceRunRequest, EbayBrowserPluginState, EbayCategoryWorkspace, EbayCollectionImportResult, EbayConfigurationStatus, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentOptimizationResult, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDeliveryLocationResult, EbayDirectoryProductSyncCheckpoint, EbayDirectoryProductSyncProgress, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReview, EbayImageCandidateReviewRequest, EbayImageGroundingPlan, EbayImageGroundingRequest, EbayImageRoleSuggestionRequest, EbayImageRoleSuggestionResult, EbayImageStage, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductMedia, EbayLocalProductMediaUploadInput, EbayLocalProductSnapshot, EbayLocalProductUpdateInput, EbayLoginResult, EbayMarketResearchDecisionRequest, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayOptimizationExportResult, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayReportImportResult, EbayStageFactCard, EbayStageGroundingRequest, EbayStageModelRecommendation, EbayStageStoryboardCard, EbayStageStoryboardRequest, EbayStore, EbaySyncResult, EbayTitleOptimizationRequest, EbayTitleOptimizationResult, EbayVideoStudioConfiguration, EbayVideoStudioProgress, EbayVideoStudioProject, EbayVideoStudioRequest, EliminatedProductRecord, EliminateRequest, ImageGenerationRequest, ImageGenerationResult, ImageMarketingTranslationRequest, ImageMarketingTranslationResult, ImageModelConnection, ImportedProductSource, InboundErpIntakeInput, InboundProcessingItem, InboundSnapshot, MarketplaceAccountProfile, MarketplaceCredentialInput, MarketplaceCredentialStatus, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, Platform, RealShiftRequest, RealShiftResult, SelectionDecision, SelectionImportRequest, SelectionTaskDraft, SupplyActivationResult, SupplyProductDownload, SupplyWarehouseProduct, TaskProgress, WorkflowCounts } from '../shared/contracts'
 import type { ComplianceBatchRecheckResult, EbayImageInspectionReport } from '../shared/contracts'
+import type { EbayMarketingFacts } from '../shared/ebayImageCategoryPlan'
 import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
 import type { EbayLocalListingRequirements, EbayLocalRevisionPreparationResult } from '../shared/contracts'
 import type { EbayTitleDecision, EbayTitleDecisionInput } from '../shared/contracts'
@@ -8,6 +9,7 @@ import type { ImagePackageTextExtractionRequest, ImagePackageTextExtractionResul
 import type { AdvisorApprovalDecision, AdvisorChatEvent, AdvisorChatRequest, AdvisorIncomingDocument, AdvisorIncomingImage, AdvisorPersonalizationSettings, AdvisorRemoteSession } from '../shared/advisor'
 import type { AiEmployeeAskRequest, AiEmployeeChatModelProfile, AiEmployeePickResult } from '../shared/aiEmployee'
 import type { ExtractedProductInfo } from '../shared/selectionExtract'
+import type { InboundCategorySuggestion } from '../shared/inboundCategorySuggestion'
 import type { AmazonDataSourceSearchResult, AmazonListingEvidence, AmazonMarketSample, AmazonReviewEvidence, AmazonSearchIntent } from '../shared/amazonScraper'
 import type { KbAgentKey, KbDocsView, KbListView, KbView } from '../shared/knowledge'
 import type { GuardianRetryRequest, GuardianRetryResult, GuardianRunEvent, GuardianRunLog, GuardianSkill, GuardianSkillInput, GuardianState } from '../shared/kbGuardian'
@@ -389,7 +391,11 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   pallet: {
     list: (): Promise<PalletWarehouseItem[]> => ipcRenderer.invoke('pallet:list'),
-    remove: (ids: string[], accessToken: string): Promise<PalletWarehouseItem[]> => ipcRenderer.invoke('pallet:remove', ids, accessToken)
+    remove: (ids: string[], accessToken: string): Promise<PalletWarehouseItem[]> => ipcRenderer.invoke('pallet:remove', ids, accessToken),
+    coreTerms: (warehouseProductId: string): Promise<{ item: { warehouseProductId: string; coreTermZh: string; coreTermEn: string }; reason: string }> => ipcRenderer.invoke('pallet:core-terms', warehouseProductId),
+    saveCoreTerms: (payload: { warehouseProductId: string; coreTermZh: string; coreTermEn: string }): Promise<{ warehouseProductId: string; coreTermZh: string; coreTermEn: string }> => ipcRenderer.invoke('pallet:core-terms:save', payload),
+    translateCoreTerm: (zh: string): Promise<{ en: string; reason: string }> => ipcRenderer.invoke('pallet:core-terms:translate', zh),
+    autoClassify: (payload: { warehouseProductId: string; sourceCategory?: string; tree: { categories: { name: string; children: string[] }[]; tertiary: Record<string, { name: string }[]> } }): Promise<{ suggestion: InboundCategorySuggestion | null; reason: string; coreTermZh: string; coreTermEn: string }> => ipcRenderer.invoke('pallet:auto-classify', payload)
   },
   myPallet: {
     list: (): Promise<PalletWarehouseItem[]> => ipcRenderer.invoke('my-pallet:list'),
@@ -435,6 +441,7 @@ contextBridge.exposeInMainWorld('desktop', {
     localProducts: (storeId?:string):Promise<EbayLocalProduct[]> => ipcRenderer.invoke('ebay:local-products:list',storeId),
     setLocalCategory: (localProductId:string, categoryId:string, categoryName:string):Promise<EbayLocalProduct> => ipcRenderer.invoke('ebay:local-products:set-category',localProductId,categoryId,categoryName),
     autoClassifyLocal: (localProductId:string):Promise<{product:EbayLocalProduct;engine:'rule'|'llm'|'none';categoryId:string|null;categoryName:string;reason:string}> => ipcRenderer.invoke('ebay:local-products:auto-classify',localProductId),
+    localCoreTerms: (localProductId:string):Promise<{product:EbayLocalProduct;reason:string}> => ipcRenderer.invoke('ebay:local-products:core-terms',localProductId),
     suggestResearchQuery: (title:string,categoryName:string):Promise<{query:string|null;reason:string}> => ipcRenderer.invoke('ebay:research-query:suggest',{title,categoryName}),
     localProductSnapshots: (localProductId:string):Promise<EbayLocalProductSnapshot[]> => ipcRenderer.invoke('ebay:local-products:snapshots',localProductId),
     downloadLocalProduct: (storeId:string,listingId:string):Promise<EbayLocalProduct> => ipcRenderer.invoke('ebay:local-products:download',storeId,listingId),
@@ -469,7 +476,7 @@ contextBridge.exposeInMainWorld('desktop', {
     syncDirectoryProducts: (request:EbayDirectoryProductSyncRequest):Promise<EbayDirectoryProductSyncResult> => ipcRenderer.invoke('ebay:category-products:sync',request),
     confirmCollection: (storeId:string):Promise<EbayCollectionImportResult> => ipcRenderer.invoke('ebay:collection:confirm',storeId),
     optimizeTitle: (request:EbayTitleOptimizationRequest):Promise<EbayTitleOptimizationResult> => ipcRenderer.invoke('ebay:optimize:title',request),
-    optimizeContent: (request:EbayContentOptimizationRequest):Promise<EbayContentOptimizationResult> => ipcRenderer.invoke('ebay:optimize:content',request),
+    optimizeContent: (request:EbayContentOptimizationRequest, accessToken?:string):Promise<EbayContentOptimizationResult> => ipcRenderer.invoke('ebay:optimize:content',request,accessToken||''),
     contentOptimization: (storeId:string,listingId:string):Promise<EbayContentOptimizationRecord|undefined> => ipcRenderer.invoke('ebay:content-optimization:get',storeId,listingId),
     saveContentOptimization: (input:EbayContentOptimizationRecordInput):Promise<EbayContentOptimizationRecord> => ipcRenderer.invoke('ebay:content-optimization:save',input),
     translateContent: (request:EbayContentTranslationRequest):Promise<EbayContentTranslationResult> => ipcRenderer.invoke('ebay:translate:content',request),
@@ -500,6 +507,7 @@ contextBridge.exposeInMainWorld('desktop', {
     reviewCandidate: (request:EbayImageCandidateReviewRequest):Promise<EbayImageCandidateReview> => ipcRenderer.invoke('image:review-candidate',request),
     suggestRoles: (request:EbayImageRoleSuggestionRequest):Promise<EbayImageRoleSuggestionResult> => ipcRenderer.invoke('image:suggest-roles',request),
     stageGrounding: (request:EbayStageGroundingRequest):Promise<EbayStageFactCard> => ipcRenderer.invoke('image:stage-grounding',request),
+    marketingFacts: (request:{title:string;description:string;itemSpecifics:Array<{name:string;value:string}>}):Promise<EbayMarketingFacts|null> => ipcRenderer.invoke('image:marketing-facts',request),
     stageStoryboard: (request:EbayStageStoryboardRequest):Promise<EbayStageStoryboardCard[]> => ipcRenderer.invoke('image:stage-storyboard',request),
     stageModelRecommend: (stage:EbayImageStage):Promise<EbayStageModelRecommendation> => ipcRenderer.invoke('image:stage-model-recommend',stage),
     realshift: (request: RealShiftRequest): Promise<RealShiftResult> => ipcRenderer.invoke('image:realshift', request),

@@ -18,8 +18,8 @@
 .yd-button:hover:not(:disabled) { border-color: var(--yd-brand); }
 .yd-button:focus-visible { outline: 2px solid var(--yd-brand); outline-offset: 2px; box-shadow: var(--yd-focus-ring); }
 .yd-button:disabled { cursor: not-allowed; opacity: .56; }
-.yd-button--primary { color: #063c3a; background: var(--yd-brand); border-color: var(--yd-brand); }
-.yd-button--primary:hover:not(:disabled) { background: var(--yd-brand-hover); border-color: var(--yd-brand-hover); color: #ffffff; }
+.yd-button--primary { color: var(--yd-on-brand); background: var(--yd-brand); border-color: var(--yd-brand); }
+.yd-button--primary:hover:not(:disabled) { background: var(--yd-brand-hover); border-color: var(--yd-brand-hover); color: var(--yd-surface); }
 .yd-button--danger { color: var(--yd-danger); border-color: color-mix(in srgb, var(--yd-danger) 38%, transparent); }
 .yd-button--danger:hover:not(:disabled) { color: var(--yd-danger); background: var(--yd-danger-soft); border-color: var(--yd-danger); }
 

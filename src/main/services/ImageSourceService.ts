@@ -68,7 +68,7 @@ async function readLimited(response: Response, limit: number): Promise<Uint8Arra
   return bytes
 }
 
-async function importImage(url: URL, fallbackName: string): Promise<ImportedProductImage> {
+export async function importImage(url: URL, fallbackName: string): Promise<ImportedProductImage> {
   const { response, finalUrl } = await publicFetch(url)
   const mimeType = (response.headers.get('content-type') || '').split(';')[0].toLocaleLowerCase()
   if (!imageTypes.has(mimeType)) throw new Error('读取结果不是受支持的 JPG、PNG 或 WebP 图片')

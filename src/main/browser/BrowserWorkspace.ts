@@ -2,6 +2,7 @@ import { writeFileSync } from 'node:fs'
 import { BaseWindow, BrowserWindow, WebContents, WebContentsView, clipboard } from 'electron'
 import { AMAZON_LISTING_EVIDENCE_SCRIPT, AMAZON_REVIEW_EVIDENCE_SCRIPT, AMAZON_SAMPLES_SCRIPT, type AmazonListingEvidence, type AmazonMarketSample, type AmazonReviewEvidence } from '../../shared/amazonScraper'
 import { matchSellableInventoryText } from '../../shared/sellableInventory'
+import { pickSupplyDescriptionText } from '../../shared/supplyDescription'
 import { shouldActivateSupplyView } from '../../shared/supplyAutoEnter'
 import { pickGigaMainImage } from '../../shared/gigaImageResolve'
 import type { BrowserBounds, BrowserState, BrowserTab, BuiltInCollectorState, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, EbayBrowserPluginState, EbayCategorySpecificRequirement, EbayCollectedProduct, EbayDeliveryLocationResult, EbayDirectoryProductScanCategory, EbayLoginResult, EbayMarketResearchFilter, EbayMarketResearchMetric, EbayMarketResearchSample, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayProductDetails, EbaySellerHubAcceptanceSnapshot, EbayStoreCategory, MarketplacePlatformCode, NetworkStrategy, Platform, SelectionTask, SupplyActivationResult } from '../../shared/contracts'
@@ -542,6 +543,7 @@ export class BrowserWorkspace {
         const firstStockAt = grab(/首次到库时间[:：]\s*(\d{4}-\d{2}-\d{2})/)
         const returnRate = grab(/退返品率[:：]\s*(\S+)/)
         const matchStockFn = ${matchSellableInventoryText.toString()};
+        const pickDescFn = ${pickSupplyDescriptionText.toString()};
         const stockHit = matchStockFn(flat) || matchStockFn(flatAll)
         const sellableInventory = stockHit && stockHit.sellableInventory !== null ? String(stockHit.sellableInventory) : ''
         // 金额统一支持区间（$20.63~$40.30）与「/件」后缀；真实页面标签后带冒号，费用面板默认折叠只能靠 textContent 通道
@@ -601,7 +603,7 @@ export class BrowserWorkspace {
           if (anchors.length) { files = anchors; break }
         }
         files = files.slice(0, 20)
-        const descriptionText = descRoot ? (descRoot.innerText || descRoot.textContent || '').trim().slice(0, 20000) : bodyText.trim().slice(0, 20000)
+        const descriptionText = pickDescFn(descRoot ? (descRoot.innerText || descRoot.textContent || '') : null)
         // 产品特点：原站真 bullets 在描述面板 #pane-description 内；页首同名标题（特点标签块）在文档序上先命中会抓错，
         // 故先限定作用域再找标题叶子；面板不存在时才回退全文档（兼容其他仓形态）
         const featScope = document.querySelector('#pane-description, [class*="des-content" i]') || document

@@ -1330,6 +1330,8 @@ export class AppDatabase {
     ensureColumn('supply_product_downloads', 'page_url', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_product_downloads', 'estimated_total', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_warehouse_products', 'region', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('supply_warehouse_products', 'core_term_zh', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('supply_warehouse_products', 'core_term_en', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('pallet_warehouse_items', 'promotion_text', 'TEXT')
     ensureColumn('pallet_warehouse_items', 'shipping_fee_text', 'TEXT')
     ensureColumn('pallet_warehouse_items', 'sellable_inventory', 'REAL')
@@ -1343,6 +1345,10 @@ export class AppDatabase {
     ensureColumn('pallet_warehouse_items', 'collected_at', 'TEXT')
     ensureColumn('pallet_warehouse_items', 'region', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('pallet_warehouse_items', 'origin', 'TEXT')
+    ensureColumn('pallet_warehouse_items', 'core_term_zh', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('pallet_warehouse_items', 'core_term_en', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('ebay_local_products', 'core_term_zh', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('ebay_local_products', 'core_term_en', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_warehouse_products', 'collected_at', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_warehouse_products', 'collected_by', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('inbound_processing_items', 'region', "TEXT NOT NULL DEFAULT ''")
@@ -2196,6 +2202,8 @@ export class AppDatabase {
       listingId:String(row.listing_id),
       categoryId:String(row.category_id),
       categoryName:String(row.category_name),
+      coreTermZh:String(row.core_term_zh ?? ''),
+      coreTermEn:String(row.core_term_en ?? ''),
       title:String(row.title),
       status:String(row.status) as EbayLocalProduct['status'],
       versionCount:Number(row.version_count),
@@ -2275,6 +2283,13 @@ export class AppDatabase {
       this.database.exec('ROLLBACK')
       throw error
     }
+    return this.getEbayLocalProducts().find(item => item.id === localProductId)!
+  }
+
+  setEbayLocalProductCoreTerms(localProductId: string, coreTermZh: string, coreTermEn: string): EbayLocalProduct {
+    const exists = this.database.prepare(`SELECT id FROM ebay_local_products WHERE id=?`).get(localProductId) as { id: string } | undefined
+    if (!exists) throw new Error('本地产品不存在')
+    this.database.prepare(`UPDATE ebay_local_products SET core_term_zh=?, core_term_en=? WHERE id=?`).run(coreTermZh, coreTermEn, localProductId)
     return this.getEbayLocalProducts().find(item => item.id === localProductId)!
   }
 
@@ -3060,7 +3075,9 @@ export class AppDatabase {
       sourceTertiaryCategory: row.source_tertiary_category ? String(row.source_tertiary_category) : undefined,
       collectedAt: row.collected_at ? String(row.collected_at) : undefined,
       region: String(row.region || ''),
-      origin: row.origin ? String(row.origin) as PalletWarehouseItem['origin'] : undefined }
+      origin: row.origin ? String(row.origin) as PalletWarehouseItem['origin'] : undefined,
+      coreTermZh: row.core_term_zh ? String(row.core_term_zh) : undefined,
+      coreTermEn: row.core_term_en ? String(row.core_term_en) : undefined }
   }
 
   listPalletItems(): PalletWarehouseItem[] {
@@ -3091,6 +3108,28 @@ export class AppDatabase {
       ids.forEach(id => statement.run(id))
     }
     return this.listPalletItems()
+  }
+
+  setPalletItemCoreTerms(warehouseProductId: string, coreTermZh: string, coreTermEn: string): PalletWarehouseItem {
+    const updated = this.database.prepare(`UPDATE pallet_warehouse_items SET core_term_zh=?, core_term_en=? WHERE warehouse_product_id=?`).run(coreTermZh, coreTermEn, warehouseProductId)
+    if (!updated.changes) throw new Error('货盘商品不存在')
+    return this.listPalletItems().find(item => item.warehouseProductId === warehouseProductId)!
+  }
+
+  /** 核心商品词取数上下文：货盘行优先，入库队列商品（仅仓行）回落仓行；两者皆无返回 null */
+  getCoreTermsContext(warehouseProductId: string): { title: string; coreTermZh: string; coreTermEn: string; store: 'pallet' | 'warehouse' } | null {
+    const pallet = this.database.prepare(`SELECT title, core_term_zh, core_term_en FROM pallet_warehouse_items WHERE warehouse_product_id=?`).get(warehouseProductId) as { title: string; core_term_zh: string; core_term_en: string } | undefined
+    if (pallet) return { title: String(pallet.title || ''), coreTermZh: String(pallet.core_term_zh || ''), coreTermEn: String(pallet.core_term_en || ''), store: 'pallet' }
+    const warehouse = this.database.prepare(`SELECT title, core_term_zh, core_term_en FROM supply_warehouse_products WHERE id=?`).get(warehouseProductId) as { title: string; core_term_zh: string; core_term_en: string } | undefined
+    if (warehouse) return { title: String(warehouse.title || ''), coreTermZh: String(warehouse.core_term_zh || ''), coreTermEn: String(warehouse.core_term_en || ''), store: 'warehouse' }
+    return null
+  }
+
+  setCoreTerms(warehouseProductId: string, coreTermZh: string, coreTermEn: string): void {
+    const pallet = this.database.prepare(`UPDATE pallet_warehouse_items SET core_term_zh=?, core_term_en=? WHERE warehouse_product_id=?`).run(coreTermZh, coreTermEn, warehouseProductId)
+    if (pallet.changes) return
+    const warehouse = this.database.prepare(`UPDATE supply_warehouse_products SET core_term_zh=?, core_term_en=? WHERE id=?`).run(coreTermZh, coreTermEn, warehouseProductId)
+    if (!warehouse.changes) throw new Error('货盘商品不存在')
   }
 
   /** 我的货盘入选关系（warehouse_product_id 去重）；列表内容始终取自货盘仓库现行数据，总货盘删除后自动消失 */
@@ -3433,6 +3472,11 @@ export class AppDatabase {
       } else {
         this.database.prepare(`INSERT INTO pallet_warehouse_items (id, warehouse_product_id, warehouse_code, item_code, title, image_url, price_text, category, subcategory, tertiary_category, source_url, stored_at, promotion_text, shipping_fee_text, sellable_inventory, sales_text, giga_index, giga_index_text, score, source_category, source_subcategory, source_tertiary_category, collected_at, region, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
           .run(crypto.randomUUID(), warehouseId, snapshot.warehouseCode, snapshot.itemCode, snapshot.title, snapshot.imageUrl, snapshot.priceText, snapshot.category, snapshot.subcategory, snapshot.tertiaryCategory, snapshot.sourceUrl, now, ...shelfValues)
+      }
+      // 仓行已有核心商品词时随确认入库带入存放行，避免二次千问取词
+      const whTerms = this.database.prepare(`SELECT core_term_zh, core_term_en FROM supply_warehouse_products WHERE id=?`).get(warehouseId) as { core_term_zh: string; core_term_en: string } | undefined
+      if (whTerms && (whTerms.core_term_zh || whTerms.core_term_en)) {
+        this.database.prepare(`UPDATE pallet_warehouse_items SET core_term_zh=?, core_term_en=? WHERE warehouse_product_id=?`).run(whTerms.core_term_zh, whTerms.core_term_en, warehouseId)
       }
       this.registerProductIntake(snapshot.warehouseCode, snapshot.itemCode, snapshot.sourceUrl, snapshot.title, 'WAREHOUSE', now)
       this.database.prepare(`UPDATE inbound_processing_items SET warehouse_product_id = ?, status = 'CONFIRMED', confirmed_at = ?, updated_at = ? WHERE id = ?`).run(warehouseId, now, now, id)

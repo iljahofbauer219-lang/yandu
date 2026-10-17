@@ -190,7 +190,7 @@ function sourceFacts(request:EbayContentOptimizationRequest):EbayContentSourceFa
     if(/^features?\s*:/i.test(value)){context='FEATURE';value=value.replace(/^features?\s*:\s*/i,'')}
     else if(/^specifications?\s*:/i.test(value)){context='SPECIFICATION';value=value.replace(/^specifications?\s*:\s*/i,'')}
     else if(/^package (?:includes|contents)\s*:/i.test(value)){context='PACKAGE';value=value.replace(/^package (?:includes|contents)\s*:\s*/i,'')}
-    add(value,'SOURCE_DESCRIPTION','eBay 原始详情',context)
+    add(value,'SOURCE_DESCRIPTION',request.sourceDescriptionLabel||'eBay 原始详情',context)
   }
   for(const item of request.itemSpecifics||[])if(item.name.trim()&&item.value.trim())add(`${item.name.trim()}: ${item.value.trim()}`,'ITEM_SPECIFIC',`eBay 属性：${item.name}`,'SPECIFICATION')
   if(request.sellerNotes?.trim())add(request.sellerNotes,'SELLER_NOTE','卖家备注','CARE')

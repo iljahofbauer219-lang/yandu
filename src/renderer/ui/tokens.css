@@ -3,6 +3,9 @@
   --yd-brand-hover: #079d98;
   --yd-brand-soft: #e1f8f6;
   --yd-brand-contrast: #075955;
+  /* 品牌实底上的前景色（DESIGN.md colors.on-brand）：#063c3a 对 --yd-brand 浅 5.07:1、暗 7.01:1，
+     而白色对 Tiffany 只有 2.41:1，小字号主按钮用白字必不过 WCAG AA。 */
+  --yd-on-brand: #063c3a;
   --yd-canvas: #f5f6f7;
   --yd-surface: #ffffff;
   --yd-surface-muted: #f7f9f9;
