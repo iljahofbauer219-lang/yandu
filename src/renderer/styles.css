@@ -528,6 +528,8 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .update-pill--error { border-color:var(--danger); background:var(--danger-bg); }
 .update-pill--info { border-color:var(--accent); }
 .update-pill span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* 失败/信息态整句中文必须完整可读（用户拒绝省略号截断的行内提示），换行而不是压缩 */
+.update-pill--error span, .update-pill--info span { white-space:normal; overflow:visible; text-overflow:clip; line-height:1.5; }
 .update-pill-action { border:1px solid #b9e333; background:#c9f542; color:#142018; padding:4px 10px; border-radius:8px; font-size:12px; font-weight:650; cursor:pointer; flex:none; }
 .update-pill-close { border:none; background:transparent; color:var(--text-muted); font-size:14px; line-height:1; padding:2px 4px; cursor:pointer; flex:none; }
 .update-pill-close:hover { color:var(--text-primary); }

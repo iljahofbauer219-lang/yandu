@@ -689,6 +689,112 @@
   color: var(--text-primary, #1e293b);
 }
 
+/* ── ④ 生图规则确认（生成前勾选） ── */
+.ebay-stage-rule-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ebay-stage-rule-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #dbe3ec);
+  border-left: 3px solid #1abc9c;
+  border-radius: 8px;
+  background: #f7fbfb;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.ebay-stage-rule-item:hover {
+  border-color: #1abc9c;
+  background: #eefaf9;
+}
+
+.ebay-stage-rule-item.locked {
+  border-left-color: #d97706;
+  background: #fffaf0;
+  cursor: default;
+}
+
+.ebay-stage-rule-item input[type="checkbox"] {
+  margin-top: 2px;
+  accent-color: #1abc9c;
+}
+
+.ebay-stage-rule-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ebay-stage-rule-item-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #1e293b);
+}
+
+.ebay-stage-rule-lock {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.ebay-stage-rule-item-detail {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary, #64748b);
+}
+
+.ebay-stage-presence-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--text-secondary, #64748b);
+}
+
+.ebay-stage-presence-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.ebay-stage-rule-summary {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #eefaf9;
+  color: #0f766e;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ── 同类雷同标记 ── */
+.ebay-stage-gen-dupe-tag {
+  display: block;
+  padding: 2px 6px;
+  font-style: normal;
+  font-size: 11px;
+  text-align: center;
+  color: #92400e;
+  background: #fef3c7;
+}
+
 /* ── 多选提示 ── */
 .ebay-stage-gen-hint {
   width: 100%;
@@ -746,3 +852,79 @@
   border-left-color: #14b8b1;
   background: #eefaf9;
 }
+
+/* ── 图片优化档位切换（简版优化 / 模型优化）── */
+.ebay-stage-lane-section { padding: 10px 16px; }
+.ebay-stage-lane-row { display: flex; gap: 8px; }
+.ebay-stage-lane-btn {
+  height: 30px;
+  padding: 0 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary, #475569);
+  background: var(--bg-primary, #fff);
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.ebay-stage-lane-btn:hover { border-color: #14b8b1; color: #0f766e; }
+.ebay-stage-lane-btn.active { color: #fff; background: #14b8b1; border-color: #14b8b1; }
+
+/* ── 简版优化三步（原图优化 / 多生图片 / 图片排序）── */
+.ebay-stage-simple-chip {
+  display: inline-block;
+  margin: 0 6px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  border-radius: 999px;
+  color: #475569;
+  background: #f1f5f9;
+}
+.ebay-stage-simple-chip.ok { color: #0f766e; background: #eefaf9; }
+.ebay-stage-simple-chip.warn { color: #b45309; background: #fef3c7; }
+.ebay-stage-simple-chip.regen { color: #0369a1; background: #e0f2fe; }
+.ebay-stage-simple-reasons {
+  display: block;
+  margin: 0 6px;
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #b45309;
+}
+.ebay-stage-simple-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 6px 8px; }
+.ebay-stage-simple-actions .yd-button { height: 26px; padding: 0 10px; font-size: 12px; }
+.ebay-stage-simple-generate-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+
+.ebay-stage-order-list { display: flex; flex-direction: column; gap: 6px; }
+.ebay-stage-order-row {
+  display: grid;
+  grid-template-columns: 28px 56px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--bg-secondary, #f8fafc);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+}
+.ebay-stage-order-index { font-size: 13px; font-weight: 700; color: #0f766e; text-align: center; }
+.ebay-stage-order-row > img { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; background: #fff; }
+.ebay-stage-order-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.ebay-stage-order-tags em {
+  padding: 1px 8px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  border-radius: 999px;
+  color: #475569;
+  background: #f1f5f9;
+}
+.ebay-stage-order-tags em.keep { color: #0f766e; background: #eefaf9; }
+.ebay-stage-order-tags em.regen { color: #0369a1; background: #e0f2fe; }
+.ebay-stage-order-tags em.gen { color: #6d28d9; background: #ede9fe; }
+.ebay-stage-order-actions { display: flex; gap: 6px; }
+.ebay-stage-order-actions .yd-button { height: 26px; padding: 0 10px; font-size: 12px; }
+.ebay-stage-order-restore { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary, #475569); }
+.ebay-stage-order-restore .yd-button { height: 26px; padding: 0 10px; font-size: 12px; }

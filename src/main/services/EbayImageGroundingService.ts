@@ -1,6 +1,7 @@
 import type { EbayImageCandidateReview, EbayImageCandidateReviewRequest, EbayImageGenerationPurpose, EbayImageGroundingPlan, EbayImageGroundingRequest, EbayImageGroundingSource, EbayImageRoleSuggestionRequest, EbayImageRoleSuggestionResult, EbayImageSourceRoleSuggestion, EbayImageStage, EbayStageFactCard, EbayStageGroundingRequest, EbayStageModelRecommendation, EbayStageStoryboardCard, EbayStageStoryboardRequest, ImagePackageTextExtractionRequest, ImagePackageTextExtractionResult, ImagePackageTextField, ImagePackageTextObservation } from '../../shared/contracts'
-import { ImageHashService } from './ImageHashService'
+import { imageHashService } from './ImageHashService'
 import { parseMarketingFactsReply, type EbayMarketingFacts } from '../../shared/ebayImageCategoryPlan'
+import { hammingDistance, isDuplicateDistance } from '../../shared/imageSimilarity'
 
 const purposes: EbayImageGenerationPurpose[] = ['HERO', 'PRODUCT', 'PAIN_POINT', 'SCENE']
 
@@ -122,7 +123,7 @@ function normalizePurpose(value: unknown): EbayImageGenerationPurpose[] {
 }
 
 export class EbayImageGroundingService {
-  private readonly hashService = new ImageHashService()
+  private readonly hashService = imageHashService
 
   constructor(
     private readonly apiKey: string,
@@ -538,7 +539,7 @@ ${comparisonUrls.length ? '- diversityScore ≥ 75：与其他已生成图（含
     }
   }
 
-  /** 感知哈希比对：候选图与任一对比图汉明距离 ≤10（64 位）视为近重复；哈希失败降级为跳过。 */
+  /** 感知哈希比对：候选图与任一对比图雷同时直接判负（阈值与面板雷同检测共用 shared 常量）；哈希失败降级为跳过。 */
   private async findNearDuplicate(candidateUrl: string, comparisonUrls: string[]) {
     if (!comparisonUrls.length) return null
     const candidateHash = await this.hashService.computeHash(candidateUrl)
@@ -546,8 +547,8 @@ ${comparisonUrls.length ? '- diversityScore ≥ 75：与其他已生成图（含
     for (const url of comparisonUrls) {
       const hash = await this.hashService.computeHash(url)
       if (!hash) continue
-      const distance = this.hashService.hammingDistance(candidateHash, hash)
-      if (distance <= 10) return { url, distance }
+      const distance = hammingDistance(candidateHash, hash)
+      if (isDuplicateDistance(distance)) return { url, distance }
     }
     return null
   }
@@ -734,12 +735,13 @@ ${inheritNote}
     }
   }
 
-  /** 营销事实卡：仅依据商品详情资料产出 1 个购买理由 + 1~3 痛点 + 1~3 场景；失败返回 null 不阻断 */
-  async marketingFacts(request: { title: string; description: string; itemSpecifics: Array<{ name: string; value: string }> }): Promise<EbayMarketingFacts | null> {
+  /** 营销事实卡：以产品下载图文页真实内容为第一事实源，产出 1 个购买理由 + 1~3 痛点 + 1~3 场景 + 1~3 特点（仅压缩合并原文）；失败返回 null 不阻断 */
+  async marketingFacts(request: { title: string; description: string; itemSpecifics: Array<{ name: string; value: string }>; pageMaterial?: string }): Promise<EbayMarketingFacts | null> {
     if (!this.apiKey) return null
     const specifics = (request.itemSpecifics || []).filter(item => item.name.trim() && item.value.trim()).slice(0, 40)
       .map(item => `${item.name.trim()}: ${item.value.trim()}`).join('；')
-    const prompt = `MARKETING_FACTS_V1 你是电商营销文案事实审核员。仅依据以下商品资料写作，不得虚构品牌、材质、尺寸、性能、认证、配件或促销承诺；资料未提及的卖点一律不写。商品标题：${request.title.slice(0, 300)}。商品详情：${(request.description || '').slice(0, 6000)}。商品属性：${specifics || '无'}。输出JSON：{"purchaseReason":"给消费者的一条购买理由（<=60字）","painPoints":["它解决的客户痛点，1至3条，每条<=40字"],"scenarios":["真实应用场景，1至3条，每条<=40字"]}`
+    const pageMaterial = (request.pageMaterial || '').replace(/\s+/g, ' ').trim().slice(0, 3500)
+    const prompt = `MARKETING_FACTS_V3 你是电商营销文案事实审核员。以下「产品下载图文页内容」是该商品唯一权威事实源，商品详情与属性只作补充；不得虚构品牌、材质、尺寸、性能、认证、配件或促销承诺，资料未提及的卖点一律不写，也不得把图文页已写明的规格改写成别的数值。商品标题：${request.title.slice(0, 300)}。产品下载图文页内容：${pageMaterial || '无'}。商品详情：${(request.description || '').slice(0, 4000)}。商品属性：${specifics || '无'}。输出JSON：{"purchaseReason":"给消费者的一条购买理由（<=60字）","painPoints":["它解决的客户痛点，1至3条，每条<=40字"],"scenarios":["真实应用场景，1至3条，每条<=40字"],"features":["产品特点1至3条，每条<=40字，只能压缩合并图文页内容里已写明的特点，可用中文表达，禁止新增卖点、参数或认证"]}`
     try {
       const parsed = await this.chat([{ type: 'text', text: prompt }])
       return parseMarketingFactsReply(JSON.stringify(parsed))

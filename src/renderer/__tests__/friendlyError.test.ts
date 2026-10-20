@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { friendlySupplyError, unwrapIpcError } from '../friendlyError'
+import { friendlySupplyError, friendlyUpdateError, unwrapIpcError } from '../friendlyError'
 
 describe('unwrapIpcError', () => {
   it('剥离 IPC 包装与 Error 前缀（可嵌套多层）', () => {
@@ -59,5 +59,37 @@ describe('friendlySupplyError', () => {
 
   it('仓名可替换（1688）', () => {
     expect(friendlySupplyError('ERR_NAME_NOT_RESOLVED', '1688').text).toBe('网络波动，连接1688失败，请检查网络后重试。')
+  })
+})
+
+describe('friendlyUpdateError（右下角自动更新）', () => {
+  it('断网原串 → 中文网络文案，英文码只留在详情里', () => {
+    const raw = "net::ERR_INTERNET_DISCONNECTED (-106) loading 'https://yandu-download.oss-cn-hangzhou.aliyuncs.com/latest-mac.yml'"
+    const out = friendlyUpdateError(raw)
+    expect(out.text).toBe('自动更新暂停：网络连接不可用，稍后自动重试')
+    expect(out.text).not.toMatch(/ERR_|net::|https:\/\//)
+    expect(out.detail).toContain('ERR_INTERNET_DISCONNECTED')
+  })
+
+  it('fetch failed 归网络类', () => {
+    expect(friendlyUpdateError('fetch failed').text).toContain('网络连接不可用')
+  })
+
+  it('TimeoutError / HTTP 403 等未知英文串降级为中文，不外露技术码', () => {
+    for (const raw of ['TimeoutError: Timeout was exceeded', 'HTTP 403', 'Certificate validation failed: unable to verify the first certificate']) {
+      const out = friendlyUpdateError(raw)
+      expect(out.text).toBe('自动更新未完成，稍后会自动重试')
+      expect(out.detail).toBe(raw)
+    }
+  })
+
+  it('主进程已中文化的磁盘空间文案原样保留，不重复加工', () => {
+    const raw = '磁盘空间不足：安装更新至少需要 5GB 可用空间，请清理后重试'
+    expect(friendlyUpdateError(raw)).toEqual({ text: raw, detail: raw })
+  })
+
+  it('空消息不显示空白条', () => {
+    expect(friendlyUpdateError(undefined).text).toBe('未知错误')
+    expect(friendlyUpdateError("Error invoking remote method 'app:x': Error: ").text).toBe('未知错误')
   })
 })

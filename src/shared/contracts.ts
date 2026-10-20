@@ -1910,6 +1910,8 @@ export interface SupplyProductDownload {
   error: string
   estimatedTotal: string
   downloadedAt: string
+  /** 产品页图集资产文件名（用于原图比对，可选） */
+  imageAssets?: string[]
 }
 
 export type MarketplaceMediaAssetType = 'ORIGINAL' | 'AI_GENERATED' | 'REALSHIFT'

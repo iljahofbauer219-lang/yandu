@@ -32,6 +32,7 @@ import { ArkVideoService } from './services/ArkVideoService'
 import { EbayImageComplianceVisionService } from './services/EbayImageComplianceVisionService'
 import { EbayImageGroundingService } from './services/EbayImageGroundingService'
 import { importProductUrl } from './services/ImageSourceService'
+import { imageHashService } from './services/ImageHashService'
 import { parseEbayListingsReport } from './services/EbayReportService'
 import { ServerProcessManager } from './services/ServerProcessManager'
 import { MaxkbKnowledgeService } from './services/MaxkbKnowledgeService'
@@ -50,6 +51,7 @@ import { parseCoreTermTranslationReply, parseCoreTermsReply, type LocalCoreTerms
 import { buildCategoryPromptTree, parseInboundCategorySuggestionReply, type CatalogBranch, type InboundCategorySuggestion } from '../shared/inboundCategorySuggestion'
 import { backCoreTermVariants, parseCoreTermVariants } from '../shared/ebayMarketVariants'
 import { parseEstimatedTotal } from '../shared/supplyEstimatedTotal'
+import { MARKETING_FACTS_VERSION, cleanMarketingFeatureLines, pickMarketingSpecifications } from '../shared/ebayImageCategoryPlan'
 
 const execFileAsync = promisify(execFile)
 const bundledToolsRoot = () => app.isPackaged ? path.join(process.resourcesPath,'.tools') : path.join(app.getAppPath(),'.tools')
@@ -3043,7 +3045,19 @@ ipcMain.handle('warehouse:download', async (_event, warehouseProductId: string, 
     throw error
   }
 })
-ipcMain.handle('warehouse:download-list', () => database?.listSupplyDownloads() ?? [])
+ipcMain.handle('warehouse:download-list', async () => {
+  const records = database?.listSupplyDownloads() ?? []
+  // 为 DOWNLOADED 记录补上 imageAssets（从产品页 HTML 解析，失败不影响其他字段）
+  return await Promise.all(records.map(async record => {
+    if (record.status !== 'DOWNLOADED' || !record.pageUrl) return record
+    try {
+      const bundle = await fetchProductPageFacts(record.pageUrl, record.warehouseProductId, '', false)
+      return bundle ? { ...record, imageAssets: bundle.imageAssets } : record
+    } catch (_error) {
+      return record
+    }
+  }))
+})
 // 验收钩子：CODEX_UI_TEST 下可以 YANDU_DROP_IPC 声明单通道缺席，复现旧主进程缺通道场景验证中文兜底横幅
 const droppedIpcChannel = process.env.CODEX_UI_TEST === '1' ? (process.env.YANDU_DROP_IPC || '') : ''
 if (droppedIpcChannel !== 'warehouse:delisted-pallet') {
@@ -3698,9 +3712,23 @@ ipcMain.handle('image:suggest-roles', (_event, request: EbayImageRoleSuggestionR
 
 // ─── 阶段式图片优化 IPC ─────────────────────────────────────────────────────
 ipcMain.handle('image:stage-grounding', (_event, request: EbayStageGroundingRequest) => ebayImageGroundingService.stageGround(request))
-ipcMain.handle('image:marketing-facts', (_event, request: { title: string; description: string; itemSpecifics: Array<{ name: string; value: string }> }) => ebayImageGroundingService.marketingFacts(request))
+ipcMain.handle('image:marketing-facts', async (_event, request: { title: string; description: string; itemSpecifics: Array<{ name: string; value: string }>; listingId?: string }) => {
+  // 事实卡第一事实源＝产品下载图文页真实内容（与『我的货盘 · 查看页面』同源）；规格只取产品尺寸/颜色/材质原文，特点取模型提炼、未返回时回落页面原文清洗
+  const listingId = typeof request.listingId === 'string' ? request.listingId : ''
+  const warehouseProductId = listingId.startsWith('PALLET-') ? listingId.slice('PALLET-'.length) : ''
+  const record = warehouseProductId && database ? database.getSupplyDownload(warehouseProductId) : null
+  const bundle = record && record.status === 'DOWNLOADED' && record.pageUrl ? await fetchProductPageFacts(record.pageUrl, warehouseProductId, '') : null
+  const specLines = pickMarketingSpecifications(bundle?.specs)
+  const pageFeatureLines = cleanMarketingFeatureLines(bundle?.features)
+  const pageMaterial = bundle ? [(bundle.specs || []).map(item => `${item.key}：${item.value}`).join('；'), (bundle.features || []).join('；'), bundle.descriptionText].filter(Boolean).join('。') : ''
+  const facts = await ebayImageGroundingService.marketingFacts({ ...request, pageMaterial })
+  if (!facts) return null
+  return { ...facts, factsVersion: MARKETING_FACTS_VERSION, specifications: specLines, features: facts.features?.length ? facts.features : pageFeatureLines }
+})
 ipcMain.handle('image:stage-storyboard', (_event, request: EbayStageStoryboardRequest) => ebayImageGroundingService.generateStageStoryboard(request))
 ipcMain.handle('image:stage-model-recommend', (_event, stage: EbayImageStage) => ebayImageGroundingService.recommendStageModels(stage))
+// 同类出图雷同检测：像素只能主进程解码（渲染器读跨域图会被 canvas 污染）
+ipcMain.handle('image:fingerprints', (_event, urls: unknown) => imageHashService.fingerprintImages(urls))
 
 ipcMain.handle('image:realshift', (_event, request: RealShiftRequest) => new RealShiftService().process(request))
 ipcMain.handle('image:realshift:preflight', () => new RealShiftService().preflight())

@@ -3,6 +3,7 @@ import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useSession } from './SessionGate'
 import { friendlySupplyError, unwrapIpcError, type FriendlyError } from './friendlyError'
+import { UpdateStatusPill } from './UpdateStatusPill'
 import { hasPermission, getServerBaseUrl } from './serverApi'
 import { LinduoAssignmentModal } from './LinduoAssignmentModal'
 import { LinduoPreferenceModal } from './LinduoPreferenceModal'
@@ -12,10 +13,13 @@ import { evaluateEbayCompliance } from '../shared/ebayComplianceKnowledge'
 import { complianceCheckFingerprint } from '../shared/complianceFingerprint'
 import { buildEbayMarketDecisionReport, confirmedEbayMarketTerms } from '../shared/ebayMarketDecision'
 import { auditEbayTitle } from '../shared/ebayTitleAudit'
+import { topMarketingSearchTerms } from '../shared/ebayImageCategoryPlan'
+import { buildSourceComplianceChecks } from '../shared/ebayImageSimpleLane'
 import type { EbayTitleDecision } from '../shared/contracts'
 import { badgeFallbackScore } from '../shared/badgeScore'
 import { shouldAutoEnterGigaLogin } from '../shared/supplyAutoEnter'
 import { inferCandidateGigaIndex, missingCandidateFacts } from '../shared/candidateFactsGate'
+import { isSupplyDownloadOpenable, palletWarehouseIdFromListingId } from '../shared/palletToEbayLocal'
 import { riskBadge } from '../shared/riskBadge'
 import { copiedWarehouseIds } from '../shared/copiedPallet'
 import { applyWarehouseQuickFilter, warehouseQuickCounts } from '../shared/warehouseQuickFilter'
@@ -1063,31 +1067,8 @@ function SupplyFactsDl({ joined, fallbackCatalog, collectedAt, collectedBy }: { 
   const collectedTime = collectedAt || joined?.collectedAt || joined?.addedAt
   return <dl className="candidate-source-facts"><div><dt>物流费</dt><dd>{joined?.shippingFeeText || '待补采'}</dd></div><div><dt>可售库存</dt><dd>{inventoryText}</dd></div><div><dt>原始类目</dt><dd title={`${catalog.category} / ${catalog.subcategory} / ${catalog.tertiaryCategory}`}>{catalog.category} / {catalog.subcategory} / {catalog.tertiaryCategory}</dd></div><div><dt>GIGA Index</dt><dd>{joined?.gigaIndexText || (joined?.gigaIndex ?? '待补采')}</dd></div><div><dt>采集时间</dt><dd>{formatCollectedAt(collectedTime)}</dd></div><div><dt>采集人</dt><dd>{collectedBy || joined?.collectedBy || (collectedTime ? '未记录' : '—')}</dd></div></dl>
 }
-// 自动更新状态悬浮提示（右下角）：下载中显示百分比，失败显示原因，下载完成可一键重启安装；
-// 状态由主进程 app:update-status 推送（见 main.ts initAutoUpdate）
 // 顶栏「刷新」整窗 reload 后的界面恢复键（会话级：关窗即清，不跨启动残留）
 const LAST_PAGE_KEY = 'yd:last-page'
-
-function UpdateStatusPill() {
-  const [status, setStatus] = useState<{ phase: 'downloading' | 'downloaded' | 'error'; version: string; percent?: number; message?: string } | null>(null)
-  const [dismissed, setDismissed] = useState(false)
-  useEffect(() => {
-    return window.desktop.appInfo.onUpdateStatus(next => {
-      setDismissed(false)
-      setStatus(next)
-    })
-  }, [])
-  if (!status || dismissed) return null
-  return <div className={`update-pill update-pill--${status.phase}`} role="status" aria-live="polite">
-    {status.phase === 'downloading' && <span>正在下载新版本 v{status.version} · {status.percent ?? 0}%</span>}
-    {status.phase === 'downloaded' && <>
-      <span>新版本 v{status.version} 已下载完成</span>
-      <button type="button" className="update-pill-action" onClick={() => void window.desktop.appInfo.installUpdate()}>重启安装</button>
-    </>}
-    {status.phase === 'error' && <span title={status.message}>自动更新失败：{status.message || '未知错误'}</span>}
-    <button type="button" className="update-pill-close" aria-label="关闭提示" onClick={() => setDismissed(true)}>×</button>
-  </div>
-}
 
 function WatchSkillPage({ onBack }: { onBack: () => void }) {
   type Task={id:string;videoPath:string;createdAt:string;status:'COMPLETED'|'FAILED';report:string;framePaths:string[];error?:string}
@@ -3318,7 +3299,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
   const [localDownloadsByWp,setLocalDownloadsByWp]=useState<Record<string,SupplyProductDownload>>({})
   // 本地产品卡与入库卡同口径：货盘事实与下载档案按 PALLET-<warehouseProductId> 反查
   useEffect(()=>{
-    if(activeTab!=='local')return
+    if(activeTab!=='local'&&activeTab!=='optimize')return
     let alive=true
     window.desktop.pallet.list().then(list=>{if(alive)setLocalPalletByWp(Object.fromEntries(list.map(item=>[item.warehouseProductId,item])))}).catch(()=>undefined)
     window.desktop.warehouses.downloads().then(list=>{if(alive)setLocalDownloadsByWp(Object.fromEntries(list.map(item=>[item.warehouseProductId,item])))}).catch(()=>undefined)
@@ -3629,6 +3610,10 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
     setProfitAssumptions(current=>{const next={...current,platformFeeMode};saveEbayProfitAssumptions(selectedLocalProduct?.id||'',next);return next})
   }
   const researchQuerySuggestion=selectedListing?ebayResearchQuerySuggestion(selectedListing):{query:'',source:'CATEGORY' as const}
+  // 「02 选择原图」的「查看页面」与本地产品卡同口径：PALLET- 前缀反查货盘下载图文档案，无 DOWNLOADED 档案时不渲染按钮
+  const selectedPalletWpId=palletWarehouseIdFromListingId(selectedLocalProduct?.listingId||'')
+  const selectedPalletDownload=selectedPalletWpId?localDownloadsByWp[selectedPalletWpId]:undefined
+  const selectedPalletDownloadable=isSupplyDownloadOpenable(selectedPalletDownload)
   const selectedDownloadedMedia=selectedLocalProduct?.snapshot.media.filter(media=>media.downloadStatus==='DOWNLOADED'&&Boolean(media.localPath))||[]
   const selectedReadableMedia=selectedDownloadedMedia.filter(media=>media.width>0&&media.height>0&&Boolean(media.sha256))
   const selectedCompliantMedia=selectedReadableMedia.filter(media=>Math.max(media.width,media.height)>=500)
@@ -3966,6 +3951,15 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
     setSourceGridExpanded(false)
     clearImageWorkflowForSourceChange()
     setNotice(`已确定选用 ${sourceDraftSelection.length} 张原图，后续生成阶段仅使用这些图。`)
+  }
+  /** 从原图选区剔除某张（简版档「非图文页图集」或尺寸不合格时调用） */
+  const removeFromSourceSelection=(url:string)=>{
+    if(!selectedListing)return
+    setSourceDraftSelection(current=>current.filter(item=>item!==url))
+    setConfirmedSourceSelection(current=>current?current.filter(item=>item!==url):null)
+    saveEbaySourceSelection(selectedListing.listingId,sourceDraftSelection.filter(item=>item!==url))
+    clearImageWorkflowForSourceChange()
+    setNotice(`已从选区剔除 1 张原图。`)
   }
   const applyImageRoleSuggestions=(suggestions:Record<string,EbayImageSourceRole>,mode:'AUTO'|'ALL')=>{
     if(!selectedListing||!Object.keys(suggestions).length)return 0
@@ -4319,7 +4313,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
         </aside>}
         <section>
           <div className="ebay-toolbar"><input value={search} onChange={event=>setSearch(event.target.value)} placeholder="搜索本地产品标题、SKU、Item ID"/><span className="ebay-local-library-note">AI优化仅使用这里保存的快照</span></div>
-          {visibleLocalProducts.length?<div className="ebay-listing-grid">{visibleLocalProducts.map(product=>{const item=product.snapshot.sourceListing;const localMedia=product.snapshot.media.find(media=>media.downloadStatus==='DOWNLOADED');const imageUrl=ebayLocalMediaUrl(localMedia?.localPath||'',localMedia?.remoteUrl||item.imageUrl);const currencyCode=(item.currency||'').trim().toUpperCase();const priceNumber=ebayMoneyNumber(item.price);const cnyPrice=currencyCode==='CNY'||currencyCode==='RMB'||priceNumber<=0?0:priceNumber*readEbayProfitAssumptions(product.id).exchangeRate;const wpId=product.listingId.startsWith('PALLET-')?product.listingId.slice('PALLET-'.length):'';const palletItem=wpId?localPalletByWp[wpId]:undefined;const dlRecord=wpId?localDownloadsByWp[wpId]:undefined;const downloadable=Boolean(dlRecord&&dlRecord.status==='DOWNLOADED'&&dlRecord.pageUrl);const estimatedTotalText=dlRecord?.estimatedTotal||'';const scoreValue=palletItem?(palletItem.gigaIndex??palletItem.score??null):null;const scoreGrade=scoreValue===null?null:Math.round(scoreValue)>=80?'A':Math.round(scoreValue)>=65?'B':'C';const inventoryText=palletItem&&(palletItem.sellableInventory!==null&&palletItem.sellableInventory!==undefined)?palletItem.sellableInventory.toLocaleString('zh-CN'):palletItem?.salesText?.replace(/^(?:Available\s*Stock|可售库存|库存)\s*[:：]?\s*/i,'')||'待补采';const palletCatalogText=palletItem?.category?`${palletItem.category} / ${palletItem.subcategory||'—'} / ${palletItem.tertiaryCategory||'—'}`:'—';const currentStoreText=product.categoryId&&activeCategoryIds.has(product.categoryId)?storePathText(product.categoryId):'未分类';const localManualActive=localManualPick?.id===product.id;const localSuggestion=localAutoSuggestions[product.id]||null;const localAdopted=!!(localSuggestion&&product.categoryId===localSuggestion.categoryId);const draftNode=localManualActive&&localManualPick?.categoryId?categoryWorkspace.categories.find(entry=>entry.categoryId===localManualPick?.categoryId)||null:null;const draftChildren=draftNode?categoryWorkspace.categories.filter(entry=>entry.parentCategoryId===draftNode.categoryId):[];const localManualHint=!draftNode?'请在左侧目录树点选一级类目':draftNode.level===1?'请继续点选二级类目':draftNode.level===2&&draftChildren.length?'该二级类目还有三级类目，请继续点选三级类目':'类目已选齐，点「确定」写入店铺类目';const localManualReady=!!draftNode&&(draftNode.level>=3||(draftNode.level===2&&!draftChildren.length));const mediaInner=<>{imageUrl?<img src={imageUrl} alt={product.title} loading="lazy" onError={event=>{if(event.currentTarget.dataset.fallback)return;event.currentTarget.dataset.fallback='1';event.currentTarget.src=localMedia?.remoteUrl||item.imageUrl}}/>:<span>无本地主图</span>}{palletItem?.promotionText?<span className="candidate-promotion">{palletItem.promotionText}</span>:null}{palletItem?<span className={`score-badge${scoreValue===null?' pending':''}`} title={scoreValue===null?'GIGA Index 未采集，待重读补采':`评分依据：GIGA Index ${palletItem.gigaIndex}`}>{scoreValue===null?'待评分':`${Math.round(scoreValue)}分 · ${scoreGrade}级`}</span>:null}</>;return <article className={`ebay-market-card ebay-local-product-card${localManualActive?' ebay-local-card-active':''}`} key={product.id} onClick={event=>{if((event.target as HTMLElement).closest('button, input, select, textarea, a'))return;if(localManualActive)exitLocalManualPick();else enterLocalManualPick(product)}}>
+          {visibleLocalProducts.length?<div className="ebay-listing-grid">{visibleLocalProducts.map(product=>{const item=product.snapshot.sourceListing;const localMedia=product.snapshot.media.find(media=>media.downloadStatus==='DOWNLOADED');const imageUrl=ebayLocalMediaUrl(localMedia?.localPath||'',localMedia?.remoteUrl||item.imageUrl);const currencyCode=(item.currency||'').trim().toUpperCase();const priceNumber=ebayMoneyNumber(item.price);const cnyPrice=currencyCode==='CNY'||currencyCode==='RMB'||priceNumber<=0?0:priceNumber*readEbayProfitAssumptions(product.id).exchangeRate;const wpId=palletWarehouseIdFromListingId(product.listingId);const palletItem=wpId?localPalletByWp[wpId]:undefined;const dlRecord=wpId?localDownloadsByWp[wpId]:undefined;const downloadable=isSupplyDownloadOpenable(dlRecord);const estimatedTotalText=dlRecord?.estimatedTotal||'';const scoreValue=palletItem?(palletItem.gigaIndex??palletItem.score??null):null;const scoreGrade=scoreValue===null?null:Math.round(scoreValue)>=80?'A':Math.round(scoreValue)>=65?'B':'C';const inventoryText=palletItem&&(palletItem.sellableInventory!==null&&palletItem.sellableInventory!==undefined)?palletItem.sellableInventory.toLocaleString('zh-CN'):palletItem?.salesText?.replace(/^(?:Available\s*Stock|可售库存|库存)\s*[:：]?\s*/i,'')||'待补采';const palletCatalogText=palletItem?.category?`${palletItem.category} / ${palletItem.subcategory||'—'} / ${palletItem.tertiaryCategory||'—'}`:'—';const currentStoreText=product.categoryId&&activeCategoryIds.has(product.categoryId)?storePathText(product.categoryId):'未分类';const localManualActive=localManualPick?.id===product.id;const localSuggestion=localAutoSuggestions[product.id]||null;const localAdopted=!!(localSuggestion&&product.categoryId===localSuggestion.categoryId);const draftNode=localManualActive&&localManualPick?.categoryId?categoryWorkspace.categories.find(entry=>entry.categoryId===localManualPick?.categoryId)||null:null;const draftChildren=draftNode?categoryWorkspace.categories.filter(entry=>entry.parentCategoryId===draftNode.categoryId):[];const localManualHint=!draftNode?'请在左侧目录树点选一级类目':draftNode.level===1?'请继续点选二级类目':draftNode.level===2&&draftChildren.length?'该二级类目还有三级类目，请继续点选三级类目':'类目已选齐，点「确定」写入店铺类目';const localManualReady=!!draftNode&&(draftNode.level>=3||(draftNode.level===2&&!draftChildren.length));const mediaInner=<>{imageUrl?<img src={imageUrl} alt={product.title} loading="lazy" onError={event=>{if(event.currentTarget.dataset.fallback)return;event.currentTarget.dataset.fallback='1';event.currentTarget.src=localMedia?.remoteUrl||item.imageUrl}}/>:<span>无本地主图</span>}{palletItem?.promotionText?<span className="candidate-promotion">{palletItem.promotionText}</span>:null}{palletItem?<span className={`score-badge${scoreValue===null?' pending':''}`} title={scoreValue===null?'GIGA Index 未采集，待重读补采':`评分依据：GIGA Index ${palletItem.gigaIndex}`}>{scoreValue===null?'待评分':`${Math.round(scoreValue)}分 · ${scoreGrade}级`}</span>:null}</>;return <article className={`ebay-market-card ebay-local-product-card${localManualActive?' ebay-local-card-active':''}`} key={product.id} onClick={event=>{if((event.target as HTMLElement).closest('button, input, select, textarea, a'))return;if(localManualActive)exitLocalManualPick();else enterLocalManualPick(product)}}>
             {downloadable?<button type="button" className="ebay-market-card-media ebay-local-media-link" title="点击查看下载图文页" aria-label={`查看下载图文页：${product.title}`} onClick={()=>void window.desktop.warehouses.openDownload(wpId).catch(reason=>setEbayError(readableError(reason,'打开下载图文页')))}>{mediaInner}</button>:<div className="ebay-market-card-media">{mediaInner}</div>}
             <div className="ebay-market-card-body">
               <b title={product.title}>{product.title}</b>
@@ -4356,7 +4350,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
       </div>}
       {activeTab==='optimize'&&!lockTitleMode&&selectedListing&&complianceReport&&<div className={`ebay-compliance-strip ${combinedGateClass}`}><div><small>eBay详情页检查结果</small><b>{combinedGateLabel}</b></div><span>{complianceReport.marketplaceLabel} · 对照 eBay 官方图片与描述要求</span><span className="counts"><strong>{combinedBlockingIssues}</strong> 个必须修改 · <strong>{combinedReviewIssues}</strong> 个技术资料不完整 · {combinedAdvisoryIssues} 个建议优化 · {visualPendingCount} 张待视觉确认</span></div>}
       {activeTab==='optimize'&&<div className={`ebay-optimize-layout${lockTitleMode?' ebay-optimize-single':''}`}>{!lockTitleMode&&<aside><b>优化任务 · V2</b><button className={optimizeMode==='title'?'active':''} onClick={()=>setOptimizeMode('title')}>标题优化 <em>{stageBadge.title}</em></button><button className={optimizeMode==='content'?'active':''} onClick={()=>setOptimizeMode('content')}>描述优化 <em>{stageBadge.content}</em></button><button className={optimizeMode==='image'?'active':''} onClick={()=>setOptimizeMode('image')}>图片优化 <em>{stageBadge.image}</em></button><button className={optimizeMode==='video'?'active':''} onClick={()=>setOptimizeMode('video')}>视频生成 <em>{stageBadge.video}</em></button><button className={optimizeMode==='pricing'?'active':''} onClick={()=>setOptimizeMode('pricing')}>售价设定 <em>{profitReady?`${estimatedProfitCny>=0?'+':''}${estimatedProfitCny.toFixed(0)}`:'待录入'}</em></button></aside>}<section>{selectedListing?<div className="ebay-optimization-workbench"><div className="ebay-selected-product">{selectedLocalPreview?<img src={selectedLocalPreview} alt={selectedTitleEnglish}/>:<span>无本地主图</span>}<div className="ebay-selected-title-pair"><small className="ebay-title-label">{selectedTitle?'已选优化标题':'eBay 原文'}</small><b>{selectedTitle||selectedTitleEnglish}</b><small className="ebay-title-label">中文直译</small><p className="ebay-title-translation">{selectedTitle?(titleVariantTranslations[selectedTitle]||'正在生成中文直译…'):(selectedTitleChinese||'正在生成中文直译…')}</p>{optimizeMode==='title'&&selectedLocalProduct&&<small className="ebay-selected-source-meta">本地快照 V{selectedLocalProduct.versionCount} · 完整度 {selectedLocalProduct.snapshot.completeness}% · 本地图片 {selectedDownloadedMedia.length} 张 · 尺寸达标 {selectedCompliantMedia.length}/{selectedDownloadedMedia.length}{selectedMinimumLongestEdge?` · 最小最长边 ${selectedMinimumLongestEdge}px`:''}</small>}</div></div>
-        {optimizeMode==='image'&&complianceReport&&<div className="ebay-diagnosis-panel ebay-compliance-panel ebay-image-initial-check"><header><div><b>图片优化 · 01 初步检查</b><small>自动对照 eBay 官方图片政策与展示指南，不评价美观和转化率。</small></div><div className="ebay-compliance-actions"><span className={`ebay-auto-check-status ${complianceAutoRunning?'checking':complianceAutoError?'failed':complianceIsCurrent?'checked':'pending'}`}><b>{complianceAutoRunning?'正在自动检查官方规则…':complianceAutoError?'自动检查失败':complianceIsCurrent?'✓ 已自动检查官方规则':'等待自动检查'}</b><small>{complianceAutoRunning?'正在读取当前商品内容':complianceAutoError?complianceAutoError:complianceIsCurrent&&complianceCheck?new Date(complianceCheck.checkedAt).toLocaleString('zh-CN'):'商品内容变化后自动执行'}</small></span><span className={`ebay-auto-check-status ebay-source-sync-status ${selectedLocalProduct?'checked':'pending'}`}><b>{selectedLocalProduct?'✓ 原商品资料已同步':'等待同步原商品资料'}</b><small>{selectedLocalProduct?`本地快照 V${selectedLocalProduct.versionCount} · ${new Date(selectedLocalProduct.snapshot.capturedAt).toLocaleString('zh-CN')} · ${selectedDownloadedMedia.length} 张图片`:'请先从线上产品下载并建立本地快照'}</small></span></div></header><div className="ebay-remediation-heading ebay-source-select-heading"><div><b>02 选择原图</b><small>已选用 {sourceDraftSelection.length}/{selectedSourceImages.length}{confirmedSourceSelection!==null?` · 已确定 ${activeImageSourceImages.length} 张进入生成选择区`:' · 点击“确定”后所选原图才会进入生成选择区'}</small></div><span className="ebay-original-gallery-heading-actions"><button type="button" className="primary" disabled={!selectedSourceImages.length} onClick={confirmSourceSelection}>确定</button><button disabled={busy===`details:${selectedListing.id}`} onClick={()=>void syncListingDetails()}>{busy===`details:${selectedListing.id}`?'正在读取…':selectedSourceImages.length>1?'重新读取产品原图':'读取产品原图'}</button></span></div>{!selectedSourceImages.length?<div className="ebay-ai-placeholder">尚未读取原商品图集。系统会自动尝试同步，也可以点击上方按钮重新读取。</div>:confirmedSourceSelection!==null&&!sourceGridExpanded?<button type="button" className="ebay-source-collapsed-bar" onClick={()=>setSourceGridExpanded(true)}>✓ 已确定 {activeImageSourceImages.length} 张原图进入生成选择区 · 点击展开重新挑选 ▾</button>:<div className="ebay-original-gallery-extra">{curatedImageSourceEntries.map(({url,originalIndex})=>{const selected=sourceDraftSelection.includes(url);return <article className={selected?'':'excluded'} key={url}><img src={url} alt={`产品原图 ${originalIndex+1}`}/><span>{originalIndex===0?'原主图':`原图 ${originalIndex+1}`}</span><button type="button" className={selected?'ebay-source-pick selected':'ebay-source-pick'} onClick={()=>toggleSourceDraftSelection(url)}>{selected?'✓ 已选用':'选用'}</button></article>})}</div>}</div>}
+        {optimizeMode==='image'&&complianceReport&&<div className="ebay-diagnosis-panel ebay-compliance-panel ebay-image-initial-check"><header><div><b>图片优化 · 01 初步检查</b><small>自动对照 eBay 官方图片政策与展示指南，不评价美观和转化率。</small></div><div className="ebay-compliance-actions"><span className={`ebay-auto-check-status ${complianceAutoRunning?'checking':complianceAutoError?'failed':complianceIsCurrent?'checked':'pending'}`}><b>{complianceAutoRunning?'正在自动检查官方规则…':complianceAutoError?'自动检查失败':complianceIsCurrent?'✓ 已自动检查官方规则':'等待自动检查'}</b><small>{complianceAutoRunning?'正在读取当前商品内容':complianceAutoError?complianceAutoError:complianceIsCurrent&&complianceCheck?new Date(complianceCheck.checkedAt).toLocaleString('zh-CN'):'商品内容变化后自动执行'}</small></span><span className={`ebay-auto-check-status ebay-source-sync-status ${selectedLocalProduct?'checked':'pending'}`}><b>{selectedLocalProduct?'✓ 原商品资料已同步':'等待同步原商品资料'}</b><small>{selectedLocalProduct?`本地快照 V${selectedLocalProduct.versionCount} · ${new Date(selectedLocalProduct.snapshot.capturedAt).toLocaleString('zh-CN')} · ${selectedDownloadedMedia.length} 张图片`:'请先从线上产品下载并建立本地快照'}</small></span></div></header><div className="ebay-remediation-heading ebay-source-select-heading"><div><b>02 选择原图</b><small>已选用 {sourceDraftSelection.length}/{selectedSourceImages.length}{confirmedSourceSelection!==null?` · 已确定 ${activeImageSourceImages.length} 张进入生成选择区`:' · 点击“确定”后所选原图才会进入生成选择区'}</small></div><span className="ebay-original-gallery-heading-actions">{selectedPalletDownloadable&&<button type="button" title="点击查看该商品的下载图文详情页" aria-label={`查看下载图文页：${selectedLocalProduct?.title||''}`} onClick={()=>void window.desktop.warehouses.openDownload(selectedPalletWpId).catch(reason=>setEbayError(readableError(reason,'打开下载图文页')))}>查看页面</button>}<button type="button" className="primary" disabled={!selectedSourceImages.length} onClick={confirmSourceSelection}>确定</button><button disabled={busy===`details:${selectedListing.id}`} onClick={()=>void syncListingDetails()}>{busy===`details:${selectedListing.id}`?'正在读取…':selectedSourceImages.length>1?'重新读取产品原图':'读取产品原图'}</button></span></div>{!selectedSourceImages.length?<div className="ebay-ai-placeholder">尚未读取原商品图集。系统会自动尝试同步，也可以点击上方按钮重新读取。</div>:confirmedSourceSelection!==null&&!sourceGridExpanded?<button type="button" className="ebay-source-collapsed-bar" onClick={()=>setSourceGridExpanded(true)}>✓ 已确定 {activeImageSourceImages.length} 张原图进入生成选择区 · 点击展开重新挑选 ▾</button>:<div className="ebay-original-gallery-extra">{curatedImageSourceEntries.map(({url,originalIndex})=>{const selected=sourceDraftSelection.includes(url);return <article className={selected?'':'excluded'} key={url}><img src={url} alt={`产品原图 ${originalIndex+1}`}/><span>{originalIndex===0?'原主图':`原图 ${originalIndex+1}`}</span><button type="button" className={selected?'ebay-source-pick selected':'ebay-source-pick'} onClick={()=>toggleSourceDraftSelection(url)}>{selected?'✓ 已选用':'选用'}</button></article>})}</div>}</div>}
         {optimizeMode==='title'&&<div className="ebay-title-workbench">
           {!selectedOriginalTitleVerified&&<div className="ebay-ai-placeholder">原标题尚未取得。请返回“店铺采集”从商品列表重新采集。</div>}
           <section className="ebay-market-research">
@@ -4407,11 +4401,16 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
           <EbayImageStagePanel
             sourceImages={activeImageSourceImages}
             sourceLabels={activeImageSourceEntries.map(entry=>ebayImageSourceRoleLabels[entry.role])}
+            sourceRoles={activeImageSourceEntries.map(entry=>entry.role)}
+            sourceChecks={buildSourceComplianceChecks(activeImageSourceEntries.map(entry=>({url:entry.url,role:entry.role})), selectedLocalProduct?.snapshot.media||[], imageVisualReport, selectedPalletDownload?.imageAssets)}
             title={selectedTitle||selectedOriginalTitle||selectedListing.title}
             description={currentEnglishDescription||''}
             itemSpecifics={selectedListing.itemSpecifics||[]}
+            coreTerm={researchQuery||researchQuerySuggestion.query}
+            searchTerms={topMarketingSearchTerms(confirmedMarketTermStats)}
             imageModels={imageModels}
             listingId={selectedListing.listingId}
+            onRemoveFromSelection={removeFromSourceSelection}
             onAllStagesConfirmed={(images)=>{
               const mapped:Partial<Record<EbayImagePurpose,string[]>>={}
               const manual:Record<string,string>={}

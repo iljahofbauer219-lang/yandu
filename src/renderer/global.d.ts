@@ -446,9 +446,10 @@ declare global {
         reviewCandidate(request:EbayImageCandidateReviewRequest):Promise<EbayImageCandidateReview>
         suggestRoles(request:EbayImageRoleSuggestionRequest):Promise<EbayImageRoleSuggestionResult>
         stageGrounding(request:EbayStageGroundingRequest):Promise<EbayStageFactCard>
-        marketingFacts(request:{title:string;description:string;itemSpecifics:Array<{name:string;value:string}>}):Promise<EbayMarketingFacts|null>
+        marketingFacts(request:{title:string;description:string;itemSpecifics:Array<{name:string;value:string}>;listingId?:string}):Promise<EbayMarketingFacts|null>
         stageStoryboard(request:EbayStageStoryboardRequest):Promise<EbayStageStoryboardCard[]>
         stageModelRecommend(stage:EbayImageStage):Promise<EbayStageModelRecommendation>
+        fingerprints(urls: string[]):Promise<Array<{ url: string; hash: string; background: 'WHITE' | 'NON_WHITE' | 'UNKNOWN' }>>
         realshift(request: RealShiftRequest): Promise<RealShiftResult>
                 realshiftPreflight(): Promise<{ ok: boolean; message: string }>
         selectRealshift(reportPath: string, choice: 'original' | 'processed'): Promise<{ selectionPath: string }>

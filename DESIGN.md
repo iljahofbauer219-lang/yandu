@@ -261,9 +261,11 @@ Don't:
 - `needs-design-decision`：规范层（`ui/primitives` + `.yd-*`）已完整但仅 2 个文件采用，历史层 31 个 CSS 与 `App.tsx` 巨型容器仍是主力。需要决定迁移节奏（按模块逐替换 vs 冻结新功能再整体重写）。
 - `needs-design-decision`：历史层未登记 hex 共 4296 处、`rgb()/rgba()` 518 处、未变量化 px 值 10663 处（债务真值 15,834 条、组件绕过 1,172 条；审计脚本会截断到 1000 条，报告内数字非真值），需要分批变量化。本文档只登记规范层真实 token，未把散落值洗白。
 - `needs-design-decision`：`{components.button-primary-hover}` 自身写死 `textColor: "#ffffff"`，对 `{colors.brand-hover}`（#079d98）只有 3.34:1，13px/650 不过 WCAG AA；改 `{colors.on-brand}` 也只有 3.66:1。要同时保住「hover 变深」的手感与达标，需设计侧定一档（候选：hover 底色降到 `{colors.brand-contrast}` #075955 + 白字 = 8.17:1）。
-- `needs-design-decision`：白字压 Tiffany 的同族缺陷还剩 9 条规则（`styles.css` 3 处、`image-studio.css` 6 处，均为 `color:#fff` + `#0abab5`/`var(--tiffany)`），每条实测 2.41:1。本轮只修掉快照屏上被 axe 命中的 2 处（`.address-go` 与 `.build-stamp`），其余分布在系统管理、eBay 同步等页面，需一次批量迁移并逐页截屏复核。
+- `needs-design-decision`：白字压 Tiffany 的同族缺陷还剩 9 条规则（`styles.css` 3 处、`image-studio.css` 6 处，均为 `color:#fff` + `#0abab5`/`var(--tiffany)`），每条实测 2.41:1。本轮修掉的 2 处（`.address-go` 8px→13px、`.build-stamp`）已进活体：2026-10-17 17:28 重启后活体 axe 在「外壳」（`main` 之外）报 0 条对比度违规。其余 9 条分布在系统管理、eBay 同步等页面，需一次批量迁移并逐页截屏复核。
+- `needs-design-decision`：`main` 内的正文对比度从未被任何闸口度量过——遮罩只作用于截图，axe 仍扫全文档，所以外壳干净不等于页面达标。2026-10-17 活体 AI跨境页实测 18 条 `color-contrast`（3.24–4.48，全在 `main` 内：`.ebay-compliance-strip` 6px/7px 小字、阶段栏按钮 `#71787c/#ffffff` 4.48、`.ebay-title-label` 3.47、市场卡标签 3.43）+ 2 条 `label-content-name-mismatch`（`aria-label` 与可见文案不一致）。这些是业务内容而非外壳，需要设计侧先定「页内小字的最小字号与色档」再逐页收口。
 - `needs-design-decision`：外壳（标题栏 + 侧栏 + 内容区）没有任何 `h1`，axe 报 `page-has-heading-one`。加不加、加在标题栏产品名还是页面标题，属信息架构决策，未擅自动 DOM。
 - `needs-design-decision`：两套语义色并存（`--yd-*` 与 `--erp-*`）数值接近但不等价（如 danger `#a33d36` vs `#b42318`），需要确定以哪套为唯一真值。
 - `needs-design-decision`：圆角与间距的第四档（如 6px 标签间距）尚未进阶梯。
 - `needs-design-decision`：`LoadingState` / `EmptyState` / `Notice` 尚未覆盖 eBay 图像工作流、入库闸口等既有提示，错误文案的中文化与动作按钮规范需并入。
 - 取证链路已建立（2026-10-17）：渲染面没有 HTTP 可达地址，活体窗口只由 `tools/design-qa-cdp.mjs` 经 CDP 取景（截图 + axe），插件原生阶段改读 `tools/design-qa-snapshot.mjs` 生成的静态快照（冻结 DOM + 内联构建 CSS，`http://127.0.0.1:4390/harness/…`）。快照屏另跑 `tools/design-qa-snapshot.mjs --axe`（写 `reports/a11y-snapshot.json`，不覆盖活体 `a11y.json`），使纯 CSS 改动免重启即可复算对比度；`--verify` 逐属性比活体 vs 快照，是保真门卫。仍待办：快照只冻结取景时所在的那一屏，多屏基线需在实机逐页取景。
+- `needs-design-decision`：基线与页面态绑死。快照屏 `maxDiffPixels: 0` 下，同一套 CSS 只是活体从「IE浏览」换到「AI跨境」就报 7,592 px 差异——逐像素定位证明它们全是页面态而非设计漂移：侧栏两条 66px 导航行（y 64–129 与 y 336–401，即高亮行换位，7,232 px）+ 标题栏仅在 AI跨境出现的「收起」按钮图标（x 1089–1132，360 px）。要么约定「重播基线前先把实机停在固定页」，要么把条件性标题栏控件也纳入遮罩（会少掉这块设计覆盖面），属设计侧取舍，未擅自改动闸口。
