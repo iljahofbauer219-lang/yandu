@@ -63,8 +63,8 @@ export interface EbayComplianceReport {
   imageAssessment:EbayImageComplianceAssessment
 }
 
-export const EBAY_COMPLIANCE_KNOWLEDGE_VERSION = 'EBAY-DETAIL-PAGE-2026.07.22'
-const VERIFIED_AT = '2026-07-22'
+export const EBAY_COMPLIANCE_KNOWLEDGE_VERSION = 'EBAY-DETAIL-PAGE-2026.10.20'
+const VERIFIED_AT = '2026-10-20'
 
 export const ebayComplianceKnowledge: EbayComplianceRule[] = [
   {id:'EBAY-PICTURE-POLICY',title:'eBay 图片政策',dimension:'图片刊登要求',authority:'eBay',sourceTitle:'Picture policy',sourceUrl:'https://www.ebay.com/help/listing-policies/policies/picture-policy?id=4370',appliesTo:['ALL'],lastVerifiedAt:VERIFIED_AT,version:'2026.07.22'},
