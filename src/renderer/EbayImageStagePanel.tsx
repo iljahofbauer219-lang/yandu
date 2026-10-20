@@ -172,6 +172,42 @@ export default function EbayImageStagePanel(props: Props) {
   const lastRunRef = useRef<{ cards: EbayCategoryShotCard[]; replace: boolean }>({ cards: [], replace: true })
   const rotateRef = useRef<Record<string, number>>({})
 
+  /** 原图清单变化时，过滤简版档持久化状态中已不在新清单的 URL */
+  useEffect(() => {
+    if (lane !== 'simple') return
+    const sourceSet = new Set(props.sourceImages)
+    let changed = false
+    if (simpleTriage) {
+      const nextKeep = simpleTriage.keep.filter(url => sourceSet.has(url))
+      const nextRegen = simpleTriage.regen.filter(item => sourceSet.has(item.url))
+      if (nextKeep.length !== simpleTriage.keep.length || nextRegen.length !== simpleTriage.regen.length) {
+        setSimpleTriage({ ...simpleTriage, keep: nextKeep, regen: nextRegen, checkedAt: new Date().toISOString() })
+        changed = true
+      }
+    }
+    const nextOrder = simpleOrder.filter(url => sourceSet.has(url))
+    if (nextOrder.length !== simpleOrder.length) {
+      setSimpleOrder(nextOrder)
+      changed = true
+    }
+    const nextDeleted = simpleDeleted.filter(url => sourceSet.has(url))
+    if (nextDeleted.length !== simpleDeleted.length) {
+      setSimpleDeleted(nextDeleted)
+      changed = true
+    }
+    const nextRegenKeys = Object.keys(simpleRegen).filter(url => sourceSet.has(url))
+    if (nextRegenKeys.length !== Object.keys(simpleRegen).length) {
+      setSimpleRegen(Object.fromEntries(nextRegenKeys.map(url => [url, simpleRegen[url]])))
+      changed = true
+    }
+    const nextGenerated = simpleGenerated.filter(img => sourceSet.has(img.url))
+    if (nextGenerated.length !== simpleGenerated.length) {
+      setSimpleGenerated(nextGenerated)
+      changed = true
+    }
+    if (changed) persist({ simpleTriage: simpleTriage ? { ...simpleTriage, keep: simpleTriage.keep.filter(url => sourceSet.has(url)), regen: simpleTriage.regen.filter(item => sourceSet.has(item.url)) } : simpleTriage, simpleOrder: nextOrder, simpleDeleted: nextDeleted, simpleRegen: Object.fromEntries(nextRegenKeys.map(url => [url, simpleRegen[url]])), simpleGenerated: nextGenerated })
+  }, [lane, props.listingId, props.sourceImages])
+
   const keptUrls = new Set(Object.values(keptByCategory).flat())
   const generatedRef = useRef(generated)
   useEffect(() => { generatedRef.current = generated }, [generated])

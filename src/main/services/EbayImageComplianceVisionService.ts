@@ -190,8 +190,8 @@ export class EbayImageComplianceVisionService {
         text: `你是 eBay 图片政策检查器，只判断以下四条规则，不评价美观或营销效果：
 1. productAccuracy：图片是否与商品标题呈现同一商品
 2. noBorder：整张图片外围是否没有人为添加的边框
-3. noAddedText：是否没有卖家后加的促销文字或营销图形
-4. noWatermark：是否没有覆盖在画面上的水印
+3. noAddedText：图片上是否有卖家后加的促销文字或营销图形（有则FAIL，无则PASS）
+4. noWatermark：图片上是否有覆盖在画面上的水印（有则FAIL，无则PASS）
 
 每条返回 PASS/FAIL/REVIEW。只有清楚看到证据才 FAIL；不确定必须 REVIEW。
 confidence 0-1。evidence 用简短中文说明。

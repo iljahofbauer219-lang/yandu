@@ -4,6 +4,7 @@ import { AMAZON_LISTING_EVIDENCE_SCRIPT, AMAZON_REVIEW_EVIDENCE_SCRIPT, AMAZON_S
 import { matchSellableInventoryText } from '../../shared/sellableInventory'
 import { pickSupplyDescriptionText } from '../../shared/supplyDescription'
 import { shouldActivateSupplyView } from '../../shared/supplyAutoEnter'
+import { shouldRetryWithoutProxy } from '../../shared/ebayDirectFallback'
 import { pickGigaMainImage } from '../../shared/gigaImageResolve'
 import type { BrowserBounds, BrowserState, BrowserTab, BuiltInCollectorState, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, EbayBrowserPluginState, EbayCategorySpecificRequirement, EbayCollectedProduct, EbayDeliveryLocationResult, EbayDirectoryProductScanCategory, EbayLoginResult, EbayMarketResearchFilter, EbayMarketResearchMetric, EbayMarketResearchSample, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayProductDetails, EbaySellerHubAcceptanceSnapshot, EbayStoreCategory, MarketplacePlatformCode, NetworkStrategy, Platform, SelectionTask, SupplyActivationResult } from '../../shared/contracts'
 import gigaCatalog from '../../renderer/gigaCatalog.json'
@@ -1431,13 +1432,46 @@ export class BrowserWorkspace {
     })()`)
   }
 
+  /**
+   * eBay 会话在系统代理下遇连接类失败时，把该 partition 临时切直连重试一次，随后立即恢复系统代理。
+   * 恢复是硬要求：店铺不能长期跑在真实出口 IP 上（eBay 靠 IP 关联店铺）。代理仍坏时，
+   * 下一次加载会再触发一次回落，代理恢复后自动回到正常链路。
+   */
+  private async loadEbayWithDirectFallback(contents: WebContents, url: string, scene: string) {
+    try {
+      await contents.loadURL(url)
+      return
+    } catch (error) {
+      if (contents.isDestroyed() || !shouldRetryWithoutProxy(error)) throw error
+      console.warn(`[ebay-direct-fallback] ${scene}在系统代理下加载失败，回落直连重试一次：${(error as Error).message}`)
+    }
+    try {
+      await contents.session.setProxy({ mode: 'direct' })
+      await contents.session.closeAllConnections()
+      if (contents.isDestroyed()) return
+      await contents.loadURL(url)
+      console.info(`[ebay-direct-fallback] ${scene}直连重试成功，已恢复系统代理`)
+    } finally {
+      if (!contents.isDestroyed()) {
+        try {
+          await contents.session.setProxy({ mode: 'system' })
+          await contents.session.closeAllConnections()
+        } catch (restoreError) {
+          console.error(`[ebay-direct-fallback] ${scene}恢复系统代理失败，该店铺暂走直连：`, restoreError)
+        }
+      }
+    }
+  }
+
   async openCredentialLogin(accountId: string, title: string, url: string, domains: string[]) {
     const target = new URL(url)
+    const ebayAccount = accountId.startsWith('ebay:')
     const allowed = (rawUrl:string)=>{try{const next=new URL(rawUrl);return next.protocol==='https:'&&domains.some(domain=>next.hostname===domain||next.hostname.endsWith(`.${domain}`))}catch{return false}}
     if (!allowed(target.toString())) throw new Error('登录地址不在平台HTTPS白名单中')
     const loadCredentialUrl=async(view:WebContentsView)=>{
       try {
-        await view.webContents.loadURL(target.toString())
+        if (ebayAccount) await this.loadEbayWithDirectFallback(view.webContents, target.toString(), '店铺登录页')
+        else await view.webContents.loadURL(target.toString())
       } catch(error) {
         const loadError=error as Error & {code?:string;errno?:number}
         if(view.webContents.isDestroyed())throw error
@@ -1464,7 +1498,6 @@ export class BrowserWorkspace {
       return id
     }
     const view = new WebContentsView({ webPreferences:{ partition:`persist:login:${accountId}`,nodeIntegration:false,contextIsolation:true,sandbox:true } })
-    const ebayAccount=accountId.startsWith('ebay:')
     view.setBackgroundColor('#ffffff')
     view.webContents.setUserAgent(view.webContents.getUserAgent().replace(/\sElectron\/[^\s]+/g,'').replace(/\scross-border-sourcing-desktop\/[^\s]+/g,''))
     view.webContents.setWindowOpenHandler(({url:next})=>{if(allowed(next))void view.webContents.loadURL(next);return{action:'deny'}})
@@ -1506,7 +1539,7 @@ export class BrowserWorkspace {
     view.webContents.on('did-stop-loading',()=>{emit();void this.injectEbayScrollbars(view).catch(()=>undefined);if(this.ebayPluginActive)void this.injectEbayPlugin(view).catch(()=>undefined)})
     view.webContents.on('page-title-updated',(_event,pageTitle)=>{tab.title=pageTitle||title||tab.title;this.emitTabs()})
     this.browserVisible=true;this.active='web';this.activeTabId=id;this.credentialDomains=domains;this.attachView(view);this.emitTabs()
-    await view.webContents.loadURL(target.toString())
+    await this.loadEbayWithDirectFallback(view.webContents, target.toString(), 'eBay 新标签页')
     return id
   }
 

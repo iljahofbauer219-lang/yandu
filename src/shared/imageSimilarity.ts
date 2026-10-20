@@ -67,10 +67,10 @@ export function isDuplicateDistance(distance: number, threshold: number = EBAY_I
 
 /** 主图白底探测缩放尺寸：16×16 取外圈 1px 环带足够判定背景色 */
 export const BACKGROUND_SIZE = 16
-/** 环带近白像素占比 ≥ 该值判为纯白底 */
-export const BACKGROUND_WHITE_RATIO = 0.9
-/** 近白阈值：三通道均 ≥ 该值记一个近白像素 */
-export const BACKGROUND_WHITE_CHANNEL = 240
+/** 环带近白像素占比 ≥ 该值判为纯白底（放宽至85%容忍JPEG压缩噪点） */
+export const BACKGROUND_WHITE_RATIO = 0.85
+/** 近白阈值：三通道均 ≥ 该值记一个近白像素（放宽至235兼容轻微阴影与压缩色偏） */
+export const BACKGROUND_WHITE_CHANNEL = 235
 
 /**
  * BGRA 小图（BACKGROUND_SIZE×BACKGROUND_SIZE）→ 背景判定：外圈环带近白占比 ≥0.9 记纯白。

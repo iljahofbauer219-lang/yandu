@@ -192,7 +192,14 @@ function sourceFacts(request:EbayContentOptimizationRequest):EbayContentSourceFa
     else if(/^package (?:includes|contents)\s*:/i.test(value)){context='PACKAGE';value=value.replace(/^package (?:includes|contents)\s*:\s*/i,'')}
     add(value,'SOURCE_DESCRIPTION',request.sourceDescriptionLabel||'eBay 原始详情',context)
   }
-  for(const item of request.itemSpecifics||[])if(item.name.trim()&&item.value.trim())add(`${item.name.trim()}: ${item.value.trim()}`,'ITEM_SPECIFIC',`eBay 属性：${item.name}`,'SPECIFICATION')
+  for(const item of request.itemSpecifics||[]){
+    if(!item.name.trim()||!item.value.trim())continue
+    const nameLower=item.name.trim().toLowerCase()
+    // 产地/Country of Origin 不参与详情页生成内容方案
+    if(nameLower.includes('country')&&nameLower.includes('origin'))continue
+    if(nameLower==='产地'||nameLower==='原产国'||nameLower==='原产地')continue
+    add(`${item.name.trim()}: ${item.value.trim()}`,'ITEM_SPECIFIC',`eBay 属性：${item.name}`,'SPECIFICATION')
+  }
   if(request.sellerNotes?.trim())add(request.sellerNotes,'SELLER_NOTE','卖家备注','CARE')
   const seen=new Set<string>()
   return rows.filter(row=>{const key=row.text.toLowerCase();if(seen.has(key))return false;seen.add(key);return true}).map((row,index)=>({...row,id:`F${String(index+1).padStart(3,'0')}`}))
