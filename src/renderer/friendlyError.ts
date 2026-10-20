@@ -67,3 +67,17 @@ export function friendlyUpdateError(raw: string | undefined): FriendlyUpdateErro
   if (!HAS_CJK.test(detail) || EN_TECH_SIGNAL.test(detail)) return { text: '自动更新未完成，稍后会自动重试', detail }
   return { text: detail, detail }
 }
+
+/**
+ * eBay 内嵌浏览器/自动登录链路的失败文案：主进程把 Chromium 的加载错误原样抛出
+ * （ERR_CONNECTION_CLOSED (-100) loading '…'），直出横幅会让用户以为店铺被封。
+ * 判定与网络模式表沿用 friendlySupplyError 同一套常量，只有动作指引按 eBay 场景改写。
+ */
+export function friendlyEbayError(raw: string): FriendlyUpdateError {
+  const detail = unwrapIpcError(raw) || '未知错误'
+  if (NETWORK_ERROR.test(detail)) {
+    return { text: '网络波动，连接eBay失败，请检查网络或代理后点「重试」。', detail }
+  }
+  if (!HAS_CJK.test(detail) || EN_TECH_SIGNAL.test(detail)) return { text: 'eBay页面打开失败，请点「重试」，或检查网络后再试。', detail }
+  return { text: detail, detail }
+}

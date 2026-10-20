@@ -2,7 +2,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState, useSyncExternalSto
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useSession } from './SessionGate'
-import { friendlySupplyError, unwrapIpcError, type FriendlyError } from './friendlyError'
+import { friendlyEbayError, friendlySupplyError, unwrapIpcError, type FriendlyError } from './friendlyError'
 import { UpdateStatusPill } from './UpdateStatusPill'
 import { hasPermission, getServerBaseUrl } from './serverApi'
 import { LinduoAssignmentModal } from './LinduoAssignmentModal'
@@ -3278,6 +3278,9 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
   const [busy,setBusy]=useState('')
   const [notice,setNotice]=useState('')
   const [ebayError,setEbayError]=useState('')
+  // 原始英文技术串（ERR_CONNECTION_CLOSED…）不外显，只在 text 与当前横幅一致时挂到 title 供排查
+  const [ebayErrorDetail,setEbayErrorDetail]=useState<{text:string;detail:string}|null>(null)
+  const [ebayBrowserRelaunchNonce,setEbayBrowserRelaunchNonce]=useState(0)
   const [ebayErrorAction,setEbayErrorAction]=useState<{label:string;run:()=>void}|null>(null)
   const [ebayErrorActionFor,setEbayErrorActionFor]=useState('')
   const ebayErrorRef=useRef<HTMLDivElement>(null)
@@ -3379,7 +3382,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
   const ebayImageAutoRoleAttempted=useRef(new Set<string>())
   const activeStore=stores.find(store=>store.id===storeScope)
   const scopeName=activeStore?.name||'尚未选择店铺'
-  const ensureEbayLogin=async(store=activeStore,silent=false)=>{if(!store)return null;if(!silent)setEbayLogin({status:'AUTO_LOGIN_RUNNING',message:'正在检查会话并安全登录eBay…',url:ebayAddress,autoLoginAttempted:false});try{const result=await window.desktop.ebay.ensureLogin(store.id);setEbayLogin(result);return result}catch(reason){const result:EbayLoginResult={status:'ERROR',message:readableError(reason,'eBay自动登录失败'),url:ebayAddress,autoLoginAttempted:false};setEbayLogin(result);return result}}
+  const ensureEbayLogin=async(store=activeStore,silent=false)=>{if(!store)return null;if(!silent)setEbayLogin({status:'AUTO_LOGIN_RUNNING',message:'正在检查会话并安全登录eBay…',url:ebayAddress,autoLoginAttempted:false});try{const result=await window.desktop.ebay.ensureLogin(store.id);setEbayLogin(result);return result}catch(reason){const result:EbayLoginResult={status:'ERROR',message:friendlyEbayError(readableError(reason,'eBay自动登录失败')).text,url:ebayAddress,autoLoginAttempted:false};setEbayLogin(result);return result}}
   const refreshStores=async()=>{const next=await window.desktop.ebay.stores();setStores(next);setStoreScope(current=>next.some(store=>store.id===current)?current:(next[0]?.id||''));return next}
   useEffect(()=>{void Promise.all([window.desktop.ebay.status().then(setConfiguration),refreshStores()]).catch(reason=>setEbayError(readableError(reason,'eBay工作区加载失败')))},[])
   useEffect(()=>{
@@ -3447,13 +3450,17 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
         } catch {
           // 浏览器尚未初始化或确实不可用时，继续展示原始导航错误。
         }
-        setEbayError(readableError(reason,'eBay浏览器打开失败'))
-        setEbayLogin({status:'ERROR',message:readableError(reason,'eBay自动登录失败'),url:'',autoLoginAttempted:false})
+        const failure=friendlyEbayError(readableError(reason,'eBay浏览器打开失败'))
+        setEbayError(failure.text)
+        setEbayErrorDetail({text:failure.text,detail:failure.detail})
+        setEbayErrorActionFor(failure.text)
+        setEbayErrorAction({label:'重试',run:()=>{void window.desktop.browser.reload('web').catch(()=>undefined);setEbayBrowserRelaunchNonce(n=>n+1)}})
+        setEbayLogin({status:'ERROR',message:failure.text,url:'',autoLoginAttempted:false})
       }
     }
     void launch()
     return()=>{cancelled=true;ebayBrowserLaunchVersion.current+=1;void window.desktop.browser.hide()}
-  },[activeStore?.id,activeTab,storeFormOpen,lockTitleMode,titleBrowserUrl])
+  },[activeStore?.id,activeTab,storeFormOpen,lockTitleMode,titleBrowserUrl,ebayBrowserRelaunchNonce])
   useEffect(()=>{if(activeTab!=='browser'||!activeStore||ebayLogin?.status!=='VERIFICATION_REQUIRED')return;const timer=window.setInterval(()=>void ensureEbayLogin(activeStore,true),2500);return()=>window.clearInterval(timer)},[activeStore?.id,activeTab,ebayLogin?.status])
   useEffect(()=>{
     if(activeTab!=='browser'||!activeStore||!ebayTranslationActive)return
@@ -4263,7 +4270,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
       {ebayDeliveryButton}
       {downloadToast&&<div className={`ebay-download-toast ${downloadToast.kind}`} role={downloadToast.kind==='error'?'alert':'status'} aria-live={downloadToast.kind==='error'?'assertive':'polite'}><span aria-hidden="true">{downloadToast.kind==='progress'?'↻':downloadToast.kind==='success'?'✓':downloadToast.kind==='warning'?'!':'×'}</span><div><b>{downloadToast.kind==='progress'?'正在下载':downloadToast.kind==='success'?'下载成功':downloadToast.kind==='warning'?'下载部分完成':'下载失败'}</b><p>{downloadToast.message}</p></div>{downloadToast.kind!=='progress'&&<button type="button" aria-label="关闭下载通知" onClick={()=>setDownloadToast(null)}>×</button>}</div>}
       {notice&&<div className="ebay-success-notice">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
-      {ebayError&&<div ref={ebayErrorRef} className="ebay-error-notice">{ebayError}{ebayErrorAction&&ebayErrorActionFor===ebayError&&<button type="button" onClick={()=>{const action=ebayErrorAction;setEbayError('');setEbayErrorAction(null);setEbayErrorActionFor('');action.run()}}>{ebayErrorAction.label}</button>}<button onClick={()=>{setEbayError('');setEbayErrorAction(null);setEbayErrorActionFor('')}}>×</button></div>}
+      {ebayError&&<div ref={ebayErrorRef} className="ebay-error-notice" title={ebayErrorDetail?.text===ebayError?ebayErrorDetail.detail:undefined}>{ebayError}{ebayErrorAction&&ebayErrorActionFor===ebayError&&<button type="button" onClick={()=>{const action=ebayErrorAction;setEbayError('');setEbayErrorAction(null);setEbayErrorActionFor('');action.run()}}>{ebayErrorAction.label}</button>}<button onClick={()=>{setEbayError('');setEbayErrorAction(null);setEbayErrorActionFor('')}}>×</button></div>}
       {activeTab==='browser'&&activeStore&&<div className={`ebay-auto-login-banner status-${(ebayLogin?.status||'CHECKING').toLowerCase()}`}><i/><div><b>{activeStore.name} · {ebayLoginLabel}</b><small>{ebayLogin?.message||'正在检查登录状态'}</small></div><button type="button" disabled={ebayLogin?.status==='AUTO_LOGIN_RUNNING'||ebayLogin?.status==='CHECKING'} onClick={()=>void ensureEbayLogin()}>一键登录</button></div>}
       {activeTab==='browser'&&(activeStore?<div className={`ebay-browser-layout${ebayWorkbenchPanel.collapsed?' side-collapsed':''}`}>{ebayWorkbenchPanel.collapsed?<PanelExpandRail panel={ebayWorkbenchPanel} label="eBay店铺工作台"/>:<aside className="ebay-login-workbench collapsible-aside"><PanelCollapseButton panel={ebayWorkbenchPanel}/><div className="ebay-workbench-heading"><small>EBAY WORKBENCH</small><h2>eBay店铺工作台</h2><p>登录身份与浏览会话按店铺独立保存</p></div><section><header><span>01</span><div><b>平台与登录身份</b><small>查看登录状态和管理登录凭据</small></div></header><div className="ebay-login-status"><i/><div><b>{activeStore.name} · {activeStore.passwordSaved?'凭据已保存':'待配置'}</b><small>{activeStore.loginUsername||'尚未设置登录账号'}</small></div></div><CredentialPanel accountId={`ebay:${activeStore.id}`} platformCode="EBAY"/></section></aside>}<main className="ebay-browser-panel"><div className="ebay-browser-heading"><div><small>WORKSPACE BROWSER</small><b>eBay浏览器</b></div><div className="browser-heading-actions"><div className="browser-translation"><button className={`translation-trigger ${ebayTranslationActive?'active':''}`} disabled={ebayTranslating} onClick={()=>ebayTranslationActive?setEbayTranslationMenuOpen(open=>!open):void translateEbayPage('BILINGUAL')}><span>{ebayTranslating?'翻译中…':ebayTranslationActive?`中文 ✓${ebayTranslationCount?` · ${ebayTranslationCount}`:''}`:'译 · 中文'}</span><i>{ebayTranslationMenuOpen?'⌃':'⌄'}</i></button>{ebayTranslationMenuOpen&&<div className="translation-menu"><b>网页翻译</b><small>Qwen-MT Flash · 自动识别语种</small><button className={ebayTranslationMode==='BILINGUAL'?'active':''} onClick={()=>{setEbayTranslationMenuOpen(false);void translateEbayPage('BILINGUAL')}}><span>原文 + 中文</span><em>推荐</em></button><button className={ebayTranslationMode==='CHINESE'?'active':''} onClick={()=>{setEbayTranslationMenuOpen(false);void translateEbayPage('CHINESE')}}><span>仅显示中文</span></button><button onClick={()=>void translateEbayPage(ebayTranslationMode)}><span>翻译新增内容</span></button><button className="restore" onClick={()=>void restoreEbayTranslation()}><span>恢复原网页</span></button></div>}</div></div></div><div className="tabs ebay-browser-tabs"><div className="tab-scroll">{ebayBrowserTabs.map(tab=><button key={tab.id} className={tab.active?'active':''} onClick={()=>void activateEbayBrowserTab(tab)}><span className={`ebay-tab-icon${tab.faviconUrl?' has-site-logo':''}`}>{tab.faviconUrl?<img src={tab.faviconUrl} alt="" onError={event=>{event.currentTarget.hidden=true}}/>:'e'}</span><b>{tab.title}</b>{tab.closable&&<i onClick={event=>{event.stopPropagation();void closeEbayBrowserTab(tab.id)}}>×</i>}</button>)}</div><button className="new-browser-tab" title="新建eBay浏览页" aria-label="新建eBay浏览页" onClick={()=>void createEbayBrowserTab()}>＋</button>{ebayBrowserState?.loading&&<span className="run-state loading"><i/>页面加载中</span>}</div><form className="address-bar ebay-address-bar" onSubmit={navigateEbay}><button type="button" title="后退" disabled={!ebayBrowserState?.canGoBack} onClick={()=>void window.desktop.browser.back('web')}>←</button><button type="button" title="前进" disabled={!ebayBrowserState?.canGoForward} onClick={()=>void window.desktop.browser.forward('web')}>→</button><button type="button" title="刷新" onClick={()=>void window.desktop.browser.reload('web')}>↻</button><input aria-label="eBay网页地址" value={ebayAddress} onChange={event=>setEbayAddress(event.target.value)}/><button className="address-go" type="submit">打开 <span>↗</span></button></form><div ref={ebayBrowserSlot} className="browser-slot ebay-browser-slot"><div className="browser-placeholder">正在打开 {activeStore.name} 的 eBay 独立浏览会话…</div></div></main></div>:<EbayEmpty title="尚未添加 eBay 店铺" description="点击顶部“添加店铺”，保存店名、登录账号和密码后进入独立浏览会话。" action="添加第一个店铺" onAction={addStore}/>)}
       {activeTab!=='browser'&&!lockTitleMode&&!configuration?.marketDataConfigured&&<div className="ebay-config-notice"><b>eBay 市场数据尚未配置 Omkar API Key</b><span>请在 AI总部的“Amazon 数据源配置”中保存 Key；同一 Key 同时用于 Amazon 和 eBay Scraper。</span></div>}

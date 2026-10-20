@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { friendlySupplyError, friendlyUpdateError, unwrapIpcError } from '../friendlyError'
+import { friendlyEbayError, friendlySupplyError, friendlyUpdateError, unwrapIpcError } from '../friendlyError'
 
 describe('unwrapIpcError', () => {
   it('剥离 IPC 包装与 Error 前缀（可嵌套多层）', () => {
@@ -91,5 +91,35 @@ describe('friendlyUpdateError（右下角自动更新）', () => {
   it('空消息不显示空白条', () => {
     expect(friendlyUpdateError(undefined).text).toBe('未知错误')
     expect(friendlyUpdateError("Error invoking remote method 'app:x': Error: ").text).toBe('未知错误')
+  })
+})
+
+describe('friendlyEbayError（eBay 内嵌浏览器/登录横幅）', () => {
+  it('ERR_CONNECTION_CLOSED（登录失败截图原串）→ 中文网络提示，原始串只留 detail', () => {
+    const raw = "Error invoking remote method 'ebay:open-seller-hub': Error: ERR_CONNECTION_CLOSED (-100) loading 'https://www.ebay.com/sh/ovw'"
+    const out = friendlyEbayError(raw)
+    expect(out.text).toBe('网络波动，连接eBay失败，请检查网络或代理后点「重试」。')
+    expect(out.text).not.toMatch(/ERR_|net::|https:\/\//)
+    expect(out.detail).toContain("ERR_CONNECTION_CLOSED (-100) loading 'https://www.ebay.com/sh/ovw'")
+  })
+
+  it('fetch failed 归入网络类', () => {
+    expect(friendlyEbayError('fetch failed').text).toContain('网络波动')
+  })
+
+  it('无中文的英文串降级为中文，不外露', () => {
+    const out = friendlyEbayError('Something went wrong while opening the page')
+    expect(out.text).toBe('eBay页面打开失败，请点「重试」，或检查网络后再试。')
+    expect(out.detail).toBe('Something went wrong while opening the page')
+  })
+
+  it('主进程已中文化的消息原样透传', () => {
+    const raw = 'eBay 店铺不存在'
+    expect(friendlyEbayError(raw)).toEqual({ text: raw, detail: raw })
+    expect(friendlyEbayError('eBay要求安全验证').text).toBe('eBay要求安全验证')
+  })
+
+  it('空消息回落未知错误', () => {
+    expect(friendlyEbayError('').text).toBe('未知错误')
   })
 })
