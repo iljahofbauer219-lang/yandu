@@ -4383,7 +4383,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
   // 售价设定页的入库前置清单：灰按钮必须说清差哪一步，并给出可点的补救入口，而不是只把按钮禁用
   const pricingImageBlockers=[
     !imageVisualReport?'图片自动初步检查未完成':'',
-    !imageAdoptionComplete?(acceptedImagePurposes.length?`四类图片仅确认 ${acceptedImagePurposes.length}/${ebayImagePurposes.length} 类`:'四类最终图片尚未确认'):'',
+    finalImageUrls.length===0?(acceptedImagePurposes.length?`四类图片仅确认 ${acceptedImagePurposes.length}/${ebayImagePurposes.length} 类`:'四类最终图片尚未确认'):'',
     finalImageChecking?'最终图集正在自动检查':'',
     !finalImageChecking&&!finalImageInspection?'最终图集检查尚未返回':'',
     finalImageInspection?.blocked?`最终图集有 ${finalImageInspection.blocked} 张未通过`:'',
