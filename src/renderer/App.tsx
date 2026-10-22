@@ -20,6 +20,9 @@ import { badgeFallbackScore } from '../shared/badgeScore'
 import { shouldAutoEnterGigaLogin } from '../shared/supplyAutoEnter'
 import { inferCandidateGigaIndex, missingCandidateFacts } from '../shared/candidateFactsGate'
 import { isSupplyDownloadOpenable, palletWarehouseIdFromListingId } from '../shared/palletToEbayLocal'
+import { buildEbayCategorySearchText, deriveEbayCostAutoFill, ebayCategoryFeeRule, ebayPlatformFeeBreakdown, toEbayProfitCostUsd } from '../shared/ebayPricingAutoFill'
+import { US_SALES_TAX_NATIONAL, US_SALES_TAX_TABLE, US_SALES_TAX_TABLE_VERSION, usSalesTaxCombinedRate, usSalesTaxLabel, usSalesTaxNationalAverageRate } from '../shared/usSalesTax'
+import type { EbayProfitAutoFill } from '../shared/ebayPricingAutoFill'
 import { riskBadge } from '../shared/riskBadge'
 import { copiedWarehouseIds } from '../shared/copiedPallet'
 import { applyWarehouseQuickFilter, warehouseQuickCounts } from '../shared/warehouseQuickFilter'
@@ -222,52 +225,70 @@ type EbayResearchQueryPreference = {query:string;source:EbayResearchQuerySource;
 type EbayProfitFeeMode = 'CATEGORY_RULE'|'MANUAL'
 type EbayProfitAssumptions = {
   exchangeRate:number
-  purchaseCostCny:number
-  logisticsCostCny:number
+  purchaseCostUsd:number
+  logisticsCostUsd:number
   packagingCostCny:number
   fulfillmentCostCny:number
   otherCostCny:number
   platformFeeMode:EbayProfitFeeMode
   platformFeeRate:number
   platformFixedFeeCny:number
+  salesTaxJurisdiction:string
+  salesTaxRate:number
+  salesTaxRateTouched?:boolean
+  internationalShippingRate:number
   promotionFeeRate:number
   returnLossRate:number
-  riskBufferRate:number
   targetMarginRate:number
+  /** 采用「建议销售价」后的核算售价；null 表示按本地快照售价核算 */
+  salePriceOverride?:number|null
+  autoFill?:EbayProfitAutoFill
 }
 
-type EbayNumericProfitField=Exclude<keyof EbayProfitAssumptions,'platformFeeMode'>
+type EbayNumericProfitField=Exclude<keyof EbayProfitAssumptions,'platformFeeMode'|'autoFill'|'salesTaxJurisdiction'|'salesTaxRateTouched'|'salePriceOverride'>
 
 const defaultEbayProfitAssumptions:EbayProfitAssumptions={
   exchangeRate:7.2,
-  purchaseCostCny:0,
-  logisticsCostCny:0,
+  purchaseCostUsd:0,
+  logisticsCostUsd:0,
   packagingCostCny:0,
   fulfillmentCostCny:0,
   otherCostCny:0,
   platformFeeMode:'CATEGORY_RULE',
   platformFeeRate:13.6,
   platformFixedFeeCny:2.88,
-  promotionFeeRate:0,
+  salesTaxJurisdiction:US_SALES_TAX_NATIONAL,
+  salesTaxRate:usSalesTaxNationalAverageRate(),
+  internationalShippingRate:1.3,
+  promotionFeeRate:5,
   returnLossRate:0,
-  riskBufferRate:0,
-  targetMarginRate:25
+  targetMarginRate:20
 }
+// 旧版默认值：自动填充时若仍是这两个旧默认，一并升到新默认档，用户手动改过的数值不动
+const legacyEbayProfitPromotionFeeRate=0
+const legacyEbayProfitTargetMarginRate=25
 const ebayProfitAssumptionsKey=(productId:string)=>scopedStorageKey('ebay-profit-assumptions',productId)
 
-function ebayCategoryFeeRule(categoryName:string,salePrice:number) {
-  const category=categoryName.trim().toLocaleLowerCase()
-  if(/musical instruments|乐器/.test(category))return {rate:6.7,label:'乐器类目规则'}
-  if(/athletic shoes|运动鞋/.test(category)&&salePrice>=150)return {rate:8,label:'高客单运动鞋规则'}
-  if(/books|movies|music|书籍|电影|音乐/.test(category))return {rate:15.3,label:'书籍、影音类目规则'}
-  return {rate:13.6,label:categoryName?`${categoryName} · 通用类目规则`:'eBay 美国站通用类目规则'}
-}
+/** 旧版按人民币口径存的两项成本，读档时迁移为美元；风险缓冲已下线，读档时丢弃 */
+type LegacyEbayProfitCostFields = { purchaseCostCny?: number; logisticsCostCny?: number; riskBufferRate?: number }
 
 function readEbayProfitAssumptions(productId:string):EbayProfitAssumptions {
   if(!productId)return defaultEbayProfitAssumptions
   try {
-    const saved=JSON.parse(readScopedItem(localStorage,ebayProfitAssumptionsKey(productId))||'null') as Partial<EbayProfitAssumptions>|null
-    return {...defaultEbayProfitAssumptions,...saved}
+    const parsed=JSON.parse(readScopedItem(localStorage,ebayProfitAssumptionsKey(productId))||'null') as (Partial<EbayProfitAssumptions>&LegacyEbayProfitCostFields)|null
+    if(!parsed)return defaultEbayProfitAssumptions
+    const {purchaseCostCny,logisticsCostCny,riskBufferRate:_legacyRiskBuffer,...saved}=parsed
+    const rate=Number(saved.autoFill?.cnyPerUsd)||Number(saved.exchangeRate)||defaultEbayProfitAssumptions.exchangeRate
+    const merged:EbayProfitAssumptions={
+      ...defaultEbayProfitAssumptions,
+      ...saved,
+      purchaseCostUsd:saved.purchaseCostUsd??toEbayProfitCostUsd(purchaseCostCny,saved.autoFill?.purchaseUsd,rate),
+      logisticsCostUsd:saved.logisticsCostUsd??toEbayProfitCostUsd(logisticsCostCny,saved.autoFill?.logisticsUsd,rate)
+    }
+    // 销售税按收货州法定税率自动带出：只有用户手改过（touched）才保留手填值，辖区无法识别时保原值
+    const tableRate=usSalesTaxCombinedRate(merged.salesTaxJurisdiction)
+    if(!merged.salesTaxRateTouched&&tableRate!==null)merged.salesTaxRate=tableRate
+    return merged
   } catch { return defaultEbayProfitAssumptions }
 }
 
@@ -3575,28 +3596,45 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
   },[selectedLocalProduct?.id])
   const selectedSaleCurrency=(selectedLocalProduct?.snapshot.details.currency||selectedListing?.currency||'USD').toUpperCase()
   const selectedSalePrice=ebayMoneyNumber(selectedLocalProduct?.snapshot.details.price||selectedListing?.price)
-  const saleRevenueCny=selectedSaleCurrency==='CNY'?selectedSalePrice:selectedSalePrice*profitAssumptions.exchangeRate
-  const categoryFeeRule=ebayCategoryFeeRule(selectedListing?.categoryName||'',selectedSalePrice)
+  // 「02 选择原图」的「查看页面」与本地产品卡同口径：PALLET- 前缀反查货盘下载图文档案，无 DOWNLOADED 档案时不渲染按钮
+  const selectedPalletWpId=palletWarehouseIdFromListingId(selectedLocalProduct?.listingId||'')
+  const selectedPalletItem=selectedPalletWpId?localPalletByWp[selectedPalletWpId]:undefined
+  const selectedPalletDownload=selectedPalletWpId?localDownloadsByWp[selectedPalletWpId]:undefined
+  const selectedPalletDownloadable=isSupplyDownloadOpenable(selectedPalletDownload)
+  const selectedPalletCategoryText=selectedPalletItem?buildEbayCategorySearchText([
+    selectedPalletItem.category?`${selectedPalletItem.category} / ${selectedPalletItem.subcategory||'—'} / ${selectedPalletItem.tertiaryCategory||'—'}`:'',
+    selectedPalletItem.sourceCategory?`${selectedPalletItem.sourceCategory} / ${selectedPalletItem.sourceSubcategory||''}`:''
+  ]):''
+  const selectedCategorySearchTexts=[selectedListing?.categoryName||'',selectedLocalProduct?.categoryName||'',selectedPalletCategoryText]
+  // 采用「建议销售价」后按覆盖价核算，未采用时按本地快照售价
+  const effectiveSalePrice=profitAssumptions.salePriceOverride??selectedSalePrice
+  const saleRevenueCny=selectedSaleCurrency==='CNY'?effectiveSalePrice:effectiveSalePrice*profitAssumptions.exchangeRate
+  const categoryFeeRule=ebayCategoryFeeRule(selectedCategorySearchTexts,effectiveSalePrice)
   const effectivePlatformFeeRate=profitAssumptions.platformFeeMode==='CATEGORY_RULE'?categoryFeeRule.rate:Math.max(0,profitAssumptions.platformFeeRate)
-  const automaticFixedFeeCny=(selectedSalePrice>0&&selectedSalePrice<=10?0.3:0.4)*profitAssumptions.exchangeRate
+  const automaticFixedFeeCny=(effectiveSalePrice>0&&effectiveSalePrice<=10?0.3:0.4)*profitAssumptions.exchangeRate
   const effectivePlatformFixedFeeCny=profitAssumptions.platformFeeMode==='CATEGORY_RULE'?automaticFixedFeeCny:Math.max(0,profitAssumptions.platformFixedFeeCny)
-  const platformFeeCny=saleRevenueCny*effectivePlatformFeeRate/100+effectivePlatformFixedFeeCny
+  // 与后台结算页同口径：计费基数 = 销售额 + 代收销售税，成交费与国际运费都按基数逐行计提
+  const feeBaseMultiplier=1+Math.max(0,profitAssumptions.salesTaxRate)/100
+  const platformFeeBreakdownCny=ebayPlatformFeeBreakdown({salePrice:saleRevenueCny,salesTaxRate:profitAssumptions.salesTaxRate,finalValueFeeRate:effectivePlatformFeeRate,internationalShippingRate:profitAssumptions.internationalShippingRate,fixedFee:effectivePlatformFixedFeeCny})
+  const internationalShippingFeeCny=platformFeeBreakdownCny.internationalShippingFee
   const promotionFeeCny=saleRevenueCny*Math.max(0,profitAssumptions.promotionFeeRate)/100
   const returnLossCny=saleRevenueCny*Math.max(0,profitAssumptions.returnLossRate)/100
-  const riskBufferCny=saleRevenueCny*Math.max(0,profitAssumptions.riskBufferRate)/100
+  // 采购与物流按美元录入，进公式前按核算汇率折算为人民币（同样四舍五入到分，与旧人民币口径数值等价）
+  const purchaseCostCny=Math.round(profitAssumptions.purchaseCostUsd*Math.max(0,profitAssumptions.exchangeRate)*100)/100
+  const logisticsCostCny=Math.round(profitAssumptions.logisticsCostUsd*Math.max(0,profitAssumptions.exchangeRate)*100)/100
   const fixedOperatingCostCny=[
-    profitAssumptions.purchaseCostCny,
-    profitAssumptions.logisticsCostCny,
+    purchaseCostCny,
+    logisticsCostCny,
     profitAssumptions.packagingCostCny,
     profitAssumptions.fulfillmentCostCny,
     profitAssumptions.otherCostCny,
     effectivePlatformFixedFeeCny
   ].reduce((total,value)=>total+Math.max(0,value),0)
   const variableCostRate=[
-    effectivePlatformFeeRate,
+    effectivePlatformFeeRate*feeBaseMultiplier,
+    profitAssumptions.internationalShippingRate*feeBaseMultiplier,
     profitAssumptions.promotionFeeRate,
-    profitAssumptions.returnLossRate,
-    profitAssumptions.riskBufferRate
+    profitAssumptions.returnLossRate
   ].reduce((total,value)=>total+Math.max(0,value),0)/100
   const totalCostCny=fixedOperatingCostCny+saleRevenueCny*variableCostRate
   const estimatedProfitCny=saleRevenueCny-totalCostCny
@@ -3608,20 +3646,113 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
   const priceCurrencyFactor=selectedSaleCurrency==='CNY'?1:Math.max(0,profitAssumptions.exchangeRate)
   const breakEvenSalePrice=priceCurrencyFactor>0?breakEvenRevenueCny/priceCurrencyFactor:0
   const targetSalePrice=priceCurrencyFactor>0?targetRevenueCny/priceCurrencyFactor:0
-  const profitReady=selectedSalePrice>0&&priceCurrencyFactor>0&&profitAssumptions.purchaseCostCny>0
-  const pricingReady=priceCurrencyFactor>0&&profitAssumptions.purchaseCostCny>0&&breakEvenDenominator>0&&targetMarginDenominator>0
+  // eBay 后台对账（美元）：与结算页逐格核对用，不参与利润公式
+  const salePriceUsd=selectedSaleCurrency==='CNY'?effectiveSalePrice/Math.max(0.0001,profitAssumptions.exchangeRate):effectiveSalePrice
+  const ebaySettlement=ebayPlatformFeeBreakdown({salePrice:salePriceUsd,salesTaxRate:profitAssumptions.salesTaxRate,finalValueFeeRate:effectivePlatformFeeRate,internationalShippingRate:profitAssumptions.internationalShippingRate,fixedFee:effectiveSalePrice>0&&effectiveSalePrice<=10?0.3:0.4})
+  const profitReady=effectiveSalePrice>0&&priceCurrencyFactor>0&&profitAssumptions.purchaseCostUsd>0
+  const pricingReady=priceCurrencyFactor>0&&profitAssumptions.purchaseCostUsd>0&&breakEvenDenominator>0&&targetMarginDenominator>0
   const updateProfitAssumption=(field:EbayNumericProfitField,value:string)=>{
     const numeric=Math.max(0,Number(value)||0)
-    setProfitAssumptions(current=>{const next={...current,[field]:numeric};saveEbayProfitAssumptions(selectedLocalProduct?.id||'',next);return next})
+    setProfitAssumptions(current=>{const next={...current,[field]:numeric,...(field==='salesTaxRate'?{salesTaxRateTouched:true}:{})};saveEbayProfitAssumptions(selectedLocalProduct?.id||'',next);return next})
+  }
+  const updateSalesTaxJurisdiction=(code:string)=>{
+    setProfitAssumptions(current=>{
+      const tableRate=usSalesTaxCombinedRate(code)
+      const next:EbayProfitAssumptions={...current,salesTaxJurisdiction:code,salesTaxRateTouched:false,...(tableRate!==null?{salesTaxRate:tableRate}:{})}
+      saveEbayProfitAssumptions(selectedLocalProduct?.id||'',next)
+      return next
+    })
   }
   const updateProfitFeeMode=(platformFeeMode:EbayProfitFeeMode)=>{
     setProfitAssumptions(current=>{const next={...current,platformFeeMode};saveEbayProfitAssumptions(selectedLocalProduct?.id||'',next);return next})
   }
+  const setSalePriceOverride=(override:number|null)=>{
+    setProfitAssumptions(current=>{const next={...current,salePriceOverride:override};saveEbayProfitAssumptions(selectedLocalProduct?.id||'',next);return next})
+  }
   const researchQuerySuggestion=selectedListing?ebayResearchQuerySuggestion(selectedListing):{query:'',source:'CATEGORY' as const}
-  // 「02 选择原图」的「查看页面」与本地产品卡同口径：PALLET- 前缀反查货盘下载图文档案，无 DOWNLOADED 档案时不渲染按钮
-  const selectedPalletWpId=palletWarehouseIdFromListingId(selectedLocalProduct?.listingId||'')
-  const selectedPalletDownload=selectedPalletWpId?localDownloadsByWp[selectedPalletWpId]:undefined
-  const selectedPalletDownloadable=isSupplyDownloadOpenable(selectedPalletDownload)
+  // 成本要素自动填充：汇率复用主进程 ai-employee:cny-usd-rate（1 小时缓存），采购/物流取自本产品货盘与下载档案，填充一次后不再覆盖手改
+  const [palletFxRate,setPalletFxRate]=useState<{cnyPerUsd:number;fetchedAt:string;source:string}|null>(null)
+  const [palletFxError,setPalletFxError]=useState('')
+  const [palletFxLoading,setPalletFxLoading]=useState(false)
+  const [costAutoFillNotice,setCostAutoFillNotice]=useState('')
+  const [costRefilling,setCostRefilling]=useState(false)
+  const refreshPalletFxRate=useCallback(async():Promise<{cnyPerUsd:number;fetchedAt:string}|null>=>{
+    setPalletFxLoading(true)
+    const failure='最新汇率暂时取不到（汇率服务或网络未响应），核算汇率保持原值，可点「重试取最新汇率」再来一次。'
+    try{
+      const rate=await window.desktop.aiEmployee.cnyUsdRate()
+      const usdPerCny=Number(rate?.usdPerCny)
+      if(!Number.isFinite(usdPerCny)||usdPerCny<=0){setPalletFxError(failure);return null}
+      const snapshot={cnyPerUsd:Math.round(10000/usdPerCny)/10000,fetchedAt:String(rate?.fetchedAt||'')}
+      setPalletFxRate({...snapshot,source:String(rate?.source||'')})
+      setPalletFxError('')
+      return snapshot
+    }catch{
+      setPalletFxError(failure)
+      return null
+    }finally{
+      setPalletFxLoading(false)
+    }
+  },[])
+  const autoFillPricingCosts=useCallback(async(force:boolean,rateSnapshot?:{cnyPerUsd:number;fetchedAt:string}|null)=>{
+    const product=selectedLocalProduct
+    if(!product)return
+    const stored=readEbayProfitAssumptions(product.id)
+    if(!force&&stored.autoFill)return
+    const snapshot=rateSnapshot!==undefined?rateSnapshot:(palletFxRate||await refreshPalletFxRate())
+    const rate=snapshot?.cnyPerUsd||0
+    const derived=deriveEbayCostAutoFill({
+      priceText:selectedPalletItem?.priceText,
+      estimatedTotal:selectedPalletDownload?.estimatedTotal,
+      shippingFeeText:selectedPalletItem?.shippingFeeText,
+      cnyPerUsd:rate
+    })
+    if(!derived.purchaseUsd&&!derived.logisticsUsd){
+      setCostAutoFillNotice(derived.warnings.join(''))
+      return
+    }
+    const feeRule=ebayCategoryFeeRule(selectedCategorySearchTexts,effectiveSalePrice)
+    const next:EbayProfitAssumptions={
+      ...stored,
+      exchangeRate:rate<=0?stored.exchangeRate:rate,
+      purchaseCostUsd:derived.purchaseUsd||stored.purchaseCostUsd,
+      logisticsCostUsd:derived.logisticsUsd||stored.logisticsCostUsd,
+      promotionFeeRate:stored.promotionFeeRate===legacyEbayProfitPromotionFeeRate?defaultEbayProfitAssumptions.promotionFeeRate:stored.promotionFeeRate,
+      targetMarginRate:stored.targetMarginRate===legacyEbayProfitTargetMarginRate?defaultEbayProfitAssumptions.targetMarginRate:stored.targetMarginRate,
+      autoFill:{
+        at:new Date().toISOString(),
+        cnyPerUsd:rate,
+        rateFetchedAt:snapshot?.fetchedAt||'',
+        purchaseUsd:derived.purchaseUsd,
+        purchaseSource:derived.purchaseSource,
+        logisticsUsd:derived.logisticsUsd,
+        logisticsSource:derived.logisticsSource,
+        feeLabel:feeRule.label
+      }
+    }
+    saveEbayProfitAssumptions(product.id,next)
+    setProfitAssumptions(next)
+    setCostAutoFillNotice([
+      `已按本产品数据自动填充：采购成本 $${next.purchaseCostUsd.toFixed(2)}、物流成本 $${next.logisticsCostUsd.toFixed(2)}、核算汇率 ${next.exchangeRate.toFixed(4)}、eBay 成交费率 ${stored.platformFeeMode==='MANUAL'?`${next.platformFeeRate}%（手动档）`:`${feeRule.rate}%`}、推广成交佣金 ${next.promotionFeeRate}%、目标毛利率 ${next.targetMarginRate}%。`,
+      ...derived.warnings
+    ].join(''))
+  },[selectedLocalProduct?.id,selectedPalletItem?.priceText,selectedPalletItem?.shippingFeeText,selectedPalletDownload?.estimatedTotal,selectedCategorySearchTexts.join('|'),effectiveSalePrice,selectedSaleCurrency,palletFxRate,refreshPalletFxRate])
+  useEffect(()=>{
+    if(optimizeMode!=='pricing'||!selectedLocalProduct)return
+    void autoFillPricingCosts(false)
+  },[optimizeMode,selectedLocalProduct?.id,palletFxRate,autoFillPricingCosts])
+  useEffect(()=>{setCostAutoFillNotice('')},[selectedLocalProduct?.id])
+  const refillPricingCosts=async()=>{
+    setCostRefilling(true)
+    try{
+      await autoFillPricingCosts(true,await refreshPalletFxRate())
+    } finally{ setCostRefilling(false) }
+  }
+  const autoFilledCny=(usd:number)=>Math.round(usd*(profitAssumptions.autoFill?.cnyPerUsd||profitAssumptions.exchangeRate)*100)/100
+  const rateTakenAtText=profitAssumptions.autoFill?.rateFetchedAt?new Date(profitAssumptions.autoFill.rateFetchedAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):''
+  const salesTaxTableRate=usSalesTaxCombinedRate(profitAssumptions.salesTaxJurisdiction)
+  const salesTaxJurisdictionLabel=usSalesTaxLabel(profitAssumptions.salesTaxJurisdiction)
+  const costAutoFillSummary=profitAssumptions.autoFill?`成本要素已按本产品数据取值${rateTakenAtText?`（汇率取自 ${rateTakenAtText}）`:''}，手改不会被自动覆盖；需要重新取值可点「按产品数据重新填充」。`:''
   const selectedDownloadedMedia=selectedLocalProduct?.snapshot.media.filter(media=>media.downloadStatus==='DOWNLOADED'&&Boolean(media.localPath))||[]
   const selectedReadableMedia=selectedDownloadedMedia.filter(media=>media.width>0&&media.height>0&&Boolean(media.sha256))
   const selectedCompliantMedia=selectedReadableMedia.filter(media=>Math.max(media.width,media.height)>=500)
@@ -4459,20 +4590,27 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
           <div className="ebay-description-rules"><b>一致性保护</b><span>✓ 原始规格、包装、安装和注意事项完整保留</span><span>✓ 痛点、客户利益及场景必须绑定真实事实编号</span><span>✓ Qwen-MT Flash 逐段翻译，数字、单位、SKU 与段落顺序保持一致</span><span>✓ 中文稿不作为 eBay 发布内容</span></div>
         </div>}
         {optimizeMode==='pricing'&&<div className="ebay-profit-workbench">
-          <header><div><b>售价与利润核算</b><small>录入完整经营成本，计算当前利润、保本售价与目标毛利售价。</small></div><span className={!profitAssumptions.purchaseCostCny?'pending':!pricingReady?'negative':'positive'}>{!profitAssumptions.purchaseCostCny?'待录采购成本':!pricingReady?'费率合计过高':'目标售价已生成'}</span></header>
+          <header><div><b>售价与利润核算</b><small>录入完整经营成本，计算当前利润、保本售价与目标毛利售价。</small></div><span className={!profitAssumptions.purchaseCostUsd?'pending':!pricingReady?'negative':'positive'}>{!profitAssumptions.purchaseCostUsd?'待录采购成本':!pricingReady?'费率合计过高':'目标售价已生成'}</span></header>
           <div className="ebay-profit-summary">
-            <article><small>eBay 当前售价</small><b>{selectedSalePrice>0?ebayDisplayPrice(selectedSaleCurrency,String(selectedSalePrice)):'售价未读取'}</b><span>来自本地商品快照</span></article>
+            <article><small>eBay 当前售价</small><b>{selectedSalePrice>0?ebayDisplayPrice(selectedSaleCurrency,String(selectedSalePrice)):'售价未读取'}</b><span>{profitAssumptions.salePriceOverride!=null?`快照价，核算已采用建议销售价 ${ebayDisplayPrice(selectedSaleCurrency,String(profitAssumptions.salePriceOverride))}`:'来自本地商品快照'}</span></article>
             <article className={pricingReady?'positive':'pending'}><small>保本售价</small><b>{pricingReady?ebayDisplayPrice(selectedSaleCurrency,String(breakEvenSalePrice.toFixed(2))):'待核算'}</b><span>覆盖全部固定成本与比例费用</span></article>
             <article className={pricingReady?'positive':'pending'}><small>目标毛利售价</small><b>{pricingReady?ebayDisplayPrice(selectedSaleCurrency,String(targetSalePrice.toFixed(2))):'待核算'}</b><span>目标毛利率 {profitAssumptions.targetMarginRate.toFixed(1)}%</span></article>
             <article className={!profitReady?'pending':estimatedProfitCny>=0?'positive':'negative'}><small>当前预计利润 / 利润率</small><b>{profitReady?`¥${estimatedProfitCny.toFixed(2)}`:'待核算'}</b><span>{profitReady?`${estimatedProfitMargin.toFixed(1)}% · 总成本 ¥${totalCostCny.toFixed(2)}`:'请录入采购成本'}</span></article>
           </div>
           <div className="ebay-profit-input-groups">
             <section>
-              <header><b>成本要素</b><small>全部按单件人民币口径录入</small></header>
+              <header><b>成本要素</b><small>采购与物流按美元（$）单件录入，其余按人民币（¥）单件录入</small></header>
+              <div className="ebay-profit-autofill-row">
+                <small className={palletFxError||costAutoFillNotice.includes('保持原值')?'warn':''}>{palletFxError||costAutoFillNotice||costAutoFillSummary||'正在按本产品数据自动填充成本要素…'}</small>
+                <span>
+                  <button type="button" disabled={costRefilling} onClick={()=>void refillPricingCosts()}>{costRefilling?'正在重新填充…':'按产品数据重新填充'}</button>
+                  {palletFxError?<button type="button" disabled={palletFxLoading} onClick={()=>void refreshPalletFxRate()}>{palletFxLoading?'正在取汇率…':'重试取最新汇率'}</button>:null}
+                </span>
+              </div>
               <div className="ebay-profit-fields">
-                <label>外币→人民币核算汇率<input type="number" min="0" step="0.0001" value={profitAssumptions.exchangeRate} disabled={selectedSaleCurrency==='CNY'} onChange={event=>updateProfitAssumption('exchangeRate',event.target.value)}/><small>{selectedSaleCurrency==='CNY'?'当前售价为人民币，无需换算。':'用于售价换算和固定成交费换算。'}</small></label>
-                <label>采购成本<input type="number" min="0" step="0.01" value={profitAssumptions.purchaseCostCny} onChange={event=>updateProfitAssumption('purchaseCostCny',event.target.value)}/><small>供应链采购价或含税采购价。</small></label>
-                <label>物流成本<input type="number" min="0" step="0.01" value={profitAssumptions.logisticsCostCny} onChange={event=>updateProfitAssumption('logisticsCostCny',event.target.value)}/><small>头程、尾程和跨境运输。</small></label>
+                <label>外币→人民币核算汇率<input type="number" min="0" step="0.0001" value={profitAssumptions.exchangeRate} onChange={event=>updateProfitAssumption('exchangeRate',event.target.value)}/><small>{!profitAssumptions.autoFill?'用于把美元成本折算为人民币，并换算固定成交费。':Math.abs(profitAssumptions.exchangeRate-profitAssumptions.autoFill.cnyPerUsd)<0.0001?`自动取自最新汇率 ${profitAssumptions.autoFill.cnyPerUsd.toFixed(4)}${rateTakenAtText?` · ${rateTakenAtText}取值`:''}，可手动覆盖。`:`已手动改为 ${profitAssumptions.exchangeRate}（自动取值 ${profitAssumptions.autoFill.cnyPerUsd.toFixed(4)}${rateTakenAtText?` · ${rateTakenAtText}取值`:''}，点「按产品数据重新填充」才会覆盖）。`}</small></label>
+                <label>采购成本（美元）<input type="number" min="0" step="0.01" value={profitAssumptions.purchaseCostUsd} onChange={event=>updateProfitAssumption('purchaseCostUsd',event.target.value)}/><small>{!profitAssumptions.autoFill?.purchaseSource?'供应链采购价或含税采购价（美元）。':Math.abs(profitAssumptions.purchaseCostUsd-profitAssumptions.autoFill.purchaseUsd)<0.005?`${profitAssumptions.autoFill.purchaseSource}，按核算汇率折合 ¥${autoFilledCny(profitAssumptions.autoFill.purchaseUsd).toFixed(2)}，可手动覆盖。`:`已手动改为 $${profitAssumptions.purchaseCostUsd.toFixed(2)}（自动取值 $${profitAssumptions.autoFill.purchaseUsd.toFixed(2)}，点「按产品数据重新填充」才会覆盖）。`}</small></label>
+                <label>物流成本（美元）<input type="number" min="0" step="0.01" value={profitAssumptions.logisticsCostUsd} onChange={event=>updateProfitAssumption('logisticsCostUsd',event.target.value)}/><small>{!profitAssumptions.autoFill?.logisticsSource?'头程、尾程和跨境运输（美元）。':Math.abs(profitAssumptions.logisticsCostUsd-profitAssumptions.autoFill.logisticsUsd)<0.005?`${profitAssumptions.autoFill.logisticsSource}，按核算汇率折合 ¥${autoFilledCny(profitAssumptions.autoFill.logisticsUsd).toFixed(2)}，可手动覆盖。`:`已手动改为 $${profitAssumptions.logisticsCostUsd.toFixed(2)}（自动取值 $${profitAssumptions.autoFill.logisticsUsd.toFixed(2)}，点「按产品数据重新填充」才会覆盖）。`}</small></label>
                 <label>包装成本<input type="number" min="0" step="0.01" value={profitAssumptions.packagingCostCny} onChange={event=>updateProfitAssumption('packagingCostCny',event.target.value)}/><small>包装材料和加固耗材。</small></label>
                 <label>仓配履约成本<input type="number" min="0" step="0.01" value={profitAssumptions.fulfillmentCostCny} onChange={event=>updateProfitAssumption('fulfillmentCostCny',event.target.value)}/><small>入库、拣货、出库等仓配费用。</small></label>
                 <label>其他固定成本<input type="number" min="0" step="0.01" value={profitAssumptions.otherCostCny} onChange={event=>updateProfitAssumption('otherCostCny',event.target.value)}/><small>支付、税费或其他单件杂项。</small></label>
@@ -4482,21 +4620,24 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
               <header><b>平台与经营费率</b><small>类目规则可自动估算，也可按账单手动覆盖</small></header>
               <div className="ebay-profit-fields">
                 <label>eBay 费率来源<select value={profitAssumptions.platformFeeMode} onChange={event=>updateProfitFeeMode(event.target.value as EbayProfitFeeMode)}><option value="CATEGORY_RULE">按商品类目估算</option><option value="MANUAL">手动输入费率</option></select><small>{profitAssumptions.platformFeeMode==='CATEGORY_RULE'?categoryFeeRule.label:'使用自定义平台费率和固定费。'}</small></label>
-                <label>eBay 成交费率（%）<input type="number" min="0" max="100" step="0.1" value={profitAssumptions.platformFeeMode==='CATEGORY_RULE'?effectivePlatformFeeRate:profitAssumptions.platformFeeRate} disabled={profitAssumptions.platformFeeMode==='CATEGORY_RULE'} onChange={event=>updateProfitAssumption('platformFeeRate',event.target.value)}/><small>按销售额计提，不含固定成交费。</small></label>
+                <label>eBay 成交费率（%）<input type="number" min="0" max="100" step="0.1" value={profitAssumptions.platformFeeMode==='CATEGORY_RULE'?effectivePlatformFeeRate:profitAssumptions.platformFeeRate} disabled={profitAssumptions.platformFeeMode==='CATEGORY_RULE'} onChange={event=>updateProfitAssumption('platformFeeRate',event.target.value)}/><small>按计费基数（售价+销售税）计提，不含固定成交费。</small></label>
                 <label>固定成交费（人民币）<input type="number" min="0" step="0.01" value={profitAssumptions.platformFeeMode==='CATEGORY_RULE'?effectivePlatformFixedFeeCny.toFixed(2):profitAssumptions.platformFixedFeeCny} disabled={profitAssumptions.platformFeeMode==='CATEGORY_RULE'} onChange={event=>updateProfitAssumption('platformFixedFeeCny',event.target.value)}/><small>{profitAssumptions.platformFeeMode==='CATEGORY_RULE'?'按每笔订单外币固定费换算。':'填写每笔订单固定费用。'}</small></label>
-                <label>推广成交佣金（%）<input type="number" min="0" max="100" step="0.1" value={profitAssumptions.promotionFeeRate} onChange={event=>updateProfitAssumption('promotionFeeRate',event.target.value)}/><small>广告成交后按销售额计提的比例。</small></label>
-                <label>退货损耗预留（%）<input type="number" min="0" max="100" step="0.1" value={profitAssumptions.returnLossRate} onChange={event=>updateProfitAssumption('returnLossRate',event.target.value)}/><small>按历史退货与不可回收成本预留。</small></label>
-                <label>风险缓冲（%）<input type="number" min="0" max="100" step="0.1" value={profitAssumptions.riskBufferRate} onChange={event=>updateProfitAssumption('riskBufferRate',event.target.value)}/><small>汇率波动、赔付和异常费用预留。</small></label>
+                <label>收货州（法定税率）<select value={profitAssumptions.salesTaxJurisdiction} onChange={event=>updateSalesTaxJurisdiction(event.target.value)}><option value={US_SALES_TAX_NATIONAL}>全国平均（51 辖区简单平均 {usSalesTaxNationalAverageRate()}%）</option>{US_SALES_TAX_TABLE.map(item=><option key={item.code} value={item.code}>{item.name}（{item.code}）· {item.combinedRate}%</option>)}</select><small>eBay 依美国各州法律对买家代收销售税，逐单按收货地址计；核算取所选辖区代表值（{US_SALES_TAX_TABLE_VERSION}）。</small></label>
+                <label>代收销售税率（%）<input type="number" min="0" max="100" step="0.01" value={profitAssumptions.salesTaxRate} onChange={event=>updateProfitAssumption('salesTaxRate',event.target.value)}/><small>{salesTaxTableRate===null?'未识别收货州，税率保持手填值，请重新选择收货州。':profitAssumptions.salesTaxRateTouched?`已手动改为 ${profitAssumptions.salesTaxRate}%（${salesTaxJurisdictionLabel}表内 ${salesTaxTableRate}%，重新选择收货州才会覆盖）。`:`自动取自${salesTaxJurisdictionLabel}法定综合税率 ${salesTaxTableRate}%（${US_SALES_TAX_TABLE_VERSION}），可手动覆盖。`}</small></label>
+                <label>国际运费费率（%）<input type="number" min="0" max="100" step="0.1" value={profitAssumptions.internationalShippingRate} onChange={event=>updateProfitAssumption('internationalShippingRate',event.target.value)}/><small>跨境发货按计费基数收取（美国站当前 1.3%），本土发货可置 0。</small></label>
               </div>
             </section>
             <section className="target">
-              <header><b>目标利润</b><small>反推不亏本售价和目标毛利售价</small></header>
+              <header><b>目标利润</b><small>推广佣金与退货预留按销售额计提；建议销售价按目标毛利率反推，可采用为核算售价</small></header>
               <div className="ebay-profit-fields">
+                <label>推广成交佣金（%）<input type="number" min="0" max="100" step="0.1" value={profitAssumptions.promotionFeeRate} onChange={event=>updateProfitAssumption('promotionFeeRate',event.target.value)}/><small>广告成交后按销售额计提的比例。</small></label>
+                <label>退货损耗预留（%）<input type="number" min="0" max="100" step="0.1" value={profitAssumptions.returnLossRate} onChange={event=>updateProfitAssumption('returnLossRate',event.target.value)}/><small>按历史退货与不可回收成本预留。</small></label>
                 <label>目标毛利率（%）<input type="number" min="0" max="80" step="0.1" value={profitAssumptions.targetMarginRate} onChange={event=>updateProfitAssumption('targetMarginRate',event.target.value)}/><small>目标毛利按销售额口径计算。</small></label>
+                <label>建议销售价（{selectedSaleCurrency}）<span className="ebay-profit-target-price"><input readOnly value={targetSalePrice.toFixed(2)}/><button type="button" onClick={()=>setSalePriceOverride(profitAssumptions.salePriceOverride==null?Math.round(targetSalePrice*100)/100:null)}>{profitAssumptions.salePriceOverride==null?'采用为核算售价':'恢复快照售价'}</button></span><small>{profitAssumptions.salePriceOverride==null?`按目标毛利率 ${profitAssumptions.targetMarginRate.toFixed(1)}% 反推；当前核算仍按快照售价 ${ebayDisplayPrice(selectedSaleCurrency,String(selectedSalePrice))}。`:`核算与对账已采用 ${ebayDisplayPrice(selectedSaleCurrency,String(profitAssumptions.salePriceOverride))}；快照售价 ${ebayDisplayPrice(selectedSaleCurrency,String(selectedSalePrice))} 仅作对照。`}</small></label>
               </div>
             </section>
           </div>
-          <div className="ebay-profit-formula"><b>核算结果</b><span>当前销售额 ¥{saleRevenueCny.toFixed(2)} − 固定成本 ¥{fixedOperatingCostCny.toFixed(2)} − 平台比例费 ¥{(platformFeeCny-effectivePlatformFixedFeeCny).toFixed(2)} − 推广 ¥{promotionFeeCny.toFixed(2)} − 退货预留 ¥{returnLossCny.toFixed(2)} − 风险缓冲 ¥{riskBufferCny.toFixed(2)} = 预计利润 ¥{estimatedProfitCny.toFixed(2)}</span><span>保本价 = 固定成本 ÷（1 − 综合比例费率 {(variableCostRate*100).toFixed(1)}%）；目标售价再扣除目标毛利率 {profitAssumptions.targetMarginRate.toFixed(1)}%。</span><small>类目费率是本地规则估算，可切换为手动覆盖；最终利润以 eBay 实际账单、广告账单和物流账单为准。参数按本地产品独立保存。</small></div>
+          <div className="ebay-profit-formula"><b>核算结果</b><span>当前销售额{profitAssumptions.salePriceOverride!=null?'（已采用建议销售价）':''} ¥{saleRevenueCny.toFixed(2)} − 固定成本 ¥{fixedOperatingCostCny.toFixed(2)} − 平台比例费 ¥{platformFeeBreakdownCny.finalValueFee.toFixed(2)} − 国际运费 ¥{internationalShippingFeeCny.toFixed(2)} − 推广 ¥{promotionFeeCny.toFixed(2)} − 退货预留 ¥{returnLossCny.toFixed(2)} = 预计利润 ¥{estimatedProfitCny.toFixed(2)}</span><span>保本价 = 固定成本 ÷（1 − 综合比例费率 {(variableCostRate*100).toFixed(1)}%）；目标售价再扣除目标毛利率 {profitAssumptions.targetMarginRate.toFixed(1)}%。</span><span>eBay 后台对账（美元，与结算页同口径）：计费基数 ${ebaySettlement.feeBase.toFixed(2)} → 成交费 ${ebaySettlement.finalValueFee.toFixed(2)} + 国际运费 ${ebaySettlement.internationalShippingFee.toFixed(2)} = 商品总费用 ${ebaySettlement.goodsFeeTotal.toFixed(2)}；加固定成交费 ${ebaySettlement.fixedFee.toFixed(2)} = 总费用 ${ebaySettlement.totalFees.toFixed(2)}；净收益 ${ebaySettlement.netProceeds.toFixed(2)}（售价−总费用，不扣采购/物流，仅对账）</span><small>类目费率是本地规则估算，可切换为手动覆盖；费率按首档上限内计（如家居与园艺 $2,500、汽配 $1,000），超出部分 eBay 另按低档费率收取，高客单请手动覆盖。最终利润以 eBay 实际账单、广告账单和物流账单为准。参数按本地产品独立保存。</small></div>
         </div>}
         {optimizeMode==='video'&&(contentResult?<EbayVideoStudio listingId={selectedListing.listingId} title={selectedTitle||selectedTitleEnglish} description={currentEnglishDescription} chineseDescription={contentResult.chineseReference||''} imageUrls={finalImageUrls} storyboard={contentResult.storyboard} imagesReady={finalImageInspectionPassed}/>:<div className="ebay-video-storyboard"><header><div><b>15秒产品视频生成</b><small>视频会直接读取描述优化内容和图片优化最终稿。</small></div><button className="primary" disabled={!selectedTitle||busy==='optimize-content'} onClick={()=>void optimizeContent()}>{busy==='optimize-content'?'生成中…':'先生成描述与视频脚本'}</button></header><div className="ebay-ai-placeholder">请先完成02描述优化，系统将自动生成视频脚本并进入方舟视频工作台。</div></div>)}
         {titleResult&&!lockTitleMode&&<div className="ebay-optimization-footer"><div><small>{optimizeMode==='pricing'?'保存后不会直接修改线上商品':`当前环节：${optimizeStageLabels[optimizeMode]}`}</small><b>{optimizeMode==='pricing'?(!complianceCheck?'尚未执行合规知识库检查':complianceCheck.gateStatus==='PASSED'?'合规门禁已通过':complianceCheck.gateStatus==='REVIEW_REQUIRED'&&complianceReviewed?'人工复核已确认':`合规门禁：${complianceCheck.gateStatus}`):nextOptimizeStatus}</b></div>{optimizeMode==='pricing'?<button className="primary" disabled={!selectedTitle||busy==='save-premium'||!complianceCheck||!imageVisualReport||!imageAdoptionComplete||finalImageChecking||!finalImageInspection||finalImageInspection.blocked>0||finalImageInspection.review>0||complianceCheck.gateStatus==='BLOCKED'||complianceCheck.gateStatus==='RECHECK_REQUIRED'||complianceCheck.gateStatus==='REVIEW_REQUIRED'&&!complianceReviewed} onClick={()=>void saveToPremium()}>{busy==='save-premium'?'保存中…':'确认并存入优品仓库'}</button>:<button className="primary" disabled={!nextOptimizeReady} title={nextOptimizeReady?'进入下一个优化环节':nextOptimizeStatus} onClick={goToNextOptimizeStage}>下一步：{nextOptimizeMode?optimizeStageLabels[nextOptimizeMode]:''}</button>}</div>}</div>:lockTitleMode?<div className="ebay-title-empty-state"><div className="ebay-title-tools"><div className="ebay-title-tools-row"><button type="button" className={titleBrowserUrl==='https://www.ebay.com/'?'active':''} onClick={()=>void openTitleBrowser('https://www.ebay.com/')}>eBay</button><button type="button" className={titleBrowserUrl==='https://www.gigab2b.com/'?'active':''} onClick={()=>void openTitleBrowser('https://www.gigab2b.com/')}>大健云仓</button><button type="button" className={titleCustomUrlOpen?'active':''} onClick={()=>setTitleCustomUrlOpen(open=>!open)}>新建</button><span className="ebay-title-tools-spacer"/><button type="button" className="primary" disabled={!titleUrlInput.trim()||busy==='read-title-url'} onClick={()=>void readTitleProductByUrl()}>{busy==='read-title-url'?'正在读取…':'读取产品'}</button></div>{titleCustomUrlOpen&&<div className="ebay-title-custom-url-row"><input value={titleCustomUrl} onChange={event=>setTitleCustomUrl(event.target.value)} onKeyDown={event=>{if(event.key==='Enter')openTitleCustomUrl()}} placeholder="输入任意网址，例如 https://www.aliexpress.com"/><button type="button" disabled={!titleCustomUrl.trim()} onClick={openTitleCustomUrl}>访问</button></div>}</div><div className="ebay-title-url-form"><header><b>输入目标产品网址</b><small>粘贴 eBay 商品链接，系统读取产品并建立本地快照后，原地开始标题优化。</small></header><div className="ebay-title-url-row"><input value={titleUrlInput} onChange={event=>setTitleUrlInput(event.target.value)} onKeyDown={event=>{if(event.key==='Enter')void readTitleProductByUrl()}} placeholder="https://www.ebay.com/itm/123456789012"/><button type="button" className="primary" disabled={!titleUrlInput.trim()||busy==='read-title-url'} onClick={()=>void readTitleProductByUrl()}>{busy==='read-title-url'?'正在读取…':'读取产品'}</button></div>{titleUrlError&&<p className="ebay-title-url-error">{titleUrlError}</p>}</div>{titleBrowserUrl&&<div className="ebay-title-browser"><div className="ebay-title-browser-bar"><span title={titleBrowserUrl}>{titleBrowserUrl}</span><button type="button" onClick={closeTitleBrowser}>关闭浏览器</button></div><div ref={titleBrowserSlot} className="ebay-title-browser-slot"><div className="browser-placeholder">正在打开浏览器…</div></div></div>}</div>:<EbayEmpty title="请选择本地产品" description="AI优化读取本地产品快照，请先从我的货盘送入产品，或从线上产品下载后在本地产品选择进入。" action="前往本地产品" onAction={()=>setActiveTab('local')}/>}</section></div>}
