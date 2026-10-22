@@ -755,6 +755,9 @@ export interface EbayOptimizationDraft {
   imageUrls?:string[]
   storyboard?:EbayVideoStoryboardShot[]
   marketDecision?:EbayMarketDecisionReport
+  /** 「05 售价设定」确认的核算售价；与 listing.price（eBay 线上快照价）分开记录，入库后仍可对照 */
+  salePrice?:string
+  saleCurrency?:string
   scoreBefore:number
   scoreAfter:number
   complianceCheckId?:string
