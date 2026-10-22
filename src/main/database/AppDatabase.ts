@@ -5,6 +5,7 @@ import type { CandidateCollectionRecord, CandidateCollectionRun, CandidateUpdate
 import { complianceCheckFingerprint } from '../../shared/complianceFingerprint'
 import { mergeCandidateFacts } from '../../shared/candidateFactsMerge'
 import { badgeFallbackScore } from '../../shared/badgeScore'
+import { normalizeEnglishDescription } from '../../shared/ebaySpecificsEnglish'
 
 function isUsableCandidateImage(value: string) {
   return /^https?:\/\//i.test(value) && !/(?:product_base|placeholder|default[-_]?image|loading|lazyload|blank|transparent|no[-_]?image)/i.test(value)
@@ -1661,12 +1662,17 @@ export class AppDatabase {
 
   getEbayOptimizationDrafts(storeId?:string):EbayOptimizationDraft[] {
     const rows=(storeId?this.database.prepare(`SELECT payload FROM ebay_optimization_drafts WHERE store_id=? ORDER BY updated_at DESC`).all(storeId):this.database.prepare(`SELECT payload FROM ebay_optimization_drafts ORDER BY updated_at DESC`).all()) as unknown as Array<{payload:string}>
-    return rows.map(row=>JSON.parse(row.payload) as EbayOptimizationDraft)
+    // 读取时一次性规范化：旧草稿详情里的中文规格键英译/丢弃，落库内容不动，用户手改的英文行原样保留
+    return rows.map(row=>{const draft=JSON.parse(row.payload) as EbayOptimizationDraft;return {...draft,description:normalizeEnglishDescription(draft.description||'')}})
   }
 
   getEbayContentOptimizationRecord(storeId:string,listingId:string):EbayContentOptimizationRecord|undefined {
     const row=this.database.prepare(`SELECT payload FROM ebay_content_optimization_records WHERE store_id=? AND listing_id=?`).get(storeId,listingId) as {payload:string}|undefined
-    return row?JSON.parse(row.payload) as EbayContentOptimizationRecord:undefined
+    if(!row)return undefined
+    // 读取时一次性规范化：旧记录区块与最终详情里的中文规格键英译/丢弃，落库内容不动
+    const record=JSON.parse(row.payload) as EbayContentOptimizationRecord
+    const result=record.result
+    return {...record,result:{...result,englishDescription:normalizeEnglishDescription(result.englishDescription||''),sections:(result.sections||[]).map(section=>({...section,content:normalizeEnglishDescription(section.content)})),sourceFacts:(result.sourceFacts||[]).map(fact=>({...fact,text:normalizeEnglishDescription(fact.text)}))}}
   }
 
   saveEbayContentOptimizationRecord(input:EbayContentOptimizationRecordInput):EbayContentOptimizationRecord {

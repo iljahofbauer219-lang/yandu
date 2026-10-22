@@ -1,6 +1,7 @@
 import type { EbayContentBenefit, EbayContentFactKind, EbayContentOptimizationRequest, EbayContentOptimizationResult, EbayContentScenario, EbayContentSection, EbayContentSourceFact, EbayTitleOptimizationRequest, EbayTitleOptimizationResult } from '../../shared/contracts'
 import { buildEbayMarketDecisionReport } from '../../shared/ebayMarketDecision'
 import { parseCategoryClassifyReply } from '../../shared/palletCategoryMatch'
+import { containsCjk, englishSpecificLabel, normalizeEnglishDescription } from '../../shared/ebaySpecificsEnglish'
 
 interface ChatResponse {
   choices?:Array<{finish_reason?:string;message?:{content?:string|null;reasoning_content?:string|null}}>
@@ -198,7 +199,10 @@ function sourceFacts(request:EbayContentOptimizationRequest):EbayContentSourceFa
     // 产地/Country of Origin 不参与详情页生成内容方案
     if(nameLower.includes('country')&&nameLower.includes('origin'))continue
     if(nameLower==='产地'||nameLower==='原产国'||nameLower==='原产地')continue
-    add(`${item.name.trim()}: ${item.value.trim()}`,'ITEM_SPECIFIC',`eBay 属性：${item.name}`,'SPECIFICATION')
+    // 英文详情页不得出现中文：键名英译后再入事实，映射表外或值含中文的条目整条丢弃
+    const label=englishSpecificLabel(item.name)
+    if(!label||containsCjk(item.value))continue
+    add(`${label}: ${item.value.trim()}`,'ITEM_SPECIFIC',`eBay 属性：${item.name}`,'SPECIFICATION')
   }
   if(request.sellerNotes?.trim())add(request.sellerNotes,'SELLER_NOTE','卖家备注','CARE')
   const seen=new Set<string>()
@@ -367,11 +371,11 @@ export class EbayOptimizationService {
 
   async optimizeContent(request:EbayContentOptimizationRequest):Promise<EbayContentOptimizationResult> {
     if(!this.apiKey)throw new Error('未配置 DeepSeek API Key，暂时无法生成详情内容')
-    const facts=request.itemSpecifics.filter(item=>item.name.trim()&&item.value.trim())
+    const facts=request.itemSpecifics.filter(item=>item.name.trim()&&item.value.trim()).map(item=>({name:englishSpecificLabel(item.name),value:item.value.trim()})).filter(item=>Boolean(item.name)&&!containsCjk(item.value))
     const verifiedFacts=sourceFacts(request)
     if(!verifiedFacts.length)throw new Error('本地快照没有可用的原始详情或商品属性，请先同步 eBay 详情')
     const messages=[
-      {role:'system',content:`你是 eBay 美国站高转化详情页编辑。只能根据 sourceFacts 中的真实事实写作，不得增加品牌、材质、尺寸、性能、认证、包装数量、配件、适用对象、产地、物流、退货、质保或促销承诺。先用自然英文概括商品，再把真实功能转换成客户痛点、解决方式和客户利益，并给出合理应用场景。痛点、利益和场景都必须提供至少一个真实 evidenceFactIds；不得把锁扣写成防盗。所有效果只能保守表达为 helps、designed to、suitable for，不得使用 prevent、guarantee、never、perfect、100% 等绝对化词语。应用场景只能使用 sourceFacts 原文已经明确出现的物品或用途，不得擅自添加 signed、autograph、man cave、game room、home office、museum、retail、gift 等对象或地点。客户利益只能解释已有功能如何帮助顾客，不得增加使用时间、维护频率、性能等级或结果保证。请生成5组 benefits 和5个 scenarios，系统会过滤不合格内容并至少保留3组。视频分镜只能描述如何使用现有商品图片，不得假装视频已经生成。不要重新输出规格和包装清单，系统会从原始事实确定性排版并保证完整保留。中文翻译由独立翻译模型处理，不要生成中文稿。只输出JSON：{"overview":"120-180词英文概述","benefits":[{"painPoint":"...","solution":"...","customerBenefit":"...","evidenceFactIds":["F001"]}],"scenarios":[{"title":"...","description":"...","evidenceFactIds":["F001"]}],"storyboard":[{"order":1,"durationSeconds":3,"visual":"...","caption":"...","sourceRequirement":"..."}]}`},
+      {role:'system',content:`你是 eBay 美国站高转化详情页编辑。只能根据 sourceFacts 中的真实事实写作，不得增加品牌、材质、尺寸、性能、认证、包装数量、配件、适用对象、产地、物流、退货、质保或促销承诺。先用自然英文概括商品，再把真实功能转换成客户痛点、解决方式和客户利益，并给出合理应用场景。痛点、利益和场景都必须提供至少一个真实 evidenceFactIds；不得把锁扣写成防盗。所有效果只能保守表达为 helps、designed to、suitable for，不得使用 prevent、guarantee、never、perfect、100% 等绝对化词语。应用场景只能使用 sourceFacts 原文已经明确出现的物品或用途，不得擅自添加 signed、autograph、man cave、game room、home office、museum、retail、gift 等对象或地点。客户利益只能解释已有功能如何帮助顾客，不得增加使用时间、维护频率、性能等级或结果保证。请生成5组 benefits 和5个 scenarios，系统会过滤不合格内容并至少保留3组。视频分镜只能描述如何使用现有商品图片，不得假装视频已经生成。不要重新输出规格和包装清单，系统会从原始事实确定性排版并保证完整保留。中文翻译由独立翻译模型处理，不要生成中文稿。输出的所有文本字段（overview、benefits 各项、scenarios 各项、storyboard 各项）必须全英文，不得出现中文字符；itemSpecifics 键名已英译。只输出JSON：{"overview":"120-180词英文概述","benefits":[{"painPoint":"...","solution":"...","customerBenefit":"...","evidenceFactIds":["F001"]}],"scenarios":[{"title":"...","description":"...","evidenceFactIds":["F001"]}],"storyboard":[{"order":1,"durationSeconds":3,"visual":"...","caption":"...","sourceRequirement":"..."}]}`},
       {role:'user',content:JSON.stringify({originalTitle:request.originalTitle,selectedTitle:request.selectedTitle,categoryName:request.categoryName,condition:request.condition||'',itemSpecifics:facts,sourceFacts:verifiedFacts})}
     ]
     let parsed:Record<string,unknown>|undefined
@@ -396,12 +400,14 @@ export class EbayOptimizationService {
     if(!parsed||!conversion)throw new Error(`${lastError||'AI 详情内容不完整'}，系统自动重试后仍未达到完整度要求`)
     const {benefits,scenarios,unsupportedClaimCount}=conversion
     const overview=verifiedOverview(request,verifiedFacts)
-    const sections:EbayContentSection[]=[
+    const rawSections:EbayContentSection[]=[
       {id:'SUMMARY',title:'Product Overview',content:overview},
       {id:'PROBLEMS',title:'Customer Problems & Solutions',content:benefits.map((item,index)=>`${index+1}. ${item.painPoint}\nHow it helps: ${item.solution}\nCustomer benefit: ${item.customerBenefit}`).join('\n\n')},
       ...factSections(verifiedFacts),
       {id:'SCENARIOS',title:'Recommended Use Scenarios',content:scenarios.map(item=>`- ${item.title}: ${item.description}`).join('\n')}
     ]
+    // 兜底：模型或旧数据若仍混入中文行，在此统一清理，保证最终详情页全英文
+    const sections=rawSections.map(section=>({...section,content:normalizeEnglishDescription(section.content)}))
     const storyboard=(Array.isArray(parsed.storyboard)?parsed.storyboard:[]).map((item,index)=>{
       const row=item as Record<string,unknown>
       return {order:index+1,durationSeconds:Math.max(1,Math.min(6,Number(row.durationSeconds)||3)),visual:String(row.visual||'').trim(),caption:String(row.caption||'').trim(),sourceRequirement:String(row.sourceRequirement||'').trim()}
