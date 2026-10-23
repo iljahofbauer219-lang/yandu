@@ -1706,7 +1706,9 @@ export class AppDatabase {
 
   getEbayOptimizationDraft(draftId:string):EbayOptimizationDraft|undefined {
     const row=this.database.prepare(`SELECT payload FROM ebay_optimization_drafts WHERE id=?`).get(draftId) as {payload:string}|undefined
-    return row?JSON.parse(row.payload) as EbayOptimizationDraft:undefined
+    if(!row)return undefined
+    const draft=JSON.parse(row.payload) as EbayOptimizationDraft
+    return {...draft,description:normalizeEnglishDescription(draft.description||'')}
   }
 
   getEbayPublishTasks(storeId?:string):EbayPublishTask[] {
@@ -1780,7 +1782,8 @@ export class AppDatabase {
     const reason=publishAllowed
       ?check.gateStatus==='PASSED'?'已通过最新规则与内容一致性检查，可进入发布确认。':'已完成最新规则检查和人工复核，可进入发布确认。'
       :check.gateStatus==='BLOCKED'?'存在禁止发布风险，必须整改或停止发布。':check.gateStatus==='REVIEW_REQUIRED'?'当前结论需要人工复核并留痕。':'规则或商品内容已变化，必须整改后重新检查。'
-    return {draft:updated,check,permit,publishAllowed,reason}
+    // 落库仍保留原始 payload（读出时英译、不清空用户手改），但交付给 Seller Hub 预填、发布对比与视频生成的草稿必须全英文
+    return {draft:{...updated,description:normalizeEnglishDescription(updated.description||'')},check,permit,publishAllowed,reason}
   }
 
   getEbayMarketResearch(storeId:string,listingId:string):EbayMarketResearchSnapshot|undefined {
