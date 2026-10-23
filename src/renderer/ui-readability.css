@@ -322,7 +322,7 @@ form label{font-size:12px;line-height:17px}
 .ebay-premium-grid b{font-size:14px;line-height:20px}
 .ebay-premium-grid em{font-size:12px}
 .ebay-premium-tags span{font-size:10px}
-.ebay-premium-card-body>button,.ebay-publish-actions button{font-size:12px}
+.ebay-premium-card-actions>button,.ebay-publish-actions button{font-size:12px}
 .ebay-publish-readiness{padding:16px}
 .ebay-publish-readiness small,.ebay-publish-readiness p,.ebay-publish-readiness>span{font-size:11px;line-height:17px}
 .ebay-publish-readiness b,.ebay-publish-readiness>span strong{font-size:15px}
