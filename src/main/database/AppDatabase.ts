@@ -6,6 +6,7 @@ import { complianceCheckFingerprint } from '../../shared/complianceFingerprint'
 import { mergeCandidateFacts } from '../../shared/candidateFactsMerge'
 import { badgeFallbackScore } from '../../shared/badgeScore'
 import { normalizeEnglishDescription } from '../../shared/ebaySpecificsEnglish'
+import { reorderDescriptionSections, reorderDescriptionText } from '../../shared/ebayDescriptionSections'
 
 function isUsableCandidateImage(value: string) {
   return /^https?:\/\//i.test(value) && !/(?:product_base|placeholder|default[-_]?image|loading|lazyload|blank|transparent|no[-_]?image)/i.test(value)
@@ -1662,17 +1663,23 @@ export class AppDatabase {
 
   getEbayOptimizationDrafts(storeId?:string):EbayOptimizationDraft[] {
     const rows=(storeId?this.database.prepare(`SELECT payload FROM ebay_optimization_drafts WHERE store_id=? ORDER BY updated_at DESC`).all(storeId):this.database.prepare(`SELECT payload FROM ebay_optimization_drafts ORDER BY updated_at DESC`).all()) as unknown as Array<{payload:string}>
-    // 读取时一次性规范化：旧草稿详情里的中文规格键英译/丢弃，落库内容不动，用户手改的英文行原样保留
-    return rows.map(row=>{const draft=JSON.parse(row.payload) as EbayOptimizationDraft;return {...draft,description:normalizeEnglishDescription(draft.description||'')}})
+    // 读取时一次性规范化：旧草稿详情里的中文规格键英译/丢弃，落库内容不动，用户手改的英文行原样保留；再按固定区块顺序重排
+    return rows.map(row=>{const draft=JSON.parse(row.payload) as EbayOptimizationDraft;return {...draft,description:reorderDescriptionText(normalizeEnglishDescription(draft.description||''))}})
   }
 
   getEbayContentOptimizationRecord(storeId:string,listingId:string):EbayContentOptimizationRecord|undefined {
     const row=this.database.prepare(`SELECT payload FROM ebay_content_optimization_records WHERE store_id=? AND listing_id=?`).get(storeId,listingId) as {payload:string}|undefined
     if(!row)return undefined
-    // 读取时一次性规范化：旧记录区块与最终详情里的中文规格键英译/丢弃，落库内容不动
+    // 读取时一次性规范化：旧记录区块与最终详情里的中文规格键英译/丢弃，落库内容不动；随后按固定区块顺序重排并去重
     const record=JSON.parse(row.payload) as EbayContentOptimizationRecord
     const result=record.result
-    return {...record,result:{...result,englishDescription:normalizeEnglishDescription(result.englishDescription||''),sections:(result.sections||[]).map(section=>({...section,content:normalizeEnglishDescription(section.content)})),sourceFacts:(result.sourceFacts||[]).map(fact=>({...fact,text:normalizeEnglishDescription(fact.text)}))}}
+    const normalizedSections=(result.sections||[]).map(section=>({...section,content:normalizeEnglishDescription(section.content)}))
+    const sections=reorderDescriptionSections(normalizedSections)
+    const assemble=(items:typeof normalizedSections)=>items.map(section=>`${section.title.toUpperCase()}\n${section.content}`).join('\n\n').trim()
+    const storedDescription=normalizeEnglishDescription(result.englishDescription||'')
+    // englishDescription 可能被用户手改过：仅当落库文本与规范化 sections 的拼装结果完全同源时才按重排顺序重建，避免覆盖手改
+    const englishDescription=storedDescription===assemble(normalizedSections)?assemble(sections):storedDescription
+    return {...record,result:{...result,englishDescription,sections,sourceFacts:(result.sourceFacts||[]).map(fact=>({...fact,text:normalizeEnglishDescription(fact.text)}))}}
   }
 
   saveEbayContentOptimizationRecord(input:EbayContentOptimizationRecordInput):EbayContentOptimizationRecord {
@@ -1708,7 +1715,7 @@ export class AppDatabase {
     const row=this.database.prepare(`SELECT payload FROM ebay_optimization_drafts WHERE id=?`).get(draftId) as {payload:string}|undefined
     if(!row)return undefined
     const draft=JSON.parse(row.payload) as EbayOptimizationDraft
-    return {...draft,description:normalizeEnglishDescription(draft.description||'')}
+    return {...draft,description:reorderDescriptionText(normalizeEnglishDescription(draft.description||''))}
   }
 
   getEbayPublishTasks(storeId?:string):EbayPublishTask[] {
@@ -1782,8 +1789,8 @@ export class AppDatabase {
     const reason=publishAllowed
       ?check.gateStatus==='PASSED'?'已通过最新规则与内容一致性检查，可进入发布确认。':'已完成最新规则检查和人工复核，可进入发布确认。'
       :check.gateStatus==='BLOCKED'?'存在禁止发布风险，必须整改或停止发布。':check.gateStatus==='REVIEW_REQUIRED'?'当前结论需要人工复核并留痕。':'规则或商品内容已变化，必须整改后重新检查。'
-    // 落库仍保留原始 payload（读出时英译、不清空用户手改），但交付给 Seller Hub 预填、发布对比与视频生成的草稿必须全英文
-    return {draft:{...updated,description:normalizeEnglishDescription(updated.description||'')},check,permit,publishAllowed,reason}
+    // 落库仍保留原始 payload（读出时英译、不清空用户手改），但交付给 Seller Hub 预填、发布对比与视频生成的草稿必须全英文且区块顺序一致
+    return {draft:{...updated,description:reorderDescriptionText(normalizeEnglishDescription(updated.description||''))},check,permit,publishAllowed,reason}
   }
 
   getEbayMarketResearch(storeId:string,listingId:string):EbayMarketResearchSnapshot|undefined {

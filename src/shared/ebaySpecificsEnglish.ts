@@ -9,6 +9,9 @@ const SPECIFIC_LABEL_ENGLISH: Record<string, string> = {
   '组装长度 (英寸)': 'Assembled Length (in)',
   '组装宽度 (英寸)': 'Assembled Width (in)',
   '组装高度 (英寸)': 'Assembled Height (in)',
+  '组装后长度 (英寸)': 'Assembled Length (in)',
+  '组装后宽度 (英寸)': 'Assembled Width (in)',
+  '组装后高度 (英寸)': 'Assembled Height (in)',
   '产品重量 (磅)': 'Product Weight (lb)',
   '长度 (英寸)': 'Package Length (in)',
   '宽度 (英寸)': 'Package Width (in)',
@@ -24,7 +27,8 @@ export function containsCjk(text: string): boolean {
 
 /** 中文规格键→英文标签；含中文但不在映射表内返回 ''（调用方应丢弃该条，不能让中文流入英文详情页）；无中文原样返回 */
 export function englishSpecificLabel(name: string): string {
-  const key = name.trim()
+  // 服务器产品页同一键存在全角括号/缺空格/多余空格写法（如「组装后长度（英寸）」），先归一再查表
+  const key = name.trim().replace(/（/g, ' (').replace(/）/g, ')').replace(/\s+/g, ' ').trim()
   if (!key) return ''
   const mapped = SPECIFIC_LABEL_ENGLISH[key]
   if (mapped) return mapped

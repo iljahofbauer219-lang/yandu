@@ -2,6 +2,7 @@ import type { EbayContentBenefit, EbayContentFactKind, EbayContentOptimizationRe
 import { buildEbayMarketDecisionReport } from '../../shared/ebayMarketDecision'
 import { parseCategoryClassifyReply } from '../../shared/palletCategoryMatch'
 import { containsCjk, englishSpecificLabel, normalizeEnglishDescription } from '../../shared/ebaySpecificsEnglish'
+import { reorderDescriptionSections } from '../../shared/ebayDescriptionSections'
 
 interface ChatResponse {
   choices?:Array<{finish_reason?:string;message?:{content?:string|null;reasoning_content?:string|null}}>
@@ -406,8 +407,8 @@ export class EbayOptimizationService {
       ...factSections(verifiedFacts),
       {id:'SCENARIOS',title:'Recommended Use Scenarios',content:scenarios.map(item=>`- ${item.title}: ${item.description}`).join('\n')}
     ]
-    // 兜底：模型或旧数据若仍混入中文行，在此统一清理，保证最终详情页全英文
-    const sections=rawSections.map(section=>({...section,content:normalizeEnglishDescription(section.content)}))
+    // 兜底：模型或旧数据若仍混入中文行，在此统一清理；随后按固定区块顺序重排，并去掉与包装内容重复的规格行
+    const sections=reorderDescriptionSections(rawSections.map(section=>({...section,content:normalizeEnglishDescription(section.content)})))
     const storyboard=(Array.isArray(parsed.storyboard)?parsed.storyboard:[]).map((item,index)=>{
       const row=item as Record<string,unknown>
       return {order:index+1,durationSeconds:Math.max(1,Math.min(6,Number(row.durationSeconds)||3)),visual:String(row.visual||'').trim(),caption:String(row.caption||'').trim(),sourceRequirement:String(row.sourceRequirement||'').trim()}

@@ -85,12 +85,25 @@ describe('旧草稿与内容记录读取时中文规格键规范化', () => {
     const store = db.createEbayStore('美国主店', 'seller', 'encrypted')
     db.saveEbayContentOptimizationRecord(recordInput(store.id))
     const record = db.getEbayContentOptimizationRecord(store.id, 'PALLET-en-1')
-    expect(record?.result.sections[0].content).toContain('- Product Type: Combo Item')
-    expect(record?.result.sections[0].content).not.toMatch(/[一-鿿]/)
-    expect(record?.result.sections[1].content).toBe('2PC Universal Bucket Racing Seats.')
+    const specs = record?.result.sections.find(section => section.id === 'SPECIFICATIONS')
+    expect(specs?.content).toContain('- Product Type: Combo Item')
+    expect(specs?.content).not.toMatch(/[一-鿿]/)
+    expect(record?.result.sections.find(section => section.id === 'SUMMARY')?.content).toBe('2PC Universal Bucket Racing Seats.')
+    expect(record?.result.sections.map(section => section.id)).toEqual(['SUMMARY', 'SPECIFICATIONS'])
     expect(record?.result.englishDescription).not.toMatch(/[一-鿿]/)
     expect(record?.result.sourceFacts[0].text).toBe('Product Type: Combo Item')
     expect(record?.result.sourceFacts[1].text).toBe('High Quality')
+  })
+
+  it('内容记录读取时按固定区块顺序重排，且落库原文不被改写', async () => {
+    db = await freshDatabase()
+    const store = db.createEbayStore('美国主店', 'seller', 'encrypted')
+    db.saveEbayContentOptimizationRecord(recordInput(store.id))
+    const record = db.getEbayContentOptimizationRecord(store.id, 'PALLET-en-1')
+    expect(record?.result.sections.map(section => section.id)).toEqual(['SUMMARY', 'SPECIFICATIONS'])
+    const raw = (db as unknown as { database: { prepare(sql: string): { get(storeId: string, listingId: string): { payload: string } } } }).database.prepare('SELECT payload FROM ebay_content_optimization_records WHERE store_id=? AND listing_id=?').get(store.id, 'PALLET-en-1')
+    const stored = JSON.parse(raw.payload) as { result: { sections: Array<{ id: string }> } }
+    expect(stored.result.sections.map(section => section.id)).toEqual(['SPECIFICATIONS', 'SUMMARY'])
   })
 
   it('按 id 读取的优品草稿同样全英文，且落库原文不被改写', async () => {

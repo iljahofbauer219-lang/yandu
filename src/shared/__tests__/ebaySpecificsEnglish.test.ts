@@ -9,6 +9,14 @@ describe('englishSpecificLabel 中文规格键英译', () => {
     expect(englishSpecificLabel(' 颜色 ')).toBe('Color')
   })
 
+  it('全角括号与「组装后」变体键先归一再查表', () => {
+    expect(englishSpecificLabel('组装后长度（英寸）')).toBe('Assembled Length (in)')
+    expect(englishSpecificLabel('组装后宽度（英寸）')).toBe('Assembled Width (in)')
+    expect(englishSpecificLabel('组装后高度（英寸）')).toBe('Assembled Height (in)')
+    expect(englishSpecificLabel('产品重量（磅）')).toBe('Product Weight (lb)')
+    expect(normalizeEnglishDescription('- 组装后长度（英寸）: 42.13')).toBe('- Assembled Length (in): 42.13')
+  })
+
   it('无中文的键原样返回', () => {
     expect(englishSpecificLabel('Item Code')).toBe('Item Code')
     expect(englishSpecificLabel('GIGA Index')).toBe('GIGA Index')
