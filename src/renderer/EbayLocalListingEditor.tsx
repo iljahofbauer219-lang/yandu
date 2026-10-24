@@ -18,6 +18,7 @@ type Props={
   onPrepare:()=>void
   onSetCategory:(categoryId:string,categoryName:string)=>void
   onAutoClassify:()=>void
+  inline?:boolean
 }
 
 type ValidationIssue={level:'ERROR'|'WARNING';section:string;message:string}
@@ -45,7 +46,7 @@ function mediaUrl(localPath:string,remoteUrl:string) {
   return localPath?`cross-media://local/${encodeURIComponent(localPath)}`:remoteUrl
 }
 
-export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify}:Props) {
+export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,inline}:Props) {
   const fileInput=useRef<HTMLInputElement>(null)
   const [draggedId,setDraggedId]=useState('')
   const [descriptionMode,setDescriptionMode]=useState<'TEXT'|'HTML'>('TEXT')
@@ -74,7 +75,7 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
   }
   const removeMedia=(id:string)=>set('media',draft.media.filter(item=>item.id!==id).map((entry,sortOrder)=>({...entry,sortOrder})))
 
-  return <div className="ebay-revise-overlay" role="dialog" aria-modal="true" aria-label="本地 eBay 商品编辑器">
+  return <div className={inline?'ebay-revise-inline':'ebay-revise-overlay'} role={inline?undefined:'dialog'} aria-modal={inline?undefined:true} aria-label="本地 eBay 商品编辑器">
     <div className="ebay-revise-shell">
       <header className="ebay-revise-topbar">
         <div className="ebay-wordmark" aria-label="eBay"><i>e</i><i>b</i><i>a</i><i>y</i></div>
