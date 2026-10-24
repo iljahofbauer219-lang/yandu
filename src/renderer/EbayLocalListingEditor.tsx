@@ -31,7 +31,7 @@ function validateDraft(draft:EbayLocalProductUpdateInput):ValidationIssue[] {
   if(!title)error('title','物品标题不能为空')
   if(title.length>80)error('title','物品标题不能超过 80 个字符')
   if(/[©®™]/.test(title))warning('title','标题含特殊符号，发布前请确认商标与知识产权风险')
-  const downloaded=draft.media.filter(item=>item.downloadStatus==='DOWNLOADED'&&item.localPath)
+  const downloaded=draft.media.filter(item=>item.downloadStatus==='DOWNLOADED'&&(item.localPath||item.remoteUrl))
   if(!downloaded.length)error('media','至少需要 1 张已保存到本地的商品图片')
   if(draft.media.length>24)error('media','商品图片不能超过 24 张')
   downloaded.filter(item=>item.width&&item.height&&Math.max(item.width,item.height)<500).forEach((_,index)=>error('media',`第 ${index+1} 张图片最长边不足 500px`))
