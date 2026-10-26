@@ -21,6 +21,14 @@ interface EbayVideoStudioProps {
   imageUrls:string[]
   storyboard:EbayVideoStoryboardShot[]
   imagesReady:boolean
+  /** 产品页原始视频本地路径列表（来自 SupplyProductDownload） */
+  originalVideoUrls?:string[]
+  /** 存在 DOWNLOADED 下载档案时允许对存量缺视频块档案重新下载补视频 */
+  canBackfillVideos?:boolean
+  backfillingVideos?:boolean
+  onBackfillVideos?:()=>void
+  /** 确认使用原视频后通知父级（用于提示下一步操作） */
+  onConfirmOriginalVideo?:()=>void
 }
 
 function readableError(reason:unknown,fallback:string) {
@@ -50,7 +58,7 @@ function capabilityStatusLabel(status:EbayVideoCapabilityStatus) {
           :status==='FAILED'?'验证失败':'未配置'
 }
 
-export default function EbayVideoStudio({listingId,title,description,chineseDescription,imageUrls,storyboard,imagesReady}:EbayVideoStudioProps) {
+export default function EbayVideoStudio({listingId,title,description,chineseDescription,imageUrls,storyboard,imagesReady,originalVideoUrls=[],canBackfillVideos=false,backfillingVideos=false,onBackfillVideos,onConfirmOriginalVideo}:EbayVideoStudioProps) {
   const [configuration,setConfiguration]=useState<EbayVideoStudioConfiguration|null>(null)
   const [projects,setProjects]=useState<EbayVideoStudioProject[]>([])
   const [additionalImages,setAdditionalImages]=useState<Array<{name:string;dataUrl:string}>>([])
@@ -69,6 +77,11 @@ export default function EbayVideoStudio({listingId,title,description,chineseDesc
   const [verifyingCapabilityId,setVerifyingCapabilityId]=useState('')
   const [error,setError]=useState('')
   const [selectedProjectId,setSelectedProjectId]=useState('')
+  /** 视频生成模式：ORIGINAL=使用原视频，GENERATE=生成新视频，SKIP=跳过视频 */
+  const [videoMode,setVideoMode]=useState<'ORIGINAL'|'GENERATE'|'SKIP'>('GENERATE')
+  /** 内置播放器加载失败的视频（链接不可达或编码不支持），提供系统浏览器预览回落 */
+  const [undecodableVideoUrls,setUndecodableVideoUrls]=useState<string[]>([])
+  const [originalVideoConfirmed,setOriginalVideoConfirmed]=useState(false)
 
   useEffect(()=>{
     setNarrationText(defaultNarration(title,storyboard))
@@ -77,6 +90,10 @@ export default function EbayVideoStudio({listingId,title,description,chineseDesc
     setProgress(null)
     setError('')
     setSelectedProjectId('')
+    // 重置视频模式为默认"生成新视频"
+    setVideoMode('GENERATE')
+    setOriginalVideoConfirmed(false)
+    setUndecodableVideoUrls([])
   },[listingId])
 
   useEffect(()=>{
@@ -189,9 +206,48 @@ export default function EbayVideoStudio({listingId,title,description,chineseDesc
       <span className={configuration?.connected?'connected':'disconnected'}><i/>{configuration?.connected?`方舟凭证已配置 · ${configuration.model}`:'火山方舟未配置'}</span>
     </header>
 
+    {/* 视频生成三选一支路 */}
+    <section className="ebay-video-mode-selector">
+      <header><b>视频来源</b><small>选择使用原产品视频、生成新视频或跳过此步骤</small></header>
+      <div className="ebay-video-mode-options">
+        <button type="button" className={`ebay-video-mode-option${videoMode==='ORIGINAL'?' active':''}${originalVideoUrls.length===0?' disabled':''}`} disabled={originalVideoUrls.length===0} onClick={()=>setVideoMode('ORIGINAL')}>
+          <span className="ebay-video-mode-icon">🎬</span>
+          <span className="ebay-video-mode-label">使用原视频</span>
+          <small className="ebay-video-mode-hint">{originalVideoUrls.length?`检测到 ${originalVideoUrls.length} 个产品视频`:'当前产品无可用视频'}</small>
+        </button>
+        <button type="button" className={`ebay-video-mode-option${videoMode==='GENERATE'?' active':''}`} onClick={()=>setVideoMode('GENERATE')}>
+          <span className="ebay-video-mode-icon">✨</span>
+          <span className="ebay-video-mode-label">生成新视频</span>
+          <small className="ebay-video-mode-hint">AI 根据图片和描述生成 15 秒视频（默认）</small>
+        </button>
+        <button type="button" className={`ebay-video-mode-option${videoMode==='SKIP'?' active':''}`} onClick={()=>setVideoMode('SKIP')}>
+          <span className="ebay-video-mode-icon">⏭️</span>
+          <span className="ebay-video-mode-label">不制作视频</span>
+          <small className="ebay-video-mode-hint">跳过视频制作，直接进入下一步售价设定</small>
+        </button>
+      </div>
+      {originalVideoUrls.length===0&&canBackfillVideos&&<div className="ebay-video-backfill-row"><small>服务器产品页暂无视频块（该档案可能下载于视频链路上线前）。</small><button type="button" disabled={backfillingVideos} onClick={onBackfillVideos}>{backfillingVideos?'正在重新下载图文…':'重新下载补视频'}</button></div>}
+    </section>
+
     {!imagesReady&&<div className="ebay-video-studio-warning">请先在03图片优化中确认最终图片并通过检查，视频只能使用已确认的商品素材。</div>}
     {configuration&&!configuration.connected&&<div className="ebay-video-studio-warning">{configuration.message}</div>}
     {error&&<div className="ebay-video-studio-error">{error}</div>}
+
+    {/* 原视频模式：显示视频预览 */}
+    {videoMode==='ORIGINAL'&&originalVideoUrls.length>0&&<section className="ebay-video-original-preview">
+      <header><b>原产品视频预览</b><small>将直接使用以下视频，不进行 AI 生成</small></header>
+      <div className="ebay-video-original-grid">
+        {originalVideoUrls.map((url,index)=><figure key={index}>
+          <video src={url} controls preload="metadata" onError={()=>setUndecodableVideoUrls(items=>items.includes(url)?items:[...items,url])}/>
+          <figcaption>视频 {index+1}</figcaption>
+          {undecodableVideoUrls.includes(url)&&<p className="ebay-video-original-fallback"><small>该视频暂时无法在 App 内预览（链接不可达或编码不支持），不影响刊登时使用此视频。</small><button type="button" onClick={()=>void window.desktop.system.openExternal(url).catch(()=>undefined)}>在系统浏览器预览</button></p>}
+        </figure>)}
+      </div>
+      <footer><small>{originalVideoConfirmed?'已确认使用原产品视频，点击下方「下一步：售价设定」继续。':`将把 ${originalVideoUrls.length} 个原产品视频作为本商品视频，不使用 AI 生成视频。`}</small><button className="primary" type="button" onClick={()=>{setOriginalVideoConfirmed(true);onConfirmOriginalVideo?.()}}>{originalVideoConfirmed?'已确认使用原视频':'确认使用此视频'}</button></footer>
+    </section>}
+
+    {/* 生成新视频模式：显示原有的完整生成界面 */}
+    {videoMode==='GENERATE'&&<div className="ebay-video-generate-content">
 
     {configuration&&<section className="ebay-video-capabilities">
       <header>
@@ -260,6 +316,13 @@ export default function EbayVideoStudio({listingId,title,description,chineseDesc
     {projects.length>0&&<section className="ebay-video-versions">
       <header><b>系统视频版本</b><small>每次生成都会保留独立版本，不覆盖已确认的视频文件。</small></header>
       <div>{projects.map(project=><button type="button" className={`${selectedProject?.id===project.id?'active':''} ${project.confirmedAt?'confirmed':''}`} key={project.id} onClick={()=>setSelectedProjectId(project.id)}><span><b>V{project.version} · {project.confirmedAt?'✓ 已确认':project.status==='READY'?'已完成':project.status==='FAILED'?'生成失败':'生成中'}</b><small>{videoModelLabel(project.model)} · {new Date(project.updatedAt).toLocaleString('zh-CN')}</small></span><em>{project.subtitleMode==='NONE'?'无字幕':project.subtitleMode==='ENGLISH'?'英文字幕':project.subtitleMode==='CHINESE'?'中文字幕':'双语字幕'} · {project.voiceMode==='NONE'?'无配音':voiceProviderLabel(project.voiceProvider)}</em></button>)}</div>
+    </section>}
+    </div>}
+
+    {/* SKIP 模式：显示跳过提示 */}
+    {videoMode==='SKIP'&&<section className="ebay-video-skip-notice">
+      <header><b>已跳过视频制作</b><small>此商品将不包含视频直接进入下一步售价设定</small></header>
+      <p>您可以在后续需要时重新进入此页面生成视频。</p>
     </section>}
   </div>
 }

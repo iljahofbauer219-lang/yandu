@@ -104,8 +104,6 @@ export function renderProductPageDocument(pageId: string, meta: ProductPageMetaV
   const sellableInventory = meta.sellableInventory ?? ''
   const dropshipLeadTime = meta.dropshipLeadTime ?? ''
   const unitPrice = meta.unitPrice ?? ''
-  const packingFee = meta.packingFee ?? ''
-  const freightFee = meta.freightFee ?? ''
   const shippingFee = meta.shippingFee ?? ''
   const estimatedTotal = meta.estimatedTotal ?? ''
   const gigaIndex = meta.gigaIndex ?? ''
@@ -121,8 +119,7 @@ export function renderProductPageDocument(pageId: string, meta: ProductPageMetaV
   const badges = [badge('首次到库', firstStockAt), badge('退返品率', returnRate), badge('GIGA Index', gigaIndex)].join('')
   const stockBadges = [badge('可售库存', sellableInventory), badge('一件代发时效', dropshipLeadTime)].join('')
   const feeRows: Array<[string, string]> = [
-    ['单价(件)', unitPrice], ['打包费', packingFee], ['运费', freightFee],
-    ['物流费', shippingFee], ['预估总额(含物流费)', estimatedTotal]
+    ['单价(件)', unitPrice], ['物流费', shippingFee], ['预估总额(含物流费)', estimatedTotal]
   ]
   const feesTable = feeRows.some(([, value]) => value.trim())
     ? `<table class="pp-specs pp-fees"><tbody>${feeRows.filter(([, value]) => value.trim()).map(([key, value]) => `<tr><th scope="row">${escapeHtmlText(key)}</th><td>${escapeHtmlText(value.trim())}</td></tr>`).join('')}</tbody></table>`

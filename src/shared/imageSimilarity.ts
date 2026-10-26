@@ -65,31 +65,40 @@ export function isDuplicateDistance(distance: number, threshold: number = EBAY_I
   return Number.isFinite(distance) && distance <= threshold
 }
 
-/** 主图白底探测缩放尺寸：16×16 取外圈 1px 环带足够判定背景色 */
+/** 主图白底探测缩放尺寸：16×16 取四角与四条边足够判定背景色 */
 export const BACKGROUND_SIZE = 16
-/** 环带近白像素占比 ≥ 该值判为纯白底（放宽至85%容忍JPEG压缩噪点） */
-export const BACKGROUND_WHITE_RATIO = 0.85
-/** 近白阈值：三通道均 ≥ 该值记一个近白像素（放宽至235兼容轻微阴影与压缩色偏） */
+/** 近白阈值：三通道均 ≥ 该值记一个近白像素（235 兼容 JPEG 压缩色偏） */
 export const BACKGROUND_WHITE_CHANNEL = 235
+/** 四个 2×2 角块近白像素数 ≥ 该值记白底角（12/16，每角容忍 1 个压缩噪点或商品内缩像素） */
+export const BACKGROUND_CORNER_WHITE_MIN = 12
+/** 一组对边近白占比均 ≥ 该值记该方向背景白（容忍商品顶到另一组边） */
+export const BACKGROUND_EDGE_PAIR_RATIO = 0.75
 
 /**
- * BGRA 小图（BACKGROUND_SIZE×BACKGROUND_SIZE）→ 背景判定：外圈环带近白占比 ≥0.9 记纯白。
+ * BGRA 小图（BACKGROUND_SIZE×BACKGROUND_SIZE）→ 背景判定。
+ * 主图商品常顶满画面，外圈环带会被商品本体截断（左右两列全是商品像素），
+ * 故改用「四角全近白 + 上下或左右至少一组对边大部分近白」判纯白底；
  * 尺寸或长度不符返回 UNKNOWN（调用方不得把未知当成违规）。
  */
 export function classifyBackgroundFromBgra(bitmap: Uint8Array | Buffer, width: number, height: number): 'WHITE' | 'NON_WHITE' | 'UNKNOWN' {
   if (width !== BACKGROUND_SIZE || height !== BACKGROUND_SIZE || bitmap.length < width * height * 4) return 'UNKNOWN'
-  let ring = 0
-  let white = 0
+  const edges: Record<'top' | 'bottom' | 'left' | 'right', [number, number]> = { top: [0, 0], bottom: [0, 0], left: [0, 0], right: [0, 0] }
+  let cornerWhite = 0
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      if (x !== 0 && y !== 0 && x !== width - 1 && y !== height - 1) continue
       const o = (y * width + x) * 4
-      ring += 1
-      if ((bitmap[o] ?? 0) >= BACKGROUND_WHITE_CHANNEL && (bitmap[o + 1] ?? 0) >= BACKGROUND_WHITE_CHANNEL && (bitmap[o + 2] ?? 0) >= BACKGROUND_WHITE_CHANNEL) white += 1
+      const white = (bitmap[o] ?? 0) >= BACKGROUND_WHITE_CHANNEL && (bitmap[o + 1] ?? 0) >= BACKGROUND_WHITE_CHANNEL && (bitmap[o + 2] ?? 0) >= BACKGROUND_WHITE_CHANNEL ? 1 : 0
+      if ((x < 2 || x >= width - 2) && (y < 2 || y >= height - 2)) cornerWhite += white
+      const edge = y === 0 ? edges.top : y === height - 1 ? edges.bottom : x === 0 ? edges.left : x === width - 1 ? edges.right : null
+      if (edge) {
+        edge[0] += white
+        edge[1] += 1
+      }
     }
   }
-  if (!ring) return 'UNKNOWN'
-  return white / ring >= BACKGROUND_WHITE_RATIO ? 'WHITE' : 'NON_WHITE'
+  const ratio = (edge: [number, number]) => (edge[1] ? edge[0] / edge[1] : 0)
+  const pairWhite = Math.max(Math.min(ratio(edges.top), ratio(edges.bottom)), Math.min(ratio(edges.left), ratio(edges.right)))
+  return cornerWhite >= BACKGROUND_CORNER_WHITE_MIN && pairWhite >= BACKGROUND_EDGE_PAIR_RATIO ? 'WHITE' : 'NON_WHITE'
 }
 
 /**

@@ -928,3 +928,66 @@
 .ebay-stage-order-actions .yd-button { height: 26px; padding: 0 10px; font-size: 12px; }
 .ebay-stage-order-restore { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary, #475569); }
 .ebay-stage-order-restore .yd-button { height: 26px; padding: 0 10px; font-size: 12px; }
+
+/* ── 原图优化区：单张重生成模型与六条规则（与多生图片区同一套状态） ── */
+.ebay-stage-simple-regen-controls {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border, #dbe3ec);
+  border-radius: 8px;
+  background: var(--bg-secondary, #fafcfd);
+}
+.ebay-stage-simple-regen-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.ebay-stage-simple-regen-head select {
+  min-width: 240px;
+  padding: 8px 12px;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 8px;
+  font-size: 13px;
+  background: var(--bg-primary, #fff);
+}
+.ebay-stage-simple-regen-head small {
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+}
+.ebay-stage-simple-regen-controls .ebay-stage-rule-grid { margin-bottom: 0; }
+
+/* ── 简版档「多生图片」结果预览（出图完成就地可见） ── */
+.ebay-stage-simple-chip.gen { color: #6d28d9; background: #ede9fe; }
+.ebay-stage-simple-gen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  margin: 10px 0 12px;
+}
+.ebay-stage-simple-gen-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--border, #dbe3ec);
+  border-radius: 8px;
+  background: #fff;
+}
+.ebay-stage-simple-gen-cell > img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #f1f5f9;
+}
+.ebay-stage-simple-gen-model {
+  font-size: 11px;
+  color: var(--text-secondary, #64748b);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

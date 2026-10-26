@@ -3,6 +3,9 @@ import { BaseWindow, BrowserWindow, WebContents, WebContentsView, clipboard } fr
 import { AMAZON_LISTING_EVIDENCE_SCRIPT, AMAZON_REVIEW_EVIDENCE_SCRIPT, AMAZON_SAMPLES_SCRIPT, type AmazonListingEvidence, type AmazonMarketSample, type AmazonReviewEvidence } from '../../shared/amazonScraper'
 import { matchSellableInventoryText } from '../../shared/sellableInventory'
 import { pickSupplyDescriptionText } from '../../shared/supplyDescription'
+import { pickSupplyFees } from '../../shared/supplyFeePick'
+import { pickDropshipShippingFee } from '../../shared/supplyDropshipFee'
+import { parseEbayAggregateMetrics, parseEbayResearchRows } from '../../shared/ebayMarketResearchParse'
 import { shouldActivateSupplyView } from '../../shared/supplyAutoEnter'
 import { shouldRetryWithoutProxy } from '../../shared/ebayDirectFallback'
 import { pickGigaMainImage } from '../../shared/gigaImageResolve'
@@ -550,10 +553,34 @@ export class BrowserWorkspace {
         // 金额统一支持区间（$20.63~$40.30）与「/件」后缀；真实页面标签后带冒号，费用面板默认折叠只能靠 textContent 通道
         const money = '((?:US\\s?\\$|\\$)\\s?[\\d,.]+(?:\\s*[~～\\-–]\\s*(?:US\\s?\\$|\\$)?\\s?[\\d,.]+)?(?:\\s*/\\s*件)?)'
         const unitPrice = grab(new RegExp('单价\\s*[（(]\\s*件\\s*[）)]\\s*[:：]?\\s{0,3}' + money)) || grab(new RegExp('单价\\s*[:：]?\\s{0,3}' + money))
-        const packingFee = grab(new RegExp('打包费\\s*[:：]?\\s{0,3}' + money))
-        const freightFee = grab(new RegExp('基础运费\\s*[:：]?\\s{0,3}' + money)) || grab(new RegExp('(?<!基础)运费\\s*[:：]?\\s{0,3}' + money))
-        const shippingFee = grab(new RegExp('(?<!预估)物流费\\s*[:：]\\s{0,3}' + money)) || grab(new RegExp('(?<!预估)物流费\\s*/?\\s*件?\\s*[:：]\\s{0,3}' + money))
         const estimatedTotal = grab(new RegExp('预估总额\\s*[（(]?\\s*含物流费\\s*[）)]?\\s*[:：]?\\s{0,3}' + money))
+        // 原页「一件代发/云送仓」两套费用并存，按文档序首抓易误取未选套：全量收候选后按一致性打分择真
+        // （total=unit+shipping 定物流费，shipping=packing+freight 定打包费/运费）；择真失败保留文档序首候选
+        const allGrab = (reSrc) => {
+          const scan = (text) => { const out = []; const re = new RegExp(reSrc, 'g'); let m; while ((m = re.exec(text)) !== null) { if (m[1]) out.push(m[1].trim()); if (re.lastIndex === m.index) re.lastIndex += 1 } return out }
+          const hit = scan(flat)
+          return hit.length ? hit : scan(flatAll)
+        }
+        const pickFeesFn = ${pickSupplyFees.toString()};
+        const pickDropshipFn = ${pickDropshipShippingFee.toString()};
+        // 物流方式区两张卡都写「预估物流费」，文档序抓取必误取云送仓：按 DOM 容器锁定含「一件代发」的最小节点直读，取不到才回落打分
+        const dropshipCardTexts = [...document.querySelectorAll('div,section,li,tr,td,label')]
+          .map(node => (node.textContent || ''))
+          .filter(text => text.length <= 400 && text.includes('预估物流费'))
+        let dropshipShipping = ''
+        try { dropshipShipping = pickDropshipFn(dropshipCardTexts) || '' } catch (e) { /* 卡片结构变化时回落候选打分，注入脚本整体不得抛错 */ }
+        const packingCandidates = allGrab('打包费\\s*[:：]?\\s{0,3}' + money)
+        const freightCandidates = allGrab('(?:基础)?运费\\s*[:：]?\\s{0,3}' + money)
+        const shippingCandidates = allGrab('(?<!预估)物流费\\s*/?\\s*件?\\s*[:：]?\\s{0,3}' + money)
+        let packingFee = packingCandidates[0] || ''
+        let freightFee = freightCandidates[0] || ''
+        let shippingFee = dropshipShipping || shippingCandidates[0] || ''
+        try {
+          const feePick = pickFeesFn({ packing: packingCandidates, freight: freightCandidates, shipping: shippingCandidates }, unitPrice, estimatedTotal)
+          packingFee = feePick.packingFee
+          freightFee = feePick.freightFee
+          if (!dropshipShipping) shippingFee = feePick.shippingFee
+        } catch (e) { /* 打分异常保留文档序首候选，注入脚本整体不得抛错 */ }
         const dropshipLeadTime = grab(/一件代发发货时效\s*(\d+\s*-\s*\d+\s*个工作日)/)
         const gigaIndex = grab(/GIGA\s*Index[:：]\s*([\d.]+)/i)
         // 站点存在非数值形态（供应商卡「GIGA Index: <60」）：原样保留供展示与闸口判读，数值字段仅纯数字时才有
@@ -1937,9 +1964,9 @@ export class BrowserWorkspace {
     return {...result,pageStatus,inspectedAt:new Date().toISOString()}
   }
 
-  async readEbayMarketResearch(accountId:string,input:{query:string;categoryId:string;condition:string;marketplaceId:string;periodDays:number}):Promise<Pick<EbayMarketResearchSnapshot,'source'|'sourceUrl'|'metrics'|'samples'>> {
+  async readEbayMarketResearch(accountId:string,input:{query:string;categoryId:string;condition:string;marketplaceId:string;periodDays:number}):Promise<Pick<EbayMarketResearchSnapshot,'source'|'sourceUrl'|'metrics'|'samples'>&{note?:string}> {
     const base=this.detailTabs.get(`login-${accountId}`)
-    if(!base||base.view.webContents.isDestroyed())throw new Error('请先打开当前 eBay 店铺并完成登录')
+    if(!base||base.view.webContents.isDestroyed())throw new Error('请先在「店铺采集」打开当前 eBay 店铺并完成登录，再回到这里检索已成交市场数据')
     const query=input.query.replace(/\s+/g,' ').trim()
     if(!query)throw new Error('请先填写市场调研核心商品词')
     const marketplace=input.marketplaceId==='EBAY_US'?'EBAY-US':input.marketplaceId.replace('_','-')
@@ -1963,9 +1990,22 @@ export class BrowserWorkspace {
     view.webContents.setUserAgent(base.view.webContents.getUserAgent())
     const extractScript=`(()=>{
       const clean=value=>(value||'').replace(/\\s+/g,' ').trim();
+      const parseResearchFn=${parseEbayResearchRows.toString()};
+      const parseMetricsFn=${parseEbayAggregateMetrics.toString()};
       const bodyText=clean(document.body?.innerText);const lower=bodyText.toLowerCase();
       const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/signin|login/.test(location.pathname.toLowerCase());
       const verification=/captcha|security check|verification code|验证码|安全验证|确认是您本人/i.test(bodyText+' '+location.href);
+      // Seller Hub「Research products」结果表用稳定 BEM 列名；此处按列直读，避免落到下方公开搜索卡片解析上（那套选择器在本页取到的是价格单元格当标题）
+      const researchRows=[...document.querySelectorAll('tr.research-table-row')].map(row=>{
+        const cell=name=>clean(row.querySelector('td.research-table-row__'+name)?.innerText);
+        const info=row.querySelector('td.research-table-row__product-info');
+        const link=info?.querySelector('a[href*="/itm/"]');
+        const image=info?.querySelector('img');
+        return {title:clean(link?.innerText),listing:clean(info?.innerText),url:link?new URL(link.href,location.href).toString():'',image:clean(image?.currentSrc||image?.src),price:cell('avgSoldPrice'),shipping:cell('avgShippingCost'),sold:cell('totalSoldCount'),date:cell('dateLastSold')}
+      });
+      const aggregateEntries=[...document.querySelectorAll('[class*="aggregate-metric"]')].map(node=>({title:clean(node.querySelector('.metric-title')?.innerText),value:clean(node.querySelector('.metric-value')?.innerText)}));
+      const researchSamples=parseResearchFn(researchRows);
+      const aggregateMetrics=parseMetricsFn(aggregateEntries);
       const moneyOf=text=>{const match=clean(text).match(/(RMB|CNY|USD|US\\s*\\$|\\$)\\s*([\\d,.]+)/i);if(!match)return {price:'',currency:'USD'};const token=match[1].toUpperCase();return {price:match[2].replace(/,/g,''),currency:/RMB|CNY/.test(token)?'CNY':'USD'}};
       const dateOf=text=>clean(text).match(/(?:date last sold|last sold|sold|售出日期|成交日期)[:：]?\\s*([A-Za-z]{3,9}\\s+\\d{1,2},?\\s+\\d{4}|\\d{1,4}[\\/-]\\d{1,2}[\\/-]\\d{1,4})/i)?.[1]||'';
       const soldQuantityOf=text=>{const match=clean(text).match(/(?:qty|quantity)\\s*sold[:：]?\\s*([\\d,.]+)|\\bsold[:：]?\\s*([\\d,.]+)|([\\d,.]+)\\s+(?:sold|已售)/i);return match?match.slice(1).find(Boolean)?.replace(/,/g,'')||'':''};
@@ -1973,7 +2013,7 @@ export class BrowserWorkspace {
       const samples=[],seen=new Set();
       [...document.querySelectorAll('a[href*="/itm/"]')].forEach(anchor=>{try{const url=new URL(anchor.href,location.href);const id=url.pathname.match(/\\/itm\\/(?:[^/]+\\/)?(\\d{9,15})/)?.[1]||url.pathname;if(seen.has(id))return;const row=anchor.closest('li.s-card,li.s-item')||anchor.closest('tr,[role="row"],article')||anchor.parentElement;const rowText=clean(row?.innerText);const titleNode=row?.querySelector('.s-card__title,.s-item__title,[data-testid*="title"],h3,[role="heading"],[class*="title"]');const candidates=[titleNode?.textContent,anchor.textContent,anchor.getAttribute('title')].map(value=>clean(value).replace(/^new listing\\s*/i,'').replace(/opens? in (?:a )?new window or tab/ig,'').trim());const title=candidates.find(value=>value.length>=5&&!/^(?:shop on ebay|sign in|register|see all|view item|research|new window|window|tab)$/i.test(value))||'';if(title.length<5||rowText.length<10)return;const image=row?.querySelector('img');const money=moneyOf(rowText);seen.add(id);samples.push({title:title.slice(0,240),price:money.price,currency:money.currency,soldDate:dateOf(rowText),url:url.toString(),imageUrl:image?.currentSrc||image?.src||'',itemId:id,shipping:shippingOf(rowText),condition:rowText.match(/\\b(Brand New|New|Pre-Owned|Used|Very Good|Good|Acceptable)\\b/i)?.[1]||'',listingFormat:rowText.match(/\\b(Buy It Now|Best Offer|Auction|\\d+ bids?)\\b/i)?.[1]||'',soldQuantity:soldQuantityOf(rowText)})}catch{}});
       const metric=(key,label,patterns)=>{for(const pattern of patterns){const match=bodyText.match(pattern);if(match?.[1])return {key,label,value:clean(match[1]),available:true}}return {key,label,value:'页面未提供',available:false}};
-      const metrics=[
+      const pageMetrics=[
         metric('TOTAL_SOLD','总成交量',[/total items sold[:：]?\\s*([\\d,.]+)/i,/items sold[:：]?\\s*([\\d,.]+)/i,/总成交量[:：]?\\s*([\\d,.]+)/i]),
         metric('AVERAGE_SOLD_PRICE','平均成交价',[/average sold price[:：]?\\s*((?:US\\s*)?\\$[\\d,.]+)/i,/avg sold price[:：]?\\s*((?:US\\s*)?\\$[\\d,.]+)/i,/平均成交价[:：]?\\s*([^ ]+)/i]),
         metric('SOLD_PRICE_RANGE','成交价区间',[/sold price range[:：]?\\s*((?:US\\s*)?\\$[\\d,.]+\\s*(?:-|to|–)\\s*(?:US\\s*)?\\$[\\d,.]+)/i,/成交价区间[:：]?\\s*([^ ]+\\s*[-–至]\\s*[^ ]+)/i]),
@@ -1982,11 +2022,14 @@ export class BrowserWorkspace {
         metric('SELLER_COUNT','成交卖家数',[/total sellers[:：]?\\s*([\\d,.]+)/i,/number of sellers[:：]?\\s*([\\d,.]+)/i,/成交卖家数[:：]?\\s*([\\d,.]+)/i]),
         metric('FREE_SHIPPING_RATE','包邮率',[/free shipping rate[:：]?\\s*([\\d.]+%)/i,/包邮率[:：]?\\s*([\\d.]+%)/i])
       ];
-      return {url:location.href,login,verification,bodyText:bodyText.slice(0,500),samples:samples.slice(0,240),metrics,ready:samples.length>0||metrics.some(item=>item.available),blocked:/access denied|temporarily unavailable|not available/i.test(lower)};
+      // 研究页顶部指标带是「数值在前、标签在后」，正则按「标签：数值」取不到，优先用 aggregate-metric 节点
+      const metrics=aggregateMetrics.some(item=>item.available)?aggregateMetrics:pageMetrics;
+      const merged=researchSamples.length?researchSamples:samples;
+      return {url:location.href,login,verification,bodyText:bodyText.slice(0,500),samples:merged.slice(0,240),metrics,researchRows:researchSamples.length,ready:merged.length>0||metrics.some(item=>item.available),blocked:/access denied|temporarily unavailable|not available/i.test(lower)};
     })()`
     const load=async(url:string)=>{
       await view.webContents.loadURL(url)
-      let result:{url:string;login:boolean;verification:boolean;bodyText:string;samples:EbayMarketResearchSample[];metrics:EbayMarketResearchMetric[];ready:boolean;blocked:boolean}={url,samples:[],metrics:[],login:false,verification:false,bodyText:'',ready:false,blocked:false}
+      let result:{url:string;login:boolean;verification:boolean;bodyText:string;samples:EbayMarketResearchSample[];metrics:EbayMarketResearchMetric[];researchRows:number;ready:boolean;blocked:boolean}={url,samples:[],metrics:[],researchRows:0,login:false,verification:false,bodyText:'',ready:false,blocked:false}
       for(let attempt=0;attempt<20;attempt+=1){
         result=await view.webContents.executeJavaScript(extractScript) as typeof result
         if(result.login)throw new Error('eBay登录会话已失效，请先返回店铺采集完成登录')
@@ -2007,19 +2050,26 @@ export class BrowserWorkspace {
         pageUrl.searchParams.set('offset',String(offset))
         const page=await load(pageUrl.toString())
         if(offset===0){researchMetrics=page.metrics;researchSourceUrl=page.url}
-        if(page.ready)researchReady=true
+        if(page.researchRows>0||page.ready)researchReady=true
         const fresh=page.samples.filter(sample=>{const key=sample.itemId||sample.url;if(seenItemIds.has(key))return false;seenItemIds.add(key);return true})
         researchSamples.push(...fresh)
         if(page.samples.length<50||fresh.length===0)break
       }
       if(researchReady&&researchSamples.length)return {source:'EBAY_PRODUCT_RESEARCH',sourceUrl:researchSourceUrl,metrics:researchMetrics,samples:researchSamples}
+      // 研究页在当前条件下没有成交表体时，仍可退回公开成交搜索，但来源与原因要随快照落库并在结果卡显示，不再静默替换
       const soldUrl=new URL('https://www.ebay.com/sch/i.html')
       soldUrl.searchParams.set('_nkw',query);soldUrl.searchParams.set('LH_Sold','1');soldUrl.searchParams.set('LH_Complete','1');soldUrl.searchParams.set('_ipg','200')
       if(input.categoryId)soldUrl.searchParams.set('_sacat',input.categoryId)
       if(conditionId)soldUrl.searchParams.set('LH_ItemCondition',conditionId)
-      const sold=await load(soldUrl.toString())
-      if(!sold.samples.length)throw new Error('当前条件下未读取到成交样本，请调整核心商品词或在 eBay Product Research 中确认筛选条件后重试')
-      return {source:'EBAY_SOLD_SEARCH',sourceUrl:sold.url,metrics:sold.metrics,samples:sold.samples}
+      let sold:{url:string;samples:EbayMarketResearchSample[];metrics:EbayMarketResearchMetric[]}
+      try {
+        sold=await load(soldUrl.toString())
+      } catch(error) {
+        const reason=error instanceof Error?error.message:String(error)
+        throw new Error(`eBay「Research products」在本页未显示任何已成交记录，改用 eBay 公开成交搜索时又失败：${reason}`)
+      }
+      if(!sold.samples.length)throw new Error(`eBay「Research products」与公开成交搜索在当前条件下都没有成交记录。请把核心商品词换成更通用的英文品名（例如去掉品牌与尺寸前缀），或把时间范围放宽到近 365 天后重新检索`)
+      return {source:'EBAY_SOLD_SEARCH',sourceUrl:sold.url,metrics:sold.metrics,samples:sold.samples,note:'eBay「Research products」在当前条件下未返回成交记录，本次已改用 eBay 公开成交搜索（Sold & Completed）'}
     } finally {
       if(!view.webContents.isDestroyed())view.webContents.close()
     }

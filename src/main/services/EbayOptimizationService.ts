@@ -3,10 +3,33 @@ import { buildEbayMarketDecisionReport } from '../../shared/ebayMarketDecision'
 import { parseCategoryClassifyReply } from '../../shared/palletCategoryMatch'
 import { containsCjk, englishSpecificLabel, normalizeEnglishDescription } from '../../shared/ebaySpecificsEnglish'
 import { reorderDescriptionSections } from '../../shared/ebayDescriptionSections'
+import { describeLlmHttpStatus, describeLlmTransportFailure, type LlmTransportFailure } from '../../shared/llmTransportError'
 
 interface ChatResponse {
   choices?:Array<{finish_reason?:string;message?:{content?:string|null;reasoning_content?:string|null}}>
   error?:{message?:string}
+}
+
+interface DeepSeekChatReply {ok:boolean;status:number;payload:ChatResponse}
+const DEEPSEEK_RETRY_DELAY_MS=800
+// undici 的 `TypeError: fetch failed` 只把真原因放在 error.cause；这里统一拆因、按中文说明抛出，
+// 并对瞬时传输故障（DNS 抖动、连接重置、超时）自动重试一次，避免用户看到不可读的裸英文串。
+async function postDeepSeekChat(endpointBase:string,apiKey:string,body:string,timeoutMs:number):Promise<DeepSeekChatReply> {
+  const endpoint=`${endpointBase.replace(/\/$/,'')}/chat/completions`
+  const maxAttempts=2
+  let lastFailure:LlmTransportFailure|undefined
+  for(let attempt=0;attempt<maxAttempts;++attempt) {
+    try {
+      const response=await fetch(endpoint,{method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},signal:AbortSignal.timeout(timeoutMs),body})
+      const payload=await response.json().catch(()=>({})) as ChatResponse
+      return {ok:response.ok,status:response.status,payload}
+    } catch (error) {
+      lastFailure=describeLlmTransportFailure(error,{service:'DeepSeek',endpoint,timeoutMs})
+      if(!lastFailure.retryable||attempt===maxAttempts-1)break
+      await new Promise(resolve=>setTimeout(resolve,DEEPSEEK_RETRY_DELAY_MS))
+    }
+  }
+  throw new Error(lastFailure?`${lastFailure.reason}${lastFailure.retryable?'（已自动重试 1 次仍未连上）':''}`:'DeepSeek 请求未完成')
 }
 
 const normalizeToken=(value:string)=>value.toLowerCase().replace(/[^a-z0-9]/g,'')
@@ -266,17 +289,13 @@ export class EbayOptimizationService {
       {role:'user',content:JSON.stringify({title:input.title,sourceCategory:input.sourceCategory,description:(input.description||'').slice(0,1200),candidates:input.nodes})}
     ]
     try {
-      const response=await fetch(`${this.baseUrl.replace(/\/$/,'')}/chat/completions`,{
-        method:'POST',headers:{Authorization:`Bearer ${this.apiKey}`,'Content-Type':'application/json'},signal:AbortSignal.timeout(20_000),
-        body:JSON.stringify({model:this.model,temperature:0,max_tokens:200,thinking:{type:'disabled'},response_format:{type:'json_object'},messages})
-      })
-      const payload=await response.json() as ChatResponse
-      if(!response.ok)return {categoryId:null,reason:`语义归类请求失败：HTTP ${response.status}`}
+      const {ok,status,payload}=await postDeepSeekChat(this.baseUrl,this.apiKey,JSON.stringify({model:this.model,temperature:0,max_tokens:200,thinking:{type:'disabled'},response_format:{type:'json_object'},messages}),20_000)
+      if(!ok)return {categoryId:null,reason:`语义归类：${describeLlmHttpStatus(status,payload.error?.message)}`}
       const content=payload.choices?.[0]?.message?.content?.trim()||''
       if(!content)return {categoryId:null,reason:'语义归类返回为空'}
       return parseCategoryClassifyReply(content,new Set(input.nodes.map(node=>node.categoryId)))
     } catch (error) {
-      return {categoryId:null,reason:error instanceof Error&&error.name==='TimeoutError'?'语义归类超时':'语义归类请求异常'}
+      return {categoryId:null,reason:error instanceof Error&&error.message?error.message:'语义归类请求异常'}
     }
   }
 
@@ -299,12 +318,8 @@ export class EbayOptimizationService {
     let parsed:ParsedResult|undefined
     let lastFinishReason=''
     const requestTitlePayload=async(requestMessages:typeof messages,maxTokens:number)=>{
-      const response=await fetch(`${this.baseUrl.replace(/\/$/,'')}/chat/completions`,{
-        method:'POST',headers:{Authorization:`Bearer ${this.apiKey}`,'Content-Type':'application/json'},signal:AbortSignal.timeout(45_000),
-        body:JSON.stringify({model:this.model,temperature:0.2,max_tokens:maxTokens,thinking:{type:'disabled'},response_format:{type:'json_object'},messages:requestMessages})
-      })
-      const payload=await response.json() as ChatResponse
-      if(!response.ok)throw new Error(payload.error?.message||`DeepSeek 请求失败：${response.status}`)
+      const {ok,status,payload}=await postDeepSeekChat(this.baseUrl,this.apiKey,JSON.stringify({model:this.model,temperature:0.2,max_tokens:maxTokens,thinking:{type:'disabled'},response_format:{type:'json_object'},messages:requestMessages}),45_000)
+      if(!ok)throw new Error(describeLlmHttpStatus(status,payload.error?.message))
       const choice=payload.choices?.[0]
       lastFinishReason=choice?.finish_reason||''
       const content=choice?.message?.content?.trim()
@@ -383,12 +398,8 @@ export class EbayOptimizationService {
     let conversion:ReturnType<typeof verifiedConversionContent>|undefined
     let lastError=''
     for(const maxTokens of [3200,4400]) {
-      const response=await fetch(`${this.baseUrl.replace(/\/$/,'')}/chat/completions`,{
-        method:'POST',headers:{Authorization:`Bearer ${this.apiKey}`,'Content-Type':'application/json'},signal:AbortSignal.timeout(45_000),
-        body:JSON.stringify({model:this.model,temperature:0.1,max_tokens:maxTokens,thinking:{type:'disabled'},response_format:{type:'json_object'},messages})
-      })
-      const payload=await response.json() as ChatResponse
-      if(!response.ok)throw new Error(payload.error?.message||`DeepSeek 请求失败：${response.status}`)
+      const {ok,status,payload}=await postDeepSeekChat(this.baseUrl,this.apiKey,JSON.stringify({model:this.model,temperature:0.1,max_tokens:maxTokens,thinking:{type:'disabled'},response_format:{type:'json_object'},messages}),45_000)
+      if(!ok)throw new Error(describeLlmHttpStatus(status,payload.error?.message))
       const content=payload.choices?.[0]?.message?.content?.trim()
       if(!content){lastError='AI 未返回详情内容';continue}
       try {const clean=content.replace(/^```json\s*|\s*```$/g,'');parsed=JSON.parse(clean.slice(clean.indexOf('{'),clean.lastIndexOf('}')+1)) as Record<string,unknown>} catch {lastError='AI 返回的详情内容格式无法解析';continue}

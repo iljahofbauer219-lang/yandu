@@ -47,8 +47,31 @@ describe('原图合规事实与分诊', () => {
       } as never
     )
     expect(checks[0]).toMatchObject({ longestEdge: 400, sizeOk: false, visualOk: true })
-    expect(checks[1]).toMatchObject({ longestEdge: 1200, sizeOk: true, visualOk: false, visualIssues: ['无水印'] })
+    expect(checks[1]).toMatchObject({ longestEdge: 1200, sizeOk: true, visualOk: false, visualIssues: ['右下角水印'] })
     expect(buildSourceComplianceChecks([{ url: 'x', role: 'HERO' }], [], null)[0]).toMatchObject({ longestEdge: 0, sizeOk: true, visualOk: true })
+  })
+
+  it('附加文字规则只约束主图：副图含文字不判失败，主图含文字判失败且文案直述真因', () => {
+    const report = {
+      checkedAt: '', model: 'm', ruleSetVersion: 'v1', status: 'FAILED', checkedImageCount: 2, passed: 0, failed: 2, review: 0, message: '',
+      images: [
+        {
+          mediaId: 'm1', sortOrder: 0, status: 'FAILED', summary: '',
+          rules: [{ rule: 'NO_ADDED_TEXT', label: '无附加文字或营销图形', status: 'FAILED', confidence: 0.9, evidence: '图片上方有营销文字 RACING SEATS' }]
+        },
+        {
+          mediaId: 'm2', sortOrder: 1, status: 'FAILED', summary: '',
+          rules: [{ rule: 'NO_ADDED_TEXT', label: '无附加文字或营销图形', status: 'FAILED', confidence: 0.9, evidence: '图片上方有营销文字 RACING SEATS' }]
+        }
+      ]
+    } as never
+    const checks = buildSourceComplianceChecks(
+      [{ url: 'https://cdn/scene.jpg', role: 'SCENE' }, { url: 'https://cdn/hero.jpg', role: 'HERO' }],
+      [{ id: 'm1', remoteUrl: 'https://cdn/scene.jpg', width: 500, height: 500 }, { id: 'm2', remoteUrl: 'https://cdn/hero.jpg', width: 500, height: 500 }],
+      report
+    )
+    expect(checks[0]).toMatchObject({ visualOk: true, visualIssues: [] })
+    expect(checks[1]).toMatchObject({ visualOk: false, visualIssues: ['图片上方有营销文字 RACING SEATS'] })
   })
 
   it('分诊：尺寸/视觉/主图白底任一不过进重生成单，其余沿用', () => {
@@ -97,11 +120,33 @@ describe('主图白底像素判定', () => {
     return offset % 4 === 3 ? 255 : value
   }))
 
+  /** 逐像素构造：white(x,y) 返回该点是否近白，用于复刻真实主图（商品顶到左右边）等构图 */
+  const bitmapFrom = (whiteAt: (x: number, y: number) => boolean) => Uint8Array.from(Array.from({ length: 16 * 16 * 4 }, (_unused, offset) => {
+    const pixel = Math.floor(offset / 4)
+    if (offset % 4 === 3) return 255
+    return whiteAt(pixel % 16, Math.floor(pixel / 16)) ? 255 : 60
+  }))
+
   it('外圈近白判纯白，外圈有色判非纯白，尺寸不符记未知', () => {
     expect(classifyBackgroundFromBgra(bitmap(120, 250), 16, 16)).toBe('WHITE')
     expect(classifyBackgroundFromBgra(bitmap(250, 40), 16, 16)).toBe('NON_WHITE')
     expect(classifyBackgroundFromBgra(bitmap(250), 9, 8)).toBe('UNKNOWN')
     expect(classifyBackgroundFromBgra(new Uint8Array(4), 16, 16)).toBe('UNKNOWN')
+  })
+
+  it('商品顶满左右边但上下与四角纯白仍判纯白（真实主图构图）', () => {
+    // 复刻 03.jpg：左右两列中段是商品像素，上下边与四角为白
+    const productTouchesSides = bitmapFrom((x, y) => (x === 0 || x === 15) && y > 2 && y < 13 ? false : (y <= 1 || y >= 14 ? true : true))
+    expect(classifyBackgroundFromBgra(productTouchesSides, 16, 16)).toBe('WHITE')
+  })
+
+  it('四角白但上下左右均被商品或彩色背景占据判非纯白', () => {
+    const onlyCornersWhite = bitmapFrom((x, y) => (x < 2 || x > 13) && (y < 2 || y > 13))
+    expect(classifyBackgroundFromBgra(onlyCornersWhite, 16, 16)).toBe('NON_WHITE')
+  })
+
+  it('彩色背景（四角与外圈全有色）判非纯白', () => {
+    expect(classifyBackgroundFromBgra(bitmapFrom(() => false), 16, 16)).toBe('NON_WHITE')
   })
 })
 

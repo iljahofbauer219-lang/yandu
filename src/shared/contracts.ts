@@ -328,6 +328,8 @@ export interface EbayMarketResearchRequest {
   listingId:string
   query:string
   periodDays:30|90|365
+  /** 默认关闭：仅当用户在检索卡上勾选后，eBay 登录态研究页读不到结果时才改用 Omkar API */
+  allowOmkarFallback?:boolean
 }
 
 export interface EbayMarketResearchDecisionRequest {
@@ -1915,6 +1917,8 @@ export interface SupplyProductDownload {
   downloadedAt: string
   /** 产品页图集资产文件名（用于原图比对，可选） */
   imageAssets?: string[]
+  /** 产品页视频资产文件名（用于视频生成选择，可选） */
+  videoAssets?: string[]
 }
 
 export type MarketplaceMediaAssetType = 'ORIGINAL' | 'AI_GENERATED' | 'REALSHIFT'

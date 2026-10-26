@@ -49,6 +49,24 @@ function normalizeAssetName(value: string): string {
   return base.replace(/\?.*$/, '').replace(/\.[a-z0-9]+$/i, '').toLowerCase()
 }
 
+/** 视觉规则失败文案缺省：规则名按通过条件措辞，反读会误解（「无附加文字」实为「含附加文字」） */
+const VISUAL_ISSUE_TEXT: Record<string, string> = {
+  PRODUCT_ACCURACY: '商品呈现与标题不符',
+  NO_BORDER: '含额外边框',
+  NO_ADDED_TEXT: '含附加文字或营销图形',
+  NO_WATERMARK: '含水印'
+}
+
+/** 附加文字规则只约束主图：场景图/尺寸表等副图常自带说明性文字，不因此判失败 */
+function visualRuleApplies(rule: string, role: string): boolean {
+  return rule !== 'NO_ADDED_TEXT' || role === 'HERO'
+}
+
+/** 失败原因直述真因：优先模型/分辨率检查给出的中文证据，缺证据回退违规措辞与规则名 */
+function issueText(rule: { rule: string; label?: string; evidence?: string }): string {
+  return rule.evidence || VISUAL_ISSUE_TEXT[rule.rule] || rule.label || rule.rule
+}
+
 /** 原图清单 vs 图文页图集（imageAssets 为资产文件名）→ 标出多出来的图；清单为空时一律不判 */
 function isExtraToPage(sourceUrl: string, pageAssets: string[]): boolean {
   if (!pageAssets.length) return false
@@ -67,14 +85,14 @@ export function buildSourceComplianceChecks(
     const item = (media || []).find(entry => entry.remoteUrl === source.url)
     const longestEdge = item ? Math.max(item.width || 0, item.height || 0) : 0
     const visual = item && report ? (report.images || []).find(entry => entry.mediaId === item.id) : undefined
-    const rules = visual?.rules || []
+    const rules = (visual?.rules || []).filter(rule => visualRuleApplies(rule.rule, source.role))
     return {
       url: source.url,
       role: source.role,
       longestEdge,
       sizeOk: longestEdge === 0 || longestEdge >= EBAY_IMAGE_MIN_LONGEST_EDGE,
       visualOk: !visual || rules.every(rule => rule.status !== 'FAILED'),
-      visualIssues: rules.filter(rule => rule.status === 'FAILED').map(rule => rule.label || rule.rule),
+      visualIssues: rules.filter(rule => rule.status === 'FAILED').map(issueText),
       visualReview: rules.filter(rule => rule.status === 'REVIEW').map(rule => rule.label || rule.rule),
       extraToPage: isExtraToPage(source.url, pageAssets || [])
     }

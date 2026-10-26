@@ -235,6 +235,10 @@ form label{font-size:12px;line-height:17px}
 .ebay-market-research{gap:14px;padding:16px}
 .ebay-market-controls{grid-template-columns:minmax(240px,1fr) 180px auto;gap:10px}
 .ebay-market-controls input,.ebay-market-controls select,.ebay-market-controls button{height:42px;font-size:13px}
+.ebay-market-controls:has(.ebay-market-channel){grid-template-columns:minmax(220px,1fr) 160px auto auto}
+.ebay-market-controls .ebay-market-channel{min-height:42px;gap:7px;color:#4d575a;font-size:12px}
+.ebay-market-controls .ebay-market-channel input{width:18px;height:18px;flex:0 0 auto}
+.ebay-market-controls .ebay-market-channel span{line-height:16px}
 .ebay-market-summary{gap:9px}
 .ebay-market-summary span{min-height:68px;padding:12px}
 .ebay-market-summary b{font-size:14px}
@@ -393,6 +397,7 @@ form label{font-size:12px;line-height:17px}
   .ebay-business-nav button{min-width:138px}
   .ebay-library-layout,.ebay-optimize-layout{grid-template-columns:230px minmax(0,1fr)}
   .ebay-market-controls,.ebay-toolbar{grid-template-columns:1fr 160px}
+  .ebay-market-controls .ebay-market-channel{grid-column:1/-1}
   .ebay-market-controls button,.ebay-toolbar button{grid-column:1/-1}
   .ebay-market-findings>div,.ebay-market-evidence{grid-template-columns:1fr}
   .support-workspace{grid-template-columns:280px minmax(420px,1fr)}

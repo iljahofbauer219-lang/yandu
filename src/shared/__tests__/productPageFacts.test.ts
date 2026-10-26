@@ -37,6 +37,16 @@ describe('服务器产品页事实解析', () => {
     expect(facts.imageAssets).toEqual([])
   })
 
+  it('pp-videos 块解析出视频资产文件名', () => {
+    const facts = parseProductPageFacts('<div class="pp-videos"><video controls preload="metadata" src="assets/v-01.mp4"></video><video controls src="assets/v-02.mp4"></video></div>')
+    expect(facts.videoAssets).toEqual(['v-01.mp4', 'v-02.mp4'])
+  })
+
+  it('无视频块时 videoAssets 为 undefined', () => {
+    const facts = parseProductPageFacts(PAGE_HTML)
+    expect(facts.videoAssets).toBeUndefined()
+  })
+
   it('描述行剔除原站导航碎片', () => {
     const cleaned = cleanPageDescriptionText('帮助中心\nBuyer中心\n消息中心(3)\n2件装桶形赛车座椅，含安装工具。\nUSA / $\nPVC 皮革材质')
     expect(cleaned.split('\n')).toEqual(['2件装桶形赛车座椅，含安装工具。', 'USA / $', 'PVC 皮革材质'])

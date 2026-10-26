@@ -211,7 +211,9 @@ export class SupplyProductDownloadService {
       status: 'DOWNLOADED',
       error: failedCount ? `部分图片失败：${failures.slice(0, 3).join('；')}` : '',
       estimatedTotal: extracted.estimatedTotal ?? '',
-      downloadedAt: capturedAt
+      downloadedAt: capturedAt,
+      imageAssets: uploadedGallery.map(item => item.file),
+      videoAssets: uploaded.filter(item => item.kind === 'video').map(item => item.file)
     }
     this.database.upsertSupplyDownload(record)
     return record

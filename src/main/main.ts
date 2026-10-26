@@ -46,6 +46,7 @@ import type { AmazonDataSourceSearchResult } from '../shared/amazonScraper'
 import { describeOmkarCloudError } from '../shared/omkarCloud'
 import { palletItemToEbayLocalInput } from '../shared/palletToEbayLocal'
 import { matchPalletCategory } from '../shared/palletCategoryMatch'
+import { ebayMarketResearchChannelLabel, isEbayResearchCategoryUsable } from '../shared/ebayMarketResearchParse'
 import { parseResearchQueryReply } from '../shared/ebayResearchQueryLlm'
 import { parseCoreTermTranslationReply, parseCoreTermsReply, type LocalCoreTerms } from '../shared/localCoreTerms'
 import { buildCategoryPromptTree, parseInboundCategorySuggestionReply, type CatalogBranch, type InboundCategorySuggestion } from '../shared/inboundCategorySuggestion'
@@ -1331,6 +1332,8 @@ function omkarFailureMessage(detail: string): string {
   return `Omkar eBay Scraper 返回错误：${text || '未知错误'}`
 }
 
+type EbayMarketEvidence = Pick<EbayMarketResearchSnapshot,'source'|'sourceUrl'|'metrics'|'samples'> & {note?:string}
+
 async function researchEbayMarket(request:EbayMarketResearchRequest):Promise<EbayMarketResearchSnapshot> {
   if(!database)throw new Error('数据库尚未初始化')
   const store=database.getEbayStores().find(item=>item.id===request.storeId)
@@ -1342,11 +1345,13 @@ async function researchEbayMarket(request:EbayMarketResearchRequest):Promise<Eba
   if(!query)throw new Error('请先填写能代表当前商品的核心商品词')
   const omkarSettings=readAmazonDataSource()
   const omkarKey=omkarSettings.encryptedApiKey&&secretStorageAvailable()?decryptSecret(omkarSettings.encryptedApiKey):''
-  marketResearchLog(`start store=${store.id} listing=${request.listingId} query="${query}" period=${request.periodDays} channel=${omkarKey?'omkar':'browser'}`)
+  const allowOmkarFallback=request.allowOmkarFallback===true&&Boolean(omkarKey)
+  const categoryUsable=isEbayResearchCategoryUsable(listing.categoryId||'')
+  const researchCategoryId=categoryUsable?(listing.categoryId||''):''
+  marketResearchLog(`start store=${store.id} listing=${request.listingId} query="${query}" period=${request.periodDays} channel=browser omkar=${allowOmkarFallback?'opt-in-fallback':'off'} category=${listing.categoryId||'无'}(${categoryUsable?'eBay类目':'非eBay类目，按全部类目检索'})`)
   const marketWorkspace=workspace
-  const readEvidence=async(searchQuery:string)=>{
+  const readOmkarEvidence=async(searchQuery:string):Promise<EbayMarketEvidence>=>{
     let omkarError:Error|null=null
-    if(omkarKey){
       try{
       const url=new URL(ebayScraperSearchEndpoint())
       url.searchParams.set('keyword',searchQuery);url.searchParams.set('marketplace','ebay.com');url.searchParams.set('page','1')
@@ -1363,13 +1368,16 @@ async function researchEbayMarket(request:EbayMarketResearchRequest):Promise<Eba
       return {source:'OMKAR_EBAY_SCRAPER' as const,sourceUrl:`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(searchQuery)}`,samples,metrics:[metric('TOTAL_SOLD','样本已售数',sold?String(sold):'',sold>0),metric('AVERAGE_SOLD_PRICE','样本平均价',prices.length?`USD ${(prices.reduce((a,b)=>a+b,0)/prices.length).toFixed(2)}`:'',prices.length>0),metric('SOLD_PRICE_RANGE','样本价格范围',prices.length?`USD ${Math.min(...prices).toFixed(2)} – ${Math.max(...prices).toFixed(2)}`:'',prices.length>0),metric('AVERAGE_SHIPPING','平均运费',shipping.length?`USD ${(shipping.reduce((a,b)=>a+b,0)/shipping.length).toFixed(2)}`:'',shipping.length>0),metric('FREE_SHIPPING_RATE','免运费样本',samples.length?`${Math.round(freeShipping/samples.length*100)}%`:'',samples.length>0),metric('SELL_THROUGH_RATE','售出率','',false),metric('SELLER_COUNT','卖家数','',false)]}
       }catch(error){
         omkarError=error instanceof Error?error:new Error(String(error))
-        marketResearchLog(`omkar failed query="${searchQuery}" error=${omkarError.message.slice(0,160)}；fallback=browser`)
+        marketResearchLog(`omkar failed query="${searchQuery}" error=${omkarError.message.slice(0,160)}`)
       }
-    }
-    if(!marketWorkspace){if(omkarError)throw omkarError;throw new Error('请先在 AI总部配置 Omkar API Key，或打开 eBay 店铺浏览器')}
+    if(omkarError)throw omkarError
+    throw new Error('Omkar eBay Scraper 尚未在 AI总部配置可用 API Key')
+  }
+  const readEvidence=async(searchQuery:string):Promise<EbayMarketEvidence>=>{
+    if(!marketWorkspace)throw new Error('请先在「店铺采集」打开当前 eBay 店铺并完成登录，再回到 AI优化检索已成交市场数据')
     const read=()=>marketWorkspace.readEbayMarketResearch(`ebay:${store.id}`,{
       query:searchQuery,
-      categoryId:listing.categoryId,
+      categoryId:researchCategoryId,
       condition:listing.condition||'',
       marketplaceId:listing.marketplaceId,
       periodDays:request.periodDays
@@ -1377,9 +1385,18 @@ async function researchEbayMarket(request:EbayMarketResearchRequest):Promise<Eba
     try {
       return await read()
     } catch(error) {
-      if(error instanceof Error&&/登录会话已失效/.test(error.message)){await ensureEbayStoreLogin(request.storeId);return read()}
-      if(omkarError)throw new Error(`Omkar 通道失败：${omkarError.message}；浏览器通道兜底失败：${error instanceof Error?error.message:String(error)}`)
-      throw error
+      const message=error instanceof Error?error.message:String(error)
+      if(/登录会话已失效|请先在「店铺采集」打开/.test(message)){
+        await ensureEbayStoreLogin(request.storeId)
+        try { return await read() } catch(retryError){ throw new Error(`自动登录后仍未读到 eBay「Research products」结果：${retryError instanceof Error?retryError.message:String(retryError)}`) }
+      }
+      if(!allowOmkarFallback)throw new Error(message)
+      marketResearchLog(`browser failed query="${searchQuery}" error=${message.slice(0,160)}；fallback=omkar（本次勾选允许）`)
+      try {
+        return await readOmkarEvidence(searchQuery)
+      } catch(omkarError) {
+        throw new Error(`eBay 登录态研究页读取失败：${message}；Omkar 回退同样失败：${omkarError instanceof Error?omkarError.message:String(omkarError)}`)
+      }
     }
   }
   let evidence=await readEvidence(query)
@@ -1460,7 +1477,9 @@ async function researchEbayMarket(request:EbayMarketResearchRequest):Promise<Eba
     source:evidence.source,sourceUrl:evidence.sourceUrl,fetchedAt:new Date().toISOString(),captureMode:'AUTOMATIC',rawSampleCount:analysis.rawSampleCount,sampleCount:analysis.rankedSamples.length,
     analysisSampleCount:analysis.analysisSampleCount,rankingBasis:analysis.rankingBasis,soldQuantityEvidenceCount:analysis.soldQuantityEvidenceCount,
     metrics:evidence.metrics,samples:analysis.rankedSamples,filters:[
-      {label:'采集方式',value:evidence.source==='OMKAR_EBAY_SCRAPER'?'Omkar eBay Scraper API':evidence.source==='EBAY_PRODUCT_RESEARCH'?'eBay Product Research':'eBay Sold & Completed'},
+      {label:'采集方式',value:ebayMarketResearchChannelLabel(evidence.source)},
+      ...(evidence.note?[{label:'来源说明',value:evidence.note}]:[]),
+      ...(categoryUsable||!listing.categoryId?[]:[{label:'类目筛选',value:`全部类目（货盘类目 ${listing.categoryId} 不是 eBay 类目 ID，按它检索 eBay 研究页会零结果）`}]),
       ...(queryBroadened?[{label:'查询词自动放宽',value:queryBroadened}]:[]),
       {label:'原始结果',value:`读取 ${analysis.rawSampleCount} 个，去重后 ${analysis.rankedSamples.length} 个`},
       {label:'标题分析池',value:`前 ${analysis.analysisSampleCount} 个有效样本`},
@@ -3047,12 +3066,13 @@ ipcMain.handle('warehouse:download', async (_event, warehouseProductId: string, 
 })
 ipcMain.handle('warehouse:download-list', async () => {
   const records = database?.listSupplyDownloads() ?? []
-  // 为 DOWNLOADED 记录补上 imageAssets（从产品页 HTML 解析，失败不影响其他字段）
+  // 为 DOWNLOADED 记录补上 imageAssets/videoAssets（从产品页 HTML 解析，失败不影响其他字段）
   return await Promise.all(records.map(async record => {
     if (record.status !== 'DOWNLOADED' || !record.pageUrl) return record
     try {
       const bundle = await fetchProductPageFacts(record.pageUrl, record.warehouseProductId, '', false)
-      return bundle ? { ...record, imageAssets: bundle.imageAssets } : record
+      if (!bundle) return record
+      return { ...record, imageAssets: bundle.imageAssets, videoAssets: bundle.videoAssets }
     } catch (_error) {
       return record
     }
@@ -3399,7 +3419,7 @@ ipcMain.handle('ebay:report:import', async (_event, storeId:string) => {
   return {storeId,fileName:path.basename(filePath),...result,failed:parsed.failed,errors:parsed.errors}
 })
 ipcMain.handle('ebay:optimize:title', (_event, request:EbayTitleOptimizationRequest) => ebayOptimizationService.optimizeTitle(request))
-interface ProductPageFactBundle { descriptionText:string; specs:Array<{key:string;value:string}>; features:string[]; imageAssets:string[] }
+interface ProductPageFactBundle { descriptionText:string; specs:Array<{key:string;value:string}>; features:string[]; imageAssets:string[]; videoAssets?:string[] }
 const productPageFactsCache=new Map<string,ProductPageFactBundle>()
 
 async function fetchProductPageFacts(pageUrl:string,warehouseProductId:string,accessToken:string,refresh=false):Promise<ProductPageFactBundle|null> {
@@ -3420,7 +3440,8 @@ async function fetchProductPageFacts(pageUrl:string,warehouseProductId:string,ac
           const specs=Array.isArray(meta.specs)?(meta.specs as Array<Record<string,unknown>>).map(row=>({key:String(row.key||'').trim(),value:String(row.value||'').trim()})).filter(row=>row.key&&row.value):[]
           const features=Array.isArray(meta.features)?(meta.features as unknown[]).map(item=>String(item).trim()).filter(Boolean):[]
           const imageAssets=Array.isArray(meta.images)?(meta.images as Array<Record<string,unknown>>).map(row=>String(row.name||'').trim()).filter(Boolean):[]
-          bundle={descriptionText:String(meta.descriptionText||'').trim(),specs,features,imageAssets}
+          const videoAssets=Array.isArray(meta.videos)?(meta.videos as Array<Record<string,unknown>>).map(row=>String(row.name||'').trim()).filter(Boolean):undefined
+          bundle={descriptionText:String(meta.descriptionText||'').trim(),specs,features,imageAssets,videoAssets:videoAssets?.length?videoAssets:undefined}
         }
       }
     }catch{ /* 登录态失效或服务器不可达时回落公开页 */ }
@@ -3432,7 +3453,7 @@ async function fetchProductPageFacts(pageUrl:string,warehouseProductId:string,ac
       const response=await fetch(url,{signal:AbortSignal.timeout(20_000)})
       if(response.ok){
         const parsed=parseProductPageFacts(await response.text())
-        bundle={descriptionText:parsed.descriptionText,specs:parsed.specs,features:parsed.features,imageAssets:parsed.imageAssets}
+        bundle={descriptionText:parsed.descriptionText,specs:parsed.specs,features:parsed.features,imageAssets:parsed.imageAssets,videoAssets:parsed.videoAssets}
       }
     }catch{ /* 公开页不可达时保持无事实，由调用方给出中文指引 */ }
   }

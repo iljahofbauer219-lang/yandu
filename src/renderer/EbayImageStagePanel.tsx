@@ -52,6 +52,8 @@ import {
 const CATEGORIES: EbayImageCategory[] = ['HERO', 'PRODUCT', 'PAIN_POINT', 'SCENE']
 /** 零度API 整链无通道时自动跨厂商改用的模型（参照上限按其元数据重算） */
 const CROSS_VENDOR_MODEL = 'wan2.7-image-pro'
+/** 原图优化区单张重生成展示的规则子集：与单图出图直接相关的六条（另三条属批量口径，留在多生图片区） */
+const SIMPLE_REGEN_RULE_IDS = ['FIDELITY', 'PLATFORM', 'CLEAN_FRAME', 'COLOR_TRUE', 'SOUND_STRUCTURE', 'SCALE_TRUE']
 // 四类配色：数量输入标签与「⑥ 审核与采纳」分组标题共用，便于对应
 const CATEGORY_COLORS: Record<EbayImageCategory, string> = {
   HERO: '#e74c3c', PRODUCT: '#27ae60', PAIN_POINT: '#1abc9c', SCENE: '#3498db'
@@ -169,13 +171,17 @@ export default function EbayImageStagePanel(props: Props) {
   const [error, setError] = useState('')
   /** 主进程重试/降级的中文说明（提示条展示） */
   const [genNotice, setGenNotice] = useState('')
-  const lastRunRef = useRef<{ cards: EbayCategoryShotCard[]; replace: boolean }>({ cards: [], replace: true })
+  const lastRunRef = useRef<{ cards: EbayCategoryShotCard[]; replace: boolean; sink: 'model' | 'simple' }>({ cards: [], replace: true, sink: 'model' })
+  const errorRef = useRef<HTMLDivElement | null>(null)
   const rotateRef = useRef<Record<string, number>>({})
 
   /** 原图清单变化时，过滤简版档持久化状态中已不在新清单的 URL */
   useEffect(() => {
     if (lane !== 'simple') return
     const sourceSet = new Set(props.sourceImages)
+    // 生成图/重生成替换图不在原图清单里，不得随原图清单一起被裁掉，否则出图完成后再渲染会把结果清没
+    const generatedUrls = new Set(simpleGenerated.map(image => image.url))
+    const regenUrls = new Set(Object.values(simpleRegen).map(entry => entry.url))
     let changed = false
     if (simpleTriage) {
       const nextKeep = simpleTriage.keep.filter(url => sourceSet.has(url))
@@ -185,12 +191,12 @@ export default function EbayImageStagePanel(props: Props) {
         changed = true
       }
     }
-    const nextOrder = simpleOrder.filter(url => sourceSet.has(url))
+    const nextOrder = simpleOrder.filter(url => sourceSet.has(url) || generatedUrls.has(url) || regenUrls.has(url))
     if (nextOrder.length !== simpleOrder.length) {
       setSimpleOrder(nextOrder)
       changed = true
     }
-    const nextDeleted = simpleDeleted.filter(url => sourceSet.has(url))
+    const nextDeleted = simpleDeleted.filter(url => sourceSet.has(url) || generatedUrls.has(url) || regenUrls.has(url))
     if (nextDeleted.length !== simpleDeleted.length) {
       setSimpleDeleted(nextDeleted)
       changed = true
@@ -200,12 +206,7 @@ export default function EbayImageStagePanel(props: Props) {
       setSimpleRegen(Object.fromEntries(nextRegenKeys.map(url => [url, simpleRegen[url]])))
       changed = true
     }
-    const nextGenerated = simpleGenerated.filter(img => sourceSet.has(img.url))
-    if (nextGenerated.length !== simpleGenerated.length) {
-      setSimpleGenerated(nextGenerated)
-      changed = true
-    }
-    if (changed) persist({ simpleTriage: simpleTriage ? { ...simpleTriage, keep: simpleTriage.keep.filter(url => sourceSet.has(url)), regen: simpleTriage.regen.filter(item => sourceSet.has(item.url)) } : simpleTriage, simpleOrder: nextOrder, simpleDeleted: nextDeleted, simpleRegen: Object.fromEntries(nextRegenKeys.map(url => [url, simpleRegen[url]])), simpleGenerated: nextGenerated })
+    if (changed) persist({ simpleTriage: simpleTriage ? { ...simpleTriage, keep: simpleTriage.keep.filter(url => sourceSet.has(url)), regen: simpleTriage.regen.filter(item => sourceSet.has(item.url)) } : simpleTriage, simpleOrder: nextOrder, simpleDeleted: nextDeleted, simpleRegen: Object.fromEntries(nextRegenKeys.map(url => [url, simpleRegen[url]])) })
   }, [lane, props.listingId, props.sourceImages])
 
   const keptUrls = new Set(Object.values(keptByCategory).flat())
@@ -250,6 +251,11 @@ export default function EbayImageStagePanel(props: Props) {
     if (Object.values(keptByCategory).some(urls => urls.length)) emit(keptByCategory)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 红条在面板末尾：出错自动滚到可视区，避免用户只看到「生成中」结束而误以为静默失败
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [error])
 
   // 模型默认推荐：优先匹配主图/白底 strengths
   useEffect(() => {
@@ -431,7 +437,7 @@ export default function EbayImageStagePanel(props: Props) {
   const generateCards = async (cards: EbayCategoryShotCard[], replace: boolean, rotationOffset = 0, sink: GenerationSink = 'model') => {
     const activeModel = modelId
     if (!activeModel) { setError('请先选择图片生成大模型'); return }
-    lastRunRef.current = { cards, replace }
+    lastRunRef.current = { cards, replace, sink }
     setBusy(true)
     setError('')
     setGenNotice('')
@@ -450,11 +456,11 @@ export default function EbayImageStagePanel(props: Props) {
     setProgress('')
   }
 
-  // 红条动作：原样重跑上一次的分镜集合
+  // 红条动作：原样重跑上一次的分镜集合（含简版档 sink，避免简版失败重试落到模型档落点）
   const retryLastRun = () => {
     const last = lastRunRef.current
     if (!last?.cards.length) return
-    void generateCards(last.cards, last.replace)
+    void generateCards(last.cards, last.replace, 0, last.sink)
   }
 
   const runOneClick = () => {
@@ -644,16 +650,33 @@ export default function EbayImageStagePanel(props: Props) {
     persist({ counts: next })
   }
 
+  /** 模型下拉：多生图片区与原图优化区共用同一份选中状态 */
+  const renderModelSelect = () => (
+    <select value={modelId} onChange={event => setModelId(event.target.value)} aria-label="图片生成大模型">
+      <option value="">请选择模型</option>
+      {props.imageModels.map(model => (
+        <option key={model.id} value={model.id}>{model.name}{model.costLabel ? ` · ${model.costLabel}` : ''}</option>
+      ))}
+    </select>
+  )
+
+  /** 单条规则勾选：两区共用同一份勾选状态与持久化 */
+  const renderRuleItem = (rule: (typeof EBAY_IMAGE_RULES)[number]) => (
+    <label className={`ebay-stage-rule-item${rule.locked ? ' locked' : ''}`} key={rule.id}>
+      <input type="checkbox" checked={rules[rule.id]} disabled={rule.locked}
+        onChange={event => { const next = { ...rules, [rule.id]: event.target.checked }; setRules(next); persist({ rules: next }) }} />
+      <span className="ebay-stage-rule-item-body">
+        <span className="ebay-stage-rule-item-label">{rule.label}{rule.locked && <em className="ebay-stage-rule-lock">必守</em>}</span>
+        <span className="ebay-stage-rule-item-detail">{rule.detail}</span>
+      </span>
+    </label>
+  )
+
   /** 模型与出图模式区块：两档共用同一套控件，仅张数下限不同（简版档允许 0） */
   const renderModelMode = (minCount: number, value: EbayImageCategoryCounts, onCount: (category: EbayImageCategory, raw: string) => void) => (
     <>
       <div className="ebay-stage-model-select">
-        <select value={modelId} onChange={event => setModelId(event.target.value)} aria-label="图片生成大模型">
-          <option value="">请选择模型</option>
-          {props.imageModels.map(model => (
-            <option key={model.id} value={model.id}>{model.name}{model.costLabel ? ` · ${model.costLabel}` : ''}</option>
-          ))}
-        </select>
+        {renderModelSelect()}
         <div className="ebay-stage-count-grid">
           <span className="ebay-stage-count-grid-title">各类图片张数</span>
           {CATEGORIES.map(category => (
@@ -678,16 +701,7 @@ export default function EbayImageStagePanel(props: Props) {
   const renderRules = () => (
     <>
       <div className="ebay-stage-rule-grid">
-        {EBAY_IMAGE_RULES.map(rule => (
-          <label className={`ebay-stage-rule-item${rule.locked ? ' locked' : ''}`} key={rule.id}>
-            <input type="checkbox" checked={rules[rule.id]} disabled={rule.locked}
-              onChange={event => { const next = { ...rules, [rule.id]: event.target.checked }; setRules(next); persist({ rules: next }) }} />
-            <span className="ebay-stage-rule-item-body">
-              <span className="ebay-stage-rule-item-label">{rule.label}{rule.locked && <em className="ebay-stage-rule-lock">必守</em>}</span>
-              <span className="ebay-stage-rule-item-detail">{rule.detail}</span>
-            </span>
-          </label>
-        ))}
+        {EBAY_IMAGE_RULES.map(renderRuleItem)}
       </div>
       <div className="ebay-stage-presence-row">
         <span className="ebay-stage-count-grid-title">痛点图 / 场景图模特：</span>
@@ -700,6 +714,20 @@ export default function EbayImageStagePanel(props: Props) {
       </div>
       <p className="ebay-stage-rule-summary">{describeActiveEbayImageRules(rules, presence, mode)}（主图与细节图任何选择下都不出现人物或动物）</p>
     </>
+  )
+
+  /** 原图优化区单张重生成控件：模型 + 六条规则，与多生图片区同一份状态，改一处两区同步 */
+  const renderSimpleRegenControls = () => (
+    <div className="ebay-stage-simple-regen-controls">
+      <div className="ebay-stage-simple-regen-head">
+        <span className="ebay-stage-count-grid-title">单张重生成模型</span>
+        {renderModelSelect()}
+        <small>「重生成这张」按此处模型与勾选规则出图；与「多生图片」区同一套配置，改一处两区同步</small>
+      </div>
+      <div className="ebay-stage-rule-grid">
+        {EBAY_IMAGE_RULES.filter(rule => SIMPLE_REGEN_RULE_IDS.includes(rule.id)).map(renderRuleItem)}
+      </div>
+    </div>
   )
 
   return <div className="ebay-stage-panel">
@@ -755,6 +783,7 @@ export default function EbayImageStagePanel(props: Props) {
           {triageBusy ? '检查中…' : simpleTriage ? '重新检查原图' : '开始检查原图'}
         </button>
       </header>
+      {renderSimpleRegenControls()}
       {triageBusy ? <p className="ebay-stage-placeholder">正在逐张读取原图并按平台规则判定（尺寸、视觉规则、主图白底）…</p>
         : !simpleTriage ? <p className="ebay-stage-placeholder">点击「开始检查原图」：合规原图直接沿用、不产生生成费用，个别不合规的才重生成。</p>
           : (
@@ -802,11 +831,25 @@ export default function EbayImageStagePanel(props: Props) {
         </button>
         {simpleGenerated.length > 0 && <em className="ebay-stage-simple-chip ok">已出 {simpleGenerated.length} 张，到「③ 图片排序」调整顺序</em>}
       </div>
+      {simpleGenerated.length > 0 && (
+        <div className="ebay-stage-simple-gen-grid">
+          {simpleGenerated.map(image => (
+            <div className="ebay-stage-simple-gen-cell" key={image.url}>
+              <img src={image.url} alt={`${marketingFactCategoryLabel(image.category)}生成图`} />
+              <em className="ebay-stage-simple-chip gen">{marketingFactCategoryLabel(image.category)}</em>
+              {image.model && <span className="ebay-stage-simple-gen-model">{modelLabel(image.model)}</span>}
+            </div>
+          ))}
+        </div>
+      )}
       {genNotice && <div className="ebay-stage-gen-notice" role="status">{genNotice}</div>}
       {error && (
-        <div className="ebay-stage-error" role="alert">
+        <div className="ebay-stage-error" role="alert" ref={errorRef}>
           <b>生成未完成</b>
           <span>{error}</span>
+          <div className="ebay-stage-error-actions">
+            <button type="button" className="yd-button yd-button--secondary" disabled={busy || !lastRunRef.current.cards.length} onClick={retryLastRun}>重试</button>
+          </div>
         </div>
       )}
     </section>
@@ -877,7 +920,7 @@ export default function EbayImageStagePanel(props: Props) {
       <small>eBay 图片规则内置：商品呈现准确、无额外边框、无附加文字或营销图形、无水印；主图纯白底且商品占幅≥80%。采纳后系统自动执行最终图集检查。</small>
       {genNotice && <div className="ebay-stage-gen-notice" role="status">{genNotice}</div>}
       {error && (
-        <div className="ebay-stage-error" role="alert">
+        <div className="ebay-stage-error" role="alert" ref={errorRef}>
           <b>生成未完成</b>
           <span>{error}</span>
           <div className="ebay-stage-error-actions">

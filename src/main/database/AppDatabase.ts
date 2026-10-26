@@ -5,6 +5,7 @@ import type { CandidateCollectionRecord, CandidateCollectionRun, CandidateUpdate
 import { complianceCheckFingerprint } from '../../shared/complianceFingerprint'
 import { mergeCandidateFacts } from '../../shared/candidateFactsMerge'
 import { badgeFallbackScore } from '../../shared/badgeScore'
+import { EBAY_COMPLIANCE_KNOWLEDGE_VERSION } from '../../shared/ebayComplianceKnowledge'
 import { normalizeEnglishDescription } from '../../shared/ebaySpecificsEnglish'
 import { reorderDescriptionSections, reorderDescriptionText } from '../../shared/ebayDescriptionSections'
 
@@ -1331,6 +1332,8 @@ export class AppDatabase {
     ensureColumn('supply_product_downloads', 'page_id', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_product_downloads', 'page_url', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_product_downloads', 'estimated_total', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('supply_product_downloads', 'image_assets', 'TEXT')
+    ensureColumn('supply_product_downloads', 'video_assets', 'TEXT')
     ensureColumn('supply_warehouse_products', 'region', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_warehouse_products', 'core_term_zh', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_warehouse_products', 'core_term_en', "TEXT NOT NULL DEFAULT ''")
@@ -2241,7 +2244,11 @@ export class AppDatabase {
     const snapshot=this.database.prepare(`SELECT content_hash FROM ebay_local_product_snapshots WHERE id=? AND local_product_id=?`).get(product.latest_snapshot_id,localProductId) as {content_hash:string}|undefined
     if(!snapshot)return null
     const row=this.database.prepare(`SELECT report_json FROM ebay_image_visual_inspections WHERE local_product_id=? AND snapshot_id=? AND content_hash=? ORDER BY checked_at DESC LIMIT 1`).get(localProductId,product.latest_snapshot_id,snapshot.content_hash) as {report_json:string}|undefined
-    return row?JSON.parse(row.report_json) as EbayImageVisualInspectionReport:null
+    if(!row)return null
+    const report=JSON.parse(row.report_json) as EbayImageVisualInspectionReport
+    // 版本号不一致时返回null，强制重新检查（避免Prompt/阈值修改后仍用旧缓存）
+    if(report.ruleSetVersion!==EBAY_COMPLIANCE_KNOWLEDGE_VERSION)return null
+    return report
   }
 
   saveEbayImageVisualInspection(localProductId:string,snapshot:EbayLocalProductSnapshot,report:EbayImageVisualInspectionReport):EbayImageVisualInspectionReport {
@@ -3575,19 +3582,53 @@ export class AppDatabase {
   }
 
   getSupplyDownload(warehouseProductId: string): SupplyProductDownload | null {
-    const row = this.database.prepare(`SELECT warehouse_product_id, page_id, page_url, image_count, failed_count, status, error, estimated_total, downloaded_at FROM supply_product_downloads WHERE warehouse_product_id=?`).get(warehouseProductId) as Record<string,unknown> | undefined
-    return row ? { warehouseProductId:String(row.warehouse_product_id), pageId:String(row.page_id ?? ''), pageUrl:String(row.page_url ?? ''), imageCount:Number(row.image_count), failedCount:Number(row.failed_count), status:row.status as SupplyProductDownload['status'], error:String(row.error), estimatedTotal:String(row.estimated_total ?? ''), downloadedAt:String(row.downloaded_at) } : null
+    const row = this.database.prepare(`SELECT warehouse_product_id, page_id, page_url, image_count, failed_count, status, error, estimated_total, downloaded_at, image_assets, video_assets FROM supply_product_downloads WHERE warehouse_product_id=?`).get(warehouseProductId) as Record<string,unknown> | undefined
+    if (!row) return null
+    const imageAssets = row.image_assets ? JSON.parse(String(row.image_assets)) as string[] : undefined
+    const videoAssets = row.video_assets ? JSON.parse(String(row.video_assets)) as string[] : undefined
+    return {
+      warehouseProductId:String(row.warehouse_product_id),
+      pageId:String(row.page_id ?? ''),
+      pageUrl:String(row.page_url ?? ''),
+      imageCount:Number(row.image_count),
+      failedCount:Number(row.failed_count),
+      status:row.status as SupplyProductDownload['status'],
+      error:String(row.error),
+      estimatedTotal:String(row.estimated_total ?? ''),
+      downloadedAt:String(row.downloaded_at),
+      imageAssets,
+      videoAssets
+    }
   }
 
   listSupplyDownloads(): SupplyProductDownload[] {
-    const rows = this.database.prepare(`SELECT warehouse_product_id, page_id, page_url, image_count, failed_count, status, error, estimated_total, downloaded_at FROM supply_product_downloads ORDER BY downloaded_at DESC`).all() as unknown as Array<Record<string,unknown>>
-    return rows.map(row => ({ warehouseProductId:String(row.warehouse_product_id), pageId:String(row.page_id ?? ''), pageUrl:String(row.page_url ?? ''), imageCount:Number(row.image_count), failedCount:Number(row.failed_count), status:row.status as SupplyProductDownload['status'], error:String(row.error), estimatedTotal:String(row.estimated_total ?? ''), downloadedAt:String(row.downloaded_at) }))
+    const rows = this.database.prepare(`SELECT warehouse_product_id, page_id, page_url, image_count, failed_count, status, error, estimated_total, downloaded_at, image_assets, video_assets FROM supply_product_downloads ORDER BY downloaded_at DESC`).all() as unknown as Array<Record<string,unknown>>
+    return rows.map(row => {
+      const imageAssets = row.image_assets ? JSON.parse(String(row.image_assets)) as string[] : undefined
+      const videoAssets = row.video_assets ? JSON.parse(String(row.video_assets)) as string[] : undefined
+      return {
+        warehouseProductId:String(row.warehouse_product_id),
+        pageId:String(row.page_id ?? ''),
+        pageUrl:String(row.page_url ?? ''),
+        imageCount:Number(row.image_count),
+        failedCount:Number(row.failed_count),
+        status:row.status as SupplyProductDownload['status'],
+        error:String(row.error),
+        estimatedTotal:String(row.estimated_total ?? ''),
+        downloadedAt:String(row.downloaded_at),
+        imageAssets,
+        videoAssets
+      }
+    })
   }
 
   upsertSupplyDownload(record: SupplyProductDownload): SupplyProductDownload {
-    this.database.prepare(`INSERT INTO supply_product_downloads (warehouse_product_id, page_id, page_url, image_count, failed_count, status, error, estimated_total, downloaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(warehouse_product_id) DO UPDATE SET page_id=excluded.page_id, page_url=excluded.page_url, image_count=excluded.image_count, failed_count=excluded.failed_count, status=excluded.status, error=excluded.error, estimated_total=excluded.estimated_total, downloaded_at=excluded.downloaded_at`)
-      .run(record.warehouseProductId, record.pageId, record.pageUrl, record.imageCount, record.failedCount, record.status, record.error, record.estimatedTotal, record.downloadedAt)
+    const imageAssetsJson = record.imageAssets ? JSON.stringify(record.imageAssets) : null
+    const videoAssetsJson = record.videoAssets ? JSON.stringify(record.videoAssets) : null
+    
+    this.database.prepare(`INSERT INTO supply_product_downloads (warehouse_product_id, page_id, page_url, image_count, failed_count, status, error, estimated_total, downloaded_at, image_assets, video_assets) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(warehouse_product_id) DO UPDATE SET page_id=excluded.page_id, page_url=excluded.page_url, image_count=excluded.image_count, failed_count=excluded.failed_count, status=excluded.status, error=excluded.error, estimated_total=excluded.estimated_total, downloaded_at=excluded.downloaded_at, image_assets=excluded.image_assets, video_assets=excluded.video_assets`)
+      .run(record.warehouseProductId, record.pageId, record.pageUrl, record.imageCount, record.failedCount, record.status, record.error, record.estimatedTotal, record.downloadedAt, imageAssetsJson, videoAssetsJson)
     return record
   }
 

@@ -3,6 +3,7 @@ export interface ProductPageFacts {
   features: string[]
   descriptionText: string
   imageAssets: string[]
+  videoAssets?: string[]
 }
 
 function decodeEntities(value: string): string {
@@ -88,6 +89,13 @@ export function parseProductPageFacts(html: string): ProductPageFacts {
     const name = decodeEntities(shot[1]).trim()
     if (name && !imageAssets.includes(name)) imageAssets.push(name)
   }
+  const videoAssets: string[] = []
+  const mp4Pattern = /src="assets\/([^"?#]+\.mp4)"/gi
+  let mp4: RegExpExecArray | null
+  while ((mp4 = mp4Pattern.exec(html))) {
+    const name = decodeEntities(mp4[1]).trim()
+    if (name && !videoAssets.includes(name)) videoAssets.push(name)
+  }
   const seen = new Set<string>()
   const dedupedSpecs = specs.filter(item => {
     const key = `${item.key}:${item.value}`.toLowerCase()
@@ -95,5 +103,5 @@ export function parseProductPageFacts(html: string): ProductPageFacts {
     seen.add(key)
     return true
   })
-  return { specs: dedupedSpecs, features, descriptionText: cleanPageDescriptionText(descriptionLines.join('\n')), imageAssets }
+  return { specs: dedupedSpecs, features, descriptionText: cleanPageDescriptionText(descriptionLines.join('\n')), imageAssets, videoAssets: videoAssets.length ? videoAssets : undefined }
 }
