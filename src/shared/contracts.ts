@@ -768,6 +768,8 @@ export interface EbayOptimizationDraft {
   complianceCheckedAt?:string
   complianceReviewedAt?:string
   complianceInputFingerprint?:string
+  /** AI 生成图转存自有服务器时的部分失败警告； successes 已替换为 /ai-assets/ 永久 URL，失败项保留原 URL */
+  aiAssetRehostWarnings?:string[]
   status:'PREMIUM'
   createdAt:string
   updatedAt:string
@@ -872,6 +874,8 @@ export interface EbayPublishVideoArtifact {
   fileName:string
   filePath:string
   previewUrl:string
+  /** 转存自有服务器后的永久 URL（/ai-assets/{id}/{name}）；转存失败时缺省，视频仍在本机 */
+  serverUrl?:string
   durationSeconds:number
   width:number
   height:number

@@ -20,6 +20,7 @@ import { LinduoLoginService } from './services/LinduoLoginService'
 import { LinduoChatModelService } from './services/LinduoChatModelService'
 import { BailianTranslationService } from './services/BailianTranslationService'
 import { SupplyProductDownloadService } from './services/SupplyProductDownloadService'
+import { AiAssetAuthError, rehostAiAssetUrls, rehostVideoFileToServer } from './services/AiAssetRehostService'
 import { requireInboundEditPermission } from './services/InboundPermissionGuard'
 import { resolveMacUpdaterZipPath } from './macUpdaterCache'
 import { hasFreeSpaceForUpdate, UPDATE_REQUIRED_FREE_BYTES } from './updateFreeSpace'
@@ -1155,7 +1156,7 @@ async function prepareEbayPublishTask(draftId:string):Promise<EbayPublishTask> {
   }
 }
 
-async function generateEbayPublishVideo(draftId:string):Promise<EbayPublishTask> {
+async function generateEbayPublishVideo(draftId:string,accessToken?:string):Promise<EbayPublishTask> {
   if(!database)throw new Error('数据库尚未初始化')
   const draft=database.getEbayOptimizationDraft(draftId)
   if(!draft)throw new Error('优品草稿不存在，请刷新后重试')
@@ -1165,7 +1166,15 @@ async function generateEbayPublishVideo(draftId:string):Promise<EbayPublishTask>
   try {
     const service=new EbayVideoService(path.join(app.getPath('userData'),'ebay-videos'))
     const video=await service.generate(validation.draft)
-    task={...task,video,comparison:buildEbayPublishComparison(validation.draft),message:'15秒商品视频已生成，可在应用内预览',updatedAt:new Date().toISOString()}
+    // 视频生成成功即转存自有服务器换永久 URL；失败不阻断任务，本机文件仍是上传到 eBay 的源
+    let videoArtifact=video
+    let rehostSuffix=''
+    if(accessToken){
+      const rehost=await rehostVideoFileToServer({serverUrl:readServerUrl(),accessToken,filePath:video.filePath})
+      if(rehost.serverUrl)videoArtifact={...video,serverUrl:rehost.serverUrl}
+      if(rehost.warning)rehostSuffix=`；${rehost.warning}`
+    }
+    task={...task,video:videoArtifact,comparison:buildEbayPublishComparison(validation.draft),message:`15秒商品视频已生成，可在应用内预览${rehostSuffix}`,updatedAt:new Date().toISOString()}
     task=appendEbayPublishAudit(task,'VIDEO_GENERATED','SUCCESS',`${video.fileName}；${video.durationSeconds}秒；${video.width}×${video.height}；${video.imageCount}张原图`)
     return database.saveEbayPublishTask(task)
   } catch(error) {
@@ -3514,9 +3523,26 @@ ipcMain.handle('ebay:optimization:export', async (_event, input:EbayOptimization
   return {filePath:selected.filePath}
 })
 ipcMain.handle('ebay:optimization-drafts:list', (_event, storeId?:string) => database?.getEbayOptimizationDrafts(storeId) ?? [])
-ipcMain.handle('ebay:optimization-drafts:save', (_event, input:EbayOptimizationDraftInput) => {
+ipcMain.handle('ebay:optimization-drafts:save', async (_event, input:EbayOptimizationDraftInput, accessToken?:string) => {
   if(!database)throw new Error('数据库尚未初始化')
-  return database.saveEbayOptimizationDraft(input)
+  try {
+    // 最终保存时刻把 AI 生成图转存自有服务器换永久 URL；失败不阻断保存，警告随草稿落库
+    if(!accessToken)return database.saveEbayOptimizationDraft(input)
+    const urls=[...new Set([input.imageUrl,...(input.imageUrls||[])].filter(Boolean))]
+    if(!urls.length)return database.saveEbayOptimizationDraft(input)
+    const {map,warnings}=await rehostAiAssetUrls({serverUrl:readServerUrl(),accessToken,urls})
+    const replace=(url:string)=>map[url]||url
+    return database.saveEbayOptimizationDraft({
+      ...input,
+      imageUrl:replace(input.imageUrl),
+      imageUrls:input.imageUrls?.map(replace),
+      ...(warnings.length?{aiAssetRehostWarnings:warnings}:{})
+    })
+  } catch(error) {
+    // IPC 不保留自定义 error.code：会话过期以消息码透传，渲染端刷新后重试一次
+    if(error instanceof AiAssetAuthError)throw new Error('SERVER_SESSION_EXPIRED')
+    throw error
+  }
 })
 ipcMain.handle('ebay:optimization-drafts:validate', (_event, draftId:string) => {
   if(!database)throw new Error('数据库尚未初始化')
@@ -3524,7 +3550,7 @@ ipcMain.handle('ebay:optimization-drafts:validate', (_event, draftId:string) => 
 })
 ipcMain.handle('ebay:publish-tasks:list', (_event, storeId?:string) => database?.getEbayPublishTasks(storeId) ?? [])
 ipcMain.handle('ebay:publish-tasks:prepare', (_event, draftId:string) => prepareEbayPublishTask(draftId))
-ipcMain.handle('ebay:publish-video:generate', (_event, draftId:string) => generateEbayPublishVideo(draftId))
+ipcMain.handle('ebay:publish-video:generate', (_event, draftId:string, accessToken?:string) => generateEbayPublishVideo(draftId,accessToken))
 ipcMain.handle('ebay:publish-video:prepare-upload', (_event, draftId:string) => prepareEbayPublishVideoUpload(draftId))
 ipcMain.handle('ebay:video-studio:configuration', () => arkVideoService().configuration())
 ipcMain.handle('ebay:video-studio:check-capabilities', () => arkVideoService().checkCapabilities())

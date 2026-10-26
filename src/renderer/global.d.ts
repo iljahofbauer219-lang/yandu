@@ -421,11 +421,11 @@ declare global {
         translateContent(request:EbayContentTranslationRequest):Promise<EbayContentTranslationResult>
         exportOptimization(input:EbayOptimizationExportInput):Promise<EbayOptimizationExportResult|null>
         optimizationDrafts(storeId?:string):Promise<EbayOptimizationDraft[]>
-        saveOptimizationDraft(input:EbayOptimizationDraftInput):Promise<EbayOptimizationDraft>
+        saveOptimizationDraft(input:EbayOptimizationDraftInput, accessToken?:string):Promise<EbayOptimizationDraft>
         validateOptimizationDraft(draftId:string):Promise<EbayPublishComplianceValidation>
         publishTasks(storeId?:string):Promise<EbayPublishTask[]>
         preparePublishTask(draftId:string):Promise<EbayPublishTask>
-        generatePublishVideo(draftId:string):Promise<EbayPublishTask>
+        generatePublishVideo(draftId:string, accessToken?:string):Promise<EbayPublishTask>
         preparePublishVideoUpload(draftId:string):Promise<EbayPublishTask>
         videoStudioConfiguration():Promise<EbayVideoStudioConfiguration>
         checkVideoStudioCapabilities():Promise<EbayVideoStudioConfiguration>

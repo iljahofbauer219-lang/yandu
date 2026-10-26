@@ -4,6 +4,7 @@ import Fastify from 'fastify'
 import { ZodError } from 'zod'
 import { config } from './config.js'
 import { HttpError } from './lib/errors.js'
+import { aiAssetPublicRoutes, aiAssetRoutes } from './modules/ai-assets/routes.js'
 import { aiRoutes } from './modules/ai/routes.js'
 import { auditRoutes } from './modules/audit/routes.js'
 import { authRoutes } from './modules/auth/routes.js'
@@ -69,6 +70,7 @@ export async function buildApp() {
   await app.register(ebayRoutes, { prefix: '/api/ebay' })
   await app.register(mediaRoutes, { prefix: '/api/media' })
   await app.register(productPageRoutes, { prefix: '/api/product-pages' })
+  await app.register(aiAssetRoutes, { prefix: '/api/ai-assets' })
   await app.register(aiRoutes, { prefix: '/api/ai' })
   await app.register(codexHarnessRoutes, { prefix: '/api/codex-harness' })
   // 零度API 价格抓取路由（DB 持久化 + 用户名密码自动登录）
@@ -81,6 +83,8 @@ export async function buildApp() {
   await app.register(mediaPublicRoutes)
   // 产品详情页公共只读路由（无需登录）
   await app.register(productPagePublicRoutes)
+  // AI 资产公共只读路由（无需登录；AI 生成图/视频最终保存时的永久托管）
+  await app.register(aiAssetPublicRoutes)
 
   return app
 }

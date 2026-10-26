@@ -21,6 +21,8 @@ export const config = {
   mediaLocalDir: read('MEDIA_LOCAL_DIR', path.resolve(process.cwd(), 'data', 'media')),
   // 产品详情页（正式入库「下载产品」服务器端建页）：公开只读静态目录
   productPagesDir: read('PRODUCT_PAGES_DIR', path.resolve(process.cwd(), 'data', 'product-pages')),
+  // AI 资产转存（AI 生成图/视频在最终保存时永久托管）：公开只读静态目录
+  aiAssetsDir: read('AI_ASSETS_DIR', path.resolve(process.cwd(), 'data', 'ai-assets')),
   mediaPublicBaseUrl: read('MEDIA_PUBLIC_BASE_URL', ''),
   mediaSigningSecret: read('MEDIA_SIGNING_SECRET', read('JWT_SECRET', DEV_ONLY_SECRET)),
   ossBucket: read('OSS_BUCKET', ''),
