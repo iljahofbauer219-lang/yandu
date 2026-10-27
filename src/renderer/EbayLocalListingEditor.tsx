@@ -114,7 +114,7 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
           <section className="ebay-revise-section ebay-revise-category-section">
             <header><div><h2>平台类目</h2><p>按核心商品词的 eBay prelist「Find a match」推荐类目；默认选中 Best match，可下拉改选后确定。</p></div><span>{platformCategory.savedName||'未选择'}</span></header>
             <div className="ebay-revise-category-row">
-              <select aria-label="平台类目" value={platformCategory.pick} disabled={platformCategory.busy||!(platformCategory.options.length||platformCategory.savedId)} onChange={event=>platformCategory.setPick(event.target.value)} title={platformCategory.options.find(o=>o.categoryId===platformCategory.pick)?.name||platformCategory.savedName||''}>
+              <select aria-label="平台类目" value={platformCategory.pick} disabled={platformCategory.busy||!(platformCategory.options.length||platformCategory.savedId)} onChange={event=>platformCategory.setPick(event.target.value)} title={platformCategory.options.find(o=>o.categoryId===platformCategory.pick)?.name||platformCategory.savedName||''} size={Math.min(platformCategory.options.length||1, 5)}>
                 {platformCategory.options.length
                   ?platformCategory.options.map(option=><option key={option.categoryId} value={option.categoryId} title={option.name}>{truncatePath(option.name)}{option.soldCount>0&&option.soldCount<999999?`（已成交 ${option.soldCount}）`:''}</option>)
                   :platformCategory.savedId
