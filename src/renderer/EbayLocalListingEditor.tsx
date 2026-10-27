@@ -48,6 +48,13 @@ function mediaUrl(localPath:string,remoteUrl:string) {
   return localPath?`cross-media://local/${encodeURIComponent(localPath)}`:remoteUrl
 }
 
+function truncatePath(name:string, maxLen=60) {
+  if (!name || name.length <= maxLen) return name
+  const head = name.slice(0, 30)
+  const tail = name.slice(-20)
+  return `${head}…${tail}`
+}
+
 export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,inline}:Props) {
   const fileInput=useRef<HTMLInputElement>(null)
   const [draggedId,setDraggedId]=useState('')
@@ -105,13 +112,13 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
 
         {platformCategory&&(
           <section className="ebay-revise-section ebay-revise-category-section">
-            <header><div><h2>平台类目</h2><p>按核心商品词的 eBay 已成交销量聚合类目；默认选中销量最大者，可下拉改选后确定。</p></div><span>{platformCategory.savedName||'未选择'}</span></header>
+            <header><div><h2>平台类目</h2><p>按核心商品词的 eBay prelist「Find a match」推荐类目；默认选中 Best match，可下拉改选后确定。</p></div><span>{platformCategory.savedName||'未选择'}</span></header>
             <div className="ebay-revise-category-row">
-              <select aria-label="平台类目" value={platformCategory.pick} disabled={platformCategory.busy||!(platformCategory.options.length||platformCategory.savedId)} onChange={event=>platformCategory.setPick(event.target.value)}>
+              <select aria-label="平台类目" value={platformCategory.pick} disabled={platformCategory.busy||!(platformCategory.options.length||platformCategory.savedId)} onChange={event=>platformCategory.setPick(event.target.value)} title={platformCategory.options.find(o=>o.categoryId===platformCategory.pick)?.name||platformCategory.savedName||''}>
                 {platformCategory.options.length
-                  ?platformCategory.options.map(option=><option key={option.categoryId} value={option.categoryId}>{option.name}{option.soldCount>0?`（已成交 ${option.soldCount}）`:''}</option>)
+                  ?platformCategory.options.map(option=><option key={option.categoryId} value={option.categoryId} title={option.name}>{truncatePath(option.name)}{option.soldCount>0&&option.soldCount<999999?`（已成交 ${option.soldCount}）`:''}</option>)
                   :platformCategory.savedId
-                    ?<option value={platformCategory.savedId}>{platformCategory.savedName||platformCategory.savedId}</option>
+                    ?<option value={platformCategory.savedId} title={platformCategory.savedName||''}>{truncatePath(platformCategory.savedName||platformCategory.savedId)}</option>
                     :<option value="">{platformCategory.busy?'正在获取平台类目…':'暂无候选类目'}</option>}
               </select>
               <button type="button" disabled={platformCategory.busy} onClick={platformCategory.refresh}>{platformCategory.busy?'获取中…':'重新获取'}</button>
