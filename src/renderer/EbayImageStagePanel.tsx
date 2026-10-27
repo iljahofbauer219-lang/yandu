@@ -70,6 +70,8 @@ interface GeneratedImage {
   hash?: string
   /** 与同类哪张雷同（每组保留第一张，其余标记出来供自动换参照重出/人工处理） */
   dupeOf?: string
+  /** 原始分镜 instruction（重生时复用，保证同卡同提示词） */
+  instruction?: string
 }
 
 interface PersistedState {
@@ -334,7 +336,7 @@ export default function EbayImageStagePanel(props: Props) {
           })
           if (result.notice) notices.push(result.notice)
           modelsUsed.push(result.model || activeModel)
-          return { failed: false, noChannel: false, cardId: card.id, images: result.imageUrls.map(url => ({ cardId: card.id, category: card.category, title: card.title, url, model: result.model || activeModel })), message: '' }
+          return { failed: false, noChannel: false, cardId: card.id, images: result.imageUrls.map(url => ({ cardId: card.id, category: card.category, title: card.title, url, model: result.model || activeModel, instruction: card.instruction })), message: '' }
         } catch (reason) {
           // 单个分镜失败不再销毁其余已出图的分类：缺的那张走卡上「↻ 重新生成」
           const raw = reason instanceof Error ? reason.message : '图片生成失败'
@@ -576,6 +578,40 @@ export default function EbayImageStagePanel(props: Props) {
         const next = { ...current, [url]: { url: image.url, model: image.model } }
         persist({ simpleRegen: next })
         return next
+      })
+      if (outcome.notices.length) setGenNotice([...new Set(outcome.notices)].join(' '))
+    }).finally(() => setRegenBusyUrl(''))
+  }
+
+  /** 多生图片单张重生：复用原卡 instruction 重出一张，替换 simpleGenerated 中对应条目 */
+  const regenSimpleGenerated = (image: GeneratedImage) => {
+    if (!modelId) { setError('请先选择图片生成大模型'); return }
+    if (!facts) { setError('事实卡尚未生成，请稍候或点击"重新生成事实卡"'); return }
+    // 旧数据可能没有 instruction，按 category 从当前事实卡取一张同类默认提示词
+    let instruction = image.instruction
+    if (!instruction) {
+      const fallbackCards = buildCategoryShotCards(facts, simpleCounts, shotContext, SIMPLE_CATEGORY_COUNT_MIN)
+      const sameCategory = fallbackCards.find(c => c.category === image.category)
+      if (!sameCategory) { setError(`当前事实卡无法生成${marketingFactCategoryLabel(image.category)}，请调整事实卡后重试。`); return }
+      instruction = sameCategory.instruction
+    }
+    const card: EbayCategoryShotCard = {
+      id: `SIMPLE-REGEN-${image.url}`,
+      category: image.category,
+      title: image.title,
+      instruction,
+      variations: 1
+    }
+    setRegenBusyUrl(image.url)
+    setError('')
+    void generateForCards([card], modelId, 0).then(outcome => {
+      if (outcome.aborted) { setError(outcome.aborted.message); return }
+      if (!outcome.fresh.length) { setError(outcome.failed[0]?.message || '重生成未完成，请重试或更换模型'); return }
+      const next = outcome.fresh[0]
+      setSimpleGenerated(current => {
+        const replaced = current.map(item => item.url === image.url ? next : item)
+        persist({ simpleGenerated: replaced })
+        return replaced
       })
       if (outcome.notices.length) setGenNotice([...new Set(outcome.notices)].join(' '))
     }).finally(() => setRegenBusyUrl(''))
@@ -838,6 +874,9 @@ export default function EbayImageStagePanel(props: Props) {
               <img src={image.url} alt={`${marketingFactCategoryLabel(image.category)}生成图`} />
               <em className="ebay-stage-simple-chip gen">{marketingFactCategoryLabel(image.category)}</em>
               {image.model && <span className="ebay-stage-simple-gen-model">{modelLabel(image.model)}</span>}
+              <button type="button" className="ebay-stage-simple-regen-btn" disabled={busy || regenBusyUrl === image.url || !modelId} onClick={() => regenSimpleGenerated(image)} title={regenBusyUrl === image.url ? '生成中…' : '用原提示词重新生成这张'}>
+                {regenBusyUrl === image.url ? '生成中…' : '↻ 重生成'}
+              </button>
             </div>
           ))}
         </div>

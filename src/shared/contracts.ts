@@ -200,6 +200,9 @@ export interface EbayLocalProduct {
   listingId:string
   categoryId:string
   categoryName:string
+  /** eBay 平台类目（发布用）：按核心商品词已成交销量最大者默认，可下拉改选后确定 */
+  platformCategoryId?:string
+  platformCategoryName?:string
   coreTermZh:string
   coreTermEn:string
   title:string
@@ -209,6 +212,13 @@ export interface EbayLocalProduct {
   downloadedAt:string
   updatedAt:string
   snapshot:EbayLocalProductSnapshot
+}
+
+/** eBay 平台类目候选：来自核心商品词已成交搜索侧栏类目聚合，soldCount 为该类目的已成交计数 */
+export interface EbayPlatformCategoryOption {
+  categoryId:string
+  name:string
+  soldCount:number
 }
 
 export interface EbayLocalProductSnapshotInput {

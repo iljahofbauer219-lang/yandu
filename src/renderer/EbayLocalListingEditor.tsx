@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import type { EbayLocalProduct, EbayLocalProductUpdateInput, EbayStoreCategory } from '../shared/contracts'
+import type { PlatformCategoryController } from './useEbayPlatformCategory'
 import './ebay-local-listing-editor.css'
 import './ebay-local-listing-pricing.css'
 import './ebay-local-listing-validation.css'
@@ -18,6 +19,7 @@ type Props={
   onPrepare:()=>void
   onSetCategory:(categoryId:string,categoryName:string)=>void
   onAutoClassify:()=>void
+  platformCategory?:PlatformCategoryController
   inline?:boolean
 }
 
@@ -46,7 +48,7 @@ function mediaUrl(localPath:string,remoteUrl:string) {
   return localPath?`cross-media://local/${encodeURIComponent(localPath)}`:remoteUrl
 }
 
-export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,inline}:Props) {
+export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,inline}:Props) {
   const fileInput=useRef<HTMLInputElement>(null)
   const [draggedId,setDraggedId]=useState('')
   const [descriptionMode,setDescriptionMode]=useState<'TEXT'|'HTML'>('TEXT')
@@ -100,6 +102,24 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
             <button type="button" onClick={onAutoClassify}>自动分类</button>
           </div>
         </section>
+
+        {platformCategory&&(
+          <section className="ebay-revise-section ebay-revise-category-section">
+            <header><div><h2>平台类目</h2><p>按核心商品词的 eBay 已成交销量聚合类目；默认选中销量最大者，可下拉改选后确定。</p></div><span>{platformCategory.savedName||'未选择'}</span></header>
+            <div className="ebay-revise-category-row">
+              <select aria-label="平台类目" value={platformCategory.pick} disabled={platformCategory.busy||!(platformCategory.options.length||platformCategory.savedId)} onChange={event=>platformCategory.setPick(event.target.value)}>
+                {platformCategory.options.length
+                  ?platformCategory.options.map(option=><option key={option.categoryId} value={option.categoryId}>{option.name}{option.soldCount>0?`（已成交 ${option.soldCount}）`:''}</option>)
+                  :platformCategory.savedId
+                    ?<option value={platformCategory.savedId}>{platformCategory.savedName||platformCategory.savedId}</option>
+                    :<option value="">{platformCategory.busy?'正在获取平台类目…':'暂无候选类目'}</option>}
+              </select>
+              <button type="button" disabled={platformCategory.busy} onClick={platformCategory.refresh}>{platformCategory.busy?'获取中…':'重新获取'}</button>
+              <button type="button" disabled={platformCategory.busy||!platformCategory.pick||platformCategory.pick===platformCategory.savedId} onClick={platformCategory.confirm}>确定</button>
+            </div>
+            {platformCategory.error&&<p className="ebay-revise-category-error" role="alert">{platformCategory.error}</p>}
+          </section>
+        )}
 
         <section id="ebay-revise-media" className="ebay-revise-section ebay-revise-media-section">
           <header><div><h2>01 图片与视频</h2><p>本地保存商品媒体；拖动可排序，第一张图片为主图。</p></div><span>{draft.media.length}/24</span></header>

@@ -3231,6 +3231,11 @@ ipcMain.handle('ebay:local-products:download', (_event, storeId:string, listingI
 ipcMain.handle('ebay:product:read-url', (_event, storeId:string, url:string) => readEbayProductByUrl(storeId,url))
 ipcMain.handle('ebay:local-products:update', (_event, localProductId:string, changes:EbayLocalProductUpdateInput) => updateEbayLocalProduct(localProductId,changes))
 ipcMain.handle('ebay:local-products:set-category', (_event, localProductId:string, categoryId:string, categoryName:string) => database?.setEbayLocalProductCategory(localProductId, categoryId, categoryName))
+ipcMain.handle('ebay:local-products:set-platform-category', (_event, localProductId:string, categoryId:string, categoryName:string) => database?.setEbayLocalProductPlatformCategory(localProductId, categoryId, categoryName))
+ipcMain.handle('ebay:local-products:platform-categories', async (_event, storeId:string, query:string) => {
+  if(!workspace)throw new Error('浏览器工作区尚未就绪，请稍后重试')
+  return workspace.readEbayPlatformCategories(`ebay:${storeId}`, query)
+})
 ipcMain.handle('ebay:research-query:suggest', async (_event, request: { title: string; categoryName: string }) => suggestResearchQueryViaLlm(request))
 
 ipcMain.handle('ebay:local-products:auto-classify', async (_event, localProductId:string) => {

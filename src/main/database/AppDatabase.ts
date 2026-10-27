@@ -220,6 +220,8 @@ export class AppDatabase {
         listing_id TEXT NOT NULL,
         category_id TEXT NOT NULL DEFAULT '',
         category_name TEXT NOT NULL DEFAULT '',
+        platform_category_id TEXT NOT NULL DEFAULT '',
+        platform_category_name TEXT NOT NULL DEFAULT '',
         title TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL DEFAULT 'INCOMPLETE',
         version_count INTEGER NOT NULL DEFAULT 0,
@@ -1352,6 +1354,8 @@ export class AppDatabase {
     ensureColumn('pallet_warehouse_items', 'origin', 'TEXT')
     ensureColumn('pallet_warehouse_items', 'core_term_zh', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('pallet_warehouse_items', 'core_term_en', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('ebay_local_products', 'platform_category_id', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('ebay_local_products', 'platform_category_name', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('ebay_local_products', 'core_term_zh', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('ebay_local_products', 'core_term_en', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_warehouse_products', 'collected_at', "TEXT NOT NULL DEFAULT ''")
@@ -2221,6 +2225,8 @@ export class AppDatabase {
       listingId:String(row.listing_id),
       categoryId:String(row.category_id),
       categoryName:String(row.category_name),
+      platformCategoryId:String(row.platform_category_id ?? ''),
+      platformCategoryName:String(row.platform_category_name ?? ''),
       coreTermZh:String(row.core_term_zh ?? ''),
       coreTermEn:String(row.core_term_en ?? ''),
       title:String(row.title),
@@ -2306,6 +2312,13 @@ export class AppDatabase {
       this.database.exec('ROLLBACK')
       throw error
     }
+    return this.getEbayLocalProducts().find(item => item.id === localProductId)!
+  }
+
+  setEbayLocalProductPlatformCategory(localProductId: string, categoryId: string, categoryName: string): EbayLocalProduct {
+    const exists = this.database.prepare(`SELECT id FROM ebay_local_products WHERE id=?`).get(localProductId) as { id: string } | undefined
+    if (!exists) throw new Error('本地产品不存在')
+    this.database.prepare(`UPDATE ebay_local_products SET platform_category_id=?, platform_category_name=?, updated_at=? WHERE id=?`).run(categoryId, categoryName, new Date().toISOString(), localProductId)
     return this.getEbayLocalProducts().find(item => item.id === localProductId)!
   }
 
