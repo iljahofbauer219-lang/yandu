@@ -2075,17 +2075,13 @@ export class BrowserWorkspace {
     }
   }
 
-  /** 平台类目候选：加载核心商品词的 eBay 已成交搜索，解析侧栏类目 facet（带已成交计数），按计数降序返回 */
+  /** 平台类目候选：加载 eBay prelist「Find a match」页，解析推荐类目完整路径（多级面包屑），按 Best match 优先返回 */
   async readEbayPlatformCategories(accountId:string,query:string):Promise<EbayPlatformCategoryOption[]> {
     const base=this.detailTabs.get(`login-${accountId}`)
     if(!base||base.view.webContents.isDestroyed())throw new Error('请先在「店铺采集」打开当前 eBay 店铺并完成登录，再获取平台类目')
     const term=query.replace(/\s+/g,' ').trim()
     if(!term)throw new Error('请先填写核心商品词')
-    const url=new URL('https://www.ebay.com/sch/i.html')
-    url.searchParams.set('_nkw',term)
-    url.searchParams.set('LH_Sold','1')
-    url.searchParams.set('LH_Complete','1')
-    url.searchParams.set('_ipg','200')
+    const url=`https://www.ebay.com/sl/prelist/identify?sr=sug&title=${encodeURIComponent(term)}&isUid=false&sssr=shListingsTopNav`
     const view=new WebContentsView({webPreferences:{partition:`persist:login:${accountId}`,nodeIntegration:false,contextIsolation:true,sandbox:true}})
     view.setBackgroundColor('#ffffff')
     view.webContents.setUserAgent(base.view.webContents.getUserAgent())
@@ -2093,27 +2089,41 @@ export class BrowserWorkspace {
       const clean=value=>(value||'').replace(/\\s+/g,' ').trim();
       const bodyText=clean(document.body?.innerText);
       const verification=/captcha|security check|verification code|验证码|安全验证|确认是您本人|pardon the interruption/i.test(bodyText+' '+location.href);
-      const map=new Map();
-      const termLower=${JSON.stringify(term.toLowerCase())};
-      document.querySelectorAll('a[href*="_sacat="]').forEach(anchor=>{
-        let href;try{href=new URL(anchor.href,location.href)}catch{return}
-        const id=href.searchParams.get('_sacat');if(!id||id==='0')return;
-        // 相关推荐词会改写 _nkw；只有保持当前查询词的链接才是左侧「Category」 refine 类目
-        const linkQuery=(href.searchParams.get('_nkw')||'').toLowerCase();
-        if(linkQuery&&linkQuery!==termLower)return;
-        const countNode=anchor.querySelector('[class*="count"],[class*="Cnt"],.cnt,[class*="agg"]');
-        const rawText=clean(anchor.textContent);
-        const nodeText=countNode?clean(countNode.textContent):'';
-        const paren=rawText.match(/\\(\\s*([\\d,]+)\\s*\\)\\s*$/);
-        const tail=rawText.match(/([\\d,]+)\\s*$/);
-        const countRaw=nodeText.replace(/[^\\d,]/g,'')||(paren?paren[1]:'')||(tail?tail[1]:'');
-        const soldCount=countRaw?parseInt(countRaw.replace(/,/g,''),10)||0:0;
-        const name=clean(rawText.replace(/\\(\\s*[\\d,]+\\s*\\)\\s*$/,'').replace(/-?\\s*apply\\s+.+\\s+filter$/i,'').replace(/[\\d,]+$/,'').trim());
-        if(!name)return;
-        const prev=map.get(id);
-        if(!prev||soldCount>prev.soldCount)map.set(id,{categoryId:id,name:name.slice(0,120),soldCount});
+      const options=[];
+      
+      // 提取 URL 中的类目 ID 路径
+      const urlParams=new URLSearchParams(location.search);
+      const catyIdPaths=urlParams.getAll('catyIdPath[]');
+      const leafCategoryId=catyIdPaths.length?catyIdPaths[catyIdPaths.length-1]:urlParams.get('caty')||'';
+      
+      // 查找「Find a match」区的类目路径按钮
+      const categoryButtons=document.querySelectorAll('button.category-button.fake-link,[class*="category-button"]');
+      categoryButtons.forEach((button,index)=>{
+        const fullPath=clean(button.textContent);
+        if(!fullPath||!fullPath.includes('>'))return;
+        
+        // 解析路径各层级
+        const parts=fullPath.split('>').map(s=>clean(s)).filter(s=>s.length>0);
+        if(parts.length<2)return;
+        
+        // 叶节点类目 ID：第一个按钮用 URL 中的 leafCategoryId，后续按钮拼接索引
+        const categoryId=index===0&&leafCategoryId?leafCategoryId:\`sug-\${index}-\${Date.now()}\`;
+        
+        // 检查是否有「Best match」或「Recommended」标记（预期在按钮附近）
+        const parentSection=button.closest('[class*="aspects-category"],[class*="find-a-match"]')||button.parentElement;
+        const sectionText=parentSection?clean(parentSection.textContent):'';
+        const isBestMatch=/best match|recommended|suggested/i.test(sectionText)&&index===0;
+        
+        options.push({
+          categoryId,
+          name:fullPath,
+          soldCount:isBestMatch?999999:0
+        });
       });
-      const options=[...map.values()].sort((left,right)=>right.soldCount-left.soldCount);
+      
+      // 按 soldCount 降序（Best match 置顶），其余保持原始顺序
+      options.sort((a,b)=>b.soldCount-a.soldCount);
+      
       return {options:options.slice(0,40),ready:options.length>0,verification,login:Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/signin|login/.test(location.pathname.toLowerCase()),bodyText:bodyText.slice(0,200)};
     })()`
     try {
@@ -2127,7 +2137,7 @@ export class BrowserWorkspace {
         if(result.ready)return result.options
         await this.sleep(750)
       }
-      throw new Error(`eBay 已成交搜索未返回任何平台类目候选（页面摘要：${lastBody||'空'}），请更换更通用的核心商品词后重试`)
+      throw new Error(`eBay prelist 页面未返回任何平台类目候选（页面摘要：${lastBody||'空'}），请更换更通用的核心商品词后重试`)
     } finally {
       if(!view.webContents.isDestroyed())view.webContents.close()
     }
