@@ -64,6 +64,8 @@ describe('isEbayResearchCategoryUsable', () => {
     expect(isEbayResearchCategoryUsable('014339')).toBe(false)
     expect(isEbayResearchCategoryUsable('')).toBe(false)
     expect(isEbayResearchCategoryUsable('Home & Garden')).toBe(false)
+    // prelist「Find a match」只有 Best match 带真叶类目 ID，其余候选是合成占位 ID，不能拿去研究页检索
+    expect(isEbayResearchCategoryUsable('sug-2-1761523456789')).toBe(false)
   })
 })
 

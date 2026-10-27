@@ -2090,6 +2090,20 @@ export class BrowserWorkspace {
       const bodyText=clean(document.body?.innerText);
       const verification=/captcha|security check|verification code|验证码|安全验证|确认是您本人|pardon the interruption/i.test(bodyText+' '+location.href);
       const options=[];
+
+      // 真叶类目 ID 只存在于页面服务端状态的 CategoryViewModel：{"_type":"CategoryViewModel",...,"value":"33697",...,"text":"eBay Motors > … > Floor Mats, Carpets & Cargo Liners"}
+      // 实测 URL 的 catyIdPath[]/caty 常为空，因此以页面 JSON 为准、URL 仅作兜底
+      const scriptText=[...document.querySelectorAll('script')].map(node=>node.textContent||'').join('\\n');
+      const categoryPairs=[];
+      let jsonCursor=-1;
+      for(;;){
+        jsonCursor=scriptText.indexOf('"CategoryViewModel"',jsonCursor+1);
+        if(jsonCursor<0)break;
+        const chunk=scriptText.slice(jsonCursor,jsonCursor+3000);
+        const idMatch=chunk.match(/"value":"(\\d{2,9})"/);
+        const pathMatch=[...chunk.matchAll(/"text":"([^"]{5,400})"/g)].map(hit=>hit[1]).find(text=>text.includes('>'));
+        if(idMatch&&pathMatch)categoryPairs.push({categoryId:idMatch[1],path:clean(pathMatch)});
+      }
       
       // 提取 URL 中的类目 ID 路径
       const urlParams=new URLSearchParams(location.search);
@@ -2098,6 +2112,7 @@ export class BrowserWorkspace {
       
       // 查找「Find a match」区的类目路径按钮
       const categoryButtons=document.querySelectorAll('button.category-button.fake-link,[class*="category-button"]');
+      let pairCursor=0;
       categoryButtons.forEach((button,index)=>{
         const fullPath=clean(button.textContent);
         if(!fullPath||!fullPath.includes('>'))return;
@@ -2106,8 +2121,11 @@ export class BrowserWorkspace {
         const parts=fullPath.split('>').map(s=>clean(s)).filter(s=>s.length>0);
         if(parts.length<2)return;
         
-        // 叶节点类目 ID：第一个按钮用 URL 中的 leafCategoryId，后续按钮拼接索引
-        const categoryId=index===0&&leafCategoryId?leafCategoryId:\`sug-\${index}-\${Date.now()}\`;
+        // 叶节点类目 ID：先按面包屑精确配对页面 JSON，再按出现顺序配对，最后回落 URL 参数或合成占位 ID
+        const pair=categoryPairs.find(item=>item.path===fullPath)||categoryPairs[pairCursor];
+        pairCursor+=1;
+        let categoryId=pair&&/^[1-9]\\d{0,8}$/.test(pair.categoryId)?pair.categoryId:'';
+        if(!categoryId)categoryId=index===0&&leafCategoryId?leafCategoryId:\`sug-\${index}-\${Date.now()}\`;
         
         // 检查是否有「Best match」或「Recommended」标记（预期在按钮附近）
         const parentSection=button.closest('[class*="aspects-category"],[class*="find-a-match"]')||button.parentElement;

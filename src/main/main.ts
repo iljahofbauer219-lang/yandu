@@ -1356,8 +1356,32 @@ async function researchEbayMarket(request:EbayMarketResearchRequest):Promise<Eba
   const omkarKey=omkarSettings.encryptedApiKey&&secretStorageAvailable()?decryptSecret(omkarSettings.encryptedApiKey):''
   const allowOmkarFallback=request.allowOmkarFallback===true&&Boolean(omkarKey)
   const categoryUsable=isEbayResearchCategoryUsable(listing.categoryId||'')
-  const researchCategoryId=categoryUsable?(listing.categoryId||''):''
-  marketResearchLog(`start store=${store.id} listing=${request.listingId} query="${query}" period=${request.periodDays} channel=browser omkar=${allowOmkarFallback?'opt-in-fallback':'off'} category=${listing.categoryId||'无'}(${categoryUsable?'eBay类目':'非eBay类目，按全部类目检索'})`)
+  // 研究页 categoryId 只认 eBay 自有类目 ID，优先级：eBay 同步类目 →「平台类目」已确定值 → 按核心商品词解析 prelist Best match
+  let researchCategoryId=categoryUsable?(listing.categoryId||''):''
+  let researchCategoryName=categoryUsable?(listing.categoryName||''):''
+  let researchCategorySource=categoryUsable?'eBay 同步类目':''
+  let researchCategoryNote=''
+  if(!researchCategoryId){
+    const local=database.getEbayLocalProducts(request.storeId).find(item=>item.listingId===request.listingId)
+    if(isEbayResearchCategoryUsable(local?.platformCategoryId||'')){
+      researchCategoryId=String(local?.platformCategoryId).trim()
+      researchCategoryName=local?.platformCategoryName||''
+      researchCategorySource='线上发布「平台类目」已确定'
+    }
+  }
+  if(!researchCategoryId&&workspace){
+    try{
+      const options=await workspace.readEbayPlatformCategories(`ebay:${store.id}`,query)
+      const hit=options.find(item=>isEbayResearchCategoryUsable(item.categoryId))
+      if(hit){researchCategoryId=hit.categoryId.trim();researchCategoryName=hit.name;researchCategorySource='按核心商品词解析 eBay prelist Best match'}
+      else researchCategoryNote=`按核心商品词未解析到可用 eBay 类目 ID${listing.categoryId?`（货盘类目 ${listing.categoryId} 不是 eBay 类目 ID）`:''}，本次按全部类目检索`
+    }catch(reason){
+      researchCategoryNote=`eBay 平台类目解析失败：${reason instanceof Error?reason.message:String(reason)}，本次按全部类目检索`
+    }
+  }else if(!researchCategoryId){
+    researchCategoryNote='应用内浏览器尚未初始化，无法解析 eBay 平台类目，本次按全部类目检索'
+  }
+  marketResearchLog(`start store=${store.id} listing=${request.listingId} query="${query}" period=${request.periodDays} channel=browser omkar=${allowOmkarFallback?'opt-in-fallback':'off'} category=${researchCategoryId?`${researchCategoryId}(${researchCategoryName||'未命名'})`:researchCategoryNote||'全部类目'}`)
   const marketWorkspace=workspace
   const readOmkarEvidence=async(searchQuery:string):Promise<EbayMarketEvidence>=>{
     let omkarError:Error|null=null
@@ -1488,7 +1512,7 @@ async function researchEbayMarket(request:EbayMarketResearchRequest):Promise<Eba
     metrics:evidence.metrics,samples:analysis.rankedSamples,filters:[
       {label:'采集方式',value:ebayMarketResearchChannelLabel(evidence.source)},
       ...(evidence.note?[{label:'来源说明',value:evidence.note}]:[]),
-      ...(categoryUsable||!listing.categoryId?[]:[{label:'类目筛选',value:`全部类目（货盘类目 ${listing.categoryId} 不是 eBay 类目 ID，按它检索 eBay 研究页会零结果）`}]),
+      ...(researchCategoryId?[{label:'类目筛选',value:`eBay 平台类目「${researchCategoryName||'未命名'}」（ID ${researchCategoryId}）· ${researchCategorySource}`}]:[{label:'类目筛选',value:`全部类目${researchCategoryNote?`（${researchCategoryNote}）`:''}`}]),
       ...(queryBroadened?[{label:'查询词自动放宽',value:queryBroadened}]:[]),
       {label:'原始结果',value:`读取 ${analysis.rawSampleCount} 个，去重后 ${analysis.rankedSamples.length} 个`},
       {label:'标题分析池',value:`前 ${analysis.analysisSampleCount} 个有效样本`},
