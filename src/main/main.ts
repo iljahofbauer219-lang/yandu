@@ -488,7 +488,8 @@ async function enrichLocalSnapshotWithProductPageImages(store:EbayStore,product:
   if(!pageId)return product
   const bundle=await fetchProductPageFacts(record.pageUrl,warehouseProductId,'')
   const assets=bundle?.imageAssets||[]
-  if(!assets.length)return product
+  const videoAssets=record.videoAssets||[]
+  if(!assets.length&&!videoAssets.length)return product
   const serverUrl=readServerUrl().replace(/\/+$/,'')
   const existingSha=new Set(product.snapshot.media.map(item=>item.sha256).filter(Boolean))
   const addedSha=new Set<string>()
@@ -496,10 +497,13 @@ async function enrichLocalSnapshotWithProductPageImages(store:EbayStore,product:
   const added:EbayLocalProductMedia[]=[]
   const capturedAt=new Date().toISOString()
   const directory=path.join(app.getPath('userData'),'ebay-local-products',safeLocalSegment(store.id),safeLocalSegment(product.listingId),capturedAt.replace(/[:.]/g,'-'))
+  fs.mkdirSync(directory,{recursive:true})
+  const hasVideo=videoAssets.length>0&&!product.snapshot.media.some(item=>item.mediaType==='VIDEO')
   for(const name of assets.slice(0,24)){
     const remoteUrl=`${serverUrl}/product-pages/${pageId}/assets/${name}`
     if(existingUrls.has(remoteUrl))continue
-    const sortOrder=product.snapshot.media.length+added.length
+    const imageIndex=added.filter(item=>item.mediaType==='IMAGE').length
+    const sortOrder=imageIndex+(hasVideo&&imageIndex>=1?1:0)
     try{
       const response=await fetch(remoteUrl,{signal:AbortSignal.timeout(20_000),headers:{'User-Agent':'Mozilla/5.0'}})
       if(!response.ok)throw new Error(`HTTP ${response.status}`)
@@ -513,7 +517,6 @@ async function enrichLocalSnapshotWithProductPageImages(store:EbayStore,product:
       const sha256=createHash('sha256').update(buffer).digest('hex')
       if(existingSha.has(sha256)||addedSha.has(sha256))continue
       addedSha.add(sha256)
-      fs.mkdirSync(directory,{recursive:true})
       const localPath=path.join(directory,`${String(sortOrder+1).padStart(2,'0')}.${selected.extension}`)
       fs.writeFileSync(localPath,buffer)
       added.push({id:crypto.randomUUID(),mediaType:'IMAGE',sortOrder,remoteUrl,localPath,mimeType,width:dimensions.width,height:dimensions.height,fileSize:buffer.length,sha256,downloadStatus:'DOWNLOADED'})
@@ -521,10 +524,32 @@ async function enrichLocalSnapshotWithProductPageImages(store:EbayStore,product:
       added.push({id:crypto.randomUUID(),mediaType:'IMAGE',sortOrder,remoteUrl,localPath:'',mimeType:'',width:0,height:0,fileSize:0,sha256:'',downloadStatus:'FAILED'})
     }
   }
+  if(hasVideo){
+    const videoName=videoAssets[0]
+    const videoRemoteUrl=`${serverUrl}/product-pages/${pageId}/assets/${videoName}`
+    const videoId=crypto.randomUUID()
+    console.log(`[enrichLocalSnapshot] 尝试下载视频：${videoRemoteUrl}`)
+    try{
+      const response=await fetch(videoRemoteUrl,{signal:AbortSignal.timeout(120_000),headers:{'User-Agent':'Mozilla/5.0'}})
+      if(!response.ok)throw new Error(`HTTP ${response.status}`)
+      const buffer=Buffer.from(await response.arrayBuffer())
+      if(!buffer.length)throw new Error('视频内容为空')
+      const mimeType=(response.headers.get('content-type')||'').split(';')[0].toLowerCase()
+      if(!mimeType.startsWith('video/'))throw new Error(`不支持的视频类型：${mimeType||'未知'}`)
+      const localPath=path.join(directory,'02.mp4')
+      fs.writeFileSync(localPath,buffer)
+      console.log(`[enrichLocalSnapshot] 视频下载成功：${localPath} (${buffer.length} bytes)`)
+      added.push({id:videoId,mediaType:'VIDEO',sortOrder:1,remoteUrl:videoRemoteUrl,localPath,mimeType,width:0,height:0,fileSize:buffer.length,sha256:createHash('sha256').update(buffer).digest('hex'),downloadStatus:'DOWNLOADED'})
+    }catch(error){
+      console.error(`[enrichLocalSnapshot] 视频下载失败：${error instanceof Error?error.message:'未知错误'}`)
+      added.push({id:videoId,mediaType:'VIDEO',sortOrder:1,remoteUrl:videoRemoteUrl,localPath:'',mimeType:'',width:0,height:0,fileSize:0,sha256:'',downloadStatus:'FAILED'})
+    }
+  }
   const downloaded=added.filter(item=>item.downloadStatus==='DOWNLOADED')
-  if(!downloaded.length)return product
-  const mergedMedia=[...product.snapshot.media,...added]
-  const mergedUrls=[...new Set([...(product.snapshot.sourceListing.imageUrls||[]),...downloaded.map(item=>item.remoteUrl)])]
+  const hasVideoFailure=added.some(item=>item.mediaType==='VIDEO'&&item.downloadStatus==='FAILED')
+  if(!downloaded.length&&!hasVideoFailure)return product
+  const mergedMedia=[...product.snapshot.media,...added].map((item,index)=>({...item,sortOrder:index}))
+  const mergedUrls=[...new Set([...(product.snapshot.sourceListing.imageUrls||[]),...downloaded.filter(item=>item.mediaType==='IMAGE').map(item=>item.remoteUrl)])]
   const updatedListing={...product.snapshot.sourceListing,imageUrls:mergedUrls,imageUrl:product.snapshot.sourceListing.imageUrl||mergedUrls[0]||''}
   return database.saveEbayLocalProductSnapshot(completeEbayLocalSnapshot({listing:updatedListing,details:product.snapshot.details,media:mergedMedia,capturedAt}))
 }
@@ -566,11 +591,13 @@ async function downloadEbayLocalProduct(storeId:string,listingId:string):Promise
   }
   const updated=database.updateEbayListingDetails(storeId,listingId,liveDetails)
   const imageUrls=[...new Set([...(liveDetails.imageUrls||[]),...(updated.imageUrls||[]),updated.imageUrl].filter(Boolean))].slice(0,24)
+  const videoUrl=liveDetails.videoUrl||''
   const mergedDetails:EbayProductDetails={
     url:liveDetails.url||details.url,
     itemSpecifics:[],
     condition:'',
     imageUrls,
+    videoUrl,
     title:liveDetails.title||updated.title,
     descriptionHtml:liveDetails.descriptionHtml||'',
     descriptionText:liveDetails.descriptionText||'',
@@ -581,14 +608,16 @@ async function downloadEbayLocalProduct(storeId:string,listingId:string):Promise
   const capturedAt=new Date().toISOString()
   const directory=path.join(app.getPath('userData'),'ebay-local-products',safeLocalSegment(storeId),safeLocalSegment(listingId),capturedAt.replace(/[:.]/g,'-'))
   fs.mkdirSync(directory,{recursive:true})
-  const media:EbayLocalProductMedia[]=new Array(mergedDetails.imageUrls.length)
+  const hasVideo=Boolean(videoUrl)
+  const media:EbayLocalProductMedia[]=new Array(mergedDetails.imageUrls.length+(hasVideo?1:0))
   const failures:string[]=[]
   let nextImageIndex=0
   const downloadNextImage=async()=>{
     while(nextImageIndex<mergedDetails.imageUrls.length) {
-      const index=nextImageIndex++
-      const remoteUrl=mergedDetails.imageUrls[index]
+      const imageIndex=nextImageIndex++
+      const remoteUrl=mergedDetails.imageUrls[imageIndex]
       const id=crypto.randomUUID()
+      const mediaIndex=imageIndex+(hasVideo&&imageIndex>=1?1:0)
       try {
         const response=await fetch(remoteUrl,{signal:AbortSignal.timeout(15_000),headers:{'User-Agent':'Mozilla/5.0'}})
         if(!response.ok)throw new Error(`HTTP ${response.status}`)
@@ -599,17 +628,35 @@ async function downloadEbayLocalProduct(storeId:string,listingId:string):Promise
         if(!selected)throw new Error(`不支持的图片类型：${mimeType||'未知'}`)
         const dimensions=imageDimensions(buffer,selected.format)
         if(!dimensions.width||!dimensions.height)throw new Error('无法识别图片尺寸')
-        const localPath=path.join(directory,`${String(index+1).padStart(2,'0')}.${selected.extension}`)
+        const localPath=path.join(directory,`${String(mediaIndex+1).padStart(2,'0')}.${selected.extension}`)
         fs.writeFileSync(localPath,buffer)
-        media[index]={id,mediaType:'IMAGE',sortOrder:index,remoteUrl,localPath,mimeType,width:dimensions.width,height:dimensions.height,fileSize:buffer.length,sha256:createHash('sha256').update(buffer).digest('hex'),downloadStatus:'DOWNLOADED'}
+        media[mediaIndex]={id,mediaType:'IMAGE',sortOrder:mediaIndex,remoteUrl,localPath,mimeType,width:dimensions.width,height:dimensions.height,fileSize:buffer.length,sha256:createHash('sha256').update(buffer).digest('hex'),downloadStatus:'DOWNLOADED'}
       } catch(error) {
         const reason=error instanceof Error?error.message:'未知错误'
-        failures.push(`第 ${index+1} 张：${reason}`)
-        media[index]={id,mediaType:'IMAGE',sortOrder:index,remoteUrl,localPath:'',mimeType:'',width:0,height:0,fileSize:0,sha256:'',downloadStatus:'FAILED'}
+        failures.push(`第 ${imageIndex+1} 张：${reason}`)
+        media[mediaIndex]={id,mediaType:'IMAGE',sortOrder:mediaIndex,remoteUrl,localPath:'',mimeType:'',width:0,height:0,fileSize:0,sha256:'',downloadStatus:'FAILED'}
       }
     }
   }
   await Promise.all(Array.from({length:Math.min(6,mergedDetails.imageUrls.length)},()=>downloadNextImage()))
+  if(hasVideo){
+    const videoId=crypto.randomUUID()
+    try {
+      const response=await fetch(videoUrl,{signal:AbortSignal.timeout(30_000),headers:{'User-Agent':'Mozilla/5.0'}})
+      if(!response.ok)throw new Error(`HTTP ${response.status}`)
+      const buffer=Buffer.from(await response.arrayBuffer())
+      if(!buffer.length)throw new Error('视频内容为空')
+      const mimeType=(response.headers.get('content-type')||'').split(';')[0].toLowerCase()
+      if(!mimeType.startsWith('video/'))throw new Error(`不支持的视频类型：${mimeType||'未知'}`)
+      const localPath=path.join(directory,'02.mp4')
+      fs.writeFileSync(localPath,buffer)
+      media[1]={id:videoId,mediaType:'VIDEO',sortOrder:1,remoteUrl:videoUrl,localPath,mimeType,width:0,height:0,fileSize:buffer.length,sha256:createHash('sha256').update(buffer).digest('hex'),downloadStatus:'DOWNLOADED'}
+    } catch(error) {
+      const reason=error instanceof Error?error.message:'未知错误'
+      failures.push(`视频：${reason}`)
+      media[1]={id:videoId,mediaType:'VIDEO',sortOrder:1,remoteUrl:videoUrl,localPath:'',mimeType:'',width:0,height:0,fileSize:0,sha256:'',downloadStatus:'FAILED'}
+    }
+  }
   const downloadedCount=media.filter(item=>item.downloadStatus==='DOWNLOADED').length
   if(!downloadedCount)throw new Error(`商品图片全部下载失败。${failures.slice(0,3).join('；')}`)
   return database.saveEbayLocalProductSnapshot(completeEbayLocalSnapshot({listing:updated,details:mergedDetails,media,capturedAt}))
@@ -1952,8 +1999,26 @@ function createWindow() {
   shell.webContents.on('console-message', (_event, _level, message, line, sourceId) => {
     if (/\b(error|exception|failed)\b/i.test(message)) console.error(`[renderer:${line}] ${message} (${sourceId})`)
   })
+  shell.webContents.on('unresponsive', () => {
+    console.error('[renderer] shell unresponsive')
+  })
+  // 渲染进程被杀/崩溃后主窗口会剩白屏：自动 reload 重建渲染进程（限流防崩溃循环）
+  let shellReloadCount = 0
+  let shellReloadWindowStart = Date.now()
   shell.webContents.on('render-process-gone', (_event, details) => {
     console.error(`[renderer] process gone: ${details.reason} (exit ${details.exitCode})`)
+    const now = Date.now()
+    if (now - shellReloadWindowStart > 60_000) {
+      shellReloadWindowStart = now
+      shellReloadCount = 0
+    }
+    if (shellReloadCount >= 3) {
+      console.error('[renderer] auto reload budget exhausted (3/min), skip recovery')
+      return
+    }
+    shellReloadCount += 1
+    console.log(`[renderer] auto reload attempt ${shellReloadCount}/3`)
+    void shell.webContents.reload()
   })
   // 渲染层首次加载完成后：如果还没有 IEBrowserPanel 用的通用 web tab，主进程主动开一个 nav 站点。
   // 原因：在 renderer 端 IEBrowserPanel 会被 React StrictMode 双调用 useEffect + App.tsx IIFE 路由 remount，
@@ -3050,6 +3115,13 @@ ipcMain.handle('comparison:update', (_event, request: ComparisonUpdateRequest) =
 ipcMain.handle('comparison:promote', (_event, request: ComparisonPromotionRequest) => database?.promoteComparisonToWarehouse(request))
 ipcMain.handle('workflow:counts', () => database?.getWorkflowCounts() ?? { collected: 0, compared: 0, selected: 0, stocked: 0, listed: 0, purchasing: 0, reconciled: 0 })
 ipcMain.handle('warehouse:list', () => database?.getSupplyWarehouseProducts() ?? [])
+ipcMain.handle('app:build-stamp', () => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(app.getAppPath(), 'dist', 'build-stamp.json'), 'utf8')) as { version: string; builtAt: string }
+  } catch {
+    return null
+  }
+})
 ipcMain.handle('member:announce', (_event, label: unknown) => {
   database?.announceCollector(typeof label === 'string' ? label : '')
   return true

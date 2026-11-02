@@ -1349,6 +1349,8 @@ export function App() {
   const [,setCatalogRevision] = useState(0)
   const [workflowCounts, setWorkflowCounts] = useState<WorkflowCounts>({ collected: 0, compared: 0, selected: 0, stocked: 0, listed: 0, purchasing: 0, reconciled: 0 })
   const [error, setError] = useState('')
+  const [navRetry, setNavRetry] = useState<{ platform: Platform; address: string } | null>(null)
+  const [mainStamp, setMainStamp] = useState<{ version: string; builtAt: string } | null>(null)
   const [translationActive, setTranslationActive] = useState(false)
   const [translationMode, setTranslationMode] = useState<BrowserTranslationMode>('BILINGUAL')
   const [translationCount, setTranslationCount] = useState(0)
@@ -1461,6 +1463,7 @@ export function App() {
   useEffect(() => { void window.desktop.selections.list().then(setSelectionItems).catch(reason => setError(reason instanceof Error ? reason.message : '选品库加载失败')) }, [])
   useEffect(() => { void window.desktop.warehouses.list().then(setWarehouseProducts).catch(reason => setError(reason instanceof Error ? reason.message : '供应仓库加载失败')) }, [])
   useEffect(() => { void window.desktop.member.announce(profile?.name || '') }, [profile?.name])
+  useEffect(() => { void window.desktop.appInfo.buildStamp().then(setMainStamp).catch(() => setMainStamp(null)) }, [])
   useEffect(() => { void window.desktop.warehouses.listDelisted().then(setDelistedWarehouseProducts).catch(() => undefined) }, [])
   useEffect(() => { void window.desktop.warehouses.downloads().then(setSupplyDownloads).catch(() => undefined) }, [])
   useEffect(() => {
@@ -1707,10 +1710,28 @@ export function App() {
     finally { setRunning(false) }
   }
 
+  const navTargetName = (url: string) => (/gigab2b\.com/i.test(url) ? '大健云仓' : /1688\.com/i.test(url) ? '1688' : /ozon\.ru/i.test(url) ? 'Ozon' : '目标站点')
+
   const navigate = async (event: FormEvent) => {
     event.preventDefault(); setError('')
     try { await window.desktop.browser.navigate(platform, address) }
-    catch (reason) { setError(reason instanceof Error ? reason.message : '导航失败') }
+    catch (reason) {
+      const raw = reason instanceof Error ? reason.message : String(reason)
+      setNavRetry({ platform, address })
+      setError(friendlySupplyError(raw, navTargetName(address)).text)
+    }
+  }
+
+  const retryNavigate = async () => {
+    const target = navRetry
+    if (!target) return
+    setNavRetry(null); setError('')
+    try { await window.desktop.browser.navigate(target.platform, target.address) }
+    catch (reason) {
+      const raw = reason instanceof Error ? reason.message : String(reason)
+      setNavRetry(target)
+      setError(friendlySupplyError(raw, navTargetName(target.address)).text)
+    }
   }
 
   const switchPlatform = (next: Platform) => {
@@ -2213,7 +2234,7 @@ export function App() {
     <div className="app-titlebar" role="banner">
       <strong className="app-titlebar-title">砚都跨境</strong>
       <div className="app-titlebar-actions">
-        <span className="build-stamp" title="渲染包构建时间">{__BUILD_STAMP__}</span>
+        <span className="build-stamp" title={`渲染包构建 ${__BUILD_STAMP__}${mainStamp ? ` · 主进程构建 ${mainStamp.builtAt.slice(0, 16).replace('T', ' ')} v${mainStamp.version}` : ' · 主进程水印缺失（旧主进程）'}`}>{__BUILD_STAMP__}</span>
         <TitlebarPanelToggle />
         <button type="button" title="刷新当前界面（先检查新版本：有新版本走更新流并保留当前页）" disabled={refreshBusy} onClick={() => void runTitlebarRefresh()}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>{refreshBusy ? '检查中…' : '刷新'}
@@ -2392,7 +2413,7 @@ export function App() {
           <div className="browser-workspace-heading"><div><small>WORKSPACE BROWSER</small><b>采集浏览器</b></div><div className="browser-heading-actions">{task.supplyPlatforms[0]==='GIGACLOUD'&&<button title={builtInCollectorActive?'采集插件已自动安装；点击可重新加载':'点击启用内置采集插件'} className={`built-in-collector-trigger${builtInCollectorActive?' active':''}`} onClick={()=>void startBuiltInCollector()}>{builtInCollectorActive?`🤖 采集插件 · 已开启 · 已选 ${builtInCollectorProducts.length} / 当前页识别 ${builtInCollectorRecognized}`:'🤖 启用采集插件'}</button>}<div className="browser-translation"><button className={`translation-trigger ${translationActive?'active':''}`} disabled={translating} onClick={()=>translationActive?setTranslationMenuOpen(open=>!open):void translateBrowserPage('BILINGUAL')}><span>{translating?'翻译中…':translationActive?`中文 ✓${translationCount?` · ${translationCount}`:''}`:'译 · 中文'}</span><i>{translationMenuOpen?'⌃':'⌄'}</i></button>{translationMenuOpen&&<div className="translation-menu"><b>网页翻译</b><small>Qwen-MT Flash · 自动识别语种</small><button className={translationMode==='BILINGUAL'?'active':''} onClick={()=>{setTranslationMenuOpen(false);void translateBrowserPage('BILINGUAL')}}><span>原文 + 中文</span><em>推荐</em></button><button className={translationMode==='CHINESE'?'active':''} onClick={()=>{setTranslationMenuOpen(false);void translateBrowserPage('CHINESE')}}><span>仅显示中文</span></button><button onClick={()=>void translateBrowserPage(translationMode)}><span>翻译新增内容</span></button><button className="restore" onClick={()=>void restoreBrowserTranslation()}><span>恢复原网页</span></button><p>滚动加载的新内容每5秒自动翻译；品牌、型号、SKU和数字将尽量保留。</p></div>}</div></div></div>
           <div className="tabs"><div className="tab-scroll">{browserTabs.map(tab=><button key={tab.id} className={tab.active?'active':''} onClick={()=>activateBrowserTab(tab)}><span>{tab.generic?'◎':tab.platform === 'ozon' ? '◉' : '淘'}</span><b>{tab.title}</b>{tab.closable && <i onClick={event=>{event.stopPropagation();void window.desktop.browser.closeTab(tab.id)}}>×</i>}</button>)}</div><button className="new-browser-tab" title="新建浏览页" aria-label="新建浏览页" onClick={()=>void createBrowserTab()}>＋</button>{state?.loading&&<span className="run-state loading"><i/>页面加载中</span>}</div>
           <form className="address-bar" onSubmit={navigate}><button type="button" title="后退" disabled={!state?.canGoBack} onClick={()=>window.desktop.browser.back(platform)}>←</button><button type="button" title="前进" disabled={!state?.canGoForward} onClick={()=>window.desktop.browser.forward(platform)}>→</button><button type="button" title="刷新" onClick={()=>window.desktop.browser.reload(platform)}>↻</button><input ref={addressInput} aria-label="网页地址" placeholder="输入网址并访问" value={address} onChange={e=>setAddress(e.target.value)} /><button className="address-go" type="submit">打开 <span>↗</span></button></form>
-          {error && <div className="error">{error}{translationKeyMissing&&<button type="button" style={{marginLeft:8}} onClick={()=>{setError('');setTranslationKeyMissing(false);setPage('llm-keys')}}>去配置 →</button>}</div>}
+          {error && <div className="error">{error}{navRetry&&<button type="button" style={{marginLeft:8}} onClick={()=>void retryNavigate()}>重试</button>}{translationKeyMissing&&<button type="button" style={{marginLeft:8}} onClick={()=>{setError('');setTranslationKeyMissing(false);setPage('llm-keys')}}>去配置 →</button>}</div>}
           <div className="browser-slot" ref={browserSlot}><div className="browser-placeholder">正在准备 {platform === 'ozon' ? 'Ozon' : platform === 'web' ? '网页' : '1688'} 浏览器…</div></div>
         </section>
       </div>}
@@ -3534,7 +3555,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
   }
   const authorizeStore=async(store:EbayStore)=>{setBusy(`authorize:${store.id}`);setEbayError('');try{await window.desktop.ebay.authorize(store.id);await refreshStores();setNotice(`${store.name} 已完成正式环境只读授权，可以同步商品。`)}catch(reason){setEbayError(readableError(reason,'eBay店铺授权失败'))}finally{setBusy('')}}
   const syncStore=async(store:EbayStore)=>{setBusy(`sync:${store.id}`);setEbayError('');try{const result=await window.desktop.ebay.sync(store.id);await refreshStores();setListings(await window.desktop.ebay.listings(store.id));setNotice(`同步完成：读取 ${result.imported} 个在线商品。`)}catch(reason){setEbayError(readableError(reason,'eBay商品同步失败'));await refreshStores()}finally{setBusy('')}}
-  const syncStoreCategories=async(store=activeStore,automatic=false)=>{if(!store||categorySyncing)return;setCategorySyncing(true);if(!automatic)setEbayError('');try{const previous=categoryWorkspace.lastSync;const result=await window.desktop.ebay.syncCategories(store.id);setCategoryWorkspace(result);const summary=result.lastSync;const changed=summary?(summary.added+summary.renamed+summary.moved+summary.removed):0;if(summary){if(!previous)setNotice(`店铺目录首次同步完成：已保存 ${summary.total} 个类别。`);else if(changed)setNotice(`检测到线上目录变化并已更新：新增 ${summary.added}、改名 ${summary.renamed}、移动 ${summary.moved}、删除 ${summary.removed}。`);else if(!automatic)setNotice(`店铺目录已是最新，共 ${summary.total} 个类别。`)}}catch(reason){if(!automatic)setEbayError(readableError(reason,'eBay店铺目录同步失败'))}finally{setCategorySyncing(false)}}
+  const syncStoreCategories=async(store=activeStore,automatic=false)=>{if(!store||categorySyncing)return;setCategorySyncing(true);if(!automatic){setEbayError('');setEbayErrorDetail(null);setEbayErrorAction(null);setEbayErrorActionFor('')}try{const previous=categoryWorkspace.lastSync;const result=await window.desktop.ebay.syncCategories(store.id);setCategoryWorkspace(result);const summary=result.lastSync;const changed=summary?(summary.added+summary.renamed+summary.moved+summary.removed):0;if(summary){if(!previous)setNotice(`店铺目录首次同步完成：已保存 ${summary.total} 个类别。`);else if(changed)setNotice(`检测到线上目录变化并已更新：新增 ${summary.added}、改名 ${summary.renamed}、移动 ${summary.moved}、删除 ${summary.removed}。`);else if(!automatic)setNotice(`店铺目录已是最新，共 ${summary.total} 个类别。`)}}catch(reason){if(!automatic){const failure=friendlyEbayError(readableError(reason,'eBay店铺目录同步失败'));setEbayError(failure.text);setEbayErrorDetail({text:failure.text,detail:failure.detail});setEbayErrorActionFor(failure.text);setEbayErrorAction({label:'重试',run:()=>void syncStoreCategories(store)})}}finally{setCategorySyncing(false)}}
   const directoryProductCategories=categoryWorkspace.categories.filter(item=>item.status==='ACTIVE'&&item.listingCount>0)
   const openDirectoryProductSync=async()=>{
     if(!activeStore||!directoryProductCategories.length)return
@@ -3989,7 +4010,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
     try{
       await window.desktop.browser.show('web')
       await window.desktop.browser.navigate('web',url)
-    }catch(reason){setTitleBrowserUrl('');setTitleUrlError(readableError(reason,'内嵌浏览器打开失败'))}
+    }catch(reason){setTitleBrowserUrl('');setTitleUrlError(friendlySupplyError(reason instanceof Error ? reason.message : String(reason), '目标站点').text)}
   }
   const closeTitleBrowser=()=>{setTitleBrowserUrl('');void window.desktop.browser.hide()}
   const openTitleCustomUrl=()=>{
@@ -4472,7 +4493,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
   const categoryImportantChanges=categorySummary?(categorySummary.added+categorySummary.renamed+categorySummary.moved+categorySummary.removed):0
   const categorySyncedAt=categorySummary?new Date(categorySummary.syncedAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'尚未同步'
   const selectStore=(store:EbayStore)=>{setStoreScope(store.id);setActiveTab('browser');setEbayError('')}
-  const navigateEbay=(event:FormEvent)=>{event.preventDefault();try{const target=new URL(ebayAddress);if(target.protocol!=='https:'||!(target.hostname==='ebay.com'||target.hostname.endsWith('.ebay.com')))throw new Error('eBay浏览器只允许访问 ebay.com');void window.desktop.browser.navigate('web',target.toString())}catch(reason){setEbayError(readableError(reason,'网址无效'))}}
+  const navigateEbay=(event:FormEvent)=>{event.preventDefault();try{const target=new URL(ebayAddress);if(target.protocol!=='https:'||!(target.hostname==='ebay.com'||target.hostname.endsWith('.ebay.com')))throw new Error('eBay浏览器只允许访问 ebay.com');void window.desktop.browser.navigate('web',target.toString())}catch(reason){const msg=reason instanceof Error?reason.message:String(reason);setEbayError(/只允许访问/.test(msg)?msg:friendlyEbayError(msg).text)}}
   const createEbayBrowserTab=async()=>{if(!activeStore)return;setEbayError('');try{await window.desktop.ebay.newBrowserTab(activeStore.id)}catch(reason){setEbayError(readableError(reason,'新建eBay浏览页失败'))}}
   const activateEbayBrowserTab=async(tab:BrowserTab)=>{setEbayError('');try{await window.desktop.browser.switchTab(tab.id);const next=await window.desktop.browser.getState('web');setEbayBrowserState(next);setEbayAddress(next.url)}catch(reason){setEbayError(readableError(reason,'切换eBay浏览页失败'))}}
   const closeEbayBrowserTab=async(tabId:string)=>{setEbayError('');try{await window.desktop.browser.closeTab(tabId)}catch(reason){setEbayError(readableError(reason,'关闭eBay浏览页失败'))}}

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EbayLocalProduct, EbayLocalProductUpdateInput, EbayStoreCategory } from '../shared/contracts'
 import type { PlatformCategoryController } from './useEbayPlatformCategory'
 import './ebay-local-listing-editor.css'
@@ -48,11 +48,68 @@ function mediaUrl(localPath:string,remoteUrl:string) {
   return localPath?`cross-media://local/${encodeURIComponent(localPath)}`:remoteUrl
 }
 
-function truncatePath(name:string, maxLen=60) {
-  if (!name || name.length <= maxLen) return name
-  const head = name.slice(0, 30)
-  const tail = name.slice(-20)
-  return `${head}…${tail}`
+function CustomCategoryDropdown({options,value,onChange,disabled,placeholder,savedId,savedName}: {
+  options:Array<{categoryId:string;name:string;soldCount:number}>
+  value:string
+  onChange:(categoryId:string)=>void
+  disabled:boolean
+  placeholder:string
+  savedId?:string
+  savedName?:string
+}) {
+  const [open,setOpen]=useState(false)
+  const dropdownRef=useRef<HTMLDivElement>(null)
+  const displayOptions=options.length>0
+    ?options
+    :(savedId?[{categoryId:savedId,name:savedName||savedId,soldCount:0}]:[])
+  const selectedOption=displayOptions.find(o=>o.categoryId===value)
+
+  useEffect(()=>{
+    const handleClickOutside=(event:MouseEvent)=>{
+      if(dropdownRef.current&&!dropdownRef.current.contains(event.target as Node)){
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown',handleClickOutside)
+    return ()=>document.removeEventListener('mousedown',handleClickOutside)
+  },[])
+
+  return (
+    <div className="ebay-revise-custom-dropdown" ref={dropdownRef}>
+      <button
+        type="button"
+        className="ebay-revise-custom-dropdown-trigger"
+        disabled={disabled}
+        onClick={()=>setOpen(!open)}
+        title={selectedOption?.name||placeholder}
+      >
+        <span>{selectedOption?.name||placeholder}</span>
+        <svg width="10" height="6" viewBox="0 0 10 6" fill="none">
+          <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      </button>
+      {open&&displayOptions.length>0&&(
+        <div className="ebay-revise-custom-dropdown-menu">
+          {displayOptions.map(option=>(
+            <div
+              key={option.categoryId}
+              className={`ebay-revise-custom-dropdown-option ${option.categoryId===value?'selected':''}`}
+              title={option.name}
+              onClick={()=>{
+                onChange(option.categoryId)
+                setOpen(false)
+              }}
+            >
+              <span>{option.name}</span>
+              {option.soldCount>0&&option.soldCount<999999&&(
+                <small>已成交 {option.soldCount}</small>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,inline}:Props) {
@@ -114,13 +171,15 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
           <section className="ebay-revise-section ebay-revise-category-section">
             <header><div><h2>平台类目</h2><p>按核心商品词的 eBay prelist「Find a match」推荐类目；默认选中 Best match，可下拉改选后确定。</p></div><span>{platformCategory.savedName||'未选择'}</span></header>
             <div className="ebay-revise-category-row">
-              <select aria-label="平台类目" value={platformCategory.pick} disabled={platformCategory.busy||!(platformCategory.options.length||platformCategory.savedId)} onChange={event=>platformCategory.setPick(event.target.value)} title={platformCategory.options.find(o=>o.categoryId===platformCategory.pick)?.name||platformCategory.savedName||''}>
-                {platformCategory.options.length
-                  ?platformCategory.options.map(option=><option key={option.categoryId} value={option.categoryId} title={option.name}>{truncatePath(option.name)}{option.soldCount>0&&option.soldCount<999999?`（已成交 ${option.soldCount}）`:''}</option>)
-                  :platformCategory.savedId
-                    ?<option value={platformCategory.savedId} title={platformCategory.savedName||''}>{truncatePath(platformCategory.savedName||platformCategory.savedId)}</option>
-                    :<option value="">{platformCategory.busy?'正在获取平台类目…':'暂无候选类目'}</option>}
-              </select>
+              <CustomCategoryDropdown
+                options={platformCategory.options}
+                value={platformCategory.pick}
+                onChange={platformCategory.setPick}
+                disabled={platformCategory.busy||!(platformCategory.options.length||platformCategory.savedId)}
+                placeholder={platformCategory.busy?'正在获取平台类目…':'暂无候选类目'}
+                savedId={platformCategory.savedId}
+                savedName={platformCategory.savedName}
+              />
               <button type="button" disabled={platformCategory.busy} onClick={platformCategory.refresh}>{platformCategory.busy?'获取中…':'重新获取'}</button>
               <button type="button" disabled={platformCategory.busy||!platformCategory.pick||platformCategory.pick===platformCategory.savedId} onClick={platformCategory.confirm}>确定</button>
             </div>
@@ -132,13 +191,28 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
           <header><div><h2>01 图片与视频</h2><p>本地保存商品媒体；拖动可排序，第一张图片为主图。</p></div><span>{draft.media.length}/24</span></header>
           <div className="ebay-revise-media-layout">
             <figure className="ebay-revise-main-media">
-              {draft.media[0]?<img src={mediaUrl(draft.media[0].localPath,draft.media[0].remoteUrl)} alt="商品主图"/>:<div>尚未添加图片</div>}
-              {draft.media[0]&&<figcaption>Main</figcaption>}
+              {draft.media[0]?(
+                draft.media[0].mediaType==='VIDEO'?(
+                  <div className="ebay-revise-main-media-video">
+                    <video src={mediaUrl(draft.media[0].localPath,draft.media[0].remoteUrl)} muted playsInline controls/>
+                  </div>
+                ):(
+                  <img src={mediaUrl(draft.media[0].localPath,draft.media[0].remoteUrl)} alt="商品主图"/>
+                )
+              ):<div>尚未添加图片</div>}
+              {draft.media[0]&&<figcaption>{draft.media[0].mediaType==='VIDEO'?'Video':'Main'}</figcaption>}
             </figure>
             <div className="ebay-revise-media-grid">
               {draft.media.map((media,index)=><figure key={media.id} draggable onDragStart={()=>setDraggedId(media.id)} onDragEnd={()=>setDraggedId('')} onDragOver={event=>event.preventDefault()} onDrop={()=>moveMedia(draggedId,media.id)} className={draggedId===media.id?'dragging':''}>
-                <img src={mediaUrl(media.localPath,media.remoteUrl)} alt={`商品图片 ${index+1}`}/>
-                <div><button type="button" onClick={()=>makeMain(media.id)}>{index===0?'主图':'设为主图'}</button><button type="button" aria-label="删除图片" onClick={()=>removeMedia(media.id)}>×</button></div>
+                {media.mediaType==='VIDEO'?(
+                  <div className="ebay-revise-media-video">
+                    <video src={mediaUrl(media.localPath,media.remoteUrl)} muted playsInline/>
+                    <div className="ebay-revise-media-play-icon">▶</div>
+                  </div>
+                ):(
+                  <img src={mediaUrl(media.localPath,media.remoteUrl)} alt={`商品图片 ${index+1}`}/>
+                )}
+                <div><button type="button" onClick={()=>makeMain(media.id)} disabled={media.mediaType==='VIDEO'}>{index===0?'主图':media.mediaType==='VIDEO'?'视频':'设为主图'}</button><button type="button" aria-label="删除媒体" onClick={()=>removeMedia(media.id)}>×</button></div>
               </figure>)}
               {draft.media.length<24&&<button className="ebay-revise-add-media" type="button" disabled={uploading} onClick={()=>fileInput.current?.click()}><strong>{uploading?'…':'＋'}</strong><span>{uploading?'正在添加':'添加照片'}</span></button>}
             </div>

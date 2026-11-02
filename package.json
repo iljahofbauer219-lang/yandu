@@ -7,7 +7,7 @@
   "main": "dist/main/main/boot/boot.js",
   "scripts": {
     "dev": "concurrently -k \"vite --port 5173 --strictPort\" \"tsc -p tsconfig.main.json --watch\" \"wait-on tcp:5173 file:dist/main/main/main.js && VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
-    "build": "vite build && tsc -p tsconfig.main.json",
+    "build": "vite build && tsc -p tsconfig.main.json && node tools/write-build-stamp.mjs",
     "rebuild:clean": "rm -rf dist build node_modules/.vite && vite build && tsc -p tsconfig.main.json",
     "verify:markers": "node tools/check-source-markers.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit",

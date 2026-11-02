@@ -1581,12 +1581,15 @@ export class BrowserWorkspace {
     const script=`(async()=>{
       const clean=value=>(value||'').replace(/\\s+/g,' ').trim();
       const normalizeImage=value=>{try{value=String(value||'').replace(/&amp;/g,'&').trim();if(!value||value.startsWith('data:'))return '';if(value.startsWith('//'))value='https:'+value;const url=new URL(value,location.href);if(url.protocol!=='https:'||!(url.hostname==='ebayimg.com'||url.hostname.endsWith('.ebayimg.com')))return '';url.pathname=url.pathname.replace(/\\/s-l\\d+(?=\\.[a-z0-9]+$)/i,'/s-l1600');return url.toString()}catch{return ''}};
+      const normalizeVideo=value=>{try{value=String(value||'').replace(/&amp;/g,'&').trim();if(!value||value.startsWith('data:'))return '';if(value.startsWith('//'))value='https:'+value;const url=new URL(value,location.href);if(url.protocol!=='https:')return '';if(!/\\.mp4(\\?|$)/i.test(url.pathname)&&!url.hostname.includes('video'))return '';return url.toString()}catch{return ''}};
       const images=[],imageKeys=new Set();
+      let videoUrl='';
       const addImage=value=>{const url=normalizeImage(value);if(!url)return;const key=url.match(/\\/images\\/g\\/([^/]+)/i)?.[1]||url;if(!imageKeys.has(key)){imageKeys.add(key);images.push(url)}};
       const addNode=node=>{if(!node)return;['data-zoom-src','data-src','src'].forEach(name=>addImage(node.getAttribute?.(name)));addImage(node.currentSrc);const srcset=node.getAttribute?.('srcset')||node.getAttribute?.('data-srcset')||'';srcset.split(',').forEach(entry=>addImage(entry.trim().split(/\\s+/)[0]))};
       let structuredProduct=null;
-      const addStructured=node=>{if(!node)return;if(Array.isArray(node)){node.forEach(addStructured);return}if(typeof node!=='object')return;const types=Array.isArray(node['@type'])?node['@type']:[node['@type']];if(types.some(type=>String(type).toLowerCase()==='product')){structuredProduct=structuredProduct||node;const values=Array.isArray(node.image)?node.image:[node.image];values.filter(Boolean).forEach(value=>typeof value==='string'?addImage(value):addImage(value?.url||value?.contentUrl))}if(node['@graph'])addStructured(node['@graph'])};
+      const addStructured=node=>{if(!node)return;if(Array.isArray(node)){node.forEach(addStructured);return}if(typeof node!=='object')return;const types=Array.isArray(node['@type'])?node['@type']:[node['@type']];if(types.some(type=>String(type).toLowerCase()==='product')){structuredProduct=structuredProduct||node;const values=Array.isArray(node.image)?node.image:[node.image];values.filter(Boolean).forEach(value=>typeof value==='string'?addImage(value):addImage(value?.url||value?.contentUrl));if(!videoUrl&&node.video){const videoValue=Array.isArray(node.video)?node.video[0]:node.video;if(typeof videoValue==='string')videoUrl=normalizeVideo(videoValue);else videoUrl=normalizeVideo(videoValue?.url||videoValue?.contentUrl)}}if(node['@graph'])addStructured(node['@graph'])};
       document.querySelectorAll('script[type="application/ld+json"]').forEach(node=>{try{addStructured(JSON.parse(node.textContent||''))}catch{}});
+      if(!videoUrl){const videoElement=document.querySelector('video[src],video source[src]');if(videoElement)videoUrl=normalizeVideo(videoElement.getAttribute('src')||videoElement.querySelector('source')?.getAttribute('src'))}
       const gallerySelectors=['[data-testid*="image-carousel"] img','.ux-image-carousel img','[class*="image-carousel"] img','[class*="image-gallery"] img','[class*="ux-image"] img'];
       gallerySelectors.forEach(selector=>document.querySelectorAll(selector).forEach(addNode));
       document.querySelectorAll('a[href*="i.ebayimg.com"] , source[srcset*="i.ebayimg.com"]').forEach(node=>{addImage(node.getAttribute('href'));addNode(node)});
@@ -1619,7 +1622,7 @@ export class BrowserWorkspace {
       const text=clean(document.body?.innerText);
       const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/signin|login/i.test(location.pathname);
       const verification=/captcha|security check|verification code|验证码|安全验证|确认是您本人/i.test(text+' '+location.href);
-      return {url:location.href,itemSpecifics:pairs.filter(item=>!/^condition$/i.test(item.name)),condition,imageUrls:images,title,subtitle,descriptionHtml,descriptionText,price,currency,shippingPolicy,returnPolicy,paymentPolicy,sellerNotes,login,verification};
+      return {url:location.href,itemSpecifics:pairs.filter(item=>!/^condition$/i.test(item.name)),condition,imageUrls:images,videoUrl,title,subtitle,descriptionHtml,descriptionText,price,currency,shippingPolicy,returnPolicy,paymentPolicy,sellerNotes,login,verification};
     })()`
     let details:EbayProductDetails&{login?:boolean;verification?:boolean}={url:targetUrl,itemSpecifics:[],condition:'',imageUrls:[]}
     try {
@@ -1642,7 +1645,7 @@ export class BrowserWorkspace {
       if(!view.webContents.isDestroyed())view.webContents.close()
     }
     if(!details.imageUrls.length&&!details.itemSpecifics.length&&!details.condition)throw new Error('未从原商品页识别到图片或商品属性，请确认商品页已完整加载后重试')
-    return {url:details.url,itemSpecifics:details.itemSpecifics,condition:details.condition,imageUrls:details.imageUrls,title:details.title,subtitle:details.subtitle,descriptionHtml:details.descriptionHtml,descriptionText:details.descriptionText,price:details.price,currency:details.currency,shippingPolicy:details.shippingPolicy,returnPolicy:details.returnPolicy,paymentPolicy:details.paymentPolicy,sellerNotes:details.sellerNotes}
+    return {url:details.url,itemSpecifics:details.itemSpecifics,condition:details.condition,imageUrls:details.imageUrls,videoUrl:details.videoUrl,title:details.title,subtitle:details.subtitle,descriptionHtml:details.descriptionHtml,descriptionText:details.descriptionText,price:details.price,currency:details.currency,shippingPolicy:details.shippingPolicy,returnPolicy:details.returnPolicy,paymentPolicy:details.paymentPolicy,sellerNotes:details.sellerNotes}
   }
 
   async readEbayRevisionCore(accountId:string,listingId:string,currency:string):Promise<{price:string;currency:string;descriptionText:string;descriptionHtml:string}> {
@@ -2359,7 +2362,7 @@ export class BrowserWorkspace {
     view.setBackgroundColor('#ffffff')
     view.webContents.setUserAgent(base.view.webContents.getUserAgent())
     try {
-      await view.webContents.loadURL('https://www.ebay.com/sh/str/category')
+      await this.loadEbayWithDirectFallback(view.webContents, 'https://www.ebay.com/sh/str/category', '店铺类目目录')
       let ready=false
       for(let attempt=0;attempt<40;attempt+=1) {
         const state=await view.webContents.executeJavaScript(`(() => {
@@ -2728,10 +2731,10 @@ export class BrowserWorkspace {
   navigate(platform: Platform, rawUrl: string) {
     const url = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`
     const currentTab=platform==='web'?this.detailTabs.get(this.activeTabId):undefined
-    const allowed=currentTab?.domains?.length
-      ? (()=>{try{const target=new URL(url);return target.protocol==='https:'&&currentTab.domains!.some(domain=>target.hostname===domain||target.hostname.endsWith(`.${domain}`))}catch{return false}})()
-      : this.isAllowedUrl(platform,url)
-    if (!allowed) throw new Error('当前标签只允许访问对应平台域名')
+    const isAllowed=(target:string)=>currentTab?.domains?.length
+      ? (()=>{try{const parsed=new URL(target);return parsed.protocol==='https:'&&currentTab.domains!.some(domain=>parsed.hostname===domain||parsed.hostname.endsWith(`.${domain}`))}catch{return false}})()
+      : this.isAllowedUrl(platform,target)
+    if (!isAllowed(url)) throw new Error('当前标签只允许访问对应平台域名')
     if (platform === 'web') {
       const tab = this.detailTabs.get(this.activeTabId)
       if (tab?.generic) {
@@ -2739,7 +2742,14 @@ export class BrowserWorkspace {
         this.emitTabs()
       }
     }
-    return this.getCurrentView(platform).webContents.loadURL(url)
+    const view=this.getCurrentView(platform)
+    return view.webContents.loadURL(url).catch(error=>{
+      const loadError=error as Error & {code?:string;errno?:number}
+      // 目标页自身跳转或被下一次导航取代时，Electron 以 ERR_ABORTED(-3) 拒绝 loadURL，但页面已落地，不该报错给用户
+      if((loadError.code==='ERR_ABORTED'||loadError.errno===-3)&&!view.webContents.isDestroyed()&&isAllowed(view.webContents.getURL()))return
+      const reason=error instanceof Error?error.message:String(error)
+      throw new Error(`打开「${url}」失败：${reason}`)
+    })
   }
 
   goBack(platform: Platform) {

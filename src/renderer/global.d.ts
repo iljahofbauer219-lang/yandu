@@ -60,6 +60,7 @@ declare global {
         set(url: string): Promise<string>
       }
       appInfo: {
+        buildStamp(): Promise<{ version: string; builtAt: string } | null>
         checkUpdate(): Promise<{ current: string; latest: string; isLatest: boolean; error: string }>
         checkUpdateNow(): Promise<{ current: string; latest: string; isLatest: boolean; error: string }>
         openDownload(): Promise<boolean>

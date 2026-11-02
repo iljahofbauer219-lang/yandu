@@ -60,6 +60,15 @@ describe('friendlySupplyError', () => {
   it('仓名可替换（1688）', () => {
     expect(friendlySupplyError('ERR_NAME_NOT_RESOLVED', '1688').text).toBe('网络波动，连接1688失败，请检查网络后重试。')
   })
+
+  it('browser:navigate 包装串（AI采集横幅截图原串）→ 网络类中文全文', () => {
+    const raw = "Error invoking remote method 'browser:navigate': Error: 打开「https://www.gigab2b.com/index.php?route=common/home」失败：ERR_CONNECTION_CLOSED (-100) loading 'https://www.gigab2b.com/index.php?route=common/home'"
+    const friendly = friendlySupplyError(raw, '大健云仓')
+    expect(friendly.kind).toBe('network')
+    expect(friendly.text).toBe('网络波动，连接大健云仓失败，请检查网络后重试。')
+    expect(friendly.brief).toBe('网络波动，连接失败')
+    expect(friendly.text).not.toContain('ERR_')
+  })
 })
 
 describe('friendlyUpdateError（右下角自动更新）', () => {

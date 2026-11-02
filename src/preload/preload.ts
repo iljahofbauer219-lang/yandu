@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld('desktop', {
     set: (url: string): Promise<string> => ipcRenderer.invoke('server-config:set', url)
   },
   appInfo: {
+    buildStamp: (): Promise<{ version: string; builtAt: string } | null> => ipcRenderer.invoke('app:build-stamp'),
     checkUpdate: (): Promise<{ current: string; latest: string; isLatest: boolean; error: string }> => ipcRenderer.invoke('app:check-update'),
     checkUpdateNow: (): Promise<{ current: string; latest: string; isLatest: boolean; error: string }> => ipcRenderer.invoke('app:check-update-now'),
     openDownload: (): Promise<boolean> => ipcRenderer.invoke('app:open-download'),

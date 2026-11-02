@@ -152,6 +152,7 @@ export interface EbayProductDetails {
   itemSpecifics:EbayItemSpecific[]
   condition:string
   imageUrls:string[]
+  videoUrl?:string
   title?:string
   subtitle?:string
   descriptionHtml?:string
@@ -168,7 +169,7 @@ export interface EbayProductDetails {
 
 export interface EbayLocalProductMedia {
   id:string
-  mediaType:'IMAGE'
+  mediaType:'IMAGE'|'VIDEO'
   sortOrder:number
   remoteUrl:string
   localPath:string
