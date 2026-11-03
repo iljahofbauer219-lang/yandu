@@ -32,6 +32,20 @@
   --yd-radius-dialog: 16px;
   --yd-focus-ring: 0 0 0 3px rgb(10 186 181 / 22%);
   --yd-transition-control: 160ms ease;
+  /* 内容层语义别名：默认值就是改造前那一帧的渲染值，所以浅色与深色档逐像素不变；
+     只有 [data-theme="graphite"] 覆盖它们，第三主题才压得住历史 CSS 里的硬编码色。
+     同族近似值（#e5f8f6 / #e7f8f6 / #8b9296 等）不在此轮收敛，见 DESIGN.md Known Gaps。 */
+  --yd-content-brand-ink: #075955;
+  --yd-content-brand-bright: #0abab5;
+  --yd-content-brand-wash: #e8f8f7;
+  --yd-content-control-ink: #333438;
+  --yd-content-nav-ink: #646b70;
+  --yd-content-status-ink: #60676b;
+  --yd-content-bg-subtle: #f8f9fa;
+  /* 品牌浅底上的二级说明文字。浅色档两行各自保持今天的原值（4.34 与 3.81，本就不过 AA，
+     属已登记旧账）；砚石档把它们收敛到同一档深青灰，压深底色后仍过 4.5:1。 */
+  --yd-content-brand-muted: #547a77;
+  --yd-content-brand-faint: #64827f;
 }
 
 [data-theme-mode="dark"] {
@@ -82,4 +96,14 @@
   --yd-info: #2b5fd9;
   --yd-info-soft: #e8eefc;
   --yd-focus-ring: 0 0 0 3px rgb(11 122 117 / 24%);
+  /* 内容层：砚都青压深一档，暖灰转冷石墨灰。浅色/深色档走上面的 :root 默认值，不受这里影响。 */
+  --yd-content-brand-ink: #054a47;
+  --yd-content-brand-bright: #0b7a75;
+  --yd-content-brand-wash: #e0f0ef;
+  --yd-content-control-ink: #14181c;
+  --yd-content-nav-ink: #47505a;
+  --yd-content-status-ink: #656f7a;
+  --yd-content-bg-subtle: #f2f4f6;
+  --yd-content-brand-muted: #4a6d6a;
+  --yd-content-brand-faint: #4a6d6a;
 }

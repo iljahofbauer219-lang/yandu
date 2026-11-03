@@ -53,6 +53,24 @@ colors:
   graphite-warning: "#8a5a08"
   graphite-danger: "#b03a2e"
   graphite-info: "#2b5fd9"
+  content-brand-ink: "#075955"
+  content-brand-bright: "#0abab5"
+  content-brand-wash: "#e8f8f7"
+  content-brand-muted: "#547a77"
+  content-brand-faint: "#64827f"
+  content-control-ink: "#333438"
+  content-nav-ink: "#646b70"
+  content-status-ink: "#60676b"
+  content-bg-subtle: "#f8f9fa"
+  graphite-content-brand-ink: "#054a47"
+  graphite-content-brand-bright: "#0b7a75"
+  graphite-content-brand-wash: "#e0f0ef"
+  graphite-content-brand-muted: "#4a6d6a"
+  graphite-content-brand-faint: "#4a6d6a"
+  graphite-content-control-ink: "#14181c"
+  graphite-content-nav-ink: "#47505a"
+  graphite-content-status-ink: "#656f7a"
+  graphite-content-bg-subtle: "#f2f4f6"
   legacy-accent: "#0abab5"
   legacy-ink: "#1d1d1f"
   legacy-erp-success: "#1f7a44"
@@ -214,6 +232,8 @@ components:
 
 第 3 套「砚石 Graphite」（`[data-theme="graphite"]`）明暗档仍是 `light`：砚都青压深一档为 `{colors.graphite-brand}`（#0b7a75），中性面转冷石墨灰，品牌实底反白改用 `{colors.graphite-on-brand}`（#ffffff 对 #0b7a75 实测 5.18:1，而 Tiffany 底在浅色主题下只能容 2.41:1）。用户在标题栏「主题」菜单里选，偏好持久化在 localStorage `app-theme:v1`，四值 `system` / `light` / `graphite` / `dark`，`system` 跟随 macOS 明暗；解析规则在 `src/renderer/ui/theme.ts`，单测在 `ui/__tests__/theme.test.ts`。
 
+内容层的可换档色走 `content-*` 九支（`--yd-content-brand-ink/bright/wash/muted/faint`、`--yd-content-control-ink/nav-ink/status-ink/bg-subtle`，定义在 `tokens.css` 的 `:root`，只在 `[data-theme="graphite"]` 里重定义）。它们**刻意不进 `[data-theme-mode="dark"]`**：历史层这些位置原本就是写死的 hex，若改引用 `--yd-brand-contrast` 一类既有变量，深色档会跟着变量换成 `#7cf0c4`，属于改观感。所以九支变量的 `:root` 值 = 今天的原 hex，浅色与深色按构造零变化，只有砚石换值——这条不变量由 `/tmp` 一次性 A/B 门卫（同一冻结 DOM × 前后两份构建 CSS × 三档主题，RGBA 逐像素）与快照屏锚点共同守着。`content-brand-muted` / `content-brand-faint` 两支是砚石专档收口的旧账：浅色仍是 4.34:1 / 3.81:1（未达标，见 Known Gaps），砚石下两者同为 `#4a6d6a`，压 `#e0f0ef` 达 4.85:1。
+
 `legacy-*` 条目只为让历史值可追溯，不代表可继续使用。**禁止在功能代码里新增未登记进本文件的 hex/rgb**：需要新色值时先在 `tokens.css` 加 `--yd-*`，再补本文档条目。
 
 ## Typography
@@ -287,6 +307,6 @@ Don't:
 - `needs-design-decision`：圆角与间距的第四档（如 6px 标签间距）尚未进阶梯。
 - `needs-design-decision`：`LoadingState` / `EmptyState` / `Notice` 尚未覆盖 eBay 图像工作流、入库闸口等既有提示，错误文案的中文化与动作按钮规范需并入。
 - 取证链路已建立（2026-10-17）：渲染面没有 HTTP 可达地址，活体窗口只由 `tools/design-qa-cdp.mjs` 经 CDP 取景（截图 + axe），插件原生阶段改读 `tools/design-qa-snapshot.mjs` 生成的静态快照（冻结 DOM + 内联构建 CSS，`http://127.0.0.1:4390/harness/…`）。快照屏另跑 `tools/design-qa-snapshot.mjs --axe`（写 `reports/a11y-snapshot.json`，不覆盖活体 `a11y.json`），使纯 CSS 改动免重启即可复算对比度；`--verify` 逐属性比活体 vs 快照，是保真门卫。仍待办：快照只冻结取景时所在的那一屏，多屏基线需在实机逐页取景。
-- `needs-design-decision`：基线与页面态绑死。快照屏 `maxDiffPixels: 0` 下，同一套 CSS 只是活体从「IE浏览」换到「AI跨境」就报 7,592 px 差异——逐像素定位证明它们全是页面态而非设计漂移：侧栏两条 66px 导航行（y 64–129 与 y 336–401，即高亮行换位，7,232 px）+ 标题栏仅在 AI跨境出现的「收起」按钮图标（x 1089–1132，360 px）。要么约定「重播基线前先把实机停在固定页」，要么把条件性标题栏控件也纳入遮罩（会少掉这块设计覆盖面），属设计侧取舍，未擅自改动闸口。
-- `needs-design-decision`：砚石（`[data-theme="graphite"]`）目前只换到「规范层 `--yd-*` + 外壳历史变量」。`theme-graphite.css` 桥接的是 `--tiffany/--bg-*/--text-*/--border-*/--accent*/--erp-*` 与 8 条外壳规则；31 个模块 CSS 里直接写死的表面色与文字色（如卡片 `#fff`、正文 `#1d2421`）不随主题名变，所以内容页在砚石下仍是浅色 Tiffany 观感，只有外壳与规范层组件换档。需要决定桥接范围：逐模块补 `[data-theme="graphite"]` 覆盖，还是先把模块 CSS 变量化（与第 1 条迁移节奏是同一个决策）。
-- `needs-design-decision`：砚石下的内容页对比度仍未被度量。2026-11-03 活体 A/B（浅色 vs 砚石，同一帧 `section.ie-browser-page`）axe 结果逐条相同——1 条 `page-has-heading-one`、29 passes、2 incomplete，切主题不新增违规；但这条帧的 `main` 是内嵌导航站，2026-10-22 在 AI跨境帧上量到的 24 节点 `color-contrast`（最低 1.83:1）没在这里复现。砚石换了底/字组合，那批小字的实际比值需在同一 eBay 内容帧上重取一遍才算数。
+- `needs-design-decision`：基线与页面态绑死。快照屏 `maxDiffPixels: 0` 下，同一套 CSS 只是活体从「IE浏览」换到「AI跨境」就报 7,592 px 差异——逐像素定位证明它们全是页面态而非设计漂移：侧栏两条 66px 导航行（y 64–129 与 y 336–401，即高亮行换位，7,232 px）+ 标题栏仅在 AI跨境出现的「收起」按钮图标（x 1089–1132，360 px）。要么约定「重播基线前先把实机停在固定页」，要么把条件性标题栏控件也纳入遮罩（会少掉这块设计覆盖面），属设计侧取舍，未擅自改动闸口。2026-11-03 第 2 期再撞一次并给出了判别法：对着 10-17 的基线，快照屏报 7,592 px（pixelmatch 6,992，差值即 AA 像素），但**同一份冻结 DOM 换上改前/改后两份构建 CSS 互为对照 = 0 px**（`main` 遮罩区外，1,247,040 px 全等），可见这 7,592 px 全部来自 16 天里活体页面态的位移，与本轮 CSS 无关。所以「等值替换」的证明要用同 DOM CSS-A/B，不能用跨时间基线比对；基线本身仍待设计侧确认后重播。
+- `needs-design-decision`：砚石的内容层覆盖已从「零」推进到「主框架可换档，长尾未收」。2026-11-03 第 2 期把 eBay 内容帧上出现频次最高的 9 支色 token 化（`image-studio.css` 87 处 + `styles.css` 51 处引用），并在 `theme-graphite.css` 补 `[data-theme="graphite"] body{color:var(--yd-text)}` 桥掉 `ui-readability.css` 里那行 `body{color:#202927}`（该文件在本轮范围外，只能在砚石档就地覆盖）。同一冻结 eBay 帧实测：砚石相对改前换档 106,878 px（8.57%），浅色与深色 0 px。剩余未 token 化的近重复家族仍在浅色层写死，砚石下仍呈 Tiffany 观感：`#e5f8f6`/`#e7f8f6`/`#dff6f4`/`#edf9f8`（品牌浅底四兄弟，与 `content-brand-wash` 差 3–14 个色阶）、`#8b9296`/`#949b9f`/`#7e898d`/`#9aa49f`/`#8b8e93`/`#8a9691`（说明文字六兄弟，正是砚石下仅剩的 4 条对比度违规）、`#5f6368`/`#fbfbfc`/`#e6e6e8`（外壳侧栏）、`#176a67`/`#087a75`/`#08736f`/`#086a66`（青绿中间档散落值）、以及 `theme-dark.css` 的 375 条明暗档覆盖表（按明暗命中，砚石不享有对应深色层）。合档会改浅色观感，需设计侧先定「一族一档」的取值表再收口（与第 1 条迁移节奏是同一个决策）。
+- `needs-design-decision`：内容页对比度已在 eBay 内容帧量到并部分收口，长尾仍待设计侧定档。2026-11-03 同一帧 axe `color-contrast`：浅色 8 条违规 / 24 passes，砚石改前 6 / 26，砚石第 2 期后 4 / 28。砚石已消掉的：`.ebay-workbench-heading > small` 与 `.ebay-browser-heading-main > div > small`（`#0abab5` 压白 2.41，由 `--tiffany` 换深青解决）、`.ebay-auto-login-banner > div > small`（4.33 → `content-brand-muted` #4a6d6a 压 #e0f0ef 达 4.85）、`.ebay-login-status > div > small`（3.80 → 同上）。浅色仍是旧账的两条：`#547a77` 压 `#e8f8f7` 4.34、`#64827f` 压 `#e8f8f7` 3.81（本轮按「浅色等值」原则压深底未动，压深会改浅色观感）。砚石剩下的 4 条全属未 token 化的说明文字灰：`#8b9296` 3.15、`#949b9f` 2.81、`#7e898d` 3.48、`.browser-placeholder` `#9aa49f` 2.32。另两条历史账不变：2026-10-22 AI跨境帧 24 节点（最低 `.score-badge` 1.83）与 `label-content-name-mismatch` / `page-has-heading-one`。需要设计侧先定「页内小字的最小字号与色档」，再逐页收口。

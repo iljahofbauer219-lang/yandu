@@ -33,8 +33,10 @@
 }
 
 /* ---------- (b) 定点覆盖：外壳与标签行 ----------
-   这几处在浅色层（styles.css）里仍是硬编码 hex，没有走变量，所以每个主题都得各自补一次；
-   根治办法是把它们改成引用 --yd- 与 --bg- 系列变量，属于已登记的「设计债」，本轮不动 styles.css。 */
+   这几处在浅色层（styles.css）里仍是硬编码 hex（悬停/选中底色、侧栏底色等），没有走变量，
+   所以每个主题得各自补一次。第 2 期已把其中「前景色」收进 --yd-content-*（如 .tabs button.active
+   的 color），但「底色」仍是各自的 hex，因此这些桥接行还不能删——删了砚石会掉回浅青底。
+   根治：把这些 hex 改成 --yd-content-*-bg 系列变量，属已登记设计债。 */
 [data-theme="graphite"] .sidebar { color:var(--text-secondary); background:var(--bg-sidebar); border-right:1px solid var(--border-soft); }
 [data-theme="graphite"] nav button:hover { color:var(--accent-contrast); background:var(--accent-soft); }
 [data-theme="graphite"] .app-titlebar-actions button:hover { color:var(--accent-contrast); background:var(--accent-soft); }
@@ -43,3 +45,9 @@
 [data-theme="graphite"] .tabs { background:var(--bg-soft); }
 [data-theme="graphite"] .tabs button { color:#5a636d; }
 [data-theme="graphite"] .tabs button.active { color:var(--accent-contrast); background:var(--bg-panel); }
+
+/* ---------- (c) 内容层正文继承 ----------
+   内容页 29 处正文色来自 ui-readability.css 的 body{color:#202927}，那一行在本轮文件范围外，
+   所以只在砚石档就地桥接；浅色与深色档不被这条规则命中，渲染值零变化。
+   根治（把 body 色改成引用 --yd-content-text）留在 DESIGN.md Known Gaps。 */
+[data-theme="graphite"] body { color:var(--yd-text); }
