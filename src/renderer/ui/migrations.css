@@ -21,9 +21,9 @@
 .sysadmin-tabs button { min-height: 34px; }
 .sysadmin-tabs button:focus-visible,.sysadmin-actions button:focus-visible,.create-form-grid input:focus-visible { outline: 2px solid var(--yd-brand); outline-offset: 2px; box-shadow: var(--yd-focus-ring); }
 
-[data-theme="dark"] .auth-card .yd-field input { color: var(--yd-text); background: rgb(255 255 255 / 7%); border-color: var(--yd-border-strong); }
-[data-theme="dark"] .sysadmin-tabs { background: var(--yd-surface-muted); }
-[data-theme="dark"] .sysadmin-tabs button.active { color: var(--yd-brand-contrast); background: var(--yd-surface); }
+[data-theme-mode="dark"] .auth-card .yd-field input { color: var(--yd-text); background: rgb(255 255 255 / 7%); border-color: var(--yd-border-strong); }
+[data-theme-mode="dark"] .sysadmin-tabs { background: var(--yd-surface-muted); }
+[data-theme-mode="dark"] .sysadmin-tabs button.active { color: var(--yd-brand-contrast); background: var(--yd-surface); }
 
 @media (max-width: 1180px) {
   .sysadmin-page { max-width: none; padding: 20px; overflow: auto; }

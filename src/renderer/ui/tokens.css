@@ -34,7 +34,7 @@
   --yd-transition-control: 160ms ease;
 }
 
-[data-theme="dark"] {
+[data-theme-mode="dark"] {
   --yd-canvas: #000000;
   --yd-surface: #151f1b;
   --yd-surface-muted: #1b2822;
@@ -55,4 +55,31 @@
   --yd-danger-soft: rgb(255 107 91 / 12%);
   --yd-info: #7aa7ff;
   --yd-info-soft: rgb(122 167 255 / 12%);
+}
+
+/* 砚石 Graphite：砚都青压深一档，中性面转冷石墨灰。模式仍是浅色，故不配深色覆盖层。
+   品牌实底反白改用纯白 —— #ffffff 对 #0b7a75 实测 5.18:1（浅色主题下 Tiffany 底只能容 2.41:1）。 */
+[data-theme="graphite"] {
+  --yd-brand: #0b7a75;
+  --yd-brand-hover: #096662;
+  --yd-brand-soft: #e0f0ef;
+  --yd-brand-contrast: #054a47;
+  --yd-on-brand: #ffffff;
+  --yd-canvas: #e9ecef;
+  --yd-surface: #ffffff;
+  --yd-surface-muted: #f2f4f6;
+  --yd-text: #14181c;
+  --yd-text-secondary: #47505a;
+  --yd-text-muted: #656f7a;
+  --yd-border: #d5dae0;
+  --yd-border-strong: #bcc4cc;
+  --yd-success: #176b46;
+  --yd-success-soft: #e2f3ea;
+  --yd-warning: #8a5a08;
+  --yd-warning-soft: #fbf0d9;
+  --yd-danger: #b03a2e;
+  --yd-danger-soft: #fbe9e6;
+  --yd-info: #2b5fd9;
+  --yd-info-soft: #e8eefc;
+  --yd-focus-ring: 0 0 0 3px rgb(11 122 117 / 24%);
 }

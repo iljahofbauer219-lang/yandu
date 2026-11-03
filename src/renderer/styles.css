@@ -669,7 +669,7 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 
 /* ===== ERP 采集加工域（P1：采集工作台 / AI 仓库） ===== */
 /* 主题变量：浅色值与历史硬编码 hex 一一对应（浅色主题像素级不变），暗色值成对给出，
-   避免整段 ERP 样式在 [data-theme="dark"] 下变成「白底 + 深绿字」的暗色盲区。
+   避免整段 ERP 样式在 [data-theme-mode="dark"] 下变成「白底 + 深绿字」的暗色盲区。
    近义 hex 已合并到同一 token（原值见注释），差异均在肉眼等价范围内。 */
 :root {
   --erp-surface:#fff;              /* 弹窗 / 抽屉 / 卡片 / 表格 / 输入框底 */
@@ -691,7 +691,7 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
   --erp-purple:#7c3aed; --erp-purple-bg:#f3e8fb;
   --erp-banner-info:#256e68; --erp-banner-info-bg:#eef7f6; --erp-banner-info-border:#cfe8e5;
 }
-[data-theme="dark"] {
+[data-theme-mode="dark"] {
   --erp-surface:#151f1b; --erp-surface-muted:#182420; --erp-surface-soft:#1b2822; --erp-surface-code:#1e2b25;
   --erp-border:rgba(255,255,255,.14); --erp-border-soft:rgba(255,255,255,.08); --erp-border-strong:rgba(255,255,255,.20);
   --erp-text:#f2f5f4; --erp-text-secondary:#b7c0bc; --erp-text-muted:#8a938f;

@@ -13,7 +13,8 @@ const image = (label: string, color: string) => `data:image/svg+xml;charset=utf-
 function Preview() {
   const [dark, setDark] = React.useState(false)
   React.useEffect(() => {
-    document.documentElement.dataset.theme = dark ? 'dark' : ''
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+    document.documentElement.dataset.themeMode = dark ? 'dark' : 'light'
   }, [dark])
 
   return <main className="stage3-preview">

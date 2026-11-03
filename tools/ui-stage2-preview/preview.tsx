@@ -8,7 +8,10 @@ import './preview.css'
 function Preview() {
   const [dark, setDark] = React.useState(false)
   const [modalOpen, setModalOpen] = React.useState(false)
-  React.useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : '' }, [dark])
+  React.useEffect(() => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+    document.documentElement.dataset.themeMode = dark ? 'dark' : 'light'
+  }, [dark])
   return <main className="stage2-preview">
     <header><div><h1>砚都跨境基础组件</h1><p>第二阶段真实组件验收</p></div><Button onClick={() => setDark(value => !value)}>{dark ? '切换浅色' : '切换深色'}</Button></header>
     <Card className="preview-card"><h2>表单与操作</h2><Field label="商品标题" defaultValue="Jersey Display Frame" hint="最多 80 个字符"/><Field label="SKU" error="SKU 已存在，请更换后重试" aria-label="SKU"/><div className="actions"><Button variant="primary">保存商品</Button><Button>取消</Button><Button variant="danger">删除</Button><Button loading>生成中</Button></div></Card>

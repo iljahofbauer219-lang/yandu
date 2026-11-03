@@ -19,11 +19,11 @@ export default function OnlineAdvisor() {
       root.appendChild(style)
     }
     const syncTheme = () => {
-      host.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
+      host.dataset.theme = document.documentElement.dataset.themeMode === 'dark' ? 'dark' : 'light'
     }
     syncTheme()
     const themeObserver = new MutationObserver(syncTheme)
-    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme-mode'] })
     setMountPoint(root)
     return () => themeObserver.disconnect()
   }, [])

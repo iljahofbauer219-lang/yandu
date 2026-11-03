@@ -61,6 +61,7 @@ import { CollectWorkbench } from './erp/CollectWorkbench'
 import { PanelCollapseButton, PanelExpandRail, TitlebarPanelToggle, usePanelCollapse } from './panel-collapse'
 import type { PanelCollapseControl } from './panel-collapse'
 import { useEbayPlatformCategory } from './useEbayPlatformCategory'
+import { readThemePreference, resolveTheme, THEME_STORAGE_KEY, type ThemePreference } from './ui/theme'
 import './ebay-image-stage-panel.css'
 import './migration-banner.css'
 import './ai-collect.css'
@@ -1282,18 +1283,20 @@ export function App() {
     else if (name === 'Listing精造师') setPage('ai-employee-listing')
     else setPage('ai-employee-workspace')
   }
-  // 主题模式：浅色/深色/跟随系统（system 实时监听 prefers-color-scheme），持久化 app-theme:v1
-  const [appTheme,setAppTheme]=useState<'light'|'dark'|'system'>(()=>{try{const saved=localStorage.getItem('app-theme:v1');return saved==='dark'||saved==='system'?saved:'light'}catch{return 'light'}})
+  // 主题：浅色/深色/砚石/跟随系统（system 实时监听 prefers-color-scheme），持久化 app-theme:v1
+  const [appTheme,setAppTheme]=useState<ThemePreference>(()=>{try{return readThemePreference(localStorage.getItem(THEME_STORAGE_KEY))}catch{return 'light'}})
   const [systemDark,setSystemDark]=useState(()=>window.matchMedia('(prefers-color-scheme: dark)').matches)
   useEffect(()=>{const query=window.matchMedia('(prefers-color-scheme: dark)');const onChange=(event:MediaQueryListEvent)=>setSystemDark(event.matches);query.addEventListener('change',onChange);return()=>query.removeEventListener('change',onChange)},[])
   const [themeMenuOpen,setThemeMenuOpen]=useState(false)
   // R-2：齿轮点开的 Linduo 选用 modal（admin → assignment, 普通用户 → preference）
   const [linduoModal, setLinduoModal] = useState<'assignment' | 'preference' | null>(null)
-  const effectiveDark=appTheme==='dark'||(appTheme==='system'&&systemDark)
-  useEffect(()=>{if(effectiveDark){document.documentElement.dataset.theme='dark'}else{delete document.documentElement.dataset.theme};try{localStorage.setItem('app-theme:v1',appTheme)}catch{}},[effectiveDark,appTheme])
+  // data-theme 记主题名、data-theme-mode 记明暗模式：深色覆盖层按 mode 命中，新增第三套主题只需一份 token 块
+  const { theme:themeName, mode:themeMode } = resolveTheme(appTheme, systemDark)
+  useEffect(()=>{document.documentElement.dataset.theme=themeName;document.documentElement.dataset.themeMode=themeMode;try{localStorage.setItem(THEME_STORAGE_KEY,appTheme)}catch{}},[themeName,themeMode,appTheme])
   const themeMenuOptions=[
     {id:'system' as const,label:'跟随系统',icon:<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>},
     {id:'light' as const,label:'浅色',icon:<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>},
+    {id:'graphite' as const,label:'砚石',icon:<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 8v8l8 5 8-5V8Z"/><path d="M4 8l8 5 8-5M12 13v8"/></svg>},
     {id:'dark' as const,label:'深色',icon:<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79Z"/></svg>}
   ]
   const [platform, setPlatform] = useState<Platform>('1688')

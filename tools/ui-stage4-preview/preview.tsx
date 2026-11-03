@@ -15,7 +15,10 @@ const areas = ['目录与仓库', '在线发布', '合规知识库', '在线顾�
 function Preview() {
   const [dark, setDark] = React.useState(false)
   const [area, setArea] = React.useState<(typeof areas)[number]>('目录与仓库')
-  React.useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : '' }, [dark])
+  React.useEffect(() => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+    document.documentElement.dataset.themeMode = dark ? 'dark' : 'light'
+  }, [dark])
   return <main className="stage4-preview">
     <header><div><h1>第四阶段 · 核心业务页验收</h1><p>统一令牌、最小字号、焦点与响应式检查</p></div><button onClick={() => setDark(v => !v)}>{dark ? '切换浅色' : '切换深色'}</button></header>
     <nav aria-label="验收区域">{areas.map(item => <button key={item} aria-current={area === item ? 'page' : undefined} onClick={() => setArea(item)}>{item}</button>)}</nav>

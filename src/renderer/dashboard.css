@@ -373,7 +373,7 @@
   font-weight: 500;
 }
 
-/* 暗色主题：由用户在标题栏选择的 app-theme 控制（<html data-theme="dark"> + theme-dark.css）。
+/* 暗色主题：由用户在标题栏选择的 app-theme 控制（<html data-theme-mode="dark"> + theme-dark.css）。
    这里原先写的是 @media (prefers-color-scheme: dark)，会跟随操作系统而非应用内选择，
    导致「系统深色 + 应用浅色」的用户看到半深半浅的工作台，故整块移除。
-   本文件其余规则仍是硬编码浅色值，接入暗色需另行按 [data-theme="dark"] 补覆盖。 */
+   本文件其余规则仍是硬编码浅色值，接入暗色需另行按 [data-theme-mode="dark"] 补覆盖。 */

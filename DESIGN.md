@@ -36,6 +36,23 @@ colors:
   dark-warning: "#ffc45e"
   dark-danger: "#ff8073"
   dark-info: "#7aa7ff"
+  graphite-brand: "#0b7a75"
+  graphite-brand-hover: "#096662"
+  graphite-brand-soft: "#e0f0ef"
+  graphite-brand-contrast: "#054a47"
+  graphite-on-brand: "#ffffff"
+  graphite-canvas: "#e9ecef"
+  graphite-surface: "#ffffff"
+  graphite-surface-muted: "#f2f4f6"
+  graphite-text: "#14181c"
+  graphite-text-secondary: "#47505a"
+  graphite-text-muted: "#656f7a"
+  graphite-border: "#d5dae0"
+  graphite-border-strong: "#bcc4cc"
+  graphite-success: "#176b46"
+  graphite-warning: "#8a5a08"
+  graphite-danger: "#b03a2e"
+  graphite-info: "#2b5fd9"
   legacy-accent: "#0abab5"
   legacy-ink: "#1d1d1f"
   legacy-erp-success: "#1f7a44"
@@ -193,7 +210,9 @@ components:
 
 ## Colors
 
-规范层的色彩全部来自 `--yd-*`，成对给出浅/暗取值（`tokens.css` 的 `:root` 与 `[data-theme="dark"]`）。主操作 `{colors.brand}`，hover 降到 `{colors.brand-hover}`，深底反白文字用 `{colors.on-brand}`；文本三级 `{colors.text}` / `{colors.text-secondary}` / `{colors.text-muted}`；表面三层 `{colors.canvas}` / `{colors.surface}` / `{colors.surface-muted}`；描边两级 `{colors.border}` / `{colors.border-strong}`。语义色四组各配一个 soft 底色：`success`、`warning`、`danger`、`info`。暗色下品牌色整体换成绿色 `{colors.dark-brand}`，画布纯黑。
+规范层的色彩全部来自 `--yd-*`。主题有两个正交的维度，都写在 `<html>` 上：`data-theme` = **主题名**（`light` / `dark` / `graphite`），`data-theme-mode` = **明暗档**（`light` / `dark`）。浅/暗取值成对给出：`tokens.css` 的 `:root` 是浅色基线，`[data-theme-mode="dark"]` 覆盖暗值；历史层的深色覆盖表（`theme-dark.css` 及模块 CSS，共 375 处选择器）一律挂在**明暗档**上，所以再加第 3 套主题只需补一个 `[data-theme="…"]` token 块，不必配深色覆盖层。主操作 `{colors.brand}`，hover 降到 `{colors.brand-hover}`，深底反白文字用 `{colors.on-brand}`；文本三级 `{colors.text}` / `{colors.text-secondary}` / `{colors.text-muted}`；表面三层 `{colors.canvas}` / `{colors.surface}` / `{colors.surface-muted}`；描边两级 `{colors.border}` / `{colors.border-strong}`。语义色四组各配一个 soft 底色：`success`、`warning`、`danger`、`info`。暗色下品牌色整体换成绿色 `{colors.dark-brand}`，画布纯黑。
+
+第 3 套「砚石 Graphite」（`[data-theme="graphite"]`）明暗档仍是 `light`：砚都青压深一档为 `{colors.graphite-brand}`（#0b7a75），中性面转冷石墨灰，品牌实底反白改用 `{colors.graphite-on-brand}`（#ffffff 对 #0b7a75 实测 5.18:1，而 Tiffany 底在浅色主题下只能容 2.41:1）。用户在标题栏「主题」菜单里选，偏好持久化在 localStorage `app-theme:v1`，四值 `system` / `light` / `graphite` / `dark`，`system` 跟随 macOS 明暗；解析规则在 `src/renderer/ui/theme.ts`，单测在 `ui/__tests__/theme.test.ts`。
 
 `legacy-*` 条目只为让历史值可追溯，不代表可继续使用。**禁止在功能代码里新增未登记进本文件的 hex/rgb**：需要新色值时先在 `tokens.css` 加 `--yd-*`，再补本文档条目。
 
@@ -269,3 +288,5 @@ Don't:
 - `needs-design-decision`：`LoadingState` / `EmptyState` / `Notice` 尚未覆盖 eBay 图像工作流、入库闸口等既有提示，错误文案的中文化与动作按钮规范需并入。
 - 取证链路已建立（2026-10-17）：渲染面没有 HTTP 可达地址，活体窗口只由 `tools/design-qa-cdp.mjs` 经 CDP 取景（截图 + axe），插件原生阶段改读 `tools/design-qa-snapshot.mjs` 生成的静态快照（冻结 DOM + 内联构建 CSS，`http://127.0.0.1:4390/harness/…`）。快照屏另跑 `tools/design-qa-snapshot.mjs --axe`（写 `reports/a11y-snapshot.json`，不覆盖活体 `a11y.json`），使纯 CSS 改动免重启即可复算对比度；`--verify` 逐属性比活体 vs 快照，是保真门卫。仍待办：快照只冻结取景时所在的那一屏，多屏基线需在实机逐页取景。
 - `needs-design-decision`：基线与页面态绑死。快照屏 `maxDiffPixels: 0` 下，同一套 CSS 只是活体从「IE浏览」换到「AI跨境」就报 7,592 px 差异——逐像素定位证明它们全是页面态而非设计漂移：侧栏两条 66px 导航行（y 64–129 与 y 336–401，即高亮行换位，7,232 px）+ 标题栏仅在 AI跨境出现的「收起」按钮图标（x 1089–1132，360 px）。要么约定「重播基线前先把实机停在固定页」，要么把条件性标题栏控件也纳入遮罩（会少掉这块设计覆盖面），属设计侧取舍，未擅自改动闸口。
+- `needs-design-decision`：砚石（`[data-theme="graphite"]`）目前只换到「规范层 `--yd-*` + 外壳历史变量」。`theme-graphite.css` 桥接的是 `--tiffany/--bg-*/--text-*/--border-*/--accent*/--erp-*` 与 8 条外壳规则；31 个模块 CSS 里直接写死的表面色与文字色（如卡片 `#fff`、正文 `#1d2421`）不随主题名变，所以内容页在砚石下仍是浅色 Tiffany 观感，只有外壳与规范层组件换档。需要决定桥接范围：逐模块补 `[data-theme="graphite"]` 覆盖，还是先把模块 CSS 变量化（与第 1 条迁移节奏是同一个决策）。
+- `needs-design-decision`：砚石下的内容页对比度仍未被度量。2026-11-03 活体 A/B（浅色 vs 砚石，同一帧 `section.ie-browser-page`）axe 结果逐条相同——1 条 `page-has-heading-one`、29 passes、2 incomplete，切主题不新增违规；但这条帧的 `main` 是内嵌导航站，2026-10-22 在 AI跨境帧上量到的 24 节点 `color-contrast`（最低 1.83:1）没在这里复现。砚石换了底/字组合，那批小字的实际比值需在同一 eBay 内容帧上重取一遍才算数。

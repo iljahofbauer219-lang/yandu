@@ -1,0 +1,45 @@
+/* ============================================================
+   砚石 Graphite —— 第 3 套主题，模式为浅色（data-theme-mode="light"）。
+   架构约定：data-theme 记主题名（light|dark|graphite），data-theme-mode 记明暗模式。
+   深色覆盖层（theme-dark.css 等）一律按 [data-theme-mode="dark"] 命中，因此新增浅色主题
+   只需要「一份 token 块 + 少量硬编码表面的定点覆盖」，不需要再抄一条 193 选择器的覆盖层。
+   默认（无 data-theme="graphite"）完全不生效，浅色与深色主题零回归。
+   ============================================================ */
+
+/* ---------- (a) 语义变量覆盖（legacy 命名空间；--yd-* 规范层在 ui/tokens.css） ---------- */
+[data-theme="graphite"] {
+  --tiffany:#0b7a75; --tiffany-soft:#e0f0ef; --ink:#14181c; --muted:#656f7a; --line:#d5dae0;
+  --panel:#ffffff; --canvas:#e9ecef; --bg-app:#e9ecef; --bg-panel:#ffffff; --bg-soft:#f2f4f6; --bg-sidebar:#f4f6f8;
+  --text-primary:#14181c; --text-secondary:#47505a; --text-muted:#656f7a;
+  --border-strong:#bcc4cc; --border-soft:#d5dae0;
+  --accent:#0b7a75; --accent-soft:#e0f0ef; --accent-contrast:#054a47;
+  --danger:#b03a2e; --danger-bg:#fbe9e6; --warn:#8a5a08; --ok:#176b46;
+  --shadow-card:0 6px 22px rgba(16,24,32,.07);
+}
+
+/* ---------- (a2) ERP 采集加工域变量覆盖 ---------- */
+[data-theme="graphite"] {
+  --erp-surface:#ffffff; --erp-surface-muted:#f2f4f6; --erp-surface-soft:#f2f4f6; --erp-surface-code:#eef1f4;
+  --erp-border:#d5dae0; --erp-border-soft:#d5dae0; --erp-border-strong:#bcc4cc;
+  --erp-text:#14181c; --erp-text-secondary:#47505a; --erp-text-muted:#656f7a;
+  --erp-ok:#176b46; --erp-ok-bg:#e2f3ea; --erp-ok-border:#b9dfc9; --erp-ok-contrast:#ffffff;
+  --erp-warn:#8a5a08; --erp-warn-bg:#fbf0d9; --erp-warn-border:#e8cf9d;
+  --erp-danger:#b03a2e; --erp-danger-bg:#fbe9e6; --erp-danger-border:#f0c2bb;
+  --erp-danger-bar:#b03a2e; --erp-danger-urgent-bg:#fbe9e6; --erp-danger-urgent-border:#f0c2bb;
+  --erp-info:#2b5fd9; --erp-info-bg:#e8eefc; --erp-info-border:#c3d2f7;
+  --erp-teal:#054a47; --erp-teal-bg:#e0f0ef;
+  --erp-purple:#7142d4; --erp-purple-bg:#efe9fd;
+  --erp-banner-info:#054a47; --erp-banner-info-bg:#e0f0ef; --erp-banner-info-border:#a7d8d4;
+}
+
+/* ---------- (b) 定点覆盖：外壳与标签行 ----------
+   这几处在浅色层（styles.css）里仍是硬编码 hex，没有走变量，所以每个主题都得各自补一次；
+   根治办法是把它们改成引用 --yd- 与 --bg- 系列变量，属于已登记的「设计债」，本轮不动 styles.css。 */
+[data-theme="graphite"] .sidebar { color:var(--text-secondary); background:var(--bg-sidebar); border-right:1px solid var(--border-soft); }
+[data-theme="graphite"] nav button:hover { color:var(--accent-contrast); background:var(--accent-soft); }
+[data-theme="graphite"] .app-titlebar-actions button:hover { color:var(--accent-contrast); background:var(--accent-soft); }
+[data-theme="graphite"] .titlebar-theme-menu button.active { color:var(--accent-contrast); background:var(--accent-soft); }
+[data-theme="graphite"] button:hover { border-color:#a7d8d4; }
+[data-theme="graphite"] .tabs { background:var(--bg-soft); }
+[data-theme="graphite"] .tabs button { color:#5a636d; }
+[data-theme="graphite"] .tabs button.active { color:var(--accent-contrast); background:var(--bg-panel); }
