@@ -4130,8 +4130,6 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
   const refreshLocalProduct=(updated:EbayLocalProduct)=>setLocalProducts(current=>[updated,...current.filter(item=>item.id!==updated.id)])
   const overlayPlatformCategory=useEbayPlatformCategory({product:localEditorProduct??null,onUpdated:refreshLocalProduct,notify:setNotice,fail:message=>setEbayError(message)})
   const inlinePlatformCategory=useEbayPlatformCategory({product:publishEditorProduct,onUpdated:refreshLocalProduct,notify:setNotice,fail:message=>setEbayError(message)})
-  // 缺口只做点名展示，绝不把「保存并准备到 eBay」变成硬阻断（页面沿用 eBay 线上原值，APP 缺记录 ≠ eBay 缺值）
-  const localProductFormGaps=(product:EbayLocalProduct)=>requiredFormGaps([],product.snapshot.details)
   const preparePublishEditorInSellerHub=async()=>{
     if(!publishEditorProduct||!publishEditorDraft)return
     const product=publishEditorProduct
@@ -4153,7 +4151,8 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
       }
       const result=await window.desktop.ebay.prepareLocalProductRevision(saved.id)
       if(!isEditorCurrent())return
-      const gaps=localProductFormGaps(saved)
+      // 缺口只做点名展示，绝不把「保存并准备到 eBay」变成硬阻断（页面沿用 eBay 线上原值，APP 缺记录 ≠ eBay 缺值）
+      const gaps=requiredFormGaps([],saved.snapshot.details)
       const skipped=[...new Set(result.skippedFields)]
       setNotice(`已在 Seller Hub 填写 ${[...new Set(result.filledFields)].length} 项：${[...new Set(result.filledFields)].join('、')||'无'}。${skipped.length?` ${skipped.length} 项未能自动写入（${skipped.join('、')}），请在页面人工补齐。`:''}${gaps.length?` APP 尚未记录：${gaps.map(item=>item.label).join('、')}，页面沿用 eBay 线上原值。`:''}最终提交按钮仍需由您点击。`)
     } catch (reason) {
