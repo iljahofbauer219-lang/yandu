@@ -145,7 +145,14 @@ export interface EbayListing {
   condition?:string
 }
 
-export interface EbayItemSpecific { name:string; value:string }
+export interface EbayItemSpecific {
+  name:string
+  value:string
+  source?:'SOURCE_PAGE'|'ENUM_MATCH'|'AI'|'MANUAL'|'CATEGORY_DEFAULT'
+  confidence?:'HIGH'|'MEDIUM'|'LOW'
+  needsConfirmation?:boolean
+  evidence?:string
+}
 
 export interface EbayProductDetails {
   url:string
@@ -165,6 +172,11 @@ export interface EbayProductDetails {
   sellerNotes?:string
   listingFormat?:'FIXED_PRICE'|'AUCTION'
   bestOfferEnabled?:boolean
+  quantity?:string
+  sku?:string
+  itemLocation?:string
+  postalCode?:string
+  handlingTime?:string
 }
 
 export interface EbayLocalProductMedia {
@@ -232,6 +244,12 @@ export interface EbayLocalProductSnapshotInput {
   capturedAt:string
 }
 
+export interface EbayLocalProductPolicySelection {
+  payment?:string
+  shipping?:string
+  return?:string
+}
+
 export interface EbayLocalProductUpdateInput {
   title:string
   descriptionText:string
@@ -239,6 +257,15 @@ export interface EbayLocalProductUpdateInput {
   price:string
   currency:string
   media:EbayLocalProductMedia[]
+  quantity?:string
+  condition?:string
+  listingFormat?:'FIXED_PRICE'|'AUCTION'
+  sku?:string
+  itemLocation?:string
+  postalCode?:string
+  handlingTime?:string
+  itemSpecifics?:EbayItemSpecific[]
+  policyIds?:EbayLocalProductPolicySelection
 }
 
 export interface EbayLocalProductMediaUploadInput {

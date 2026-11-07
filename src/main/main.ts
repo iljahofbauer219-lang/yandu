@@ -56,6 +56,7 @@ import { buildCategoryPromptTree, parseInboundCategorySuggestionReply, type Cata
 import { backCoreTermVariants, parseCoreTermVariants } from '../shared/ebayMarketVariants'
 import { parseEstimatedTotal } from '../shared/supplyEstimatedTotal'
 import { EBAY_SITE_ROOT_DOMAINS } from '../shared/ebaySites'
+import { mergeEbayLocalDetailsEdit } from '../shared/ebayListingForm'
 import { MARKETING_FACTS_VERSION, cleanMarketingFeatureLines, pickMarketingSpecifications } from '../shared/ebayImageCategoryPlan'
 
 const execFileAsync = promisify(execFile)
@@ -996,17 +997,7 @@ function updateEbayLocalProduct(localProductId:string,changes:EbayLocalProductUp
     currency:changes.currency.trim(),
     updatedAt:capturedAt
   }
-  const details:EbayProductDetails={
-    url:product.snapshot.details.url,
-    itemSpecifics:[],
-    condition:'',
-    imageUrls:changes.media.map(item=>item.remoteUrl).filter(Boolean),
-    title,
-    descriptionText:changes.descriptionText.trim(),
-    descriptionHtml:changes.descriptionHtml.trim(),
-    price:listing.price,
-    currency:listing.currency
-  }
+  const details=mergeEbayLocalDetailsEdit(product.snapshot.details,{...changes,title,price:listing.price,currency:listing.currency})
   const sourceMedia=new Map(product.snapshot.media.map(media=>[media.id,media]))
   const media=changes.media.slice(0,24).map((media,index)=>({...(sourceMedia.get(media.id)||media),sortOrder:index}))
   return database.saveEbayLocalProductSnapshot(completeEbayLocalSnapshot({listing,details,media,capturedAt}))
