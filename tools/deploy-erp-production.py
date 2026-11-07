@@ -59,6 +59,12 @@ def main():
         assert environment.get('DATABASE_URL') and environment.get('JWT_SECRET')
         assert len(environment['JWT_SECRET']) >= 20
         assert any(m.get('Name') == 'app_media-data' for m in deployed['Mounts'])
+        # 详情页与 AI 资产目录必须各自落卷：容器可写层随每次重新部署清空
+        # （2026-11-07 实测 /erp/data/ai-assets 未落卷，上一批 /ai-assets 地址随旧容器全 404）
+        assert environment.get('PRODUCT_PAGES_DIR') == '/app/data/product-pages'
+        assert environment.get('AI_ASSETS_DIR') == '/app/data/ai-assets'
+        assert any(m.get('Name') == 'app_product-pages-data' for m in deployed['Mounts'])
+        assert any(m.get('Name') == 'app_ai-assets-data' for m in deployed['Mounts'])
         # 迁移历史校验：任何既有迁移缺失或被改写均中止。
         query = 'SELECT migration_name,checksum FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL'
         js = 'const p=new (require("@prisma/client").PrismaClient)();p.$queryRawUnsafe(' + json.dumps(query) + ').then(r=>console.log(JSON.stringify(r))).finally(()=>p.$disconnect())'

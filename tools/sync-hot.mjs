@@ -39,5 +39,13 @@ fs.mkdirSync(HOT, { recursive: true })
 fs.cpSync(path.join(root, 'dist', 'main'), path.join(HOT, 'main-dist'), { recursive: true })
 fs.cpSync(path.join(root, 'dist', 'renderer'), path.join(HOT, 'renderer'), { recursive: true })
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
-fs.writeFileSync(path.join(HOT, 'version.json'), JSON.stringify({ version: pkg.version, builtAt: new Date().toISOString() }, null, 2))
+// builtAt 必须沿用本次构建戳：restart-app.sh 用它比对「实际加载的构建」与 dist 构建，
+// 若在这里写同步时刻，两份时间永远不等，陈旧热更新就能伪装成最新构建蒙过门禁。
+let builtAt = new Date().toISOString()
+try {
+  builtAt = String(JSON.parse(fs.readFileSync(path.join(root, 'dist', 'build-stamp.json'), 'utf8')).builtAt ?? builtAt)
+} catch {
+  console.warn('[hot:sync] 警告：dist/build-stamp.json 缺失，version.json 只能记同步时刻（重启门禁将判为构建不一致）')
+}
+fs.writeFileSync(path.join(HOT, 'version.json'), JSON.stringify({ version: pkg.version, builtAt }, null, 2))
 console.log(`[hot:sync] 完成，耗时 ${((Date.now() - started) / 1000).toFixed(1)}s → ${HOT}；重启 App 生效`)

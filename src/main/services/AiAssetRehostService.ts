@@ -1,7 +1,8 @@
 /**
  * AI 资产转存：把 AI 生成图 / 生成视频的字节上传到自有服务器 /api/ai-assets，
- * 换回 /ai-assets/{id}/{name} 永久 URL。仅用于最终保存时刻（存入优品仓库、视频生成成功），
- * 中间环节的临时 URL / 本地路径不受影响。
+ * 换回 /ai-assets/{id}/{name} 永久 URL。两个时机调用：
+ * ①大模型出图 / 出视频当刻（permanentizeGeneratedMediaUrls，见 image:generate、视频工作室）；
+ * ②最终保存时刻（存入优品仓库、发布视频生成）。中间环节的临时 URL / 本地路径不受影响。
  *
  * 失败语义：任何一步失败都不抛出（不阻断保存），改为在 warnings 里返回中文原因，
  * 对应 URL 保留原值。已指向服务器 /ai-assets/ 的 URL 幂等跳过。
@@ -28,6 +29,8 @@ export interface AiAssetRehostOptions {
   serverUrl: string
   accessToken: string
   urls: string[]
+  /** 整体失败时中文警告的后半句；默认按「保存」口径描述 */
+  failureHint?: string
 }
 
 const MAX_ASSETS = 40
@@ -148,6 +151,7 @@ export async function rehostAiAssetUrls(options: AiAssetRehostOptions): Promise<
   const map: Record<string, string> = {}
   const warnings: string[] = []
   const targets = [...new Set(options.urls.filter(Boolean))].filter(url => !url.startsWith(permanentPrefix))
+  console.info(`[ai-asset] 转存入口：候选 ${options.urls.filter(Boolean).length} 个，需转存 ${targets.length} 个，令牌${options.accessToken ? '已带' : '缺失'}，永久前缀 ${permanentPrefix}`)
   if (!targets.length || !options.accessToken) return { map, warnings }
 
   const loaded: Array<{ url: string; asset: LoadedAsset }> = []
@@ -156,6 +160,7 @@ export async function rehostAiAssetUrls(options: AiAssetRehostOptions): Promise<
       loaded.push({ url, asset: await loadAsset(url) })
     } catch (error) {
       const message = error instanceof Error ? error.message : '未知错误'
+      console.warn(`[ai-asset] 取字节失败（${message}）：${url.slice(0, 90)}`)
       warnings.push(`1 张资产转存失败（${message}），已保留原地址`)
     }
   }
@@ -164,12 +169,46 @@ export async function rehostAiAssetUrls(options: AiAssetRehostOptions): Promise<
   try {
     const serverUrls = await uploadAssets(serverUrl, options.accessToken, loaded.map(entry => entry.asset))
     loaded.forEach((entry, index) => { map[entry.url] = serverUrls[index] })
+    console.info(`[ai-asset] 转存成功 ${serverUrls.length} 个 → ${serverUrls.join(' , ')}`)
   } catch (error) {
     if (error instanceof AiAssetAuthError) throw error
     const message = error instanceof Error ? error.message : '未知错误'
-    warnings.push(`AI 资产转存到自有服务器失败（${message}），本次保存仍使用原地址`)
+    console.warn(`[ai-asset] 上传失败：${message}`)
+    warnings.push(`AI 资产转存到自有服务器失败（${message}），${options.failureHint ?? '本次保存仍使用原地址'}`)
   }
   return { map, warnings }
+}
+
+const TEMPORARY_URL_WARNING = '未登录砚都服务器，本次生成的图片与视频仍存放在厂商临时地址（数小时后失效）；请重新登录砚都账号后再生成，或尽快存入优品仓库转存。'
+const SESSION_EXPIRED_WARNING = '砚都登录会话已过期，本次生成的图片与视频仍存放在厂商临时地址（数小时后失效）；请重新登录砚都账号后再生成。'
+
+/**
+ * 出图 / 出视频当刻换永久地址：渲染端持久化的必须是 {server}/ai-assets/… 地址，
+ * 厂商签名地址（会过期）与本机路径都不再落库。
+ * 未登录、会话过期、服务器故障一律不抛出——保留原地址并回中文原因，由调用方的提示条展示。
+ */
+export async function permanentizeGeneratedMediaUrls(options: {
+  serverUrl: string
+  accessToken: string
+  urls: string[]
+}): Promise<{ urls: string[]; warnings: string[] }> {
+  const urls = options.urls
+  if (!urls.length) return { urls, warnings: [] }
+  const permanentPrefix = `${options.serverUrl.replace(/\/+$/, '')}/ai-assets/`
+  if (urls.every(url => url.startsWith(permanentPrefix))) return { urls, warnings: [] }
+  if (!options.accessToken) return { urls, warnings: [TEMPORARY_URL_WARNING] }
+  try {
+    const { map, warnings } = await rehostAiAssetUrls({
+      serverUrl: options.serverUrl,
+      accessToken: options.accessToken,
+      urls,
+      failureHint: '本次生成的图片仍使用厂商临时地址（数小时后失效）'
+    })
+    return { urls: urls.map(url => map[url] || url), warnings }
+  } catch (error) {
+    if (error instanceof AiAssetAuthError) return { urls, warnings: [SESSION_EXPIRED_WARNING] }
+    throw error
+  }
 }
 
 /** 15 秒视频生成成功后的单文件转存：filePath 限 userData/ebay-videos 之内（与视频服务写出目录一致） */
@@ -180,6 +219,7 @@ export async function rehostVideoFileToServer(options: {
 }): Promise<{ serverUrl?: string; warning?: string }> {
   const root = path.join(app.getPath('userData'), 'ebay-videos')
   const resolved = path.resolve(options.filePath)
+  if (!options.accessToken) return { warning: '未登录砚都服务器，视频仍存放在本机（换机或清理后无法播放）；请重新登录砚都账号后重新生成' }
   if (!resolved.startsWith(`${root}${path.sep}`)) return { warning: '视频文件不在系统视频目录内，跳过转存' }
   try {
     const buffer = await fsp.readFile(resolved)

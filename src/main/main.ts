@@ -20,7 +20,7 @@ import { LinduoLoginService } from './services/LinduoLoginService'
 import { LinduoChatModelService } from './services/LinduoChatModelService'
 import { BailianTranslationService } from './services/BailianTranslationService'
 import { SupplyProductDownloadService } from './services/SupplyProductDownloadService'
-import { AiAssetAuthError, rehostAiAssetUrls, rehostVideoFileToServer } from './services/AiAssetRehostService'
+import { AiAssetAuthError, permanentizeGeneratedMediaUrls, rehostAiAssetUrls, rehostVideoFileToServer } from './services/AiAssetRehostService'
 import { requireInboundEditPermission } from './services/InboundPermissionGuard'
 import { resolveMacUpdaterZipPath } from './macUpdaterCache'
 import { hasFreeSpaceForUpdate, UPDATE_REQUIRED_FREE_BYTES } from './updateFreeSpace'
@@ -46,6 +46,7 @@ import type { GuardianSkillInput } from '../shared/kbGuardian'
 import type { AmazonDataSourceSearchResult } from '../shared/amazonScraper'
 import { describeOmkarCloudError } from '../shared/omkarCloud'
 import { palletItemToEbayLocalInput } from '../shared/palletToEbayLocal'
+import { applyServerAssetBatch, isStaleProductPageAsset } from '../shared/ebayProductPageAssets'
 import { matchPalletCategory } from '../shared/palletCategoryMatch'
 import { ebayMarketResearchChannelLabel, isEbayResearchCategoryUsable } from '../shared/ebayMarketResearchParse'
 import { parseResearchQueryReply } from '../shared/ebayResearchQueryLlm'
@@ -130,7 +131,7 @@ import { auditEbayTitle } from '../shared/ebayTitleAudit'
 import { confirmedEbayMarketTerms } from '../shared/ebayMarketDecision'
 import { cleanPageDescriptionText, parseProductPageFacts } from '../shared/productPageFacts'
 import { resolveContentPlanSource } from '../shared/contentPlanSource'
-import type { BrowserBounds, BrowserTranslationMode, CandidateUpdateRequest, CollectedOzonProduct, CollectedSupplyProduct, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, CollectorPluginProduct, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonUpdateRequest, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceDocumentDraft, ComplianceEnforcementStatus, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReviewStatus, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceTaskStatus, EbayAcceptanceBatch, EbayAcceptanceCheck, EbayAcceptanceItemResult, EbayAcceptanceRunRequest, EbayAcceptanceScenarioResult, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReviewRequest, EbayImageGroundingRequest, EbayImageInspection, EbayImageInspectionReport, EbayImageRoleSuggestionRequest, EbayImageStage, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductMedia, EbayLocalProductMediaUploadInput, EbayLocalProductSnapshotInput, EbayLocalProductUpdateInput, EbayMarketKeywordStat, EbayMarketResearchDecisionRequest, EbayMarketResearchFinding, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayProductDetails, EbayPublishAuditEvent, EbayPublishComparisonItem, EbayPublishTask, EbaySellerHubAcceptanceSnapshot, EbayStageGroundingRequest, EbayStageStoryboardRequest, EbayTitleDecisionInput, EbayTitleOptimizationRequest, EbayVideoStudioRequest, EliminateRequest, ImageGenerationRequest, ImageModelProfile, ImportedProductImage, ImportedProductSource, InboundErpIntakeInput, InboundSnapshot, MarketplaceCredentialInput, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePublishDraftUpdate, NetworkStrategy, Platform, RealShiftRequest, SelectionDecision, SelectionImportRequest, SelectionTask, SelectionTaskDraft, SupplyPlatformCode, TaskProgress } from '../shared/contracts'
+import type { BrowserBounds, BrowserTranslationMode, CandidateUpdateRequest, CollectedOzonProduct, CollectedSupplyProduct, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, CollectorPluginProduct, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonUpdateRequest, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceDocumentDraft, ComplianceEnforcementStatus, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReviewStatus, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceTaskStatus, EbayAcceptanceBatch, EbayAcceptanceCheck, EbayAcceptanceItemResult, EbayAcceptanceRunRequest, EbayAcceptanceScenarioResult, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReviewRequest, EbayImageGroundingRequest, EbayImageInspection, EbayImageInspectionReport, EbayImageRoleSuggestionRequest, EbayImageStage, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductMedia, EbayLocalProductMediaUploadInput, EbayLocalProductSnapshotInput, EbayLocalProductUpdateInput, EbayMarketKeywordStat, EbayMarketResearchDecisionRequest, EbayMarketResearchFinding, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayProductDetails, EbayPublishAuditEvent, EbayPublishComparisonItem, EbayPublishTask, EbaySellerHubAcceptanceSnapshot, EbayStageGroundingRequest, EbayStageStoryboardRequest, EbayTitleDecisionInput, EbayTitleOptimizationRequest, EbayVideoStudioRequest, EliminateRequest, ImageGenerationRequest, ImageGenerationResult, ImageModelProfile, ImportedProductImage, ImportedProductSource, InboundErpIntakeInput, InboundSnapshot, MarketplaceCredentialInput, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePublishDraftUpdate, NetworkStrategy, Platform, RealShiftRequest, SelectionDecision, SelectionImportRequest, SelectionTask, SelectionTaskDraft, SupplyPlatformCode, TaskProgress } from '../shared/contracts'
 
 import type { EbayStore, EbayStoreCategory, EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
 import type { AiEmployeeAskRequest } from '../shared/aiEmployee'
@@ -547,9 +548,19 @@ async function enrichLocalSnapshotWithProductPageImages(store:EbayStore,product:
   }
   const downloaded=added.filter(item=>item.downloadStatus==='DOWNLOADED')
   const hasVideoFailure=added.some(item=>item.mediaType==='VIDEO'&&item.downloadStatus==='FAILED')
-  if(!downloaded.length&&!hasVideoFailure)return product
-  const mergedMedia=[...product.snapshot.media,...added].map((item,index)=>({...item,sortOrder:index}))
-  const mergedUrls=[...new Set([...(product.snapshot.sourceListing.imageUrls||[]),...downloaded.filter(item=>item.mediaType==='IMAGE').map(item=>item.remoteUrl)])]
+  // 服务器当前批次是原图唯一口径：旧快照里指向已被替换掉的资产先剔除，再按当前批次补齐（重下同名换扩展名时不留破图）
+  // 仅在产品页清单确实取到时才对齐；取不到时保持旧记录原样，避免把整批原图误判成失效
+  const currentBatch=bundle?[...assets,...videoAssets]:[]
+  const staleOptions={serverUrl,pageId,assets:currentBatch}
+  const keptMedia=product.snapshot.media.filter(item=>!isStaleProductPageAsset(item.remoteUrl,staleOptions))
+  const previousUrls=product.snapshot.sourceListing.imageUrls||[]
+  const mergedUrls=applyServerAssetBatch([...new Set([...previousUrls,...downloaded.filter(item=>item.mediaType==='IMAGE').map(item=>item.remoteUrl)])],{serverUrl,pageId,assets:currentBatch})
+  const aligned=Boolean(downloaded.length)||hasVideoFailure
+    ||keptMedia.length!==product.snapshot.media.length
+    ||mergedUrls.length!==previousUrls.length
+    ||mergedUrls.some((url,index)=>url!==previousUrls[index])
+  if(!aligned)return product
+  const mergedMedia=[...keptMedia,...added].map((item,index)=>({...item,sortOrder:index}))
   const updatedListing={...product.snapshot.sourceListing,imageUrls:mergedUrls,imageUrl:product.snapshot.sourceListing.imageUrl||mergedUrls[0]||''}
   return database.saveEbayLocalProductSnapshot(completeEbayLocalSnapshot({listing:updatedListing,details:product.snapshot.details,media:mergedMedia,capturedAt}))
 }
@@ -1049,8 +1060,34 @@ function withEbayLocalMediaFileSizes(products:EbayLocalProduct[]):EbayLocalProdu
   })}}))
 }
 
-type EbayImageFormat='jpeg'|'png'|'gif'|'tiff'|'bmp'|'webp'|'heic'|'avif'
+// 重下图文是整批替换：旧快照里残留的页面资产地址已在服务器上消失（同名还可能换扩展名）。
+// 读取时按服务器当前批次对齐图片清单并剔除失效媒体行，「02 选择原图」「① 产品原图」才不会出破图。
+function withServerProductPageAssets(products:EbayLocalProduct[]):EbayLocalProduct[] {
+  const store=database
+  if(!store)return products
+  const serverUrl=readServerUrl().replace(/\/+$/,'')
+  return products.map(product=>{
+    const warehouseProductId=product.listingId.startsWith('PALLET-')?product.listingId.slice('PALLET-'.length):''
+    const record=warehouseProductId?store.getSupplyDownload(warehouseProductId):null
+    if(!record||record.status!=='DOWNLOADED'||!record.pageId)return product
+    const assets=record.imageAssets||[]
+    if(!assets.length)return product
+    const batch=[...assets,...(record.videoAssets||[])]
+    const stale={serverUrl,pageId:record.pageId,assets:batch}
+    const sourceListing=product.snapshot.sourceListing
+    const media=product.snapshot.media.filter(item=>!isStaleProductPageAsset(item.remoteUrl,stale))
+    const imageUrls=applyServerAssetBatch(sourceListing.imageUrls||[],{serverUrl,pageId:record.pageId,assets})
+    const imageUrl=isStaleProductPageAsset(sourceListing.imageUrl||'',stale)?imageUrls.find(url=>!isStaleProductPageAsset(url,stale))||'':sourceListing.imageUrl
+    const unchanged=media.length===product.snapshot.media.length
+      && imageUrl===sourceListing.imageUrl
+      && imageUrls.length===(sourceListing.imageUrls||[]).length
+      && imageUrls.every((url,index)=>url===(sourceListing.imageUrls||[])[index])
+    if(unchanged)return product
+    return {...product,snapshot:{...product.snapshot,media,sourceListing:{...sourceListing,imageUrls,imageUrl}}}
+  })
+}
 
+type EbayImageFormat='jpeg'|'png'|'gif'|'tiff'|'bmp'|'webp'|'heic'|'avif'
 const ebayImageFormats:Record<string,{format:EbayImageFormat;extension:string}>={
   'image/jpeg':{format:'jpeg',extension:'jpg'},
   'image/jpg':{format:'jpeg',extension:'jpg'},
@@ -3321,7 +3358,7 @@ ipcMain.handle('ebay:browser-tab:new', (_event, storeId:string) => newEbayBrowse
 ipcMain.handle('ebay:product:open', (_event, storeId:string, url:string, title:string) => openEbayProductTab(storeId,url,title))
 ipcMain.handle('ebay:login:ensure', (_event, storeId:string) => ensureEbayStoreLogin(storeId))
 ipcMain.handle('ebay:listings:list', (_event, storeId?:string) => database?.getEbayListings(storeId) ?? [])
-ipcMain.handle('ebay:local-products:list', (_event, storeId?:string) => withEbayLocalMediaFileSizes(database?.getEbayLocalProducts(storeId) ?? []))
+ipcMain.handle('ebay:local-products:list', (_event, storeId?:string) => withEbayLocalMediaFileSizes(withServerProductPageAssets(database?.getEbayLocalProducts(storeId) ?? [])))
 ipcMain.handle('ebay:local-products:snapshots', (_event, localProductId:string) => database?.getEbayLocalProductSnapshots(localProductId) ?? [])
 ipcMain.handle('ebay:local-products:download', (_event, storeId:string, listingId:string) => downloadEbayLocalProduct(storeId,listingId))
 ipcMain.handle('ebay:product:read-url', (_event, storeId:string, url:string) => readEbayProductByUrl(storeId,url))
@@ -3671,7 +3708,17 @@ ipcMain.handle('ebay:video-studio:pick-images', async () => {
     return {name:path.basename(filePath),dataUrl:`data:${mime};base64,${fs.readFileSync(filePath).toString('base64')}`}
   })
 })
-ipcMain.handle('ebay:video-studio:generate', (event, request:EbayVideoStudioRequest) => arkVideoService().generate(request,progress=>event.sender.send('ebay:video-studio:progress',progress)))
+ipcMain.handle('ebay:video-studio:generate', async (event, request:EbayVideoStudioRequest, accessToken?:string) => {
+  const service=arkVideoService()
+  const project=await service.generate(request,progress=>event.sender.send('ebay:video-studio:progress',progress))
+  const video=project.video
+  if(process.env.CODEX_UI_TEST==='1'||!video?.filePath||video.status!=='READY')return project
+  // 出片当刻换永久地址：本机文件与方舟签名地址都无法长期支撑界面回放
+  const rehost=await rehostVideoFileToServer({serverUrl:readServerUrl(),accessToken:typeof accessToken==='string'?accessToken:'',filePath:video.filePath})
+  if(rehost.serverUrl)return service.attachVideoServerUrl(request.listingId,project.id,rehost.serverUrl)??project
+  if(!rehost.warning)return project
+  return {...project,video:{...video,message:[video.message,rehost.warning].filter(Boolean).join('；')}}
+})
 ipcMain.handle('ebay:acceptance:list', (_event, storeId:string) => database?.getEbayAcceptanceBatches(storeId) ?? [])
 ipcMain.handle('ebay:acceptance:run', (_event, request:EbayAcceptanceRunRequest) => runEbayAcceptance(request))
 ipcMain.handle('ebay:sync', async (_event, storeId:string) => {
@@ -3823,7 +3870,15 @@ ipcMain.handle('image:models', async () => {
   const connected = models.length > 0
   return { connected, models, message: connected ? `已聚合 ${models.length} 个生图模型` : '暂无可用生图模型' }
 })
-ipcMain.handle('image:generate', (_event, request: ImageGenerationRequest) => {
+ipcMain.handle('image:generate', async (_event, request: ImageGenerationRequest, accessToken?: string) => {
+  const result = await dispatchImageGeneration(request)
+  // 出图当刻换永久地址：厂商签名地址数小时后过期，直接持久化就会在下次打开时变成破图
+  if (process.env.CODEX_UI_TEST === '1') return result
+  const { urls, warnings } = await permanentizeGeneratedMediaUrls({ serverUrl: readServerUrl(), accessToken: typeof accessToken === 'string' ? accessToken : '', urls: result.imageUrls || [] })
+  if (!warnings.length && urls.join('|') === (result.imageUrls || []).join('|')) return result
+  return { ...result, imageUrls: urls, notice: [result.notice, ...warnings].filter(Boolean).join('；') }
+})
+async function dispatchImageGeneration(request: ImageGenerationRequest): Promise<ImageGenerationResult> {
   if(process.env.CODEX_UI_TEST==='1'&&request.model==='phase7-mock'){
     const svg='<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800"><rect width="800" height="800" fill="#f3efe7"/><rect x="240" y="160" width="320" height="480" rx="28" fill="#45b9d6"/></svg>'
     return{taskId:`phase7-${Date.now()}`,imageUrls:[`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`]}
@@ -3835,7 +3890,7 @@ ipcMain.handle('image:generate', (_event, request: ImageGenerationRequest) => {
     return linduoImageService.generate(request)
   }
   return imageService.generate(request)
-})
+}
 ipcMain.handle('image:translate-marketing',async(_event,request:ImageMarketingTranslationRequest):Promise<ImageMarketingTranslationResult>=>{
   if(process.env.CODEX_UI_TEST==='1')return{model:'phase7-mock-translation',targetLanguage:request.targetLanguage,translations:request.texts.map((_text,index)=>index?'Описание товара':'Товар для дома'),status:'TRANSLATED',issues:[]}
   const target=request.targetLanguage==='俄语'?'Russian':request.targetLanguage==='英语'?'English':request.targetLanguage==='西班牙语'?'Spanish':request.targetLanguage

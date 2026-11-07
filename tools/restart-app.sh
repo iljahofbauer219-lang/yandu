@@ -55,5 +55,26 @@ fi
 
 sleep 5 # 窗口揭示标记晚于端口监听数秒，避免误报
 grep -q "main window revealed" /tmp/yandu-dev-start.log || echo "[restart] 警告：尚未见窗口揭示标记，请查看 /tmp/yandu-dev-start.log" >&2
+
+# bootloader 优先加载 ~/yandu-hot 外置构建，dist 比它新并不会被加载；只看进程启动时间会放行
+# 四天前同步过的陈旧热更新（改完代码实机跑的仍是旧主进程）。这里核对「实际加载的构建」= 本次构建。
+stamp=$(node -e "try{process.stdout.write(String(JSON.parse(require('node:fs').readFileSync('dist/build-stamp.json','utf8')).builtAt))}catch{process.stdout.write('')}")
+loaded=$(grep -E "\[hot\] (external build loaded|builtin build loaded)" /tmp/yandu-dev-start.log | tail -1)
+if [ -z "$loaded" ]; then
+  echo "[restart] 失败：日志没有 [hot] 构建加载标记，无法确认主进程来源" >&2; exit 1
+fi
+case "$loaded" in
+  *"builtin build loaded"*)
+    echo "[restart] 主进程加载内置构建（hot 目录不存在或已 disabled），dist 即最新" ;;
+  *)
+    hot_built=$(printf '%s' "$loaded" | sed 's/.*builtAt //; s/).*$//')
+    if [ -z "$stamp" ]; then
+      echo "[restart] 失败：dist/build-stamp.json 读不到构建戳，无法核对热更新构建" >&2; exit 1
+    fi
+    if [ "$hot_built" != "$stamp" ]; then
+      echo "[restart] 失败：实机加载的是热更新旧构建 builtAt=$hot_built，本次构建是 $stamp；先跑 npm run hot:sync 再重启" >&2
+      exit 1
+    fi ;;
+esac
 echo "[restart] OK pid=$pid lstart=$lstart"
 [ -f dist/build-stamp.json ] && cat dist/build-stamp.json || echo "[restart] 警告：dist/build-stamp.json 缺失（构建链未跑写戳步）" >&2

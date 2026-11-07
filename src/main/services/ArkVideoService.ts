@@ -479,6 +479,16 @@ export class ArkVideoService {
     return this.list(listingId)
   }
 
+  /** 转存成功后的服务器永久地址写回工程档案：界面按 serverUrl 优先播放，本机文件仍是上传素材 */
+  attachVideoServerUrl(listingId:string, projectId:string, serverUrl:string):EbayVideoStudioProject|null {
+    const project=this.list(listingId).find(item=>item.id===projectId)
+    if(!project?.video?.filePath)return null
+    const metadataPath=path.join(path.dirname(path.dirname(project.video.filePath)),'project.json')
+    const updated:EbayVideoStudioProject={...project,video:{...project.video,serverUrl},updatedAt:new Date().toISOString()}
+    fs.writeFileSync(metadataPath,JSON.stringify(updated,null,2),'utf8')
+    return updated
+  }
+
   async pickImages():Promise<Array<{name:string;dataUrl:string}>> {
     throw new Error('图片选择应由主进程对话框处理')
   }

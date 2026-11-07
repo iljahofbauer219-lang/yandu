@@ -436,14 +436,14 @@ declare global {
         videoStudioProjects(listingId:string):Promise<EbayVideoStudioProject[]>
         confirmVideoStudioProject(listingId:string,projectId:string):Promise<EbayVideoStudioProject[]>
         pickVideoStudioImages():Promise<Array<{name:string;dataUrl:string}>>
-        generateVideoStudio(request:EbayVideoStudioRequest):Promise<EbayVideoStudioProject>
+        generateVideoStudio(request:EbayVideoStudioRequest, accessToken?:string):Promise<EbayVideoStudioProject>
         onVideoStudioProgress(callback:(progress:EbayVideoStudioProgress)=>void):()=>void
         acceptanceBatches(storeId:string):Promise<EbayAcceptanceBatch[]>
         runAcceptance(request:EbayAcceptanceRunRequest):Promise<EbayAcceptanceBatch>
       }
       image: {
         models(): Promise<ImageModelConnection>
-        generate(request: ImageGenerationRequest): Promise<ImageGenerationResult>
+        generate(request: ImageGenerationRequest, accessToken?: string): Promise<ImageGenerationResult>
         ground(request:EbayImageGroundingRequest):Promise<EbayImageGroundingPlan>
         extractPackageText(request:ImagePackageTextExtractionRequest):Promise<ImagePackageTextExtractionResult>
         reviewCandidate(request:EbayImageCandidateReviewRequest):Promise<EbayImageCandidateReview>

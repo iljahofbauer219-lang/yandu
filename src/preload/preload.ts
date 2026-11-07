@@ -497,14 +497,14 @@ contextBridge.exposeInMainWorld('desktop', {
     videoStudioProjects: (listingId:string):Promise<EbayVideoStudioProject[]> => ipcRenderer.invoke('ebay:video-studio:list',listingId),
     confirmVideoStudioProject: (listingId:string,projectId:string):Promise<EbayVideoStudioProject[]> => ipcRenderer.invoke('ebay:video-studio:confirm',listingId,projectId),
     pickVideoStudioImages: ():Promise<Array<{name:string;dataUrl:string}>> => ipcRenderer.invoke('ebay:video-studio:pick-images'),
-    generateVideoStudio: (request:EbayVideoStudioRequest):Promise<EbayVideoStudioProject> => ipcRenderer.invoke('ebay:video-studio:generate',request),
+    generateVideoStudio: (request:EbayVideoStudioRequest, accessToken?:string):Promise<EbayVideoStudioProject> => ipcRenderer.invoke('ebay:video-studio:generate',request,accessToken),
     onVideoStudioProgress: (callback:(progress:EbayVideoStudioProgress)=>void) => { const listener=(_event:Electron.IpcRendererEvent,progress:EbayVideoStudioProgress)=>callback(progress);ipcRenderer.on('ebay:video-studio:progress',listener);return()=>ipcRenderer.removeListener('ebay:video-studio:progress',listener) },
     acceptanceBatches: (storeId:string):Promise<EbayAcceptanceBatch[]> => ipcRenderer.invoke('ebay:acceptance:list',storeId),
     runAcceptance: (request:EbayAcceptanceRunRequest):Promise<EbayAcceptanceBatch> => ipcRenderer.invoke('ebay:acceptance:run',request)
   },
   image: {
     models: (): Promise<ImageModelConnection> => ipcRenderer.invoke('image:models'),
-    generate: (request: ImageGenerationRequest): Promise<ImageGenerationResult> => ipcRenderer.invoke('image:generate', request),
+    generate: (request: ImageGenerationRequest, accessToken?: string): Promise<ImageGenerationResult> => ipcRenderer.invoke('image:generate', request, accessToken),
     ground: (request:EbayImageGroundingRequest):Promise<EbayImageGroundingPlan> => ipcRenderer.invoke('image:ground',request),
     extractPackageText: (request:ImagePackageTextExtractionRequest):Promise<ImagePackageTextExtractionResult> => ipcRenderer.invoke('image:extract-package-text',request),
     reviewCandidate: (request:EbayImageCandidateReviewRequest):Promise<EbayImageCandidateReview> => ipcRenderer.invoke('image:review-candidate',request),

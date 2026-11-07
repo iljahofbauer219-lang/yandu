@@ -11,6 +11,7 @@ import type {
   EbayVideoVoiceProvider,
   EbayVideoVoiceStyle
 } from '../shared/contracts'
+import { getTokens } from './serverApi'
 import './ebay-video-studio.css'
 
 interface EbayVideoStudioProps {
@@ -161,7 +162,7 @@ export default function EbayVideoStudio({listingId,title,description,chineseDesc
     setGenerating(true);setError('')
     setProgress({listingId,projectId:'',phase:'PREPARING',progress:1,message:'正在建立视频项目'})
     try{
-      const project=await window.desktop.ebay.generateVideoStudio(request)
+      const project=await window.desktop.ebay.generateVideoStudio(request,getTokens()?.accessToken ?? '')
       const nextProjects=await window.desktop.ebay.videoStudioProjects(listingId)
       setProjects(nextProjects)
       setSelectedProjectId(project.id)
@@ -308,9 +309,9 @@ export default function EbayVideoStudio({listingId,title,description,chineseDesc
 
     {selectedProject?.video&&<section className="ebay-video-result">
       <header><div><b>最终视频 · V{selectedProject.version}</b><small>已下载并永久保存到本系统视频库</small></div><span>✓ 已完成</span></header>
-      <video src={selectedProject.video.previewUrl} controls preload="metadata"/>
+      <video src={selectedProject.video.serverUrl || selectedProject.video.previewUrl} controls preload="metadata"/>
       <div className="ebay-video-result-meta"><span>{videoModelLabel(selectedProject.model)}</span><span>{configuration?.textModels.find(item=>item.id===selectedProject.textModelId)?.label||selectedProject.textModelId||'旧版本未记录文案模型'}</span><span>15秒</span><span>1280×720</span><span>{selectedProject.sourceImageCount}张素材</span><span>{selectedProject.subtitleMode==='NONE'?'无字幕':selectedProject.subtitleMode==='ENGLISH'?'英文字幕':selectedProject.subtitleMode==='CHINESE'?'中文字幕':'双语字幕'}</span><span>{selectedProject.voiceMode==='NONE'?'无配音':`${selectedProject.voiceMode==='ENGLISH'?'英文':'中文'} · ${voiceProviderLabel(selectedProject.voiceProvider)}`}</span></div>
-      <footer><a href={selectedProject.video.previewUrl} download={selectedProject.video.fileName}>下载 MP4</a><button className="primary" type="button" disabled={Boolean(selectedProject.confirmedAt)} onClick={()=>void confirmProject()}>{selectedProject.confirmedAt?'✓ 当前视频已确认':'确认采用当前视频'}</button></footer>
+      <footer><a href={selectedProject.video.serverUrl || selectedProject.video.previewUrl} download={selectedProject.video.fileName}>下载 MP4</a><button className="primary" type="button" disabled={Boolean(selectedProject.confirmedAt)} onClick={()=>void confirmProject()}>{selectedProject.confirmedAt?'✓ 当前视频已确认':'确认采用当前视频'}</button></footer>
     </section>}
 
     {projects.length>0&&<section className="ebay-video-versions">

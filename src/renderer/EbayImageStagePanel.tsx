@@ -47,6 +47,7 @@ import {
   type EbaySimpleSourceCheck,
   type EbaySimpleTriage
 } from '../shared/ebayImageSimpleLane'
+import { getTokens } from './serverApi'
 
 // 简化流程：合规内置 → 原图 → 事实卡自动 → 模型+出图模式 → 生图规则勾选 → 一键生成四类图 → 逐图采纳/单张重生 → 保留回显
 const CATEGORIES: EbayImageCategory[] = ['HERO', 'PRODUCT', 'PAIN_POINT', 'SCENE']
@@ -333,7 +334,7 @@ export default function EbayImageStagePanel(props: Props) {
             size: card.category === 'HERO' || card.category === 'PRODUCT' ? '2K' : '1K',
             count: card.variations,
             prompt: buildCategoryGenerationPrompt(card, facts as EbayMarketingFacts, mode, { rules, presence })
-          })
+          }, getTokens()?.accessToken ?? '')
           if (result.notice) notices.push(result.notice)
           modelsUsed.push(result.model || activeModel)
           return { failed: false, noChannel: false, cardId: card.id, images: result.imageUrls.map(url => ({ cardId: card.id, category: card.category, title: card.title, url, model: result.model || activeModel, instruction: card.instruction })), message: '' }
