@@ -1779,6 +1779,8 @@ export class AppDatabase {
     const now=new Date().toISOString()
     // 清空范围只来自通过 ID 门禁的行：eBay 改下拉结构导致某类全行解不出 ID 时跳过该类 DELETE，
     // 绝不清空本表要保护的可复用政策资产；空提交=不删不增的 no-op（Task 5 允许零结果抓取）。
+    // 已知限制（Task 4 裁定）：正因为 DELETE 只跟着「有存活行的类」走，eBay 侧真删光某一类政策时本方法清不掉那些幽灵行，
+    // 抓取结果里也没有「这个类整体消失」的信号；将来要支持，必须由抓取侧（Task 5 的 ReviseItem 抓取）显式传删除信号，本表不自行推断。
     const accepted=rows.map(row=>({row,policyId:String(row.policyId||'').trim()})).filter(item=>/^\d{6,}$/.test(item.policyId))
     const kinds=[...new Set(accepted.map(item=>item.row.kind))]
     const statement=this.database.prepare(`INSERT INTO ebay_business_policies (id,store_id,kind,policy_id,label,listing_count,is_default,updated_at) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(store_id,kind,policy_id) DO UPDATE SET label=excluded.label,listing_count=excluded.listing_count,is_default=excluded.is_default,updated_at=excluded.updated_at`)

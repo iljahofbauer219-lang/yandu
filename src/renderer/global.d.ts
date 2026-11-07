@@ -4,7 +4,7 @@ import type { EbayMarketingFacts } from '../shared/ebayImageCategoryPlan'
 import type { InboundCategorySuggestion } from '../shared/inboundCategorySuggestion'
 import type { EbayImageInspectionReport, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayLocalProductMedia, EbayLocalProductMediaUploadInput } from '../shared/contracts'
 import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
-import type { EbayLocalListingRequirements, EbayLocalRevisionPreparationResult } from '../shared/contracts'
+import type { EbayBusinessPolicyKind, EbayLocalListingRequirements, EbayLocalRevisionPreparationResult, EbayStoreBusinessPolicy } from '../shared/contracts'
 import type { EbayTitleDecision, EbayTitleDecisionInput, EbayImageStage, EbayStageFactCard, EbayStageGroundingRequest, EbayStageModelRecommendation, EbayStageStoryboardCard, EbayStageStoryboardRequest } from '../shared/contracts'
 import type { AdvisorDesktopApi } from '../shared/advisor'
 import type { AiEmployeeAskRequest, AiEmployeeChatModelProfile, AiEmployeePickResult } from '../shared/aiEmployee'
@@ -397,6 +397,7 @@ declare global {
         localProductImageVisualReport(localProductId:string):Promise<EbayImageVisualInspectionReport|null>
         reviewLocalProductImageRule(input:EbayImageVisualReviewInput):Promise<EbayImageVisualInspectionReport>
         localProductRequirements(storeId:string,listingId:string,title:string):Promise<EbayLocalListingRequirements>
+        businessPolicies(storeId:string,kind?:EbayBusinessPolicyKind):Promise<EbayStoreBusinessPolicy[]>
         prepareLocalProductRevision(localProductId:string):Promise<EbayLocalRevisionPreparationResult>
         removeLocalProduct(localProductId:string):Promise<boolean>
         removeLocalListing(storeId:string,listingId:string):Promise<boolean>

@@ -9,10 +9,11 @@ import { parseEbayAggregateMetrics, parseEbayResearchRows } from '../../shared/e
 import { shouldActivateSupplyView } from '../../shared/supplyAutoEnter'
 import { shouldRetryWithoutProxy } from '../../shared/ebayDirectFallback'
 import { EBAY_SITE_ROOT_DOMAINS } from '../../shared/ebaySites'
+import { extractPolicyIdFromLabel } from '../../shared/ebayListingForm'
 import { pickGigaMainImage } from '../../shared/gigaImageResolve'
 import type { BrowserBounds, BrowserState, BrowserTab, BuiltInCollectorState, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, EbayBrowserPluginState, EbayCategorySpecificRequirement, EbayCollectedProduct, EbayDeliveryLocationResult, EbayDirectoryProductScanCategory, EbayLoginResult, EbayMarketResearchFilter, EbayMarketResearchMetric, EbayMarketResearchSample, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayPlatformCategoryOption, EbayProductDetails, EbaySellerHubAcceptanceSnapshot, EbayStoreCategory, MarketplacePlatformCode, NetworkStrategy, Platform, SelectionTask, SupplyActivationResult } from '../../shared/contracts'
 import gigaCatalog from '../../renderer/gigaCatalog.json'
-import type { EbayLocalListingRequirements, EbayLocalProduct, EbayLocalRevisionPreparationResult } from '../../shared/contracts'
+import type { EbayBusinessPolicyKind, EbayLocalListingRequirements, EbayLocalProduct, EbayLocalRevisionPreparationResult, EbayScrapedPolicyOption } from '../../shared/contracts'
 
 const GIGA_CATALOG_VERSION = 'gigab2b-2026-07-13'
 const GIGA_CATEGORY_PATHS = Object.fromEntries(gigaCatalog.flatMap(level1 => level1.children.flatMap(level2 => level2.children.map(level3 => [level3.id, [
@@ -30,6 +31,14 @@ export const EBAY_STORE_VIEW_REQUIRED = 'EBAY_STORE_VIEW_REQUIRED'
 function ebayStoreViewError(message: string) {
   return Object.assign(new Error(message), { code: EBAY_STORE_VIEW_REQUIRED })
 }
+
+/**
+ * ReviseItem 页政策下拉的类别清单（Task 5 抓取侧）。页内脚本按同一顺序匹配下拉并回原始文本，
+ * 文本解析全留在 TS：这里同时充当 kind 的运行时白名单（Task 4 评审把「row.kind 无运行时校验」钉在 T5），
+ * 脚本里出现清单外的 kind 时该行被丢弃——政策计数缺口警告会随之点名，不会静默入库脏类别。
+ * 单测 src/main/browser/__tests__/ebayPolicyScrape.test.ts 钉死两侧 kind 集合一致，Task 9 真机复验下拉命中的是同一批区块。
+ */
+export const EBAY_POLICY_SCRAPE_KINDS: EbayBusinessPolicyKind[] = ['PAYMENT', 'SHIPPING', 'RETURN', 'FULFILLMENT']
 
 interface DetailTab {
   id: string
@@ -1795,13 +1804,34 @@ export class BrowserWorkspace {
       const labelFor=field=>{const attributeName=(field.name||'').match(/^(?:search-box-)?attributes[._-]?(.+)$/i)?.[1];if(attributeName)return clean(attributeName.replace(/([a-z])([A-Z])/g,'$1 $2').replace(/[._-]+/g,' '));const explicit=field.id?document.querySelector('label[for="'+CSS.escape(field.id)+'"]'):null;return clean(explicit?.textContent||field.closest('label')?.textContent||field.getAttribute('aria-label')||field.getAttribute('placeholder')||field.name||field.id)};
       const categorySpecifics=[];
       for(const field of fields.filter(field=>/attributes/i.test((field.name||'')+' '+(field.id||'')))){const label=labelFor(field);if(!label||label.length>120||/title|标题|description|描述|price|价格|quantity|数量|sku/i.test(label))continue;const name=label.replace(/\*|required soon|recommended|required|必填|建议/ig,'').replace(/[:：]$/,'').trim();if(!name||categorySpecifics.some(item=>item.name.toLowerCase()===name.toLowerCase()))continue;const options=field.tagName==='SELECT'?[...field.options].map(item=>clean(item.textContent)).filter(Boolean).slice(0,100):[];const required=Boolean(field.required||field.getAttribute('aria-required')==='true'||/\[ESSENTIAL\]/i.test(field.id||'')||/\*|required|必填/i.test(label));categorySpecifics.push({name,required,value:clean(field.value||field.textContent),options,source:'SELLER_HUB'})}
+      const policyGroups=[{kind:'PAYMENT',patterns:[/payment policy|付款政策|支付政策/i]},{kind:'SHIPPING',patterns:[/shipping policy|delivery policy|运输政策|物流政策/i]},{kind:'RETURN',patterns:[/return policy|退货政策/i]},{kind:'FULFILLMENT',patterns:[/fulfillment policy|handling policy|发货政策/i]}];
+      const policyOptions=[];
+      for(const group of policyGroups){
+        const select=fields.find(field=>field.tagName==='SELECT'&&group.patterns.some(pattern=>pattern.test(labelFor(field)+' '+(field.name||'')+' '+(field.id||''))));
+        if(!select)continue;
+        for(const option of [...select.options]){const raw=clean(option.textContent);if(raw)policyOptions.push({kind:group.kind,raw,selected:option.selected})}
+      }
       const titleField=fields.find(field=>visible(field)&&/^(title|listing title|item title|物品标题|商品标题|刊登标题)(?:\s|$)/i.test(labelFor(field)))||document.querySelector('input[name="title"],input[id="title"]');
-      return {url:location.href,login,verification,ready:Boolean(titleField),categorySpecifics};
+      return {url:location.href,login,verification,ready:Boolean(titleField),categorySpecifics,policyOptions};
     })()`
-    let result:{url:string;login:boolean;verification:boolean;ready:boolean;categorySpecifics:EbayCategorySpecificRequirement[]}={url:reviseUrl,login:false,verification:false,ready:false,categorySpecifics:[]}
+    let result:{url:string;login:boolean;verification:boolean;ready:boolean;categorySpecifics:EbayCategorySpecificRequirement[];policyOptions:Array<{kind:string;raw:string;selected:boolean}>}={url:reviseUrl,login:false,verification:false,ready:false,categorySpecifics:[],policyOptions:[]}
     for(let attempt=0;attempt<20;attempt+=1){result=await tab.view.webContents.executeJavaScript(script,true) as typeof result;if(result.login)throw new Error('eBay 登录会话已失效，请先完成登录');if(result.verification)throw new Error('eBay 要求安全验证，请人工完成后重试');if(result.ready)break;await this.sleep(750)}
     if(!result.ready)throw new Error('Seller Hub 修改页尚未加载完成，请确认商品仍在线后重试')
-    return {sourceUrl:result.url,categorySpecifics:result.categorySpecifics,inspectedAt:new Date().toISOString(),warnings:result.categorySpecifics.length?[]:['页面未读取到类目属性；可能是页面结构变化或该类目没有可见属性'],policies:[]}
+    // 解析全留在 TS：页内脚本只回下拉的原始文本与选中态，id / 在架数一律由 extractPolicyIdFromLabel 解出，
+    // 这样这一段映射可以离线跑 fixtures（Task 9 之前不动真页也能验）。
+    const policies:EbayScrapedPolicyOption[]=result.policyOptions.flatMap(item=>{
+      const kind=item.kind as EbayBusinessPolicyKind
+      if(!EBAY_POLICY_SCRAPE_KINDS.includes(kind))return []
+      const parsed=extractPolicyIdFromLabel(item.raw)
+      return [{kind,label:parsed.label,...(parsed.policyId?{policyId:parsed.policyId}:{}),...(parsed.listingCount?{listingCount:parsed.listingCount}:{}),selected:item.selected} satisfies EbayScrapedPolicyOption]
+    })
+    return {sourceUrl:result.url,categorySpecifics:result.categorySpecifics,policies,inspectedAt:new Date().toISOString(),warnings:[
+      ...(result.categorySpecifics.length?[]:['页面未读取到类目属性；可能是页面结构变化或该类目没有可见属性']),
+      ...(policies.length?[]:['页面未读取到付款/运输/退货政策下拉；请在 Seller Hub 修改页确认政策区块已加载后重试']),
+      // Task 4 裁定：DAO 只清「至少有一条带编号行」的类别，eBay 真删光某类政策时旧行清不掉，
+      // 显式删除信号必须由抓取侧给出。抓取侧目前没有该信号，所以这里把陈旧风险点名出来（不硬阻断任何按钮）。
+      ...(policies.length&&!policies.some(item=>item.policyId)?['政策下拉读到了选项但都解析不出政策编号，本地政策库保持上一次抓取的结果；请在 Seller Hub 修改页核对政策名称是否仍带编号']:[])
+    ]}
   }
 
   async prepareEbayLocalProductRevision(accountId:string,product:EbayLocalProduct):Promise<EbayLocalRevisionPreparationResult> {

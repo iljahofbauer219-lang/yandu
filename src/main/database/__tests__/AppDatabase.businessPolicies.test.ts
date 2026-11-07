@@ -8,6 +8,8 @@ import type { EbayScrapedPolicyOption } from '../../../shared/contracts'
  * 「当前选中」映射为 is_default，供 APP 下一次发布默认选同一政策。
  * 破坏面守卫：清空范围只来自通过 ID 门禁的行——某类全行解不出 ID（eBay 改下拉结构）或提交空数组时，
  * 跳过该类 DELETE 且整体 no-op，绝不清空这份可复用政策资产；整个 DELETE+INSERT 走单事务。
+ * 代价（Task 4 裁定，Task 5 已在抓取侧点名）：eBay 真删光某一类政策时本方法清不掉旧行，
+ * 因为「显式删除信号」必须由抓取侧给出，本表不自行推断整体消失。
  */
 
 const ctx=vi.hoisted(()=>({dir:''}))
