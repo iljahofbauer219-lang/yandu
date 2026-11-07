@@ -10,6 +10,7 @@ import { shouldActivateSupplyView } from '../../shared/supplyAutoEnter'
 import { shouldRetryWithoutProxy } from '../../shared/ebayDirectFallback'
 import { EBAY_SITE_ROOT_DOMAINS } from '../../shared/ebaySites'
 import { extractPolicyIdFromLabel } from '../../shared/ebayListingForm'
+import { EBAY_LOCAL_FILL_TARGETS, ebayLocalFillPayload } from './ebayLocalFill'
 import { pickGigaMainImage } from '../../shared/gigaImageResolve'
 import type { BrowserBounds, BrowserState, BrowserTab, BuiltInCollectorState, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, EbayBrowserPluginState, EbayCategorySpecificRequirement, EbayCollectedProduct, EbayDeliveryLocationResult, EbayDirectoryProductScanCategory, EbayLoginResult, EbayMarketResearchFilter, EbayMarketResearchMetric, EbayMarketResearchSample, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayPlatformCategoryOption, EbayProductDetails, EbaySellerHubAcceptanceSnapshot, EbayStoreCategory, MarketplacePlatformCode, NetworkStrategy, Platform, SelectionTask, SupplyActivationResult } from '../../shared/contracts'
 import gigaCatalog from '../../renderer/gigaCatalog.json'
@@ -1861,14 +1862,17 @@ export class BrowserWorkspace {
     const tabId=await this.newEbayTab(accountId,`${product.title.slice(0,42)} · 本地版本待确认`,reviseUrl)
     const tab=this.detailTabs.get(tabId)
     if(!tab)throw new Error('未能创建 Seller Hub 修改页面')
+    // 标题/价格沿用「存档 details 优先、线上刊登原值兜底」的既有口径（主进程完成度读数同方向）；
+    // 其余字段只认 snapshot.details：APP 没记录就不进 payload，页面保留 eBay 线上原值（Task 8 裁定）。
     const payload={
-      title:details.title||listing.title,
-      price:details.price||listing.price,
-      description:details.descriptionHtml||details.descriptionText||'',
+      ...ebayLocalFillPayload(details,{title:listing.title,price:listing.price}),
       localImageCount:snapshot.media.filter(item=>item.downloadStatus==='DOWNLOADED'&&item.localPath).length
     }
+    // 目标表序列化：RegExp 过不去 executeJavaScript，只带 .source 源串，页内再用 new RegExp(source,'i') 重建（标志位丢了就是真页面静默不命中）
+    const targets=EBAY_LOCAL_FILL_TARGETS.map(target=>({...target,patterns:target.patterns.map(pattern=>pattern.source)}))
     const script=String.raw`(() => {
       const desired=${JSON.stringify(payload)};
+      const targets=${JSON.stringify(targets)};
       const clean=value=>(value||'').replace(/\s+/g,' ').trim();
       const visible=node=>Boolean(node&&node.getClientRects().length&&!node.disabled);
       const bodyText=clean(document.body?.innerText).slice(0,40000);
@@ -1882,13 +1886,23 @@ export class BrowserWorkspace {
       const filledFields=[],skippedFields=[],warnings=[];
       const fill=(label,field,value)=>{if(setValue(field,value))filledFields.push(label);else if(value!==undefined&&value!==null&&String(value).trim())skippedFields.push(label)};
       const titleField=find([/^(item |listing )?title\b/i,/物品标题|商品标题|刊登标题/], 'input[name="title"],input[id="title"]');
-      fill('标题',titleField,desired.title);
-      fill('价格',find([/^price\b|buy it now price|starting price/i,/价格|一口价|起拍价/]),desired.price);
-      const descriptionField=allFields.find(field=>field.tagName==='TEXTAREA'&&/description|详情|描述/i.test(labelFor(field)))||fields.find(field=>field.isContentEditable&&/description|详情|描述/i.test(labelFor(field)));
-      fill('描述',descriptionField,desired.description);
+      const selectByPolicyId=(field,policyId)=>{if(!field||field.tagName!=='SELECT')return false;const want=clean(String(policyId||''));if(!/^\d+$/.test(want))return false;const option=[...field.options].find(item=>clean(item.value)===want||clean(item.textContent).includes('('+want+')'));if(!option)return false;field.value=option.value;field.dispatchEvent(new Event('change',{bubbles:true}));field.dispatchEvent(new Event('blur',{bubbles:true}));return true};
+      for(const target of targets){
+        if(desired[target.key]===undefined)continue;
+        if(target.key==='description'){
+          const field=allFields.find(node=>node.tagName==='TEXTAREA'&&/description|详情|描述/i.test(labelFor(node)))||fields.find(node=>node.isContentEditable&&/description|详情|描述/i.test(labelFor(node)));
+          fill('描述',field,desired.description);
+          continue;
+        }
+        const field=find(target.patterns.map(source=>new RegExp(source,'i')),target.selectors);
+        // 命中的是勾选框一律算「跳过」绝不点击：eBay 的「按现状出售 / 同意条款」类复选框标签可能正撞中 数量/所在地/自定义编号 的模式，而计划只授权写文本与下拉值，改动页面勾选态属未经授权的变更（重试 20 次还会把勾上去的框永远留在页面上）。
+        if(field&&field.type==='checkbox'){skippedFields.push(target.label);continue}
+        if(target.byPolicyId){if(selectByPolicyId(field,desired[target.key]))filledFields.push(target.label);else skippedFields.push(target.label);continue}
+        fill(target.label,field,desired[target.key]);
+      }
       const submitButtonDetected=[...document.querySelectorAll('button,input[type="submit"],a[role="button"]')].filter(visible).some(node=>/^(submit|publish|list it|revise it|update listing|save changes|modify|提交|发布|修改|确认修改|更新刊登)/i.test(clean(node.textContent||node.value||node.getAttribute('aria-label'))));
       if(desired.localImageCount)warnings.push('本地已保存 '+desired.localImageCount+' 张图片；为防止误覆盖线上媒体，图片仍需在本页人工核对。');
-      warnings.push('本次只准备标题、描述和价格；其余 eBay 字段保持线上原值。');
+      warnings.push('本次填写标题、描述、价格、数量、商品状况、付款/运输/退货政策、商品所在地、邮编与 SKU；图片、类目与业务政策内容仍需在页面人工核对，且本次尚未提交，最终修改仍由您在 eBay 页面点击确认。');
       let banner=document.getElementById('__cross_border_local_revision_guard');if(!banner){banner=document.createElement('div');banner.id='__cross_border_local_revision_guard';banner.style.cssText='position:fixed;z-index:2147483647;left:20px;right:20px;bottom:20px;padding:14px 18px;border:2px solid #12a9a3;border-radius:12px;background:#e8faf8;color:#075b57;font:700 14px/20px system-ui;box-shadow:0 8px 30px rgba(0,0,0,.18)';document.body.appendChild(banner)}banner.textContent='已从本地版本填写 '+[...new Set(filledFields)].length+' 项，跳过 '+[...new Set(skippedFields)].length+' 项；尚未提交。请逐项核对图片、类目、业务政策和费用，再由您点击 eBay 最终提交按钮。';
       return {url:location.href,login,verification,ready:Boolean(titleField),filledFields:[...new Set(filledFields)],skippedFields:[...new Set(skippedFields)],warnings,submitButtonDetected};
     })()`
