@@ -40,6 +40,13 @@ function ebayStoreViewError(message: string) {
  */
 export const EBAY_POLICY_SCRAPE_KINDS: EbayBusinessPolicyKind[] = ['PAYMENT', 'SHIPPING', 'RETURN', 'FULFILLMENT']
 
+/**
+ * 政策类别的中文点名用词，只服务于面向用户的 warnings 文案（全局约束：提示一律中文完整句，不得出现裸英文技术串）。
+ * 键集用 Record<EbayBusinessPolicyKind,string> 由类型系统强制补齐四类：新增类别时不写中文用词就过不了 typecheck，
+ * 单测另钉一条「点名文案里不得出现 PAYMENT/SHIPPING/RETURN/FULFILLMENT 裸串」。
+ */
+const EBAY_POLICY_SCRAPE_KIND_LABELS: Record<EbayBusinessPolicyKind, string> = { PAYMENT:'付款', SHIPPING:'运输', RETURN:'退货', FULFILLMENT:'发货' }
+
 interface DetailTab {
   id: string
   platform: Platform
@@ -1806,9 +1813,12 @@ export class BrowserWorkspace {
       for(const field of fields.filter(field=>/attributes/i.test((field.name||'')+' '+(field.id||'')))){const label=labelFor(field);if(!label||label.length>120||/title|标题|description|描述|price|价格|quantity|数量|sku/i.test(label))continue;const name=label.replace(/\*|required soon|recommended|required|必填|建议/ig,'').replace(/[:：]$/,'').trim();if(!name||categorySpecifics.some(item=>item.name.toLowerCase()===name.toLowerCase()))continue;const options=field.tagName==='SELECT'?[...field.options].map(item=>clean(item.textContent)).filter(Boolean).slice(0,100):[];const required=Boolean(field.required||field.getAttribute('aria-required')==='true'||/\[ESSENTIAL\]/i.test(field.id||'')||/\*|required|必填/i.test(label));categorySpecifics.push({name,required,value:clean(field.value||field.textContent),options,source:'SELLER_HUB'})}
       const policyGroups=[{kind:'PAYMENT',patterns:[/payment policy|付款政策|支付政策/i]},{kind:'SHIPPING',patterns:[/shipping policy|delivery policy|运输政策|物流政策/i]},{kind:'RETURN',patterns:[/return policy|退货政策/i]},{kind:'FULFILLMENT',patterns:[/fulfillment policy|handling policy|发货政策/i]}];
       const policyOptions=[];
+      const claimed=new Set();
       for(const group of policyGroups){
-        const select=fields.find(field=>field.tagName==='SELECT'&&group.patterns.some(pattern=>pattern.test(labelFor(field)+' '+(field.name||'')+' '+(field.id||''))));
+        const matches=fields.filter(field=>field.tagName==='SELECT'&&!claimed.has(field)&&group.patterns.some(pattern=>pattern.test(labelFor(field)+' '+(field.name||'')+' '+(field.id||''))));
+        const select=matches.find(field=>visible(field))||matches[0];
         if(!select)continue;
+        claimed.add(select);
         for(const option of [...select.options]){const raw=clean(option.textContent);if(raw)policyOptions.push({kind:group.kind,raw,selected:option.selected})}
       }
       const titleField=fields.find(field=>visible(field)&&/^(title|listing title|item title|物品标题|商品标题|刊登标题)(?:\s|$)/i.test(labelFor(field)))||document.querySelector('input[name="title"],input[id="title"]');
@@ -1823,14 +1833,23 @@ export class BrowserWorkspace {
       const kind=item.kind as EbayBusinessPolicyKind
       if(!EBAY_POLICY_SCRAPE_KINDS.includes(kind))return []
       const parsed=extractPolicyIdFromLabel(item.raw)
-      return [{kind,label:parsed.label,...(parsed.policyId?{policyId:parsed.policyId}:{}),...(parsed.listingCount?{listingCount:parsed.listingCount}:{}),selected:item.selected} satisfies EbayScrapedPolicyOption]
+      // label 兜底：eBay 偶发把选项写成只有编号（"(257217501013)"），此时解析出的 label 是空串，
+      // 过 ID 门禁后会以空名字入库（label 列 NOT NULL 允许空串），Task 7 会显示成空白选项；改带走原始文本。
+      return [{kind,label:parsed.label||item.raw,...(parsed.policyId?{policyId:parsed.policyId}:{}),...(parsed.listingCount?{listingCount:parsed.listingCount}:{}),selected:item.selected} satisfies EbayScrapedPolicyOption]
+    })
+    // 陈旧风险逐类点名（Task 4 裁定的落点）：DAO 的 DELETE 只跟着「至少有一条带编号存活行」的类别走，
+    // 所以某一类读到选项却全类解析不出编号时，该类的旧行清不掉、又不会有任何提示（其余有编号的类别保持沉默）。
+    // 只点名，不硬阻断任何按钮；类别名用中文，Task 7 据此知道该核对哪一块政策。
+    const policyKindsWithOptions=[...new Set(policies.map(item=>item.kind))]
+    const policyKindsWithId=new Set(policies.filter(item=>item.policyId).map(item=>item.kind))
+    const stalePolicyWarnings=policyKindsWithOptions.filter(kind=>!policyKindsWithId.has(kind)).map(kind=>{
+      const label=EBAY_POLICY_SCRAPE_KIND_LABELS[kind]
+      return `${label}政策下拉读到了选项但都解析不出政策编号，本地${label}政策保持上一次抓取的结果；请在 Seller Hub 修改页核对${label}政策名称是否仍带编号`
     })
     return {sourceUrl:result.url,categorySpecifics:result.categorySpecifics,policies,inspectedAt:new Date().toISOString(),warnings:[
       ...(result.categorySpecifics.length?[]:['页面未读取到类目属性；可能是页面结构变化或该类目没有可见属性']),
       ...(policies.length?[]:['页面未读取到付款/运输/退货政策下拉；请在 Seller Hub 修改页确认政策区块已加载后重试']),
-      // Task 4 裁定：DAO 只清「至少有一条带编号行」的类别，eBay 真删光某类政策时旧行清不掉，
-      // 显式删除信号必须由抓取侧给出。抓取侧目前没有该信号，所以这里把陈旧风险点名出来（不硬阻断任何按钮）。
-      ...(policies.length&&!policies.some(item=>item.policyId)?['政策下拉读到了选项但都解析不出政策编号，本地政策库保持上一次抓取的结果；请在 Seller Hub 修改页核对政策名称是否仍带编号']:[])
+      ...stalePolicyWarnings
     ]}
   }
 
