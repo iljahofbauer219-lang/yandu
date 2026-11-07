@@ -2276,12 +2276,14 @@ export function App() {
       <button type="button" className="update-pill-close" aria-label="关闭提示" onClick={() => setUpdateHint('')}>×</button>
     </div>}
     <div className="app-titlebar" role="banner">
-      <strong className="app-titlebar-title">砚都跨境</strong>
-      <div className="app-titlebar-actions">
+      <div className="app-titlebar-left">
+        <strong className="app-titlebar-title">砚都跨境</strong>
         <span className="build-stamp" title={`渲染包构建 ${__BUILD_STAMP__}${mainStamp ? ` · 主进程构建 ${formatStampLocal(mainStamp.builtAt)} v${mainStamp.version}` : ' · 主进程水印缺失（旧主进程）'}`}>{__BUILD_STAMP__}</span>
         <button type="button" className="ip-chip" title={publicIp ? `${publicIp.ip} · ${publicIp.country}${publicIp.isVpn ? ' (VPN)' : ''} · 点击刷新` : '点击查询出口 IP'} disabled={publicIpLoading} onClick={() => refreshPublicIp()}>
           {publicIpLoading ? '⏳' : publicIp ? `🌐 ${publicIp.ip.includes(':') ? 'IPv6 网络' : publicIp.ip} · ${publicIp.country}${publicIp.isVpn ? ' (VPN)' : ''}` : '🌐 未知'}
         </button>
+      </div>
+      <div className="app-titlebar-actions">
         <TitlebarPanelToggle />
         <button type="button" title="刷新当前界面（先检查新版本：有新版本走更新流并保留当前页）" disabled={refreshBusy} onClick={() => void runTitlebarRefresh()}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>{refreshBusy ? '检查中…' : '刷新'}
