@@ -831,6 +831,14 @@ export interface EbayCategorySpecificRequirement {
   source:'SELLER_HUB'
 }
 
+export interface EbayFormFieldSchema {
+  key:'quantity'|'condition'|'listingFormat'|'paymentPolicy'|'shippingPolicy'|'returnPolicy'|'itemLocation'|'postalCode'|'handlingTime'|'sku'|'storeCategory'|'salesTax'|'compatibility'
+  label:string
+  required:boolean
+  control:'SELECT'|'TEXT'|'BOOLEAN'
+  options:string[]
+}
+
 export interface EbayImageInspection {
   url:string
   reachable:boolean

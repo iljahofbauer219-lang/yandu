@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { EbayLocalProductUpdateInput, EbayProductDetails } from '../contracts'
-import { mergeEbayLocalDetailsEdit } from '../ebayListingForm'
+import type { EbayCategorySpecificRequirement, EbayLocalProductUpdateInput, EbayProductDetails } from '../contracts'
+import { EBAY_HARD_REQUIRED_FIELDS, extractPolicyIdFromLabel, formatFormGaps, formValuesFromInput, mergeEbayLocalDetailsEdit, requiredFormGaps } from '../ebayListingForm'
+
+const requirement=(name:string,required:boolean,value=''):EbayCategorySpecificRequirement=>({name,required,value,options:[],source:'SELLER_HUB'})
 
 const previous:EbayProductDetails={
   url:'https://www.ebay.com/itm/123',
@@ -112,5 +114,73 @@ describe('mergeEbayLocalDetailsEdit 边界（修复轮 1）', () => {
     const merged=mergeEbayLocalDetailsEdit(previous,{...changes,itemSpecifics:[{name:'Brand',value:'OEM'}]})
     merged.itemSpecifics[0].value='Generic'
     expect(previous.itemSpecifics[0].value).toBe('OEM')
+  })
+})
+
+describe('EBAY_HARD_REQUIRED_FIELDS', () => {
+  it('固化 spec §1.1 的与类目无关硬必填全集，且不含可选字段', () => {
+    expect(EBAY_HARD_REQUIRED_FIELDS.filter(item=>item.required).map(item=>item.key).sort()).toEqual(
+      ['condition','itemLocation','listingFormat','paymentPolicy','postalCode','quantity','returnPolicy','shippingPolicy']
+    )
+    expect(EBAY_HARD_REQUIRED_FIELDS.some(item=>item.key==='sku')).toBe(false)
+    expect(EBAY_HARD_REQUIRED_FIELDS.some(item=>item.key==='storeCategory')).toBe(false)
+    expect(EBAY_HARD_REQUIRED_FIELDS.every(item=>item.options.length===0||item.key==='listingFormat')).toBe(true)
+  })
+})
+
+describe('requiredFormGaps', () => {
+  const filled={quantity:'12',condition:'New',listingFormat:'FIXED_PRICE',paymentPolicy:'257217501013',shippingPolicy:'1851',returnPolicy:'14',itemLocation:'Guangdong, CN',postalCode:'528000'}
+
+  it('全集齐 → 无缺口', () => {
+    expect(requiredFormGaps([],filled)).toEqual([])
+  })
+
+  it('缺几项点几名，字段缺口排在属性缺口之前', () => {
+    const gaps=requiredFormGaps([requirement('Brand',true),requirement('Type',false)],{...filled,condition:'',postalCode:'  '})
+    expect(gaps).toEqual([
+      {kind:'FIELD',name:'condition',label:'商品状况'},
+      {kind:'FIELD',name:'postalCode',label:'所在地邮编'},
+      {kind:'ASPECT',name:'Brand',label:'Brand'}
+    ])
+  })
+
+  it('非必填属性即使空着也不算缺口；必填属性有值也不算', () => {
+    expect(requiredFormGaps([requirement('Color',false),requirement('MPN',true,'1K-205')],filled)).toEqual([])
+  })
+
+  it('属性名归一后去重，同名必填只报一次', () => {
+    const gaps=requiredFormGaps([requirement('Brand',true),requirement('brand *',true)],filled)
+    expect(gaps.filter(item=>item.kind==='ASPECT')).toHaveLength(1)
+  })
+
+  it('formatFormGaps 输出中文顿号清单，空数组返回空串', () => {
+    expect(formatFormGaps([])).toBe('')
+    expect(formatFormGaps([{kind:'FIELD',name:'quantity',label:'数量'},{kind:'ASPECT',name:'Brand',label:'Brand'}])).toBe('数量、Brand')
+  })
+
+  it('formValuesFromInput 把 policyIds 摊平成三个政策键', () => {
+    const values=formValuesFromInput({title:'t',descriptionText:'',descriptionHtml:'',price:'1',currency:'USD',media:[],quantity:'3',condition:'New',policyIds:{shipping:'18510002003'}})
+    expect(values.quantity).toBe('3')
+    expect(values.shippingPolicy).toBe('18510002003')
+    expect(values.paymentPolicy).toBeUndefined()
+    expect(requiredFormGaps([],formValuesFromInput({title:'t',descriptionText:'',descriptionHtml:'',price:'1',currency:'USD',media:[],quantity:'3',condition:'New',itemLocation:'CN',postalCode:'528000',listingFormat:'FIXED_PRICE'})).map(item=>item.name)).toEqual(['paymentPolicy','shippingPolicy','returnPolicy'])
+  })
+})
+
+describe('extractPolicyIdFromLabel', () => {
+  it('解出括号里的数字政策 ID 并剥掉尾括号', () => {
+    expect(extractPolicyIdFromLabel('eBay Managed Payments (257217501013)')).toEqual({policyId:'257217501013',label:'eBay Managed Payments'})
+  })
+  it('解出 listings 计数但不误认成政策 ID', () => {
+    expect(extractPolicyIdFromLabel('云仓包邮 (1851 listings)')).toEqual({label:'云仓包邮',listingCount:1851})
+  })
+  it('既无 ID 也无计数的名字原样返回', () => {
+    expect(extractPolicyIdFromLabel('14天大健云仓退货')).toEqual({label:'14天大健云仓退货'})
+  })
+  it('千分位计数与多余空白一并规整', () => {
+    expect(extractPolicyIdFromLabel('  标准运输  (2,050 listings) ')).toEqual({label:'标准运输',listingCount:2050})
+  })
+  it('空串与纯空白返回空 label，不抛异常', () => {
+    expect(extractPolicyIdFromLabel('')).toEqual({label:''})
   })
 })
