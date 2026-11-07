@@ -113,3 +113,14 @@
   white-space: nowrap;
 }
 
+/* 05 状况与库存：本文件第 1 行的旧规则（.ebay-revise-specifics{margin-left:198px} 与 .ebay-revise-specifics>div{…42px}）是上一版编辑器的遗留，
+   会压住新行的三列布局，故下面用「父类+行类」提高优先级并把缩进复位。 */
+.ebay-revise-form-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.ebay-revise-form-grid .ebay-revise-field>input,.ebay-revise-form-grid .ebay-revise-field>select{width:100%}
+.ebay-revise-field [data-gap]{border-color:var(--ebay-revise-danger,#c14b3a);box-shadow:0 0 0 2px rgba(193,75,58,.14)}
+.ebay-revise-specifics{margin-top:14px;margin-left:0;display:grid;gap:8px}
+.ebay-revise-specifics .ebay-revise-specific-row{display:grid;grid-template-columns:minmax(120px,1fr) minmax(0,2fr) 132px;align-items:center;gap:10px}
+.ebay-revise-specific-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ebay-revise-specific-row em{font-style:normal;opacity:.72;font-size:12px}
+@media (max-width:1180px){.ebay-revise-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+

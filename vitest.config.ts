@@ -6,6 +6,7 @@ export default defineConfig({
       'src/main/**/__tests__/**/*.test.ts',
       'src/shared/**/__tests__/**/*.test.ts',
       'src/renderer/**/__tests__/**/*.test.ts',
+      'src/renderer/**/__tests__/**/*.test.tsx',
       'server/src/**/__tests__/**/*.test.ts'
     ],
     environment: 'node',

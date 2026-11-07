@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { EbayLocalProduct, EbayLocalProductUpdateInput, EbayStoreCategory } from '../shared/contracts'
+import type { EbayItemSpecific, EbayLocalProduct, EbayLocalProductUpdateInput, EbayStoreBusinessPolicy, EbayStoreCategory } from '../shared/contracts'
+import { formatFormGaps, type EbayFormGap } from '../shared/ebayListingForm'
 import type { PlatformCategoryController } from './useEbayPlatformCategory'
 import './ebay-local-listing-editor.css'
 import './ebay-local-listing-pricing.css'
@@ -20,6 +21,10 @@ type Props={
   onSetCategory:(categoryId:string,categoryName:string)=>void
   onAutoClassify:()=>void
   platformCategory?:PlatformCategoryController
+  gaps:EbayFormGap[]
+  businessPolicies:EbayStoreBusinessPolicy[]
+  readingPolicies:boolean
+  onReadPolicies:()=>void
   inline?:boolean
 }
 
@@ -41,6 +46,11 @@ function validateDraft(draft:EbayLocalProductUpdateInput):ValidationIssue[] {
   if(!draft.descriptionText.trim()&&!draft.descriptionHtml.trim())error('description','商品描述不能为空')
   if(!Number.isFinite(Number(draft.price))||Number(draft.price)<=0)error('pricing','价格必须是大于 0 的数字')
   if(!/^[A-Z]{3}$/.test(draft.currency.trim()))error('pricing','币种必须使用 3 位大写代码，例如 USD')
+  const quantity=draft.quantity===undefined?'':draft.quantity.trim()
+  if(quantity&&!/^[1-9]\d{0,5}$/.test(quantity))error('form','数量必须是大于 0 的整数')
+  if(draft.listingFormat&&!['FIXED_PRICE','AUCTION'].includes(draft.listingFormat))error('form','刊登格式只能是「现在购买」或「拍卖」')
+  if((draft.sku||'').trim().length>50)error('form','自定义编号（SKU）不能超过 50 个字符')
+  if((draft.postalCode||'').trim()&&!/^[A-Za-z0-9][A-Za-z0-9 -]{2,11}$/.test(draft.postalCode!.trim()))error('form','所在地邮编格式不正确')
   return issues
 }
 
@@ -112,7 +122,7 @@ function CustomCategoryDropdown({options,value,onChange,disabled,placeholder,sav
   )
 }
 
-export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,inline}:Props) {
+export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,gaps,businessPolicies,readingPolicies,onReadPolicies,inline}:Props) {
   const fileInput=useRef<HTMLInputElement>(null)
   const [draggedId,setDraggedId]=useState('')
   const [descriptionMode,setDescriptionMode]=useState<'TEXT'|'HTML'>('TEXT')
@@ -122,6 +132,7 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
   const priceCurrency=draft.currency.trim().toUpperCase()||'USD'
   const priceSymbol=({USD:'$',GBP:'£',EUR:'€',CAD:'CA$',AUD:'A$',CNY:'¥',RMB:'¥'} as Record<string,string>)[priceCurrency]||priceCurrency
   const set=<K extends keyof EbayLocalProductUpdateInput>(key:K,value:EbayLocalProductUpdateInput[K])=>onChange({...draft,[key]:value})
+  const SOURCE_LABELS:Record<NonNullable<EbayItemSpecific['source']>,string>={SOURCE_PAGE:'源页抓取',ENUM_MATCH:'枚举匹配',AI:'AI 推断',MANUAL:'人工确认',CATEGORY_DEFAULT:'类目记忆'}
   const moveMedia=(sourceId:string,targetId:string)=>{
     if(!sourceId||sourceId===targetId)return
     const media=[...draft.media]
@@ -236,6 +247,24 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
             <label className="ebay-revise-format-field"><span>格式</span><select disabled value="FIXED_PRICE"><option value="FIXED_PRICE">现在购买</option></select></label>
             <label className="ebay-revise-price-field"><span>商品价格</span><div><b>{priceSymbol}</b><input aria-label={`商品价格（${priceCurrency}）`} inputMode="decimal" value={draft.price} onChange={event=>set('price',event.target.value)}/></div><small>{priceCurrency} · eBay 原刊登币种</small></label>
           </div>
+        </section>
+
+        <section id="ebay-revise-form" className="ebay-revise-section">
+          <header><div><h2>05 状况与库存</h2><p>eBay 发布硬必填。留空的字段在准备 Seller Hub 时不写入，页面沿用线上原值。</p></div></header>
+          <div className="ebay-revise-form-grid">
+            <label className="ebay-revise-field"><span>刊登格式</span><select value={draft.listingFormat||'FIXED_PRICE'} onChange={event=>set('listingFormat',event.target.value as 'FIXED_PRICE'|'AUCTION')}><option value="FIXED_PRICE">现在购买</option><option value="AUCTION">拍卖</option></select></label>
+            <label className="ebay-revise-field"><span>数量</span><input data-gap={gaps.some(item=>item.name==='quantity')?'quantity':undefined} inputMode="numeric" value={draft.quantity??''} onChange={event=>set('quantity',event.target.value.replace(/[^\d]/g,''))}/></label>
+            <label className="ebay-revise-field"><span>eBay 商品状况</span><input data-gap={gaps.some(item=>item.name==='condition')?'condition':undefined} placeholder="New" value={draft.condition??''} onChange={event=>set('condition',event.target.value)}/></label>
+            <label className="ebay-revise-field"><span>自定义编号（SKU）</span><input maxLength={50} value={draft.sku??''} onChange={event=>set('sku',event.target.value)}/></label>
+          </div>
+          {(draft.itemSpecifics?.length||0)>0&&<div className="ebay-revise-specifics">
+            <b>类目属性 {draft.itemSpecifics!.length} 项</b>
+            {draft.itemSpecifics!.map((item,index)=><div className="ebay-revise-specific-row" key={`${item.name}-${index}`}>
+              <span title={item.name}>{item.name}</span>
+              <input value={item.value} onChange={event=>{const next=[...(draft.itemSpecifics||[])];next[index]={...next[index],value:event.target.value,source:'MANUAL',needsConfirmation:false};set('itemSpecifics',next)}}/>
+              <em>{item.source?SOURCE_LABELS[item.source]:'—'}{item.needsConfirmation?' · 待确认':''}</em>
+            </div>)}
+          </div>}
         </section>
       </main>
 
