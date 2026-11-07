@@ -50,7 +50,9 @@ function validateDraft(draft:EbayLocalProductUpdateInput):ValidationIssue[] {
   if(quantity&&!/^[1-9]\d{0,5}$/.test(quantity))error('form','数量必须是大于 0 的整数')
   if(draft.listingFormat&&!['FIXED_PRICE','AUCTION'].includes(draft.listingFormat))error('form','刊登格式只能是「现在购买」或「拍卖」')
   if((draft.sku||'').trim().length>50)error('form','自定义编号（SKU）不能超过 50 个字符')
-  if((draft.postalCode||'').trim()&&!/^[A-Za-z0-9][A-Za-z0-9 -]{2,11}$/.test(draft.postalCode!.trim()))error('form','所在地邮编格式不正确')
+  // 本编辑器无「所在地邮编」输入控件（Task 7 才加）， postalCode 只能经 App.tsx:238 从库记录带入；
+  // 若按 ERROR 计入 errors.length>0，会永久禁用两个保存按钮且无 UI 可改，违反「门禁不得 brick 操作」。故暂降为 WARNING。
+  if((draft.postalCode||'').trim()&&!/^[A-Za-z0-9][A-Za-z0-9 -]{2,11}$/.test(draft.postalCode!.trim()))warning('form','所在地邮编格式不正确')
   return issues
 }
 

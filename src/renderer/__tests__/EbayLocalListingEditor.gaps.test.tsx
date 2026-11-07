@@ -27,12 +27,22 @@ describe('EbayLocalListingEditor · 05 状况与库存', () => {
     expect(html).toContain('05 状况与库存')
     expect(html).toContain('value="12"')
     expect(html).toContain('eBay 商品状况')
-    expect(html).toContain('value="FIXED_PRICE"')
+    // 05 刊登格式下拉的判别式断言：React19 renderToStaticMarkup 不给 <select> 输出 value，
+    // value="FIXED_PRICE" 在未经改动的 04 区块（EbayLocalListingEditor.tsx:247）里也存在，
+    // 无法证明 05 下拉。value="AUCTION" 仅 05 select 会渲染，且把它锁在 <select>…</select> 内，
+    // 05 select 一旦整段回归即消失，测试必红。
+    expect(html).toMatch(/<select><option value="FIXED_PRICE"[^>]*>现在购买<\/option><option value="AUCTION">拍卖<\/option><\/select>/)
+    // 门禁不 brick（DOM 级）：05 数量/状况输入恒不带 disabled——即使有 ERROR 也必须可编辑，
+    // 否则「保存」被 errors.length>0 禁用后用户无从修复非法值。
+    expect(html).toMatch(/<span>数量<\/span><input(?:(?!disabled)[\s\S])*?value="12"\/>/)
+    expect(html).toMatch(/<span>eBay 商品状况<\/span><input(?:(?!disabled)[\s\S])*?value="New"\/>/)
   })
 
   it('数量非正整数时报必须修改', () => {
     const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({quantity:'0'}))}/>)
     expect(html).toContain('数量必须是大于 0 的整数')
+    // 该字段自身处于 ERROR（数量非法）时仍不禁用，即「非空但非法」错误自带改值逃生门，不 brick。
+    expect(html).toMatch(/<span>数量<\/span><input(?:(?!disabled)[\s\S])*?value="0"\/>/)
   })
 
   it('属性来源徽标显示中文来源与「待确认」', () => {
@@ -40,5 +50,11 @@ describe('EbayLocalListingEditor · 05 状况与库存', () => {
     const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draft)}/>)
     expect(html).toContain('AI 推断')
     expect(html).toContain('待确认')
+  })
+
+  it('gaps 命中的字段挂 data-gap，未命中的不挂', () => {
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(),{gaps:[{kind:'FIELD',name:'quantity',label:'数量'}]})}/>)
+    expect(html).toContain('data-gap="quantity"')
+    expect(html).not.toContain('data-gap="condition"')
   })
 })
