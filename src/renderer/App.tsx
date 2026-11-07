@@ -24,7 +24,7 @@ import { buildEbayCategorySearchText, deriveEbayCostAutoFill, ebayCategoryFeeRul
 import { US_SALES_TAX_NATIONAL, US_SALES_TAX_TABLE, US_SALES_TAX_TABLE_VERSION, usSalesTaxCombinedRate, usSalesTaxLabel, usSalesTaxNationalAverageRate } from '../shared/usSalesTax'
 import { ebayMarketResearchChannelLabel, ebayMarketResearchChannelShortLabel } from '../shared/ebayMarketResearchParse'
 import { EBAY_SITE_ALLOWED_MESSAGE, isEbaySiteUrl } from '../shared/ebaySites'
-import { formatFormGaps, formValuesFromInput, requiredFormGaps } from '../shared/ebayListingForm'
+import { formatFormGaps, formValuesFromInput, isEbayPolicyId, requiredFormGaps } from '../shared/ebayListingForm'
 import type { EbayProfitAutoFill } from '../shared/ebayPricingAutoFill'
 import { riskBadge } from '../shared/riskBadge'
 import { copiedWarehouseIds } from '../shared/copiedPallet'
@@ -230,7 +230,7 @@ function ebayLocalProductDraft(product:EbayLocalProduct):EbayLocalProductUpdateI
 function ebayLocalProductFormSeed(product:EbayLocalProduct):Pick<EbayLocalProductUpdateInput,'quantity'|'condition'|'listingFormat'|'sku'|'itemLocation'|'postalCode'|'handlingTime'|'itemSpecifics'|'policyIds'> {
   const {details,sourceListing}=product.snapshot
   // 政策三项只认纯数字政策 id：快照里这三格可能是采集页面读到的整段文字，灌进下拉既会伪装成「已填」也会让灌值引擎按 id 命不中政策
-  const policyId=(value?:string)=>{const text=(value||'').trim();return /^\d+$/.test(text)?text:''}
+  const policyId=(value?:string)=>{const text=(value||'').trim();return isEbayPolicyId(text)?text:''}
   const payment=policyId(details.paymentPolicy),shipping=policyId(details.shippingPolicy),returns=policyId(details.returnPolicy)
   return {
     quantity:details.quantity??String(sourceListing.quantity??''),
@@ -4961,7 +4961,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
               </div>}
               {task?.comparison?.length?<details className="ebay-publish-details"><summary>查看发布前后对比（{task.comparison.length}项）</summary>{task.comparison.map(item=><div key={item.field}><b>{item.field}</b><span><small>原版</small>{item.before}</span><i>→</i><span><small>待发布</small>{item.after}</span><em>{item.status==='CHANGED'?'有变化':item.status==='UNCHANGED'?'未变化':'人工核对'}</em></div>)}</details>:null}
               {task?.auditTrail?.length?<details className="ebay-publish-details audit"><summary>查看操作审计（{task.auditTrail.length}条）</summary>{task.auditTrail.map(event=><div key={event.id}><b>{new Date(event.createdAt).toLocaleString('zh-CN')}</b><span>{event.detail.slice(0,320)}</span><em>{event.status==='SUCCESS'?'成功':event.status==='WARNING'?'待确认':'失败'}</em></div>)}</details>:null}
-              <em className="compliance-saved">{fullyReady?`内容已就绪 · 门禁 ${draft.complianceGateStatus}`:'当前不可进入发布交付'}</em>
+              <em className="compliance-saved">{!ready?'当前不可进入发布交付':fullyReady?`内容已就绪 · 门禁 ${draft.complianceGateStatus}`:'内容可交付 · 仍有 eBay 硬必填待补齐'}</em>
             </div>
             <div className="ebay-publish-actions">
               <button disabled={busy===`publish-check:${draft.id}`} onClick={()=>void validateDraftForPublish(draft)}>{busy===`publish-check:${draft.id}`?'正在重检…':'发布前重检'}</button>

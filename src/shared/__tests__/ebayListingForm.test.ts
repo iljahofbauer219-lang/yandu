@@ -135,6 +135,12 @@ describe('requiredFormGaps', () => {
     expect(requiredFormGaps([],filled)).toEqual([])
   })
 
+  it('政策格里是整段页面文字而非政策 id 时按未记录点名，避免伪装成已填', () => {
+    const prose='PayPal Preferred Shipping to United States. 3-5 business days. See details'
+    const gaps=requiredFormGaps([],{...filled,paymentPolicy:prose,shippingPolicy:' 1851 '})
+    expect(gaps).toEqual([{kind:'FIELD',name:'paymentPolicy',label:'付款政策'}])
+  })
+
   it('缺几项点几名，字段缺口排在属性缺口之前', () => {
     const gaps=requiredFormGaps([requirement('Brand',true),requirement('Type',false)],{...filled,condition:'',postalCode:'  '})
     expect(gaps).toEqual([

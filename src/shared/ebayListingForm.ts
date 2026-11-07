@@ -71,11 +71,17 @@ export function normaliseAspectName(name:string):string {
     .trim()
 }
 
+/** eBay 政策 id 恒为纯数字；采集器把整段页面文字塞进快照政策格时，非数字值既会伪装成「已填」也会让灌值引擎按 id 命不中。 */
+export function isEbayPolicyId(value?:string):boolean {
+  return /^\d+$/.test(String(value||'').trim())
+}
+
 export function requiredFormGaps(aspects:EbayCategorySpecificRequirement[],values:EbayFormValues,hardRequired:EbayFormFieldSchema[]=EBAY_HARD_REQUIRED_FIELDS):EbayFormGap[] {
   const gaps:EbayFormGap[]=[]
   for(const item of hardRequired) {
     if(!item.required)continue
-    if(!String(values[item.key]??'').trim())gaps.push({kind:'FIELD',name:item.key,label:item.label})
+    const raw=String(values[item.key]??'').trim()
+    if(/Policy$/.test(item.key)?!isEbayPolicyId(raw):!raw)gaps.push({kind:'FIELD',name:item.key,label:item.label})
   }
   const seen=new Set<string>()
   for(const aspect of aspects) {
