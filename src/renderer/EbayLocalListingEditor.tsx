@@ -164,7 +164,7 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
       <header className="ebay-revise-topbar">
         <div className="ebay-wordmark" aria-label="eBay"><i>e</i><i>b</i><i>a</i><i>y</i></div>
         <div><b>本地产品编辑</b><span>Item ID {product.listingId} · 本地版本 V{product.versionCount}</span></div>
-        <em>仅保存图片、标题、描述和价格，不修改线上刊登</em>
+        <em>保存本地版本并准备 eBay 必填字段，不代您提交线上刊登</em>
         <button type="button" aria-label="关闭编辑器" disabled={saving} onClick={onClose}>×</button>
       </header>
 

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { ComponentProps } from 'react'
@@ -135,5 +137,40 @@ describe('EbayLocalListingEditor · 07 政策与所在地', () => {
     expect(shipping.indexOf('18510002003')).toBeLessThan(shipping.indexOf('18510002004'))
     expect(html).not.toContain('data-policy-kind="fulfillment"')
     expect(html).not.toContain('6600001')
+  })
+})
+
+// 页眉范围声明：本对话框自 Task 6/7 起已渲染 05 状况与库存、07 政策与所在地，
+// 「仅保存图片、标题、描述和价格」是对渲染范围的事实错误声明，必须消失；
+// 同时钉住「不代您提交线上刊登」——最终提交按钮恒由操作员点击，任何文案不得暗示代码代提交。
+describe('EbayLocalListingEditor · 页眉范围声明', () => {
+  const headerEm=(html:string):string=>{
+    const topbar=html.slice(html.indexOf('ebay-revise-topbar'),html.indexOf('ebay-revise-body'))
+    return /<em>([^<]*)<\/em>/.exec(topbar)?.[1]??''
+  }
+  it('页眉 <em> 不再声明只处理标题/描述/价格，且说明不代您提交线上刊登', () => {
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf())}/>)
+    const em=headerEm(html)
+    expect(em).not.toBe('')
+    expect(em).not.toContain('仅保存图片、标题、描述和价格')
+    expect(em).not.toContain('标题、描述和价格')
+    expect(em).toContain('不代您提交线上刊登')
+    expect(em).not.toMatch(/。$/)
+  })
+
+  it('源码守卫：App.tsx 本地详情准备提示与「进入发布」副本同口径，旧「标题、描述和价格」范围声明不得残留', () => {
+    const appSource=readFileSync(path.resolve(process.cwd(),'src/renderer/App.tsx'),'utf8')
+    const line=appSource.split('\n').find(item=>item.startsWith('  const prepareLocalEditorInSellerHub='))??''
+    expect(line).not.toBe('')
+    expect(line).not.toContain('准备标题、描述和价格')
+    // 点名实际写入项与未能自动写入项，且保留本地版本号 / 图片人工核对 / 未提交三项既有事实
+    expect(line).toContain('new Set(result.filledFields)')
+    expect(line).toContain('未能自动写入')
+    expect(line).toContain(`本地 V\${product.versionCount}`)
+    expect(line).toContain('图片仍由您在页面人工核对，系统没有提交')
+    // 「进入发布」副本（App.tsx:4172）保持同口径，两处不得各自漂移
+    const sibling=appSource.split('\n').find(item=>item.includes('setNotice(`已在 Seller Hub 填写'))??''
+    expect(sibling).toContain('未能自动写入')
+    expect(sibling).toContain('最终提交按钮仍需由您点击')
   })
 })
