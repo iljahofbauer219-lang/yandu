@@ -274,8 +274,12 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
           </div>}
         </section>
 
+        {/* 评审 Important-2：读取政策走的是同一个全局 busy（App.tsx 的 busyKey），只锁 readingPolicies 时，
+            保存/上传/「保存并准备到 eBay」进行中照样能点它——两边互相覆盖 busy，会让 preparing 提前变 false、
+            「保存并准备到 eBay」在中途重新可点。故四类进行中一律禁用，并把原因写进按钮文案：点了没反应会被读成「代码没生效」。
+            这是便利按钮不是门禁：只是随流程结束的瞬时锁定，就绪度读数不受影响。 */}
         <section id="ebay-revise-policies" className="ebay-revise-section">
-          <header><div><h2>07 政策与所在地</h2><p>店铺级可复用资产：从 Seller Hub 读一次即入库，之后同类发布直接选用。政策按 eBay 政策 ID 命中，不按名称猜。</p></div><button type="button" disabled={readingPolicies} onClick={onReadPolicies}>{readingPolicies?'正在读取…':'从 Seller Hub 读取政策'}</button></header>
+          <header><div><h2>07 政策与所在地</h2><p>店铺级可复用资产：从 Seller Hub 读一次即入库，之后同类发布直接选用。政策按 eBay 政策 ID 命中，不按名称猜。</p></div><button type="button" disabled={readingPolicies||saving||uploading||preparing} onClick={onReadPolicies}>{readingPolicies?'正在读取…':saving||uploading||preparing?'请等待当前操作完成':'从 Seller Hub 读取政策'}</button></header>
           {businessPolicies.length===0&&<p className="ebay-revise-category-error">尚未读取到店铺政策。点上方按钮开一次修改页即可抓取；读取前这些字段保留 eBay 线上原值。</p>}
           <div className="ebay-revise-form-grid">
             {POLICY_FIELDS.map(([kind,label])=>{

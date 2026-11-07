@@ -70,18 +70,47 @@ const policies:EbayStoreBusinessPolicy[]=[
   {id:'s1:FULFILLMENT:6600001',storeId:'s1',kind:'FULFILLMENT',policyId:'6600001',label:'云仓代发履约政策',isDefault:true,updatedAt:''}
 ]
 
+// 评审 Important-4：本任务的核心不变量「政策按 eBay 政策 ID 命中，不按名称猜」必须有回归锁。
+// option 的 value 只允许是数字 policyId；中文 label 只许出现在标签文本里。故两侧同时断言：
+// value 里出现 label（把 value={item.policyId} 突变成 value={item.label}）必红。
 describe('EbayLocalListingEditor · 07 政策与所在地', () => {
   it('已有政策时按 kind 分组渲染下拉并选中草稿值', () => {
     const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({policyIds:{shipping:'18510002004'}}),{businessPolicies:policies})}/>)
     expect(html).toContain('07 政策与所在地')
-    expect(html).toContain('data-policy-kind="shipping"')
+    // data-policy-kind 挂在 <select> 自身（不是 label 或 option），评审 Minor-2 点名核对：实现本已如此，只在测试侧锁死位置。
+    expect(html).toMatch(/<select data-policy-kind="shipping"/)
     expect(html).toContain('<option value="18510002004" selected="">')
     expect(html).toContain('云仓包邮')
+    // 命中不变量：value 是政策 ID（付款政策未选值，故裸 option 标签），中文 label 绝不进 value。
+    expect(html).toContain('<option value="257217501013"')
+    expect(html).not.toContain('value="eBay Managed Payments"')
+    expect(html).not.toContain('value="云仓包邮"')
   })
 
   it('无政策时给出「从 Seller Hub 读取政策」入口而不是空白', () => {
     const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(),{businessPolicies:[]})}/>)
     expect(html).toContain('从 Seller Hub 读取政策')
+    // 评审 Minor-1：上一条只锁页眉按钮文案（与 businessPolicies 无关、恒渲染），空状态提示本身也得被钉住。
+    expect(html).toContain('尚未读取到店铺政策')
+  })
+
+  it('读取政策按钮在保存/上传/准备进行中同样禁用，并写明为什么点不动（评审 Important-2）', () => {
+    const readButton=(over:Partial<ComponentProps<typeof EbayLocalListingEditor>>={})=>{
+      const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(),{businessPolicies:policies,...over})}/>)
+      const section=html.slice(html.indexOf('id="ebay-revise-policies"'))
+      return section.slice(section.indexOf('<button'),section.indexOf('</button>')+'</button>'.length)
+    }
+    // 空闲：可点且文案就是动作本身
+    expect(readButton()).toContain('>从 Seller Hub 读取政策<')
+    expect(readButton()).not.toContain('disabled')
+    // 读取中：禁用 + 进度文案
+    expect(readButton({readingPolicies:true})).toContain('disabled')
+    expect(readButton({readingPolicies:true})).toContain('>正在读取…<')
+    // 其它流程占用全局 busy 时：静默禁用会被读成「代码没生效」，故文案点名原因
+    for (const occupied of [{saving:true},{uploading:true},{preparing:true}]) {
+      expect(readButton(occupied)).toContain('disabled')
+      expect(readButton(occupied)).toContain('>请等待当前操作完成<')
+    }
   })
 
   it('就绪度条点名缺口，并声明这些字段页面沿用线上原值', () => {

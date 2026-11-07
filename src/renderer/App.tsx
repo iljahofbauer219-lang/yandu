@@ -3418,6 +3418,10 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
   const [publishEditorProduct,setPublishEditorProduct]=useState<EbayLocalProduct|null>(null)
   // 07 政策下拉的店铺级数据源：政策按店铺入库、不按商品，所以两个编辑器（发布内嵌 + 本地浮层）共用这一份状态。
   const [publishEditorPolicies,setPublishEditorPolicies]=useState<EbayStoreBusinessPolicy[]>([])
+  // 评审 Important-3：这份状态只有一个写入点、原样留着就会跨店生效——切到 B 店后 A 店的政策行仍当选项渲染，
+  // 操作员一点就选中，异店的 policyId 落进 B 店的 details.*Policy，Task 8 再把它推给 eBay。
+  // 在飞的读取要跨 await 判断「店还是不是点按钮那一家」，而闭包里的 activeStore 恒为渲染时的旧值，故用 ref 存最新店铺 id。
+  const activeStoreIdRef=useRef('')
   // 内嵌发布编辑器的会话标识（优品草稿 id + 本地产品 id）：点「进入发布」时写入，点「×」或保存关闭时清空。
   // 「保存并准备到 eBay」的保存加灌字段要跑十几秒，异步回来时只有会话没变才写回编辑器，避免幽灵重开或覆盖新打开的那一个。
   const publishEditorSession=useRef('')
@@ -3510,6 +3514,9 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
     if(logo)setEbayPlatformLogo(logo)
   },[ebayBrowserTabs])
   useEffect(()=>setEbayPlatformLogo(''),[activeStore?.id])
+  // 评审 Important-3（其一）：政策是店铺级资产，切换店铺立刻清空下拉数据源，别家店的历史行绝不能再被选中；
+  // 同时把最新店铺 id 交给 ref，供读取政策链路跨 await 自检（其二在 readBusinessPoliciesFor 里）。
+  useEffect(()=>{activeStoreIdRef.current=activeStore?.id||'';setPublishEditorPolicies([])},[activeStore?.id])
   useEffect(()=>{
     const launchVersion=++ebayBrowserLaunchVersion.current
     if(lockTitleMode){if(!titleBrowserUrl){void window.desktop.browser.hide();return}return()=>void window.desktop.browser.hide()}
@@ -4167,14 +4174,29 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
   // 裁决 5：与 preparePublishEditorInSellerHub 同款顺序，调用前先 setActiveTab('browser')——真开了 eBay 页签就必须让用户看见，静默后台开页会被当成「代码没生效」。
   const readBusinessPoliciesFor=async(product:EbayLocalProduct|null,busyKey:string)=>{
     if(!product||!activeStore)return
+    // 评审 Important-3（其二，读取本身也要抗竞态）：店铺 id 与商品标识在入口钉死——抓取只针对点按钮那一刻的
+    // 那家店、那个商品；每次 await 之后核对 activeStoreIdRef，店已切走就丢弃结果、不写任何政策状态。
+    const storeId=activeStore.id
+    const {listingId,title}=product
+    const isCurrentStore=()=>activeStoreIdRef.current===storeId
     setBusy(busyKey);setEbayError('')
     try {
       setActiveTab('browser')
-      await window.desktop.ebay.localProductRequirements(activeStore.id,product.listingId,product.title)
-      setPublishEditorPolicies(await window.desktop.ebay.businessPolicies(activeStore.id))
-      setNotice('店铺政策已抓取入库；付款/运输/退货政策可直接下拉选择，之后同类发布复用。')
+      // 评审 Important-1：这个 IPC 对「政策已读到但没写进本地库」是 return warnings（Task 5 的落库兜底），
+      // 不抛错。返回值必须接下来，否则照样弹下面的成功提示就是在骗操作员——下拉用的还是上一次入库的旧政策。
+      const requirements=await window.desktop.ebay.localProductRequirements(storeId,listingId,title)
+      if(!isCurrentStore())return
+      // 政策清单两种结果都重载：库里可能留着上一次成功抓取的行，警告只说明「这一次没写进去」。
+      const policies=await window.desktop.ebay.businessPolicies(storeId)
+      if(!isCurrentStore())return
+      setPublishEditorPolicies(policies)
+      if(requirements.warnings.length) {
+        // 警告本身已是完整中文句子，逐条全量上屏：不截断、不改写、不只挑第一条。
+        const details=requirements.warnings.map((warning,index)=>`${index+1}. ${warning}`).join(' ')
+        setEbayError(`本次读取有 ${requirements.warnings.length} 项未完整入库，下方政策下拉与抓取时间可能仍是上一次入库的旧政策。请逐条照下面提示处理后，重新点「从 Seller Hub 读取政策」：${details}`)
+      } else setNotice('店铺政策已抓取入库；付款/运输/退货政策可直接下拉选择，之后同类发布复用。')
     } catch (reason) {
-      setEbayError(readableError(reason,'读取店铺政策失败；请确认 eBay 已登录且该商品仍在线'))
+      if(isCurrentStore())setEbayError(readableError(reason,'读取店铺政策失败；请确认 eBay 已登录且该商品仍在线'))
     } finally {
       setBusy('')
     }
