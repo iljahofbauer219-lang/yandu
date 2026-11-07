@@ -176,7 +176,7 @@ describe('Seller Hub 灌字段脚本 · 注入的目标表', () => {
     expect(script.match(/new RegExp\(/g)).toHaveLength(1)
   })
 
-  it('两处标签碰撞封死：数量模式不含 sold quantity，「所在地邮编」不被商品所在地命中（一律按页内重建后的源串断言）', async () => {
+  it('三处标签碰撞封死：数量模式不含 sold quantity 且中文支挡住已售数量，「所在地邮编」不被商品所在地命中（一律按页内重建后的源串断言）', async () => {
     const { script } = await runPrepare()
     const targets = literalOf<TargetWire[]>(script, 'targets')
     /**
@@ -200,6 +200,11 @@ describe('Seller Hub 灌字段脚本 · 注入的目标表', () => {
     expect(hits('quantity', 'Available quantity')).toBe(true)
     expect(hits('quantity', 'Quantity available')).toBe(true)
     expect(hits('quantity', '数量')).toBe(true)
+    // R3 同款对称口径：页内 test 的串以 label 开头（labelFor(field)+' '+name+' '+id），
+    // 无锚点 /数量/ 会让中文界面的「已售数量」销量框抢走库存写入——与上面 Important-1 同一种「写错控件+假成功」，
+    // 所以中文支用整串否定预查（.*(已售|销量) 出现即整串拒绝），同时保住带前缀的正常库存 label。
+    expect(hits('quantity', '已售数量 quantity totalSoldQuantity')).toBe(false)
+    expect(hits('quantity', '可用数量 quantity quantity-field')).toBe(true)
 
     // Important-2：「所在地」是「所在地邮编」的子串，邮编框在 DOM 里靠前时 itemLocation 的 find 会选中邮编框，
     // 随后 postalCode（循环第 9 项）再覆盖它 —— filledFields 同时报两项、真所在地却一个字没动（假成功）。
