@@ -1756,6 +1756,8 @@ export class AppDatabase {
   }
 
   getEbayBusinessPolicies(storeId:string,kind?:EbayBusinessPolicyKind):EbayStoreBusinessPolicy[] {
+    // 两分支排序有意不同：带 kind 的默认项置顶（isDefault DESC）供发布表单直接取首选项；
+    // 不带 kind 的跨类总表按 kind,label 稳定归类展示（被测试钉死），Task 7 的下拉各自按 isDefault 再排。
     const rows=(kind
       ?this.database.prepare(`SELECT * FROM ebay_business_policies WHERE store_id=? AND kind=? ORDER BY is_default DESC, label`).all(storeId,kind)
       :this.database.prepare(`SELECT * FROM ebay_business_policies WHERE store_id=? ORDER BY kind, label`).all(storeId)) as unknown as Array<{
@@ -1775,17 +1777,22 @@ export class AppDatabase {
 
   saveEbayBusinessPolicies(storeId:string,rows:EbayScrapedPolicyOption[]):EbayStoreBusinessPolicy[] {
     const now=new Date().toISOString()
-    const kinds=[...new Set(rows.map(row=>row.kind))]
-    for(const kind of kinds)this.database.prepare(`DELETE FROM ebay_business_policies WHERE store_id=? AND kind=?`).run(storeId,kind)
+    // 清空范围只来自通过 ID 门禁的行：eBay 改下拉结构导致某类全行解不出 ID 时跳过该类 DELETE，
+    // 绝不清空本表要保护的可复用政策资产；空提交=不删不增的 no-op（Task 5 允许零结果抓取）。
+    const accepted=rows.map(row=>({row,policyId:String(row.policyId||'').trim()})).filter(item=>/^\d{6,}$/.test(item.policyId))
+    const kinds=[...new Set(accepted.map(item=>item.row.kind))]
     const statement=this.database.prepare(`INSERT INTO ebay_business_policies (id,store_id,kind,policy_id,label,listing_count,is_default,updated_at) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(store_id,kind,policy_id) DO UPDATE SET label=excluded.label,listing_count=excluded.listing_count,is_default=excluded.is_default,updated_at=excluded.updated_at`)
     const saved:EbayStoreBusinessPolicy[]=[]
-    for(const row of rows) {
-      const policyId=String(row.policyId||'').trim()
-      if(!/^\d{6,}$/.test(policyId))continue
-      const id=`${storeId}:${row.kind}:${policyId}`
-      statement.run(id,storeId,row.kind,policyId,row.label.trim(),row.listingCount===undefined?null:row.listingCount,row.selected?1:0,now)
-      saved.push({id,storeId,kind:row.kind,policyId,label:row.label.trim(),...(row.listingCount===undefined?{}:{listingCount:row.listingCount}),isDefault:row.selected,updatedAt:now})
-    }
+    this.database.exec('BEGIN IMMEDIATE')
+    try {
+      for(const kind of kinds)this.database.prepare(`DELETE FROM ebay_business_policies WHERE store_id=? AND kind=?`).run(storeId,kind)
+      for(const {row,policyId} of accepted) {
+        const id=`${storeId}:${row.kind}:${policyId}`
+        statement.run(id,storeId,row.kind,policyId,row.label.trim(),row.listingCount===undefined?null:row.listingCount,row.selected?1:0,now)
+        saved.push({id,storeId,kind:row.kind,policyId,label:row.label.trim(),...(row.listingCount===undefined?{}:{listingCount:row.listingCount}),isDefault:row.selected,updatedAt:now})
+      }
+      this.database.exec('COMMIT')
+    } catch(error){this.database.exec('ROLLBACK');throw error}
     return saved
   }
 

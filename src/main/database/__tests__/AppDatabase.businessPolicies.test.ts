@@ -6,6 +6,8 @@ import type { EbayScrapedPolicyOption } from '../../../shared/contracts'
  * 回归守卫：eBay 店铺级业务政策（付款/运输/退货）是「零新 API」方案下唯一可复用的发布资产。
  * 语义：政策 ID 从下拉文本括号里解出；无 ID 的行不入库；同类目重复抓取覆盖标签与计数，不产生重复行；
  * 「当前选中」映射为 is_default，供 APP 下一次发布默认选同一政策。
+ * 破坏面守卫：清空范围只来自通过 ID 门禁的行——某类全行解不出 ID（eBay 改下拉结构）或提交空数组时，
+ * 跳过该类 DELETE 且整体 no-op，绝不清空这份可复用政策资产；整个 DELETE+INSERT 走单事务。
  */
 
 const ctx=vi.hoisted(()=>({dir:''}))
@@ -58,6 +60,42 @@ describe('AppDatabase · eBay 业务政策库', () => {
   it('listingCount 从文本计数写入并可原样读回', () => {
     database.saveEbayBusinessPolicies(storeId,[{kind:'RETURN',label:'30天退货',policyId:'19007008010',listingCount:2050,selected:true}])
     expect(database.getEbayBusinessPolicies(storeId,'RETURN').find(item=>item.policyId==='19007008010')?.listingCount).toBe(2050)
+  })
+
+  it('空数组提交是 no-op：不删不增，既有政策原样保留（Task 5 允许零结果抓取）', () => {
+    const before=database.getEbayBusinessPolicies(storeId)
+    expect(before.length).toBeGreaterThan(0)
+    expect(database.saveEbayBusinessPolicies(storeId,[])).toEqual([])
+    expect(database.getEbayBusinessPolicies(storeId)).toEqual(before)
+  })
+
+  it('某类政策全部行过不了 ID 门禁 → 跳过该类 DELETE，既有政策原样保留', () => {
+    const before=database.getEbayBusinessPolicies(storeId)
+    expect(before.length).toBeGreaterThan(0)
+    expect(database.saveEbayBusinessPolicies(storeId,[
+      option('SHIPPING','eBay 新版下拉（解不出数字 ID）A','12345'),
+      option('SHIPPING','eBay 新版下拉（解不出数字 ID）B',undefined),
+      option('PAYMENT','付款新样式','abc')
+    ])).toEqual([])
+    expect(database.getEbayBusinessPolicies(storeId)).toEqual(before)
+  })
+
+  it('同批重复 policyId 走 ON CONFLICT 覆盖：库里只留最后一行的标签与计数', () => {
+    const saved=database.saveEbayBusinessPolicies(storeId,[
+      option('FULFILLMENT','云仓履约','20250001001',true),
+      {kind:'FULFILLMENT',label:'云仓履约（改名）',policyId:'20250001001',listingCount:12,selected:false}
+    ])
+    const id=`${storeId}:FULFILLMENT:20250001001`
+    expect(saved.map(item=>item.id)).toEqual([id,id])
+    expect(database.getEbayBusinessPolicies(storeId,'FULFILLMENT')).toEqual([
+      {id,storeId,kind:'FULFILLMENT',policyId:'20250001001',label:'云仓履约（改名）',listingCount:12,isDefault:false,updatedAt:saved[0].updatedAt}
+    ])
+  })
+
+  it('行主键固定为 storeId:kind:policyId（Task 7 fixtures 依赖该格式）', () => {
+    const saved=database.saveEbayBusinessPolicies(storeId,[option('RETURN','90天退货','19007008099')])
+    expect(saved[0].id).toBe(`${storeId}:RETURN:19007008099`)
+    expect(database.getEbayBusinessPolicies(storeId,'RETURN').map(item=>item.id)).toEqual([`${storeId}:RETURN:19007008099`])
   })
 
   it('店铺之间互不可见', () => {
