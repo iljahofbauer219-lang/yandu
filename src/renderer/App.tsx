@@ -2254,7 +2254,7 @@ export function App() {
       <div className="app-titlebar-actions">
         <span className="build-stamp" title={`渲染包构建 ${__BUILD_STAMP__}${mainStamp ? ` · 主进程构建 ${mainStamp.builtAt.slice(0, 16).replace('T', ' ')} v${mainStamp.version}` : ' · 主进程水印缺失（旧主进程）'}`}>{__BUILD_STAMP__}</span>
         <button type="button" className="ip-chip" title={publicIp ? `${publicIp.ip} · ${publicIp.country}${publicIp.isVpn ? ' (VPN)' : ''} · 点击刷新` : '点击查询出口 IP'} disabled={publicIpLoading} onClick={() => refreshPublicIp()}>
-          {publicIpLoading ? '⏳' : publicIp ? `🌐 ${publicIp.ip} · ${publicIp.country}${publicIp.isVpn ? ' (VPN)' : ''}` : '🌐 未知'}
+          {publicIpLoading ? '⏳' : publicIp ? `🌐 ${publicIp.ip.includes(':') ? 'IPv6 网络' : publicIp.ip} · ${publicIp.country}${publicIp.isVpn ? ' (VPN)' : ''}` : '🌐 未知'}
         </button>
         <TitlebarPanelToggle />
         <button type="button" title="刷新当前界面（先检查新版本：有新版本走更新流并保留当前页）" disabled={refreshBusy} onClick={() => void runTitlebarRefresh()}>

@@ -4078,7 +4078,7 @@ const PUBLIC_IP_CACHE_TTL_MS = 5 * 60 * 1000
 
 function fetchPublicIp(): Promise<{ ip: string; country: string; org: string; isVpn: boolean } | null> {
   return new Promise((resolve) => {
-    const req = https.get('https://myip.ipip.net/', { timeout: 4000 }, (res) => {
+    const req = https.get('https://myip.ipip.net/', { timeout: 4000, family: 4 }, (res) => {
       let body = ''
       res.on('data', (chunk) => { body += chunk })
       res.on('end', () => {

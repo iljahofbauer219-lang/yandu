@@ -89,7 +89,7 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .pallet-heading-switch,.candidate-heading-switch { display:flex; align-items:center; }
 .pallet-heading-switch .candidate-view-switch,.candidate-heading-switch .candidate-view-switch { margin-bottom:0; align-self:center; }
 .build-stamp { align-self:center; margin-right:8px; color:var(--yd-text-secondary); font-size:11px; font-variant-numeric:tabular-nums; }
-.ip-chip { align-self:center; margin-right:8px; padding:4px 8px; color:var(--yd-text-secondary); font-size:11px; font-variant-numeric:tabular-nums; border:1px solid var(--border-soft); border-radius:var(--yd-radius-control); background:transparent; cursor:pointer; }
+.ip-chip { align-self:center; margin-right:8px; max-width:210px; padding:4px 8px; color:var(--yd-text-secondary); font-size:11px; font-variant-numeric:tabular-nums; border:1px solid var(--border-soft); border-radius:var(--yd-radius-control); background:transparent; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ip-chip:hover:not(:disabled) { color:var(--yd-content-brand-ink); background:#edf9f8; }
 .ip-chip:disabled { opacity:.6; cursor:not-allowed; }
 .supply-source-card { height:auto; min-height:590px; }
