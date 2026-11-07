@@ -50,9 +50,10 @@ function validateDraft(draft:EbayLocalProductUpdateInput):ValidationIssue[] {
   if(quantity&&!/^[1-9]\d{0,5}$/.test(quantity))error('form','数量必须是大于 0 的整数')
   if(draft.listingFormat&&!['FIXED_PRICE','AUCTION'].includes(draft.listingFormat))error('form','刊登格式只能是「现在购买」或「拍卖」')
   if((draft.sku||'').trim().length>50)error('form','自定义编号（SKU）不能超过 50 个字符')
-  // 本编辑器无「所在地邮编」输入控件（Task 7 才加）， postalCode 只能经 App.tsx:238 从库记录带入；
-  // 若按 ERROR 计入 errors.length>0，会永久禁用两个保存按钮且无 UI 可改，违反「门禁不得 brick 操作」。故暂降为 WARNING。
-  if((draft.postalCode||'').trim()&&!/^[A-Za-z0-9][A-Za-z0-9 -]{2,11}$/.test(draft.postalCode!.trim()))warning('form','所在地邮编格式不正确')
+  // 07 已有「所在地邮编」输入控件（Task 7），但保持 WARNING 不升 ERROR：eBay 国别站点邮编格式差异大，
+  // 旧记录可能本来就没错，硬阻断会让「保存」无从满足（门禁不得 brick 操作）。
+  // section 键指向 policies：明细按钮会跳到 #ebay-revise-policies（07 区块）而不是 05。
+  if((draft.postalCode||'').trim()&&!/^[A-Za-z0-9][A-Za-z0-9 -]{2,11}$/.test(draft.postalCode!.trim()))warning('policies','所在地邮编格式不正确')
   return issues
 }
 
@@ -131,10 +132,14 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
   const issues=useMemo(()=>validateDraft(draft),[draft])
   const errors=issues.filter(item=>item.level==='ERROR')
   const warnings=issues.filter(item=>item.level==='WARNING')
+  const gapLabels=formatFormGaps(gaps)
   const priceCurrency=draft.currency.trim().toUpperCase()||'USD'
   const priceSymbol=({USD:'$',GBP:'£',EUR:'€',CAD:'CA$',AUD:'A$',CNY:'¥',RMB:'¥'} as Record<string,string>)[priceCurrency]||priceCurrency
   const set=<K extends keyof EbayLocalProductUpdateInput>(key:K,value:EbayLocalProductUpdateInput[K])=>onChange({...draft,[key]:value})
   const SOURCE_LABELS:Record<NonNullable<EbayItemSpecific['source']>,string>={SOURCE_PAGE:'源页抓取',ENUM_MATCH:'枚举匹配',AI:'AI 推断',MANUAL:'人工确认',CATEGORY_DEFAULT:'类目记忆'}
+  // 07 只渲染付款/运输/退货三类下拉（裁决 3）：FULFILLMENT 入库存着但不做第四个控件；kind 收窄用映射表，不用 toUpperCase 断言。
+  const KIND_BY_PREFIX:Record<'payment'|'shipping'|'return','PAYMENT'|'SHIPPING'|'RETURN'>={payment:'PAYMENT',shipping:'SHIPPING',return:'RETURN'}
+  const POLICY_FIELDS=[['payment','付款政策'],['shipping','运输政策'],['return','退货政策']] as const
   const moveMedia=(sourceId:string,targetId:string)=>{
     if(!sourceId||sourceId===targetId)return
     const media=[...draft.media]
@@ -165,7 +170,7 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
 
       <main className="ebay-revise-body">
         <section className={`ebay-revise-validation ${errors.length?'blocked':'ready'}`}>
-          <div><strong>{errors.length?`${errors.length} 项必须修改`:'四项核心资料已通过'}</strong><span>{warnings.length} 项建议优化 · 本地产品只保留四个核心部分</span></div>
+          <div><strong>{errors.length?`${errors.length} 项必须修改`:gaps.length?`eBay 必填待补齐 ${gaps.length} 项`:'四项核心资料已通过'}</strong><span>{gaps.length?`${gapLabels} 未在 APP 记录；准备到 Seller Hub 时这些字段沿用 eBay 线上原值，请人工核对。`:`${warnings.length} 项建议优化 · 图片、标题、描述、价格与状况政策齐备`}</span></div>
           {issues.length>0&&<details><summary>查看检查明细</summary><div>{issues.map((issue,index)=><button type="button" key={`${issue.section}-${index}`} className={issue.level.toLowerCase()} onClick={()=>document.getElementById(`ebay-revise-${issue.section}`)?.scrollIntoView({behavior:'smooth',block:'start'})}><b>{issue.level==='ERROR'?'必须修改':'建议优化'}</b><span>{issue.message}</span></button>)}</div></details>}
         </section>
 
@@ -268,9 +273,28 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
             </div>)}
           </div>}
         </section>
+
+        <section id="ebay-revise-policies" className="ebay-revise-section">
+          <header><div><h2>07 政策与所在地</h2><p>店铺级可复用资产：从 Seller Hub 读一次即入库，之后同类发布直接选用。政策按 eBay 政策 ID 命中，不按名称猜。</p></div><button type="button" disabled={readingPolicies} onClick={onReadPolicies}>{readingPolicies?'正在读取…':'从 Seller Hub 读取政策'}</button></header>
+          {businessPolicies.length===0&&<p className="ebay-revise-category-error">尚未读取到店铺政策。点上方按钮开一次修改页即可抓取；读取前这些字段保留 eBay 线上原值。</p>}
+          <div className="ebay-revise-form-grid">
+            {POLICY_FIELDS.map(([kind,label])=>{
+              // DAO 无 kind 参数时按 kind,label 排序、不按 isDefault（AppDatabase 注释点名由本组件补），故默认政策在此前置排序。
+              const options=businessPolicies.filter(item=>item.kind===KIND_BY_PREFIX[kind]).sort((left,right)=>Number(right.isDefault)-Number(left.isDefault)||left.label.localeCompare(right.label,'zh-CN'))
+              const gapName=`${kind}Policy`
+              return <label className="ebay-revise-field" key={kind}><span>{label}</span><select data-policy-kind={kind} data-gap={gaps.some(item=>item.name===gapName)?gapName:undefined} value={draft.policyIds?.[kind]||''} onChange={event=>set('policyIds',{...(draft.policyIds||{}),[kind]:event.target.value})}>
+                <option value="">未选择（沿用线上原值）</option>
+                {options.map(item=><option key={item.policyId} value={item.policyId}>{item.label}{item.listingCount?` · ${item.listingCount} 条`:''}</option>)}
+              </select></label>
+            })}
+            <label className="ebay-revise-field"><span>发货处理天数</span><input inputMode="numeric" value={draft.handlingTime??''} onChange={event=>set('handlingTime',event.target.value.replace(/[^\d]/g,''))}/></label>
+            <label className="ebay-revise-field"><span>商品所在地</span><input data-gap={gaps.some(item=>item.name==='itemLocation')?'itemLocation':undefined} placeholder="Guangdong, CN" value={draft.itemLocation??''} onChange={event=>set('itemLocation',event.target.value)}/></label>
+            <label className="ebay-revise-field"><span>所在地邮编</span><input data-gap={gaps.some(item=>item.name==='postalCode')?'postalCode':undefined} value={draft.postalCode??''} onChange={event=>set('postalCode',event.target.value)}/></label>
+          </div>
+        </section>
       </main>
 
-      <footer className="ebay-revise-footer"><span>{errors.length?`还有 ${errors.length} 项必须修改后才能保存`:'仅保存四项核心内容；类目、库存、SKU、属性和政策不写入新版本'}</span><button type="button" disabled={saving||preparing} onClick={onClose}>取消</button><button type="button" disabled={saving||preparing||uploading||errors.length>0} onClick={onSave}>{saving?'正在保存…':'保存本地新版本'}</button><button className="primary" type="button" disabled={saving||preparing||uploading||errors.length>0} onClick={onPrepare}>{preparing?'正在准备 Seller Hub…':'保存并准备到 eBay'}</button></footer>
+      <footer className="ebay-revise-footer"><span>{errors.length?`还有 ${errors.length} 项必须修改后才能保存`:'保存标题、描述、价格、状况、数量、SKU、类目属性与政策所在地；库存与业务政策仍只在 eBay 页面生效'}</span><button type="button" disabled={saving||preparing} onClick={onClose}>取消</button><button type="button" disabled={saving||preparing||uploading||errors.length>0} onClick={onSave}>{saving?'正在保存…':'保存本地新版本'}</button><button className="primary" type="button" disabled={saving||preparing||uploading||errors.length>0} onClick={onPrepare}>{preparing?'正在准备 Seller Hub…':'保存并准备到 eBay'}</button></footer>
     </div>
   </div>
 }

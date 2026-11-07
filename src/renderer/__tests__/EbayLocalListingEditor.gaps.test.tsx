@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { ComponentProps } from 'react'
 import EbayLocalListingEditor from '../EbayLocalListingEditor'
-import type { EbayLocalProduct, EbayLocalProductUpdateInput } from '../../shared/contracts'
+import type { EbayLocalProduct, EbayLocalProductUpdateInput, EbayStoreBusinessPolicy } from '../../shared/contracts'
 import { formValuesFromInput, requiredFormGaps } from '../../shared/ebayListingForm'
 
 const product={id:'lp1',storeId:'s1',listingId:'T1',title:'Bracket',imageUrl:'',imageUrls:[],price:'9.9',currency:'USD',quantity:12,status:'ACTIVE',versionCount:1,updatedAt:'',categoryId:'',categoryName:'',snapshot:{details:{url:'',itemSpecifics:[{name:'Brand',value:'OEM'}],condition:'New',imageUrls:[],quantity:'12',paymentPolicy:'257217501013',shippingPolicy:'18510002003',returnPolicy:'19007008009',itemLocation:'Guangdong, CN',postalCode:'528000',listingFormat:'FIXED_PRICE',descriptionText:'x'},media:[],sourceListing:{} as never,completeness:100,missingFields:[],contentHash:'',capturedAt:'',id:'snap1',localProductId:'lp1',version:1}} as unknown as EbayLocalProduct
@@ -56,5 +56,55 @@ describe('EbayLocalListingEditor · 05 状况与库存', () => {
     const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(),{gaps:[{kind:'FIELD',name:'quantity',label:'数量'}]})}/>)
     expect(html).toContain('data-gap="quantity"')
     expect(html).not.toContain('data-gap="condition"')
+  })
+})
+
+// 评审裁决 2：DAO（getEbayBusinessPolicies 无 kind 时按 kind,label 排序，不按 isDefault）不保证默认在前，
+// 故 fixture 故意把非默认的 18510002004 排在默认的 18510002003 之前——组件不自己按 isDefault 前置，
+// 「默认政策先渲染」必红；若 fixture 不重排，这条断言在没有排序时也会假绿。
+const policies:EbayStoreBusinessPolicy[]=[
+  {id:'s1:PAYMENT:257217501013',storeId:'s1',kind:'PAYMENT',policyId:'257217501013',label:'eBay Managed Payments',isDefault:true,updatedAt:''},
+  {id:'s1:SHIPPING:18510002004',storeId:'s1',kind:'SHIPPING',policyId:'18510002004',label:'标准运输',isDefault:false,updatedAt:''},
+  {id:'s1:SHIPPING:18510002003',storeId:'s1',kind:'SHIPPING',policyId:'18510002003',label:'云仓包邮',listingCount:1851,isDefault:true,updatedAt:''},
+  {id:'s1:RETURN:19007008009',storeId:'s1',kind:'RETURN',policyId:'19007008009',label:'14天大健云仓退货',isDefault:true,updatedAt:''},
+  {id:'s1:FULFILLMENT:6600001',storeId:'s1',kind:'FULFILLMENT',policyId:'6600001',label:'云仓代发履约政策',isDefault:true,updatedAt:''}
+]
+
+describe('EbayLocalListingEditor · 07 政策与所在地', () => {
+  it('已有政策时按 kind 分组渲染下拉并选中草稿值', () => {
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({policyIds:{shipping:'18510002004'}}),{businessPolicies:policies})}/>)
+    expect(html).toContain('07 政策与所在地')
+    expect(html).toContain('data-policy-kind="shipping"')
+    expect(html).toContain('<option value="18510002004" selected="">')
+    expect(html).toContain('云仓包邮')
+  })
+
+  it('无政策时给出「从 Seller Hub 读取政策」入口而不是空白', () => {
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(),{businessPolicies:[]})}/>)
+    expect(html).toContain('从 Seller Hub 读取政策')
+  })
+
+  it('就绪度条点名缺口，并声明这些字段页面沿用线上原值', () => {
+    const draft=draftOf({condition:'',postalCode:'',policyIds:{payment:'257217501013',shipping:'18510002003',return:'19007008009'}})
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draft,{gaps:requiredFormGaps([],formValuesFromInput(draft))})}/>)
+    expect(html).toContain('eBay 必填待补齐 2 项')
+    expect(html).toContain('商品状况')
+    expect(html).toContain('沿用 eBay 线上原值')
+    expect(html).not.toContain('四项核心资料已通过')
+  })
+
+  it('所在地与邮编可编辑并回填', () => {
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({itemLocation:'Yunnan, CN',postalCode:'650000'}))}/>)
+    expect(html).toContain('value="Yunnan, CN"')
+    expect(html).toContain('value="650000"')
+  })
+
+  it('同类政策 isDefault 排最前，且 FULFILLMENT 不进 07 下拉（裁决 2/3）', () => {
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(),{businessPolicies:policies})}/>)
+    const shipping=html.slice(html.indexOf('data-policy-kind="shipping"'),html.indexOf('data-policy-kind="return"'))
+    expect(shipping.indexOf('18510002003')).toBeGreaterThan(-1)
+    expect(shipping.indexOf('18510002003')).toBeLessThan(shipping.indexOf('18510002004'))
+    expect(html).not.toContain('data-policy-kind="fulfillment"')
+    expect(html).not.toContain('6600001')
   })
 })
