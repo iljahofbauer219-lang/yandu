@@ -572,9 +572,10 @@ async function downloadEbayLocalProduct(storeId:string,listingId:string):Promise
   if(!database)throw new Error('数据库尚未初始化')
   const store=database.getEbayStores().find(item=>item.id===storeId)
   const listing=database.getEbayListings(storeId).find(item=>item.listingId===listingId)
+  // 「重新读取/详情同步」要把编辑器刚保存的属性、状况、政策、数量等字段保住，先取本地已存快照作为合并基线
+  const existing=database.getEbayLocalProducts(storeId).find(item=>item.listingId===listingId)
   if(!store)throw new Error('eBay 店铺不存在')
   if(!listing){
-    const existing=database.getEbayLocalProducts(storeId).find(item=>item.listingId===listingId)
     if(existing)return enrichLocalSnapshotWithProductPageImages(store,existing)
     throw new Error('线上与本地产品库都没有这条记录，本操作未执行；请先从我的货盘送入，或同步线上产品后再更新快照')
   }
@@ -606,17 +607,24 @@ async function downloadEbayLocalProduct(storeId:string,listingId:string):Promise
   const updated=database.updateEbayListingDetails(storeId,listingId,liveDetails)
   const imageUrls=[...new Set([...(liveDetails.imageUrls||[]),...(updated.imageUrls||[]),updated.imageUrl].filter(Boolean))].slice(0,24)
   const videoUrl=liveDetails.videoUrl||''
-  const mergedDetails:EbayProductDetails={
-    url:liveDetails.url||details.url,
-    itemSpecifics:[],
-    condition:'',
-    imageUrls,
-    videoUrl,
+  // 详情同步只刷新线上确实会变的标题、描述、价格与币种；属性、状况、政策、数量、SKU、所在地、邮编、处理时间
+  // 一律以本地已存快照为基线合并，编辑器刚保存的这些字段不再被这次重新读取抹掉。
+  // 首次下载还没有本地快照时，用刚刚按线上读取刷新过的产品记录（含真实属性与状况）打底。
+  const baselineDetails:EbayProductDetails=existing?.snapshot.details||{...details,itemSpecifics:updated.itemSpecifics||[],condition:updated.condition||''}
+  const resyncChanges:EbayLocalProductUpdateInput={
     title:liveDetails.title||updated.title,
-    descriptionHtml:liveDetails.descriptionHtml||'',
     descriptionText:liveDetails.descriptionText||'',
+    descriptionHtml:liveDetails.descriptionHtml||'',
     price:originalCoreReady?liveDetails.price||updated.price:updated.currency.trim().toUpperCase()===expectedCurrency?updated.price:'',
-    currency:expectedCurrency
+    currency:expectedCurrency,
+    // 此刻本地媒体还没下载完，图片清单走下面 liveDetails+线上记录去重合并的结果，故这里传空媒体行、随后显式覆盖
+    media:[]
+  }
+  const mergedDetails:EbayProductDetails={
+    ...mergeEbayLocalDetailsEdit(baselineDetails,resyncChanges),
+    url:liveDetails.url||details.url,
+    imageUrls,
+    videoUrl
   }
   if(!mergedDetails.imageUrls.length)throw new Error('原商品页没有识别到可下载图片，请确认商品图片正常显示后重试')
   const capturedAt=new Date().toISOString()

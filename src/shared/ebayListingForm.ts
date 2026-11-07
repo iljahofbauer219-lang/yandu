@@ -13,14 +13,16 @@ export function mergeEbayLocalDetailsEdit(previous:EbayProductDetails,changes:Eb
     postalCode:changes.postalCode===undefined?previous.postalCode:changes.postalCode.trim(),
     handlingTime:changes.handlingTime===undefined?previous.handlingTime:changes.handlingTime.trim(),
     listingFormat:changes.listingFormat===undefined?previous.listingFormat:changes.listingFormat,
-    paymentPolicy:policies.payment===undefined?previous.paymentPolicy:policies.payment,
-    shippingPolicy:policies.shipping===undefined?previous.shippingPolicy:policies.shipping,
-    returnPolicy:policies.return===undefined?previous.returnPolicy:policies.return,
+    // 政策三项全项目统一存放政策 id 数字串（人类可读名只存在于抓取到的政策表/下拉标签里），页面读取带进来的空格一律不能留下
+    paymentPolicy:policies.payment===undefined?previous.paymentPolicy:policies.payment.trim(),
+    shippingPolicy:policies.shipping===undefined?previous.shippingPolicy:policies.shipping.trim(),
+    returnPolicy:policies.return===undefined?previous.returnPolicy:policies.return.trim(),
     title:changes.title.trim(),
     descriptionText:changes.descriptionText.trim(),
     descriptionHtml:changes.descriptionHtml.trim(),
     price:changes.price.trim(),
     currency:changes.currency.trim(),
-    imageUrls:changes.media.map(item=>item.remoteUrl).filter(Boolean)
+    // 图片清单只收 IMAGE 行：VIDEO 行属于 details.videoUrl，后续任务会把它当 eBay 图片清单推送，混入视频会直接报错
+    imageUrls:changes.media.filter(item=>item.mediaType==='IMAGE').map(item=>item.remoteUrl).filter(Boolean)
   }
 }

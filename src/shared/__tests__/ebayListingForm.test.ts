@@ -80,3 +80,37 @@ describe('mergeEbayLocalDetailsEdit', () => {
     expect(previous.itemSpecifics).toHaveLength(1)
   })
 })
+
+describe('mergeEbayLocalDetailsEdit 边界（修复轮 1）', () => {
+  it('SKU 与处理时间：本次没提交就保原值，提交了才覆盖并去掉前后空格', () => {
+    const base:EbayProductDetails={...previous,sku:'OLD-SKU',handlingTime:'3'}
+    const untouched=mergeEbayLocalDetailsEdit(base,changes)
+    expect(untouched.sku).toBe('OLD-SKU')
+    expect(untouched.handlingTime).toBe('3')
+    const edited=mergeEbayLocalDetailsEdit(base,{...changes,sku:'  NEW-SKU  ',handlingTime:' 5 '})
+    expect(edited.sku).toBe('NEW-SKU')
+    expect(edited.handlingTime).toBe('5')
+  })
+
+  it('媒体行里的视频不进入图片清单，图片清单只留 IMAGE 行', () => {
+    const merged=mergeEbayLocalDetailsEdit(previous,{...changes,media:[
+      ...changes.media,
+      {id:'v1',mediaType:'VIDEO' as const,sortOrder:1,remoteUrl:'https://img.example/v.mp4',localPath:'/tmp/v.mp4',mimeType:'video/mp4',width:0,height:0,fileSize:100,sha256:'',downloadStatus:'DOWNLOADED' as const}
+    ]})
+    expect(merged.imageUrls).toEqual(['https://img.example/b.jpg'])
+    expect(merged.videoUrl).toBe('https://img.example/v.mp4')
+  })
+
+  it('政策三项存的是政策 id 数字串，页面读取带进来的空格必须被去掉', () => {
+    const merged=mergeEbayLocalDetailsEdit(previous,{...changes,policyIds:{payment:' 123456789012 ',shipping:' 257217501013 ',return:' 987654321099 '}})
+    expect(merged.paymentPolicy).toBe('123456789012')
+    expect(merged.shippingPolicy).toBe('257217501013')
+    expect(merged.returnPolicy).toBe('987654321099')
+  })
+
+  it('提交的属性逐条复制，改返回值里的属性值不会回写旧快照', () => {
+    const merged=mergeEbayLocalDetailsEdit(previous,{...changes,itemSpecifics:[{name:'Brand',value:'OEM'}]})
+    merged.itemSpecifics[0].value='Generic'
+    expect(previous.itemSpecifics[0].value).toBe('OEM')
+  })
+})
