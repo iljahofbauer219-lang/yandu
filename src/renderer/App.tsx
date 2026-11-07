@@ -1106,6 +1106,15 @@ function formatCollectedAt(value?: string) {
   return value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—'
 }
 
+// 水印悬浮提示用：builtAt 是 UTC ISO（存储格式被 boot 门禁比对依赖），仅显示层换算本地墙钟，与 __BUILD_STAMP__ 同格式
+function formatStampLocal(iso?: string | null) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 16).replace('T', ' ')
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 function SupplyFactsDl({ joined, fallbackCatalog, collectedAt, collectedBy }: { joined?: CollectedSupplyProduct; fallbackCatalog?: { category: string; subcategory: string; tertiaryCategory: string }; collectedAt?: string; collectedBy?: string }) {
   // 无回联记录也渲染参数区（各项待补采），保证卡片更新可见、口径与候选卡一致
   const inventoryText = joined && joined.sellableInventory !== null && joined.sellableInventory !== undefined ? joined.sellableInventory.toLocaleString('zh-CN') : joined?.salesText?.replace(/^(?:Available\s*Stock|可售库存|库存)\s*[:：]?\s*/i,'') || '待补采'
@@ -2269,7 +2278,7 @@ export function App() {
     <div className="app-titlebar" role="banner">
       <strong className="app-titlebar-title">砚都跨境</strong>
       <div className="app-titlebar-actions">
-        <span className="build-stamp" title={`渲染包构建 ${__BUILD_STAMP__}${mainStamp ? ` · 主进程构建 ${mainStamp.builtAt.slice(0, 16).replace('T', ' ')} v${mainStamp.version}` : ' · 主进程水印缺失（旧主进程）'}`}>{__BUILD_STAMP__}</span>
+        <span className="build-stamp" title={`渲染包构建 ${__BUILD_STAMP__}${mainStamp ? ` · 主进程构建 ${formatStampLocal(mainStamp.builtAt)} v${mainStamp.version}` : ' · 主进程水印缺失（旧主进程）'}`}>{__BUILD_STAMP__}</span>
         <button type="button" className="ip-chip" title={publicIp ? `${publicIp.ip} · ${publicIp.country}${publicIp.isVpn ? ' (VPN)' : ''} · 点击刷新` : '点击查询出口 IP'} disabled={publicIpLoading} onClick={() => refreshPublicIp()}>
           {publicIpLoading ? '⏳' : publicIp ? `🌐 ${publicIp.ip.includes(':') ? 'IPv6 网络' : publicIp.ip} · ${publicIp.country}${publicIp.isVpn ? ' (VPN)' : ''}` : '🌐 未知'}
         </button>
