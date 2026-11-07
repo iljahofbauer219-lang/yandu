@@ -176,6 +176,47 @@ describe('Seller Hub 灌字段脚本 · 注入的目标表', () => {
     expect(script.match(/new RegExp\(/g)).toHaveLength(1)
   })
 
+  it('两处标签碰撞封死：数量模式不含 sold quantity，「所在地邮编」不被商品所在地命中（一律按页内重建后的源串断言）', async () => {
+    const { script } = await runPrepare()
+    const targets = literalOf<TargetWire[]>(script, 'targets')
+    /**
+     * 与页面完全同路：目标表先被 JSON 序列化（patterns 只剩 .source），页内再用 new RegExp(source,'i') 重建，
+     * 这里照此重建后再 test，断言的是真页面上跑的那批模式，不是 TS 字面量。
+     */
+    const rebuilt = (key: string) => {
+      const patterns = targets.find(item => item.key === key)?.patterns
+      if (!patterns) throw new Error(`注入的 targets 里找不到 ${key}`)
+      return patterns.map(source => new RegExp(source, 'i'))
+    }
+    const hits = (key: string, label: string) => rebuilt(key).some(pattern => pattern.test(label))
+
+    // Important-1：已售数量属读取/抓取侧（src/shared/ebayMarketResearchParse.ts 的 TOTAL_SOLD），
+    // 写入侧若命中它会把 APP 库存灌进销量框，还照报「填写 数量」。
+    expect(rebuilt('quantity').map(pattern => pattern.source).some(source => /sold quantity/i.test(source))).toBe(false)
+    expect(hits('quantity', 'Sold quantity')).toBe(false)
+    expect(hits('quantity', 'sold quantity')).toBe(false)
+    // 收紧只砍销量控件：正常数量框与「可用数量」口径不变。
+    expect(hits('quantity', 'Quantity')).toBe(true)
+    expect(hits('quantity', 'Available quantity')).toBe(true)
+    expect(hits('quantity', 'Quantity available')).toBe(true)
+    expect(hits('quantity', '数量')).toBe(true)
+
+    // Important-2：「所在地」是「所在地邮编」的子串，邮编框在 DOM 里靠前时 itemLocation 的 find 会选中邮编框，
+    // 随后 postalCode（循环第 9 项）再覆盖它 —— filledFields 同时报两项、真所在地却一个字没动（假成功）。
+    expect(hits('itemLocation', '所在地邮编')).toBe(false)
+    expect(hits('postalCode', '所在地邮编')).toBe(true)
+    // 页内 label 的实际拼接形状是 labelFor(field)+' '+(field.name||'')+' '+(field.id||'')。
+    expect(hits('itemLocation', '所在地邮编 postal-code itemLocation')).toBe(false)
+    expect(hits('postalCode', '所在地邮编 postal-code itemLocation')).toBe(true)
+    expect(hits('itemLocation', '商品所在地')).toBe(true)
+    expect(hits('itemLocation', '所在地')).toBe(true)
+    expect(hits('postalCode', '商品所在地')).toBe(false)
+    // 英文侧模式与 postalCode 的模式本条未动，回归留痕。
+    expect(hits('itemLocation', 'Item location')).toBe(true)
+    expect(hits('itemLocation', 'Ships from')).toBe(true)
+    expect(hits('postalCode', 'ZIP code')).toBe(true)
+  })
+
   it('标题字段的 find 行与 ready 判定原样保留（主进程 if(!result.ready) 抛错仍成立）', async () => {
     const { script } = await runPrepare()
     expect(script).toContain(String.raw`const titleField=find([/^(item |listing )?title\b/i,/物品标题|商品标题|刊登标题/], 'input[name="title"],input[id="title"]');`)

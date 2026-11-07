@@ -25,12 +25,12 @@ export const EBAY_LOCAL_FILL_TARGETS:EbayLocalFillTarget[]=[
   {label:'标题',key:'title',patterns:[/^(item |listing )?title\b/i,/物品标题|商品标题|刊登标题/],selectors:'input[name="title"],input[id="title"]'},
   {label:'价格',key:'price',patterns:[/^price\b|buy it now price|starting price/i,/价格|一口价|起拍价/]},
   {label:'描述',key:'description',patterns:[/description|详情|描述/i]},
-  {label:'数量',key:'quantity',patterns:[/^quantity\b|available quantity|quantity available|sold quantity/i,/数量/]},
+  {label:'数量',key:'quantity',patterns:[/^quantity\b|available quantity|quantity available/i,/数量/]},
   {label:'商品状况',key:'condition',patterns:[/item condition|^condition\b/i,/商品状况|物品状况/]},
   {label:'付款政策',key:'paymentPolicy',byPolicyId:true,patterns:[/payment policy/i,/付款政策|支付政策/]},
   {label:'运输政策',key:'shippingPolicy',byPolicyId:true,patterns:[/shipping policy|delivery policy/i,/运输政策|物流政策/]},
   {label:'退货政策',key:'returnPolicy',byPolicyId:true,patterns:[/return policy/i,/退货政策/]},
-  {label:'商品所在地',key:'itemLocation',patterns:[/item location|located in|ships from/i,/商品所在地|所在地/]},
+  {label:'商品所在地',key:'itemLocation',patterns:[/item location|located in|ships from/i,/^(?:商品)?所在地(?!邮编)/]},
   {label:'所在地邮编',key:'postalCode',patterns:[/\bzip\b|postal code|postcode/i,/邮编/]},
   {label:'自定义编号',key:'sku',patterns:[/custom label|\bsku\b/i,/自定义编号|卖家编号/]}
 ]
