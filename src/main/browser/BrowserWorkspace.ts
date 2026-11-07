@@ -1801,7 +1801,7 @@ export class BrowserWorkspace {
     let result:{url:string;login:boolean;verification:boolean;ready:boolean;categorySpecifics:EbayCategorySpecificRequirement[]}={url:reviseUrl,login:false,verification:false,ready:false,categorySpecifics:[]}
     for(let attempt=0;attempt<20;attempt+=1){result=await tab.view.webContents.executeJavaScript(script,true) as typeof result;if(result.login)throw new Error('eBay 登录会话已失效，请先完成登录');if(result.verification)throw new Error('eBay 要求安全验证，请人工完成后重试');if(result.ready)break;await this.sleep(750)}
     if(!result.ready)throw new Error('Seller Hub 修改页尚未加载完成，请确认商品仍在线后重试')
-    return {sourceUrl:result.url,categorySpecifics:result.categorySpecifics,inspectedAt:new Date().toISOString(),warnings:result.categorySpecifics.length?[]:['页面未读取到类目属性；可能是页面结构变化或该类目没有可见属性']}
+    return {sourceUrl:result.url,categorySpecifics:result.categorySpecifics,inspectedAt:new Date().toISOString(),warnings:result.categorySpecifics.length?[]:['页面未读取到类目属性；可能是页面结构变化或该类目没有可见属性'],policies:[]}
   }
 
   async prepareEbayLocalProductRevision(accountId:string,product:EbayLocalProduct):Promise<EbayLocalRevisionPreparationResult> {

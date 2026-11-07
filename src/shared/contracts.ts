@@ -274,11 +274,33 @@ export interface EbayLocalProductMediaUploadInput {
   base64:string
 }
 
+export type EbayBusinessPolicyKind='PAYMENT'|'SHIPPING'|'RETURN'|'FULFILLMENT'
+
+export interface EbayStoreBusinessPolicy {
+  id:string
+  storeId:string
+  kind:EbayBusinessPolicyKind
+  policyId:string
+  label:string
+  listingCount?:number
+  isDefault:boolean
+  updatedAt:string
+}
+
+export interface EbayScrapedPolicyOption {
+  kind:EbayBusinessPolicyKind
+  label:string
+  policyId?:string
+  listingCount?:number
+  selected:boolean
+}
+
 export interface EbayLocalListingRequirements {
   sourceUrl:string
   categorySpecifics:EbayCategorySpecificRequirement[]
   inspectedAt:string
   warnings:string[]
+  policies:EbayScrapedPolicyOption[]
 }
 
 export interface EbayLocalRevisionPreparationResult {

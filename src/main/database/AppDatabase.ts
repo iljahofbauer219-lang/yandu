@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { DatabaseSync } from 'node:sqlite'
 import path from 'node:path'
-import type { CandidateCollectionRecord, CandidateCollectionRun, CandidateUpdateRequest, CandidateWorkspace, CollectedOzonProduct, CollectedSupplyProduct, CollectorDuplicateProduct, CollectorDuplicateStage, CollectorPluginImportResult, ComparisonCostSettings, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonRecordView, ComparisonSupplierMatch, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceAuditEvent, ComplianceBatchRecheckResult, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementAction, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceFinding, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReleasePermit, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceRuleVersion, ComplianceSource, ComplianceSourceChange, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, DelistedPalletItem, EbayAcceptanceBatch, EbayCategoryChange, EbayCategorySyncSummary, EbayCategoryWorkspace, EbayCollectedProduct, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayDirectoryProductScanCategory, EbayDirectoryProductSyncCheckpoint, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductSnapshot, EbayLocalProductSnapshotInput, EbayMarketResearchDecisionRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayProductDetails, EbayProductSyncChange, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayStore, EbayStoreCategory, EbayTitleDecision, EbayTitleDecisionInput, EbayTitleHandoff, EliminatedOrigin, EliminatedProductRecord, EliminatedRecordStatus, EliminateRequest, InboundErpIntakeInput, InboundOrigin, InboundProcessingItem, InboundSnapshot, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, SelectionCatalogItem, SelectionDecision, SelectionImportRequest, SelectionTask, SupplyProductDownload, SupplyWarehouseCode, SupplyWarehouseProduct } from '../../shared/contracts'
+import type { CandidateCollectionRecord, CandidateCollectionRun, CandidateUpdateRequest, CandidateWorkspace, CollectedOzonProduct, CollectedSupplyProduct, CollectorDuplicateProduct, CollectorDuplicateStage, CollectorPluginImportResult, ComparisonCostSettings, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonRecordView, ComparisonSupplierMatch, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceAuditEvent, ComplianceBatchRecheckResult, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementAction, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceFinding, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReleasePermit, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceRuleVersion, ComplianceSource, ComplianceSourceChange, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, DelistedPalletItem, EbayAcceptanceBatch, EbayBusinessPolicyKind, EbayCategoryChange, EbayCategorySyncSummary, EbayCategoryWorkspace, EbayCollectedProduct, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayDirectoryProductScanCategory, EbayDirectoryProductSyncCheckpoint, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductSnapshot, EbayLocalProductSnapshotInput, EbayMarketResearchDecisionRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayProductDetails, EbayProductSyncChange, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayScrapedPolicyOption, EbayStore, EbayStoreBusinessPolicy, EbayStoreCategory, EbayTitleDecision, EbayTitleDecisionInput, EbayTitleHandoff, EliminatedOrigin, EliminatedProductRecord, EliminatedRecordStatus, EliminateRequest, InboundErpIntakeInput, InboundOrigin, InboundProcessingItem, InboundSnapshot, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, SelectionCatalogItem, SelectionDecision, SelectionImportRequest, SelectionTask, SupplyProductDownload, SupplyWarehouseCode, SupplyWarehouseProduct } from '../../shared/contracts'
 import { complianceCheckFingerprint } from '../../shared/complianceFingerprint'
 import { mergeCandidateFacts } from '../../shared/candidateFactsMerge'
 import { badgeFallbackScore } from '../../shared/badgeScore'
@@ -392,6 +392,19 @@ export class AppDatabase {
         FOREIGN KEY (store_id) REFERENCES ebay_stores(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_ebay_store_categories_tree ON ebay_store_categories(store_id, status, parent_category_id, sort_order);
+      CREATE TABLE IF NOT EXISTS ebay_business_policies (
+        id TEXT PRIMARY KEY,
+        store_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        policy_id TEXT NOT NULL,
+        label TEXT NOT NULL,
+        listing_count INTEGER,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL,
+        UNIQUE(store_id, kind, policy_id),
+        FOREIGN KEY (store_id) REFERENCES ebay_stores(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_ebay_business_policies_store ON ebay_business_policies(store_id, kind, is_default DESC, label);
       CREATE TABLE IF NOT EXISTS ebay_category_sync_runs (
         id TEXT PRIMARY KEY,
         store_id TEXT NOT NULL,
@@ -1740,6 +1753,40 @@ export class AppDatabase {
   saveEbayPublishTask(task:EbayPublishTask):EbayPublishTask {
     this.database.prepare(`INSERT INTO ebay_publish_tasks (id,store_id,draft_id,listing_id,status,payload,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(store_id,draft_id) DO UPDATE SET id=excluded.id,status=excluded.status,payload=excluded.payload,updated_at=excluded.updated_at`).run(task.id,task.storeId,task.draftId,task.listingId,task.status,JSON.stringify(task),task.createdAt,task.updatedAt)
     return task
+  }
+
+  getEbayBusinessPolicies(storeId:string,kind?:EbayBusinessPolicyKind):EbayStoreBusinessPolicy[] {
+    const rows=(kind
+      ?this.database.prepare(`SELECT * FROM ebay_business_policies WHERE store_id=? AND kind=? ORDER BY is_default DESC, label`).all(storeId,kind)
+      :this.database.prepare(`SELECT * FROM ebay_business_policies WHERE store_id=? ORDER BY kind, label`).all(storeId)) as unknown as Array<{
+        id:string;store_id:string;kind:EbayBusinessPolicyKind;policy_id:string;label:string;listing_count:number|null;is_default:number;updated_at:string
+      }>
+    return rows.map(row=>({
+      id:row.id,
+      storeId:row.store_id,
+      kind:row.kind,
+      policyId:row.policy_id,
+      label:row.label,
+      ...(row.listing_count===null?{}:{listingCount:row.listing_count}),
+      isDefault:Boolean(row.is_default),
+      updatedAt:row.updated_at
+    }))
+  }
+
+  saveEbayBusinessPolicies(storeId:string,rows:EbayScrapedPolicyOption[]):EbayStoreBusinessPolicy[] {
+    const now=new Date().toISOString()
+    const kinds=[...new Set(rows.map(row=>row.kind))]
+    for(const kind of kinds)this.database.prepare(`DELETE FROM ebay_business_policies WHERE store_id=? AND kind=?`).run(storeId,kind)
+    const statement=this.database.prepare(`INSERT INTO ebay_business_policies (id,store_id,kind,policy_id,label,listing_count,is_default,updated_at) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(store_id,kind,policy_id) DO UPDATE SET label=excluded.label,listing_count=excluded.listing_count,is_default=excluded.is_default,updated_at=excluded.updated_at`)
+    const saved:EbayStoreBusinessPolicy[]=[]
+    for(const row of rows) {
+      const policyId=String(row.policyId||'').trim()
+      if(!/^\d{6,}$/.test(policyId))continue
+      const id=`${storeId}:${row.kind}:${policyId}`
+      statement.run(id,storeId,row.kind,policyId,row.label.trim(),row.listingCount===undefined?null:row.listingCount,row.selected?1:0,now)
+      saved.push({id,storeId,kind:row.kind,policyId,label:row.label.trim(),...(row.listingCount===undefined?{}:{listingCount:row.listingCount}),isDefault:row.selected,updatedAt:now})
+    }
+    return saved
   }
 
   getEbayAcceptanceBatches(storeId:string):EbayAcceptanceBatch[] {
