@@ -72,11 +72,12 @@ export function sanitizeProductPageHtml(html: string): string {
  * 公开详情页的 CSP。`script-src 'none'` 是决定性控制：即使净化漏了某种载荷，浏览器也不会执行。
  * `sandbox`（不带 allow-same-origin）让文档落到不透明源，切断对本站 storage/cookie 的访问，
  * 从而阻断「同源 fetch 自动附带 __Host-yandu_harness」这条提权路径。
- * `img-src` 保留 https: 是因为客户端对下载失败的图片保留源站直链。
+ * `img-src` 收紧为 'self' data:：公开页由 meta 模板渲染，图片/视频一律 assets/ 本站路径；
+ * 下载失败的媒体在渲染层直接跳过，不再保留源站直链（存档 index.html 非服务出口，不受影响）。
  */
 export const PRODUCT_PAGE_CSP = [
   "default-src 'none'",
-  "img-src 'self' data: https:",
+  "img-src 'self' data:",
   // 视频已重托管到本站 assets/，放行 'self' 媒体；源站直链视频不存在故不开 https:
   "media-src 'self'",
   "style-src 'unsafe-inline'",

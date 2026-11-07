@@ -66,6 +66,16 @@ describe('writePageAtomic（重下载只留最新一批）', () => {
     const leftovers = (await fsp.readdir(root)).filter(name => name.includes('staging'))
     expect(leftovers).toEqual([])
   })
+
+  it('重下批次缩小同样干净：旧图与旧视频文件一并删除，不残留', async () => {
+    await seedPage('page-d', { orgId: 'org-1', warehouseProductId: 'wh-1' }, { '01.png': 'a', '02.png': 'b', 'v-01.mp4': 'old-video' })
+    await writePageAtomic(root, 'page-d', async staging => {
+      await fsp.writeFile(path.join(staging, 'assets', '01.png'), 'only')
+      await fsp.writeFile(path.join(staging, 'index.html'), '<div>new</div>')
+      await fsp.writeFile(path.join(staging, 'meta.json'), JSON.stringify({ orgId: 'org-1', warehouseProductId: 'wh-1' }))
+    })
+    expect(await listAssets('page-d')).toEqual(['01.png'])
+  })
 })
 
 describe('findProductPages（同组织+同商品归属）', () => {

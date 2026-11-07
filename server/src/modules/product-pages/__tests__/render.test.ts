@@ -177,6 +177,24 @@ describe('renderProductPageDocument', () => {
     expect(legacy.indexOf('LEGACY paragraph')).toBeLessThan(legacy.indexOf('assets/d-09.jpg'))
   })
 
+  it('媒体仅自托管：文档无任何 img/video 原站直链，descriptionFlow 越界索引跳过', () => {
+    const html = renderProductPageDocument('page-1', meta({
+      videos: [{ name: 'v-01.mp4', contentType: 'video/mp4' }],
+      descriptionText: '图文描述\n段落足够长的长度以保持为段落不再分类。',
+      descriptionImages: [{ name: 'd-01.jpg', contentType: 'image/jpeg' }],
+      descriptionFlow: [
+        { kind: 't', text: '段落足够长的长度以保持为段落不再分类。' },
+        { kind: 'img', i: 7 }
+      ]
+    }))
+    expect(html).not.toMatch(/<(img|video)\b[^>]*src="http/)
+    expect(html).toContain('<video controls preload="metadata" src="assets/v-01.mp4">')
+    expect(html).toContain('assets/01.jpg')
+    expect(html).not.toContain('assets/undefined')
+    // 越界 i 的 img 块被整块跳过：描述区只剩段落，且未把 d-01 误当作被引用而漏进尾部网格
+    expect(html).toContain('assets/d-01.jpg')
+  })
+
   it('descriptionFlow 表格块按原站边框表渲染：两列键值灰底、多列不着色、空表降级、单元格转义', () => {
     const html = renderProductPageDocument('page-1', meta({
       descriptionText: '图文描述\nProduct Details',

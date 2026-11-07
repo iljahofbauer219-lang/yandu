@@ -253,6 +253,8 @@ try {
   check('CSP base-uri 限定 self（本站 base 可用、外部 base 被拒）', csp.includes("base-uri 'self'"), csp)
   check('CSP 含 frame-ancestors/form-action none', csp.includes("frame-ancestors 'none'") && csp.includes("form-action 'none'"), csp)
   check('CSP 含 media-src self（重托管视频可播放，且仅本站）', csp.includes("media-src 'self'") && !/media-src[^;]*https:/i.test(csp), csp)
+  check('CSP img-src 收紧为 self+data:（原站图片一律不可直连）', csp.includes("img-src 'self' data:") && !/img-src[^;]*https:/i.test(csp), csp)
+  check('页面图片/视频全部本站 assets/ 相对路径（无原站直链媒体）', !/<(img|video)\b[^>]*src="http/i.test(page.text))
   check('响应头含 nosniff / no-referrer / noindex', page.headers.get('x-content-type-options') === 'nosniff'
     && page.headers.get('referrer-policy') === 'no-referrer'
     && (page.headers.get('x-robots-tag') ?? '').includes('noindex'))

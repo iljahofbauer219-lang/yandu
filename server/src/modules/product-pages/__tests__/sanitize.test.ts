@@ -115,8 +115,9 @@ describe('PRODUCT_PAGE_CSP', () => {
     expect(PRODUCT_PAGE_CSP).not.toMatch(/style-src[^;]*https?:/)
   })
 
-  it('img-src 保留 https: 以兼容客户端保留的源站直链图片', () => {
-    expect(PRODUCT_PAGE_CSP).toContain("img-src 'self' data: https:")
+  it('img-src 收紧为 self+data:，杜绝任何原站图片直连', () => {
+    expect(PRODUCT_PAGE_CSP).toContain("img-src 'self' data:")
+    expect(PRODUCT_PAGE_CSP).not.toMatch(/img-src[^;]*https:/)
   })
 })
 
