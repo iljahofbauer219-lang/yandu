@@ -227,8 +227,11 @@ function ebayLocalProductDraft(product:EbayLocalProduct):EbayLocalProductUpdateI
 }
 
 /** 发布表单种子：把本地产品已有的硬必填字段带进编辑器，用户不必重新手打；标题/描述/价格/图片仍由调用方覆盖。 */
-function ebayLocalProductFormSeed(product:EbayLocalProduct):Pick<EbayLocalProductUpdateInput,'quantity'|'condition'|'listingFormat'|'sku'|'itemLocation'|'postalCode'|'handlingTime'|'itemSpecifics'> {
+function ebayLocalProductFormSeed(product:EbayLocalProduct):Pick<EbayLocalProductUpdateInput,'quantity'|'condition'|'listingFormat'|'sku'|'itemLocation'|'postalCode'|'handlingTime'|'itemSpecifics'|'policyIds'> {
   const {details,sourceListing}=product.snapshot
+  // 政策三项只认纯数字政策 id：快照里这三格可能是采集页面读到的整段文字，灌进下拉既会伪装成「已填」也会让灌值引擎按 id 命不中政策
+  const policyId=(value?:string)=>{const text=(value||'').trim();return /^\d+$/.test(text)?text:''}
+  const payment=policyId(details.paymentPolicy),shipping=policyId(details.shippingPolicy),returns=policyId(details.returnPolicy)
   return {
     quantity:details.quantity??String(sourceListing.quantity??''),
     condition:details.condition||'',
@@ -237,7 +240,8 @@ function ebayLocalProductFormSeed(product:EbayLocalProduct):Pick<EbayLocalProduc
     itemLocation:details.itemLocation||'',
     postalCode:details.postalCode||'',
     handlingTime:details.handlingTime||'',
-    itemSpecifics:(details.itemSpecifics||[]).map(item=>({...item}))
+    itemSpecifics:(details.itemSpecifics||[]).map(item=>({...item})),
+    policyIds:{...(payment?{payment}:{}),...(shipping?{shipping}:{}),...(returns?{returns}:{})}
   }
 }
 
@@ -4499,8 +4503,9 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
   const combinedReviewIssues=reviewIssues.length
   const combinedRemediationIssues=remediationIssues.length
   const combinedAdvisoryIssues=advisoryIssues.length
-  const combinedGateLabel=complianceAutoRunning?'自动检查中':!complianceIsCurrent?'内容变化，待重检':complianceCheck?.gateStatus==='BLOCKED'||combinedBlockingIssues?'必须修改':combinedReviewIssues?'技术资料不完整':combinedRemediationIssues?'建议优化':visualPendingCount?'技术规则通过 · 视觉待检查':'符合 eBay 要求'
-  const combinedGateClass=complianceAutoRunning||!complianceIsCurrent?'pending':combinedBlockingIssues?'blocked':combinedReviewIssues?'review_required':combinedRemediationIssues?'remediation_required':visualPendingCount?'visual_pending':'passed'
+  const pendingAspectConfirmation=Boolean(titleResult?.itemSpecifics.some(item=>item.needsConfirmation||!String(item.value||'').trim()))
+  const combinedGateLabel=complianceAutoRunning?'自动检查中':!complianceIsCurrent?'内容变化，待重检':complianceCheck?.gateStatus==='BLOCKED'||combinedBlockingIssues?'必须修改':combinedReviewIssues?'技术资料不完整':combinedRemediationIssues?'建议优化':visualPendingCount?'技术规则通过 · 视觉待检查':pendingAspectConfirmation?'属性待确认':'符合 eBay 要求'
+  const combinedGateClass=complianceAutoRunning||!complianceIsCurrent?'pending':combinedBlockingIssues?'blocked':combinedReviewIssues?'review_required':combinedRemediationIssues?'remediation_required':visualPendingCount?'visual_pending':pendingAspectConfirmation?'review_required':'passed'
   const scoreBefore=0 // 仅兼容旧草稿数据结构；产品判断已改用合规门禁，不再计算竞争力分数。
   const scoreAfter=0
   const saveToPremium=async()=>{if(!selectedListing||!activeStore||!titleResult||!selectedTitle||!complianceReport)return;if(!complianceCheck||!complianceIsCurrent){setEbayError('当前内容尚未完成最新合规检查，请等待自动重检完成。');setOptimizeMode('image');return}if(complianceCheck.gateStatus==='BLOCKED'||complianceCheck.gateStatus==='RECHECK_REQUIRED'){setEbayError(`当前合规门禁为 ${complianceCheck.gateStatus}，请整改后重新检查。`);setOptimizeMode('image');return}if(complianceCheck.gateStatus==='REVIEW_REQUIRED'&&!complianceReviewed){setEbayError('合规知识库要求人工复核，完成证据核验后才能继续。');setOptimizeMode('image');return}if(!imageVisualReport){setEbayError('图片自动初步检查尚未完成。');setOptimizeMode('image');return}if(!imageAdoptionComplete){setEbayError('请先完成图片自然化处理并确认所有最终图片。');setOptimizeMode('image');return}if(!finalImageInspection||finalImageChecking){setEbayError('最终图片图集仍在自动检查，请稍候。');setOptimizeMode('image');return}if(finalImageInspection.blocked||finalImageInspection.review){setEbayError(`最终图集中仍有 ${finalImageInspection.blocked} 张未通过、${finalImageInspection.review} 张需要人工确认；请处理后再保存。`);setOptimizeMode('image');return}if(!optimizedImage){setEbayError('商品缺少有效主图，请先在线上产品补充主图。');setOptimizeMode('image');return}if(selectedTitle.length>80){setEbayError('所选标题超过80字符，请重新选择或生成标题。');setOptimizeMode('title');return}if(!titleResult.description.trim()){setEbayError('结构化商品描述不能为空，请核对后再保存。');setOptimizeMode('content');return}if(!profitAssumptions.salePriceConfirmed){setEbayError('请先在「05 售价设定」点「采用为核算售价」或「恢复快照售价」确认核算售价。');setOptimizeMode('pricing');return}setBusy('save-premium');setEbayError('');try{const saved=await runWithSessionRetry(token=>window.desktop.ebay.saveOptimizationDraft({storeId:activeStore.id,listingId:selectedListing.listingId,listing:selectedListing,selectedTitle,titleVariants:titleResult.variants,itemSpecifics:titleResult.itemSpecifics,description:titleResult.description,imageUrl:optimizedImage,imageUrls:finalImageUrls,storyboard:contentResult?.storyboard||[],marketDecision:titleResult.marketDecision||marketDecision||undefined,salePrice:effectiveSalePrice.toFixed(2),saleCurrency:selectedSaleCurrency,scoreBefore,scoreAfter,complianceCheckId:complianceCheck.id,complianceGateStatus:complianceCheck.gateStatus,complianceRuleSetVersion:complianceCheck.ruleSetVersion,complianceCheckedAt:complianceCheck.checkedAt,complianceReviewedAt:complianceCheck.reviewedAt,complianceInputFingerprint:complianceCheck.inputFingerprint},token));setOptimizationDrafts(await window.desktop.ebay.optimizationDrafts(activeStore.id));setNotice(`已按核算售价 ${ebayDisplayPrice(selectedSaleCurrency,effectiveSalePrice.toFixed(2))} 存入优品仓库；最终图集 ${finalImageUrls.length} 张通过自动检查并转存自有服务器，原 eBay 线上图片与线上售价未被修改。${saved.aiAssetRehostWarnings?.length?` 注意：${saved.aiAssetRehostWarnings.join('；')}`:''}`);setActiveTab('premium')}catch(reason){setEbayError(readableError(reason,'保存优品仓库失败'))}finally{setBusy('')}}
@@ -4524,7 +4529,11 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
     !draft.listing.categoryName?'缺少类目':'',
     !draft.imageUrl?'缺少主图':'',
     !draft.description.trim()?'缺少英文详情':'',
-    draft.itemSpecifics.some(item=>item.needsConfirmation||!item.value.trim())?'属性待确认':''
+    (()=>{const pending=draft.itemSpecifics.filter(item=>item.needsConfirmation||!item.value.trim());return pending.length?`属性待确认：${pending.map(item=>item.name).slice(0,6).join('、')}${pending.length>6?` 等 ${pending.length} 项`:''}`:''})()
+  ].filter(Boolean)
+  // eBay 硬必填缺口只用于点名展示：ReviseItem 页上这些字段有线上原值，APP 没记录不代表 eBay 缺值，挂进硬门禁会把可工作的按钮直接吞掉。
+  const draftPublishAdvisories=(draft:EbayOptimizationDraft)=>[
+    (()=>{const product=localProducts.find(item=>item.listingId===draft.listing.listingId);if(!product)return '';const gaps=requiredFormGaps([],product.snapshot.details);return gaps.length?`eBay 必填待补齐：${formatFormGaps(gaps)}`:''})()
   ].filter(Boolean)
   const publishReadyDrafts=optimizationDrafts.filter(draft=>draftPublishIssues(draft).length===0)
   const premiumListings=optimizationDrafts.map(draft=>draft.listing)
@@ -4895,10 +4904,10 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
             <span>当前显示 {visiblePremiumDrafts.length} 个优品</span>
           </div>
           {visiblePremiumDrafts.length?<div className="ebay-premium-card-grid">{visiblePremiumDrafts.map(draft=>{
-            const issues=draftPublishIssues(draft)
-            const ready=!issues.length
-            return <article className={`ebay-premium-card ${ready?'ready':'incomplete'}`} key={draft.id}>
-              <div className="ebay-premium-card-media">{draft.imageUrl?<img src={draft.imageUrl} alt={draft.selectedTitle}/>:<span>无主图</span>}<em>{ready?'发布就绪':premiumNeedsReview(draft)?'待复核':'待完善'}</em></div>
+            const issues=draftPublishIssues(draft).concat(draftPublishAdvisories(draft))
+            const fullyReady=!issues.length
+            return <article className={`ebay-premium-card ${fullyReady?'ready':'incomplete'}`} key={draft.id}>
+              <div className="ebay-premium-card-media">{draft.imageUrl?<img src={draft.imageUrl} alt={draft.selectedTitle}/>:<span>无主图</span>}<em>{fullyReady?'发布就绪':premiumNeedsReview(draft)?'待复核':'待完善'}</em></div>
               <div className="ebay-premium-card-body">
                 <small>Item ID {draft.listingId}</small>
                 <b>{draft.selectedTitle}</b>
@@ -4924,6 +4933,8 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
         {optimizationDrafts.length?<div className="ebay-premium-grid">{optimizationDrafts.map(draft=>{
           const issues=draftPublishIssues(draft)
           const ready=!issues.length
+          const pendingIssues=issues.concat(draftPublishAdvisories(draft))
+          const fullyReady=!pendingIssues.length
           const task=publishTasks.find(item=>item.draftId===draft.id)
           const taskCurrent=Boolean(task&&new Date(task.updatedAt).getTime()>=new Date(draft.updatedAt).getTime())
           const publishChecklist=[
@@ -4937,7 +4948,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
             {draft.imageUrl?<img src={draft.imageUrl} alt={draft.selectedTitle}/>:<span>无主图</span>}
             <div>
               <small>Item ID {draft.listingId}</small><b>{draft.selectedTitle}</b>
-              <p>{ready?'标题、类目、图片、详情、属性和入库合规快照均已齐备。':`待完善：${issues.join('、')}`}</p>
+              <p>{fullyReady?'标题、类目、图片、详情、属性和入库合规快照均已齐备。':`待完善：${pendingIssues.join('、')}`}</p>
               <div className="ebay-final-publish-checklist">{publishChecklist.map(item=><span className={item.ready?'ready':'missing'} key={item.label}><i>{item.ready?'✓':'!'}</i><b>{item.label}</b><small>{item.detail}</small></span>)}<span className="review"><i>人</i><b>Seller Hub 人工核对项</b><small>图片、价格、库存及业务政策保留线上原值</small></span></div>
               {task&&<div className={`ebay-publish-task-status ${task.status.toLowerCase()}`}>
                 <strong>{taskCurrent?publishTaskLabel[task.status]:'发布资料已变化'}</strong><span>{taskCurrent?task.message:'当前优化草稿晚于上次预填记录，旧记录已失效，请重新统一预填。'}</span>
@@ -4950,7 +4961,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
               </div>}
               {task?.comparison?.length?<details className="ebay-publish-details"><summary>查看发布前后对比（{task.comparison.length}项）</summary>{task.comparison.map(item=><div key={item.field}><b>{item.field}</b><span><small>原版</small>{item.before}</span><i>→</i><span><small>待发布</small>{item.after}</span><em>{item.status==='CHANGED'?'有变化':item.status==='UNCHANGED'?'未变化':'人工核对'}</em></div>)}</details>:null}
               {task?.auditTrail?.length?<details className="ebay-publish-details audit"><summary>查看操作审计（{task.auditTrail.length}条）</summary>{task.auditTrail.map(event=><div key={event.id}><b>{new Date(event.createdAt).toLocaleString('zh-CN')}</b><span>{event.detail.slice(0,320)}</span><em>{event.status==='SUCCESS'?'成功':event.status==='WARNING'?'待确认':'失败'}</em></div>)}</details>:null}
-              <em className="compliance-saved">{ready?`内容已就绪 · 门禁 ${draft.complianceGateStatus}`:'当前不可进入发布交付'}</em>
+              <em className="compliance-saved">{fullyReady?`内容已就绪 · 门禁 ${draft.complianceGateStatus}`:'当前不可进入发布交付'}</em>
             </div>
             <div className="ebay-publish-actions">
               <button disabled={busy===`publish-check:${draft.id}`} onClick={()=>void validateDraftForPublish(draft)}>{busy===`publish-check:${draft.id}`?'正在重检…':'发布前重检'}</button>

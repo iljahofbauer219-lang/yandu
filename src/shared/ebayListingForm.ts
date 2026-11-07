@@ -59,11 +59,15 @@ export const EBAY_HARD_REQUIRED_FIELDS:EbayFormFieldSchema[]=[
   field('postalCode','所在地邮编','TEXT')
 ]
 
+/** 只剥离作为标签后缀的必填标记：`Required Parts`、`建议零售价` 本身是 eBay 真属性名，削成 `Parts`、`零售价` 会让两条必填属性在缺口计算里撞成同一个键，缺口静默消失即假绿灯。 */
 export function normaliseAspectName(name:string):string {
   return String(name||'')
-    .replace(/\s+/g,' ')
-    .replace(/\*|required soon|required immediately|required|必填|建议|required per policy/gi,'')
+    .replace(/\*|\s+/g,' ')
     .replace(/[:：]\s*$/,'')
+    .replace(/\s*[(（【\[]\s*(?:required(?:\s+(?:immediately|soon|per\s+policy))?|必填|建议)\s*[)）】\]]\s*$/i,'')
+    .replace(/\s+required(?:\s+(?:immediately|soon|per\s+policy))?\s*$/i,'')
+    .replace(/(?:必填|建议)\s*$/,'')
+    .replace(/\s+/g,' ')
     .trim()
 }
 

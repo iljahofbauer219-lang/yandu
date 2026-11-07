@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { EbayCategorySpecificRequirement, EbayLocalProductUpdateInput, EbayProductDetails } from '../contracts'
-import { EBAY_HARD_REQUIRED_FIELDS, extractPolicyIdFromLabel, formatFormGaps, formValuesFromInput, mergeEbayLocalDetailsEdit, requiredFormGaps } from '../ebayListingForm'
+import { EBAY_HARD_REQUIRED_FIELDS, extractPolicyIdFromLabel, formatFormGaps, formValuesFromInput, mergeEbayLocalDetailsEdit, normaliseAspectName, requiredFormGaps } from '../ebayListingForm'
 
 const requirement=(name:string,required:boolean,value=''):EbayCategorySpecificRequirement=>({name,required,value,options:[],source:'SELLER_HUB'})
 
@@ -164,6 +164,49 @@ describe('requiredFormGaps', () => {
     expect(values.shippingPolicy).toBe('18510002003')
     expect(values.paymentPolicy).toBeUndefined()
     expect(requiredFormGaps([],formValuesFromInput({title:'t',descriptionText:'',descriptionHtml:'',price:'1',currency:'USD',media:[],quantity:'3',condition:'New',itemLocation:'CN',postalCode:'528000',listingFormat:'FIXED_PRICE'})).map(item=>item.name)).toEqual(['paymentPolicy','shippingPolicy','returnPolicy'])
+  })
+
+  it('Required Parts 与 Parts 是两条不同的必填属性，空值时各报一个缺口', () => {
+    const gaps=requiredFormGaps([requirement('Required Parts',true),requirement('Parts',true)],filled)
+    expect(gaps.filter(item=>item.kind==='ASPECT')).toEqual([
+      {kind:'ASPECT',name:'Required Parts',label:'Required Parts'},
+      {kind:'ASPECT',name:'Parts',label:'Parts'}
+    ])
+  })
+
+  it('建议零售价 与 零售价 不被归一成同一个键，两条空必填各自点名', () => {
+    const gaps=requiredFormGaps([requirement('建议零售价',true),requirement('零售价',true)],filled)
+    expect(gaps.filter(item=>item.kind==='ASPECT').map(item=>item.label)).toEqual(['建议零售价','零售价'])
+  })
+})
+
+describe('normaliseAspectName', () => {
+  it('剥掉作为后缀的必填标记、星号与冒号', () => {
+    expect(normaliseAspectName('Brand *')).toBe('Brand')
+    expect(normaliseAspectName('Country required')).toBe('Country')
+    expect(normaliseAspectName('品牌（必填）')).toBe('品牌')
+    expect(normaliseAspectName('MPN (required)')).toBe('MPN')
+    expect(normaliseAspectName('Condition:')).toBe('Condition')
+    expect(normaliseAspectName('Material required immediately')).toBe('Material')
+    expect(normaliseAspectName('MPN (required per policy)')).toBe('MPN')
+    expect(normaliseAspectName('品牌（必填）：')).toBe('品牌')
+  })
+
+  it('标记不是后缀时属性名原样保留，不把真属性名削成同名词', () => {
+    expect(normaliseAspectName('Required Parts')).toBe('Required Parts')
+    expect(normaliseAspectName('建议零售价')).toBe('建议零售价')
+  })
+
+  it('多余空白合并，空输入返回空串', () => {
+    expect(normaliseAspectName('  Type   of   Item  ')).toBe('Type of Item')
+    expect(normaliseAspectName('')).toBe('')
+    expect(normaliseAspectName('   ')).toBe('')
+  })
+
+  it('归一化幂等：同一标签二次归一不再变化', () => {
+    for(const name of ['Brand *','Country required','品牌（必填）','MPN (required)','Condition:','Required Parts','建议零售价：']) {
+      expect(normaliseAspectName(normaliseAspectName(name))).toBe(normaliseAspectName(name))
+    }
   })
 })
 
