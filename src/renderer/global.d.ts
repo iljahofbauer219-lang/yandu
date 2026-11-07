@@ -65,6 +65,7 @@ declare global {
         checkUpdateNow(): Promise<{ current: string; latest: string; isLatest: boolean; error: string }>
         openDownload(): Promise<boolean>
         installUpdate(): Promise<boolean>
+        publicIp(): Promise<{ ip: string; country: string; org: string; isVpn: boolean } | null>
         onUpdateStatus(callback: (status: { phase: 'downloading' | 'downloaded' | 'error'; version: string; percent?: number; message?: string }) => void): () => void
       }
       llmKeys: {

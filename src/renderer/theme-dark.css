@@ -27,6 +27,8 @@
 [data-theme-mode="dark"] nav button:hover { color:var(--accent-contrast); background:rgba(255,255,255,.07); }
 [data-theme-mode="dark"] nav .nav-active { color:var(--accent-contrast); background:var(--accent-soft); box-shadow:inset 3px 0 0 var(--accent); }
 [data-theme-mode="dark"] .app-titlebar-actions button:hover { color:var(--accent-contrast); background:rgba(255,255,255,.07); }
+[data-theme-mode="dark"] .ip-chip { border-color:rgba(255,255,255,.1); }
+[data-theme-mode="dark"] .ip-chip:hover:not(:disabled) { color:var(--accent-contrast); background:rgba(255,255,255,.07); }
 [data-theme-mode="dark"] .titlebar-theme-menu { box-shadow:0 10px 30px rgba(0,0,0,.5); }
 [data-theme-mode="dark"] .titlebar-theme-menu button.active { color:var(--accent-contrast); background:var(--accent-soft); }
 [data-theme-mode="dark"] nav button em { color:#03130c; background:var(--accent); }

@@ -23,6 +23,7 @@ import { isSupplyDownloadOpenable, palletWarehouseIdFromListingId } from '../sha
 import { buildEbayCategorySearchText, deriveEbayCostAutoFill, ebayCategoryFeeRule, ebayPlatformFeeBreakdown, toEbayProfitCostUsd } from '../shared/ebayPricingAutoFill'
 import { US_SALES_TAX_NATIONAL, US_SALES_TAX_TABLE, US_SALES_TAX_TABLE_VERSION, usSalesTaxCombinedRate, usSalesTaxLabel, usSalesTaxNationalAverageRate } from '../shared/usSalesTax'
 import { ebayMarketResearchChannelLabel, ebayMarketResearchChannelShortLabel } from '../shared/ebayMarketResearchParse'
+import { EBAY_SITE_ALLOWED_MESSAGE, isEbaySiteUrl } from '../shared/ebaySites'
 import type { EbayProfitAutoFill } from '../shared/ebayPricingAutoFill'
 import { riskBadge } from '../shared/riskBadge'
 import { copiedWarehouseIds } from '../shared/copiedPallet'
@@ -1467,6 +1468,20 @@ export function App() {
   useEffect(() => { void window.desktop.warehouses.list().then(setWarehouseProducts).catch(reason => setError(reason instanceof Error ? reason.message : '供应仓库加载失败')) }, [])
   useEffect(() => { void window.desktop.member.announce(profile?.name || '') }, [profile?.name])
   useEffect(() => { void window.desktop.appInfo.buildStamp().then(setMainStamp).catch(() => setMainStamp(null)) }, [])
+  const [publicIp, setPublicIp] = useState<{ ip: string; country: string; org: string; isVpn: boolean } | null>(null)
+  const [publicIpLoading, setPublicIpLoading] = useState(false)
+  const refreshPublicIp = useCallback(() => {
+    setPublicIpLoading(true)
+    window.desktop.appInfo.publicIp()
+      .then(setPublicIp)
+      .catch(() => undefined)
+      .finally(() => setPublicIpLoading(false))
+  }, [])
+  useEffect(() => {
+    refreshPublicIp()
+    const timer = setInterval(refreshPublicIp, 5 * 60 * 1000)
+    return () => clearInterval(timer)
+  }, [refreshPublicIp])
   useEffect(() => { void window.desktop.warehouses.listDelisted().then(setDelistedWarehouseProducts).catch(() => undefined) }, [])
   useEffect(() => { void window.desktop.warehouses.downloads().then(setSupplyDownloads).catch(() => undefined) }, [])
   useEffect(() => {
@@ -2238,6 +2253,9 @@ export function App() {
       <strong className="app-titlebar-title">砚都跨境</strong>
       <div className="app-titlebar-actions">
         <span className="build-stamp" title={`渲染包构建 ${__BUILD_STAMP__}${mainStamp ? ` · 主进程构建 ${mainStamp.builtAt.slice(0, 16).replace('T', ' ')} v${mainStamp.version}` : ' · 主进程水印缺失（旧主进程）'}`}>{__BUILD_STAMP__}</span>
+        <button type="button" className="ip-chip" title={publicIp ? `${publicIp.ip} · ${publicIp.country}${publicIp.isVpn ? ' (VPN)' : ''} · 点击刷新` : '点击查询出口 IP'} disabled={publicIpLoading} onClick={() => refreshPublicIp()}>
+          {publicIpLoading ? '⏳' : publicIp ? `🌐 ${publicIp.ip} · ${publicIp.country}${publicIp.isVpn ? ' (VPN)' : ''}` : '🌐 未知'}
+        </button>
         <TitlebarPanelToggle />
         <button type="button" title="刷新当前界面（先检查新版本：有新版本走更新流并保留当前页）" disabled={refreshBusy} onClick={() => void runTitlebarRefresh()}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>{refreshBusy ? '检查中…' : '刷新'}
@@ -4496,7 +4514,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
   const categoryImportantChanges=categorySummary?(categorySummary.added+categorySummary.renamed+categorySummary.moved+categorySummary.removed):0
   const categorySyncedAt=categorySummary?new Date(categorySummary.syncedAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'尚未同步'
   const selectStore=(store:EbayStore)=>{setStoreScope(store.id);setActiveTab('browser');setEbayError('')}
-  const navigateEbay=(event:FormEvent)=>{event.preventDefault();try{const target=new URL(ebayAddress);if(target.protocol!=='https:'||!(target.hostname==='ebay.com'||target.hostname.endsWith('.ebay.com')))throw new Error('eBay浏览器只允许访问 ebay.com');void window.desktop.browser.navigate('web',target.toString())}catch(reason){const msg=reason instanceof Error?reason.message:String(reason);setEbayError(/只允许访问/.test(msg)?msg:friendlyEbayError(msg).text)}}
+  const navigateEbay=(event:FormEvent)=>{event.preventDefault();try{const target=new URL(ebayAddress);if(!isEbaySiteUrl(target.toString()))throw new Error(EBAY_SITE_ALLOWED_MESSAGE);setEbayError('');void window.desktop.browser.navigate('web',target.toString())}catch(reason){const msg=reason instanceof Error?reason.message:String(reason);setEbayError(/访问|阻止/.test(msg)?msg:friendlyEbayError(msg).text)}}
   const createEbayBrowserTab=async()=>{if(!activeStore)return;setEbayError('');try{await window.desktop.ebay.newBrowserTab(activeStore.id)}catch(reason){setEbayError(readableError(reason,'新建eBay浏览页失败'))}}
   const activateEbayBrowserTab=async(tab:BrowserTab)=>{setEbayError('');try{await window.desktop.browser.switchTab(tab.id);const next=await window.desktop.browser.getState('web');setEbayBrowserState(next);setEbayAddress(next.url)}catch(reason){setEbayError(readableError(reason,'切换eBay浏览页失败'))}}
   const closeEbayBrowserTab=async(tabId:string)=>{setEbayError('');try{await window.desktop.browser.closeTab(tabId)}catch(reason){setEbayError(readableError(reason,'关闭eBay浏览页失败'))}}

@@ -40,6 +40,7 @@
 [data-theme="graphite"] .sidebar { color:var(--text-secondary); background:var(--bg-sidebar); border-right:1px solid var(--border-soft); }
 [data-theme="graphite"] nav button:hover { color:var(--accent-contrast); background:var(--accent-soft); }
 [data-theme="graphite"] .app-titlebar-actions button:hover { color:var(--accent-contrast); background:var(--accent-soft); }
+[data-theme="graphite"] .ip-chip:hover:not(:disabled) { color:var(--accent-contrast); background:var(--accent-soft); }
 [data-theme="graphite"] .titlebar-theme-menu button.active { color:var(--accent-contrast); background:var(--accent-soft); }
 [data-theme="graphite"] button:hover { border-color:#a7d8d4; }
 [data-theme="graphite"] .tabs { background:var(--bg-soft); }

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { EBAY_SITE_ROOT_DOMAINS } from '../../../shared/ebaySites'
 
 vi.mock('electron', () => ({
   BaseWindow: class {},
@@ -66,6 +67,34 @@ describe('BrowserWorkspace.navigate 加载失败处理', () => {
   it('白名单外域名同步抛错且不触发加载', () => {
     const { host, loadURL } = makeWorkspace('')
     expect(() => navigateMethod.call(host, '1688', 'https://evil.example.com/login')).toThrow('当前标签只允许访问对应平台域名')
+    expect(loadURL).not.toHaveBeenCalled()
+  })
+})
+
+function makeEbayTabHost(landedUrl = '') {
+  const loadURL = vi.fn(async () => undefined)
+  const host: WorkspaceHost = {
+    detailTabs: new Map([['login-ebay:s1', { domains: EBAY_SITE_ROOT_DOMAINS }]]),
+    activeTabId: 'login-ebay:s1',
+    emitTabs: () => undefined,
+    getCurrentView: () => ({ webContents: { loadURL, isDestroyed: () => false, getURL: () => landedUrl } }),
+    isAllowedUrl: isAllowedUrlMethod
+  }
+  return { host, loadURL }
+}
+
+describe('eBay 浏览器标签放行各国官方站点', () => {
+  it.each(['https://www.ebay.com/itm/123456789012', 'https://www.ebay.de/sch/i.html?_nkw=bag', 'https://www.ebay.cn/', 'https://www.ebay.co.uk/'])('%s 可打开', async url => {
+    const { host, loadURL } = makeEbayTabHost(url)
+    await navigateMethod.call(host, 'web', url)
+    expect(loadURL).toHaveBeenCalledWith(url)
+  })
+
+  it('ebay 形近域与后缀拼接域仍被阻止', () => {
+    const { host, loadURL } = makeEbayTabHost('')
+    ;['https://evil-ebay.com/', 'https://ebay.de.attacker.net/'].forEach(url => {
+      expect(() => navigateMethod.call(host, 'web', url)).toThrow('当前标签只允许访问对应平台域名')
+    })
     expect(loadURL).not.toHaveBeenCalled()
   })
 })

@@ -3,6 +3,7 @@ import iconv from 'iconv-lite'
 import fs from 'node:fs'
 import path from 'node:path'
 import nodeNet from 'node:net'
+import https from 'node:https'
 import { pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 import { execFile, spawn } from 'node:child_process'
@@ -54,6 +55,7 @@ import { parseCoreTermTranslationReply, parseCoreTermsReply, type LocalCoreTerms
 import { buildCategoryPromptTree, parseInboundCategorySuggestionReply, type CatalogBranch, type InboundCategorySuggestion } from '../shared/inboundCategorySuggestion'
 import { backCoreTermVariants, parseCoreTermVariants } from '../shared/ebayMarketVariants'
 import { parseEstimatedTotal } from '../shared/supplyEstimatedTotal'
+import { EBAY_SITE_ROOT_DOMAINS } from '../shared/ebaySites'
 import { MARKETING_FACTS_VERSION, cleanMarketingFeatureLines, pickMarketingSpecifications } from '../shared/ebayImageCategoryPlan'
 
 const execFileAsync = promisify(execFile)
@@ -366,7 +368,7 @@ function openEbaySellerHub(storeId:string) {
   const store=database?.getEbayStores().find(item=>item.id===storeId)
   if(!store)throw new Error('eBay 店铺不存在')
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
-  return workspace.openCredentialLogin(`ebay:${store.id}`,`${store.name} · eBay`,'https://www.ebay.com/sh/ovw',['ebay.com'])
+  return workspace.openCredentialLogin(`ebay:${store.id}`,`${store.name} · eBay`,'https://www.ebay.com/sh/ovw',EBAY_SITE_ROOT_DOMAINS)
 }
 
 function newEbayBrowserTab(storeId:string) {
@@ -4069,6 +4071,53 @@ ipcMain.handle('app:check-update', async () => {
 ipcMain.handle('app:open-download', () => {
   void shell.openExternal(`${readServerUrl().replace(/\/+$/, '')}/download/`).catch(() => undefined)
   return true
+})
+
+// 顶栏 IP chip：查询出口公网 IP 与所在国家（主进程侧，避免渲染器 CORS）
+let publicIpCache: { ip: string; country: string; org: string; isVpn: boolean; fetchedAt: number } | null = null
+const PUBLIC_IP_CACHE_TTL_MS = 5 * 60 * 1000
+
+function fetchPublicIp(): Promise<{ ip: string; country: string; org: string; isVpn: boolean } | null> {
+  return new Promise((resolve) => {
+    const req = https.get('https://myip.ipip.net/', { timeout: 4000 }, (res) => {
+      let body = ''
+      res.on('data', (chunk) => { body += chunk })
+      res.on('end', () => {
+        try {
+          // 响应格式："当前 IP：1.2.3.4  来自于：中国 广东 深圳  电信"
+          const match = body.match(/当前 IP[：:]\s*(\S+)\s*来自于[：:]\s*(\S+)(?:\s+\S+)*\s+(\S+)/)
+          if (match) {
+            const ip = match[1]
+            const country = match[2]
+            const isp = match[3]
+            resolve({
+              ip,
+              country,
+              org: isp,
+              isVpn: /vpn|proxy|hosting|datacenter|机房|数据中心/i.test(isp)
+            })
+          } else {
+            resolve(null)
+          }
+        } catch {
+          resolve(null)
+        }
+      })
+    })
+    req.on('error', () => resolve(null))
+    req.on('timeout', () => { req.destroy(); resolve(null) })
+  })
+}
+
+ipcMain.handle('app:public-ip', async () => {
+  if (publicIpCache && Date.now() - publicIpCache.fetchedAt < PUBLIC_IP_CACHE_TTL_MS) {
+    return publicIpCache
+  }
+  const result = await fetchPublicIp()
+  if (result) {
+    publicIpCache = { ...result, fetchedAt: Date.now() }
+  }
+  return result
 })
 // 登录页「检查更新」按钮：既回读 feed 版本，也真正驱动 autoUpdater 检查+自动下载（根治项 C）
 ipcMain.handle('app:check-update-now', async () => {

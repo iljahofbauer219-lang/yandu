@@ -60,6 +60,7 @@ contextBridge.exposeInMainWorld('desktop', {
     checkUpdateNow: (): Promise<{ current: string; latest: string; isLatest: boolean; error: string }> => ipcRenderer.invoke('app:check-update-now'),
     openDownload: (): Promise<boolean> => ipcRenderer.invoke('app:open-download'),
     installUpdate: (): Promise<boolean> => ipcRenderer.invoke('app:install-update'),
+    publicIp: (): Promise<{ ip: string; country: string; org: string; isVpn: boolean } | null> => ipcRenderer.invoke('app:public-ip'),
     onUpdateStatus: (callback: (status: { phase: 'downloading' | 'downloaded' | 'error'; version: string; percent?: number; message?: string }) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, status: { phase: 'downloading' | 'downloaded' | 'error'; version: string; percent?: number; message?: string }) => callback(status)
       ipcRenderer.on('app:update-status', listener)

@@ -8,6 +8,7 @@ import { pickDropshipShippingFee } from '../../shared/supplyDropshipFee'
 import { parseEbayAggregateMetrics, parseEbayResearchRows } from '../../shared/ebayMarketResearchParse'
 import { shouldActivateSupplyView } from '../../shared/supplyAutoEnter'
 import { shouldRetryWithoutProxy } from '../../shared/ebayDirectFallback'
+import { EBAY_SITE_ROOT_DOMAINS } from '../../shared/ebaySites'
 import { pickGigaMainImage } from '../../shared/gigaImageResolve'
 import type { BrowserBounds, BrowserState, BrowserTab, BuiltInCollectorState, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, EbayBrowserPluginState, EbayCategorySpecificRequirement, EbayCollectedProduct, EbayDeliveryLocationResult, EbayDirectoryProductScanCategory, EbayLoginResult, EbayMarketResearchFilter, EbayMarketResearchMetric, EbayMarketResearchSample, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayPlatformCategoryOption, EbayProductDetails, EbaySellerHubAcceptanceSnapshot, EbayStoreCategory, MarketplacePlatformCode, NetworkStrategy, Platform, SelectionTask, SupplyActivationResult } from '../../shared/contracts'
 import gigaCatalog from '../../renderer/gigaCatalog.json'
@@ -918,7 +919,7 @@ export class BrowserWorkspace {
     const profiles: Record<MarketplacePlatformCode, { title: string; url: string; domains: string[] }> = {
       OZON: { title: 'Ozon 市场', url: 'https://www.ozon.ru/', domains: ['ozon.ru'] },
       AMAZON: { title: 'Amazon 市场', url: 'https://www.amazon.com/', domains: ['amazon.com', 'amazon.cn'] },
-      EBAY: { title: 'eBay 市场', url: 'https://www.ebay.com/', domains: ['ebay.com'] },
+      EBAY: { title: 'eBay 市场', url: 'https://www.ebay.com/', domains: EBAY_SITE_ROOT_DOMAINS },
       ALIEXPRESS: { title: 'AliExpress 市场', url: 'https://www.aliexpress.com/', domains: ['aliexpress.com'] },
       TEMU: { title: 'Temu 市场', url: 'https://www.temu.com/', domains: ['temu.com'] }
     }
@@ -1545,7 +1546,7 @@ export class BrowserWorkspace {
     if(this.visibleTabCount()>=8)throw new Error('最多同时打开8个浏览标签，请先关闭不需要的标签')
     const base=this.detailTabs.get(`login-${accountId}`)
     if(!base||base.view.webContents.isDestroyed())throw ebayStoreViewError('请先打开当前eBay店铺浏览器')
-    const domains=['ebay.com']
+    const domains = EBAY_SITE_ROOT_DOMAINS
     const target=new URL(targetUrl)
     if(target.protocol!=='https:'||!domains.some(domain=>target.hostname===domain||target.hostname.endsWith(`.${domain}`)))throw new Error('原商品链接不属于 eBay，已阻止打开')
     const id=`ebay-${accountId}-${crypto.randomUUID()}`
