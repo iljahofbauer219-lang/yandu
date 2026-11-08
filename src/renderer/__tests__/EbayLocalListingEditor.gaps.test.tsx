@@ -17,9 +17,12 @@ const draftOf=(over:Partial<EbayLocalProductUpdateInput>={}):EbayLocalProductUpd
 })
 
 const noop=vi.fn()
+// 载体编号默认给一个合法在架 itemId：R1 后 07 区恒渲染校验提示，默认值让上面既有断言仍针对「政策已就绪」的正常态，
+// 不合法的分支由下面 R1 专测按 over 覆盖，避免每条旧断言都被红色提示污染。
 const props=(draft:EbayLocalProductUpdateInput,over:Partial<ComponentProps<typeof EbayLocalListingEditor>>={}):ComponentProps<typeof EbayLocalListingEditor>=>({
   inline:true,product,draft,saving:false,uploading:false,preparing:false,readingPolicies:false,businessPolicies:[],categories:[],
   onChange:noop,onSave:noop,onClose:noop,onUpload:noop,onPrepare:noop,onSetCategory:noop,onAutoClassify:noop,onReadPolicies:noop,
+  policyCarrierItemId:'189035181453',onPolicyCarrierItemIdChange:noop,
   gaps:requiredFormGaps([],formValuesFromInput(draft)),...over
 })
 
@@ -212,5 +215,53 @@ describe('EbayLocalListingEditor · 图片必须真在本地（D1）', () => {
     expect(inline).toContain('onUpload={files=>void uploadPublishEditorMedia(files)}')
     expect(inline).not.toContain('uploading={false}')
     expect(inline).toContain('uploading={busy===`publish-media:${publishEditorProduct?.id}`}')
+  })
+})
+
+// R1 断点：本地产品 listingId 是 PALLET-<货盘编号>，直接拼进 ReviseItem 会被 eBay 拒成 createOrGetDraft 错误页，
+// 政策永远抓不到（真机取证见 5.4）。政策是店铺级资产，故开页载体改由操作员手填真实在架商品编号、按店铺记住，
+// 且「不合法就不发 IPC」——开一个必然报错的页签比当场点名缺什么更糟。
+describe('EbayLocalListingEditor · 07 政策读取载体（R1）', () => {
+  const carrierTag=(over:Partial<ComponentProps<typeof EbayLocalListingEditor>>={})=>{
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(),over)}/>)
+    return /<input data-policy-carrier[^>]*>/.exec(html)?.[0]??''
+  }
+
+  it('载体编号手填回显，且任何流程进行中都不禁用它（禁用会被读成「代码没生效」）', () => {
+    expect(carrierTag()).toContain('value="189035181453"')
+    expect(carrierTag({readingPolicies:true,saving:true,uploading:true,preparing:true})).not.toContain('disabled')
+  })
+
+  it('载体空着或填成本地 PALLET 编号时当场点名，全中文且不靠 eBay 报错', () => {
+    const empty=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(),{policyCarrierItemId:''})}/>)
+    expect(empty).toContain('「在架商品编号」还是空的')
+    const pallet=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(),{policyCarrierItemId:'PALLET-4b695b47-1'})}/>)
+    expect(pallet).toContain('PALLET-4b695b47-1')
+    expect(pallet).toContain('不是 eBay 商品编号')
+  })
+
+  it('上次抓取时间沿用政策入库时间口径，未抓取过时如实说明', () => {
+    const fetched=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(),{businessPolicies:policies.map((item,index)=>({...item,updatedAt:index===4?'2026-11-07T12:00:00.000Z':'2026-10-01T00:00:00.000Z'}))})}/>)
+    expect(fetched).toContain('上次抓取：2026/11')
+    expect(fetched).not.toContain('尚未抓取过')
+    expect(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf())}/>)).toContain('上次抓取：尚未抓取过')
+  })
+
+  it('源码守卫：读取入口先过纯函数再发 IPC，两个编辑器调用点都接载体，且按店铺记住', () => {
+    const appSource=readFileSync(path.resolve(process.cwd(),'src/renderer/App.tsx'),'utf8')
+    const start=appSource.indexOf('const readBusinessPoliciesFor=async')
+    expect(start).toBeGreaterThan(-1)
+    const body=appSource.slice(start,start+2400)
+    expect(body).toContain('const carrier=checkEbayPolicyCarrierItemId(policyCarrierItemId)')
+    expect(body).toContain('if(!carrier.ok){setEbayError(carrier.message);return}')
+    expect(body).toContain('localProductRequirements(storeId,carrier.itemId,title)')
+    // 不再拿 PALLET 本地编号当载体开页；setBusy 也必须在把关之后，否则空载体照样进入「正在读取…」
+    expect(body).not.toMatch(/localProductRequirements\(storeId,listingId/)
+    expect(body.indexOf('if(!carrier.ok)')).toBeLessThan(body.indexOf('setBusy(busyKey)'))
+    const callSites=appSource.split('\n').filter(line=>line.includes('policyCarrierItemId={policyCarrierItemId}'))
+    expect(callSites.length).toBe(2)
+    callSites.forEach(line=>expect(line).toContain('onPolicyCarrierItemIdChange={setPolicyCarrierForActiveStore}'))
+    expect(appSource).toContain('const ebayPolicyCarrierKey=(storeId:string)=>`ebay-policy-carrier:${storeId}`')
+    expect(appSource).toContain('setPolicyCarrierItemId(readPolicyCarrierItemId(activeStore?.id||\'\'))')
   })
 })

@@ -118,6 +118,14 @@
 .ebay-revise-form-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .ebay-revise-form-grid .ebay-revise-field>input,.ebay-revise-form-grid .ebay-revise-field>select{width:100%}
 .ebay-revise-field [data-gap]{border-color:var(--ebay-revise-danger,#c14b3a);box-shadow:0 0 0 2px rgba(193,75,58,.14)}
+/* 07 政策读取载体：开修改页用的在架商品编号，手填、按店铺记住，故与「读取政策」按钮同区块。 */
+.ebay-policy-carrier{margin:0 0 10px}
+.ebay-policy-carrier label{display:flex;align-items:center;gap:8px;font-size:12px;color:#1f2a2e}
+.ebay-policy-carrier label span{white-space:nowrap}
+.ebay-policy-carrier input{flex:0 0 220px;padding:7px 10px;border:1px solid #d8dfe2;border-radius:10px;background:#fff;font-size:13px;color:#1f2a2e}
+.ebay-policy-carrier p{margin:6px 0 0;font-size:12px;line-height:1.5}
+.ebay-policy-carrier-ok{color:#0d8b85}
+.ebay-policy-carrier .ebay-revise-category-error{margin:6px 0 0}
 .ebay-revise-specifics{margin-top:14px;margin-left:0;display:grid;gap:8px}
 .ebay-revise-specifics .ebay-revise-specific-row{display:grid;grid-template-columns:minmax(120px,1fr) minmax(0,2fr) 132px;align-items:center;gap:10px}
 .ebay-revise-specific-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

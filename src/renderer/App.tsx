@@ -24,6 +24,7 @@ import { buildEbayCategorySearchText, deriveEbayCostAutoFill, ebayCategoryFeeRul
 import { US_SALES_TAX_NATIONAL, US_SALES_TAX_TABLE, US_SALES_TAX_TABLE_VERSION, usSalesTaxCombinedRate, usSalesTaxLabel, usSalesTaxNationalAverageRate } from '../shared/usSalesTax'
 import { ebayMarketResearchChannelLabel, ebayMarketResearchChannelShortLabel } from '../shared/ebayMarketResearchParse'
 import { EBAY_SITE_ALLOWED_MESSAGE, isEbaySiteUrl } from '../shared/ebaySites'
+import { checkEbayPolicyCarrierItemId } from '../shared/ebayPolicyCarrier'
 import { formatFormGaps, formValuesFromInput, isEbayPolicyId, requiredFormGaps } from '../shared/ebayListingForm'
 import type { EbayProfitAutoFill } from '../shared/ebayPricingAutoFill'
 import { riskBadge } from '../shared/riskBadge'
@@ -180,6 +181,19 @@ const ebayImageDefaultModelKey='ebay-image-default-model:v1'
 
 function readEbayImageDefaultModel() {
   return localStorage.getItem(ebayImageDefaultModelKey)||''
+}
+
+// R1：政策抓取的载体商品编号按店铺记住——政策是店铺级资产，填一次即长期复用，不该绑在某个本地产品上。
+const ebayPolicyCarrierKey=(storeId:string)=>`ebay-policy-carrier:${storeId}`
+
+function readPolicyCarrierItemId(storeId:string) {
+  if(!storeId)return ''
+  try { return localStorage.getItem(ebayPolicyCarrierKey(storeId))||'' } catch { return '' }
+}
+
+function writePolicyCarrierItemId(storeId:string,itemId:string) {
+  if(!storeId)return
+  try { localStorage.setItem(ebayPolicyCarrierKey(storeId),itemId) } catch { /* 本地存储不可用时仅本次会话生效 */ }
 }
 
 
@@ -3426,6 +3440,9 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
   const [publishEditorProduct,setPublishEditorProduct]=useState<EbayLocalProduct|null>(null)
   // 07 政策下拉的店铺级数据源：政策按店铺入库、不按商品，所以两个编辑器（发布内嵌 + 本地浮层）共用这一份状态。
   const [publishEditorPolicies,setPublishEditorPolicies]=useState<EbayStoreBusinessPolicy[]>([])
+  // R1：政策抓取的「载体商品编号」。本地产品 listingId 是 PALLET-<货盘编号>，不是 eBay itemId，拿它开 ReviseItem
+  // 会被 eBay 拒成 createOrGetDraft 错误页；政策按店铺入库复用，所以载体交给操作员手填一个真实在架编号，并按店铺记住。
+  const [policyCarrierItemId,setPolicyCarrierItemId]=useState('')
   // 评审 Important-3：这份状态只有一个写入点、原样留着就会跨店生效——切到 B 店后 A 店的政策行仍当选项渲染，
   // 操作员一点就选中，异店的 policyId 落进 B 店的 details.*Policy，Task 8 再把它推给 eBay。
   // 在飞的读取要跨 await 判断「店还是不是点按钮那一家」，而闭包里的 activeStore 恒为渲染时的旧值，故用 ref 存最新店铺 id。
@@ -3524,7 +3541,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
   useEffect(()=>setEbayPlatformLogo(''),[activeStore?.id])
   // 评审 Important-3（其一）：政策是店铺级资产，切换店铺立刻清空下拉数据源，别家店的历史行绝不能再被选中；
   // 同时把最新店铺 id 交给 ref，供读取政策链路跨 await 自检（其二在 readBusinessPoliciesFor 里）。
-  useEffect(()=>{activeStoreIdRef.current=activeStore?.id||'';setPublishEditorPolicies([])},[activeStore?.id])
+  useEffect(()=>{activeStoreIdRef.current=activeStore?.id||'';setPublishEditorPolicies([]);setPolicyCarrierItemId(readPolicyCarrierItemId(activeStore?.id||''))},[activeStore?.id])
   useEffect(()=>{
     const launchVersion=++ebayBrowserLaunchVersion.current
     if(lockTitleMode){if(!titleBrowserUrl){void window.desktop.browser.hide();return}return()=>void window.desktop.browser.hide()}
@@ -4207,19 +4224,25 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
   }
   // 「07 政策与所在地」读取：开一次 ReviseItem 修改页即抓政策入库（Task 5 引擎），两个编辑器共用这一个读取函数与一份政策状态。
   // 裁决 5：与 preparePublishEditorInSellerHub 同款顺序，调用前先 setActiveTab('browser')——真开了 eBay 页签就必须让用户看见，静默后台开页会被当成「代码没生效」。
+  const setPolicyCarrierForActiveStore=(value:string)=>{setPolicyCarrierItemId(value);writePolicyCarrierItemId(activeStore?.id||'',value)}
   const readBusinessPoliciesFor=async(product:EbayLocalProduct|null,busyKey:string)=>{
     if(!product||!activeStore)return
-    // 评审 Important-3（其二，读取本身也要抗竞态）：店铺 id 与商品标识在入口钉死——抓取只针对点按钮那一刻的
-    // 那家店、那个商品；每次 await 之后核对 activeStoreIdRef，店已切走就丢弃结果、不写任何政策状态。
+    // 评审 Important-3（其二，读取本身也要抗竞态）：店铺 id 与载体编号在入口钉死——抓取只针对点按钮那一刻的
+    // 那家店、那个载体；每次 await 之后核对 activeStoreIdRef，店已切走就丢弃结果、不写任何政策状态。
     const storeId=activeStore.id
-    const {listingId,title}=product
+    const {title}=product
     const isCurrentStore=()=>activeStoreIdRef.current===storeId
+    // R1：product.listingId 是 PALLET-<货盘编号>，拼进 ReviseItem 只会被 eBay 拒成 createOrGetDraft 错误页。
+    // 载体编号只为打开一次修改页，政策本身按店铺入库复用，所以这里只认操作员手填的真实在架商品编号；
+    // 不合法就不发 IPC——开一个必然报错的页签，比当场点名缺什么更糟。
+    const carrier=checkEbayPolicyCarrierItemId(policyCarrierItemId)
+    if(!carrier.ok){setEbayError(carrier.message);return}
     setBusy(busyKey);setEbayError('')
     try {
       setActiveTab('browser')
       // 评审 Important-1：这个 IPC 对「政策已读到但没写进本地库」是 return warnings（Task 5 的落库兜底），
       // 不抛错。返回值必须接下来，否则照样弹下面的成功提示就是在骗操作员——下拉用的还是上一次入库的旧政策。
-      const requirements=await window.desktop.ebay.localProductRequirements(storeId,listingId,title)
+      const requirements=await window.desktop.ebay.localProductRequirements(storeId,carrier.itemId,title)
       if(!isCurrentStore())return
       // 政策清单两种结果都重载：库里可能留着上一次成功抓取的行，警告只说明「这一次没写进去」。
       const policies=await window.desktop.ebay.businessPolicies(storeId)
@@ -4950,7 +4973,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
         </section>
       </div>}
       {activeTab==='publish'&&<div className="ebay-stage-panel ebay-publish-stage">
-        {publishEditorDraftId&&publishEditorProduct&&publishEditorDraft?<EbayLocalListingEditor inline product={publishEditorProduct} draft={publishEditorDraft} saving={false} uploading={busy===`publish-media:${publishEditorProduct?.id}`} preparing={busy===`publish-prepare:${publishEditorProduct?.id}`} categories={categoryWorkspace.categories} platformCategory={inlinePlatformCategory} onChange={setPublishEditorDraft} onSave={async()=>{if(!publishEditorProduct)return;try{const updated=await window.desktop.ebay.updateLocalProduct(publishEditorProduct.id,publishEditorDraft);setLocalProducts(current=>[updated,...current.filter(item=>item.id!==updated.id)]);setNotice('本地版本已保存');publishEditorSession.current='';setPublishEditorDraftId('');setPublishEditorProduct(null);setPublishEditorDraft(null)}catch(reason){setEbayError(readableError(reason,'保存本地版本失败'))}}} onClose={()=>{publishEditorSession.current='';setPublishEditorDraftId('');setPublishEditorProduct(null);setPublishEditorDraft(null)}} onUpload={files=>void uploadPublishEditorMedia(files)} onPrepare={()=>{void preparePublishEditorInSellerHub()}} onSetCategory={()=>{}} onAutoClassify={()=>{}} gaps={publishEditorDraft?requiredFormGaps([],formValuesFromInput(publishEditorDraft)):[]} businessPolicies={publishEditorPolicies} readingPolicies={busy==='publish-read-policies'} onReadPolicies={()=>{void readBusinessPoliciesFor(publishEditorProduct,'publish-read-policies')}}/>:<><section className="ebay-final-handoff-heading"><div><small>FINAL STEP · PUBLISH REVIEW & HANDOFF</small><b>最终发布确认与统一交付</b><p>标题、类目属性、图片、英文详情和合规结论只在这里汇总。确认资料完整后，才会打开 Seller Hub 统一预填可安全识别的字段；最终提交仍由人工点击。</p></div><span>唯一 Seller Hub 交付入口</span></section>
+        {publishEditorDraftId&&publishEditorProduct&&publishEditorDraft?<EbayLocalListingEditor inline product={publishEditorProduct} draft={publishEditorDraft} saving={false} uploading={busy===`publish-media:${publishEditorProduct?.id}`} preparing={busy===`publish-prepare:${publishEditorProduct?.id}`} categories={categoryWorkspace.categories} platformCategory={inlinePlatformCategory} onChange={setPublishEditorDraft} onSave={async()=>{if(!publishEditorProduct)return;try{const updated=await window.desktop.ebay.updateLocalProduct(publishEditorProduct.id,publishEditorDraft);setLocalProducts(current=>[updated,...current.filter(item=>item.id!==updated.id)]);setNotice('本地版本已保存');publishEditorSession.current='';setPublishEditorDraftId('');setPublishEditorProduct(null);setPublishEditorDraft(null)}catch(reason){setEbayError(readableError(reason,'保存本地版本失败'))}}} onClose={()=>{publishEditorSession.current='';setPublishEditorDraftId('');setPublishEditorProduct(null);setPublishEditorDraft(null)}} onUpload={files=>void uploadPublishEditorMedia(files)} onPrepare={()=>{void preparePublishEditorInSellerHub()}} onSetCategory={()=>{}} onAutoClassify={()=>{}} gaps={publishEditorDraft?requiredFormGaps([],formValuesFromInput(publishEditorDraft)):[]} businessPolicies={publishEditorPolicies} readingPolicies={busy==='publish-read-policies'} onReadPolicies={()=>{void readBusinessPoliciesFor(publishEditorProduct,'publish-read-policies')}} policyCarrierItemId={policyCarrierItemId} onPolicyCarrierItemIdChange={setPolicyCarrierForActiveStore}/>:<><section className="ebay-final-handoff-heading"><div><small>FINAL STEP · PUBLISH REVIEW & HANDOFF</small><b>最终发布确认与统一交付</b><p>标题、类目属性、图片、英文详情和合规结论只在这里汇总。确认资料完整后，才会打开 Seller Hub 统一预填可安全识别的字段；最终提交仍由人工点击。</p></div><span>唯一 Seller Hub 交付入口</span></section>
         <section className="ebay-acceptance-center">
           <header><div><small>PHASE 03 · ACCEPTANCE</small><b>正式发布验收</b><p>连接真实 Seller Hub 验证单品；批量检查最多10件，并执行四类失败保护自检。</p></div><div><button disabled={Boolean(busy)||!optimizationDrafts.length} onClick={()=>void runAcceptance('SINGLE')}>{busy==='acceptance:SINGLE'?'真实页面验收中…':'运行真实单品验收'}</button><button className="primary" disabled={Boolean(busy)||!listings.length} onClick={()=>void runAcceptance('BATCH_10')}>{busy==='acceptance:BATCH_10'?'批量验收中…':'运行10商品批量验收'}</button></div></header>
           {latestAcceptance?<><div className={`ebay-acceptance-summary ${latestAcceptance.status.toLowerCase()}`}><span><small>验收模式</small><b>{latestAcceptance.mode==='SINGLE'?'真实单品':'批量10商品'}</b></span><span><small>本次检查</small><b>{latestAcceptance.checked}/{latestAcceptance.requested}</b></span><span><small>通过</small><b>{latestAcceptance.passed}</b></span><span><small>需关注</small><b>{latestAcceptance.attention}</b></span><span><small>阻断</small><b>{latestAcceptance.blocked}</b></span><span><small>结论</small><b>{latestAcceptance.status==='PASSED'?'通过':latestAcceptance.status==='ATTENTION'?'需关注':'有阻断'}</b></span></div>
@@ -5004,7 +5027,7 @@ function EbayPlatformWorkspace({initialTab,lockTitleMode,onOpenMyPallet,onOpenAm
         })}</div>:<EbayEmpty title="暂无待发布版本" description="请先在AI优化中完成内容与合规检查，再保存到优品仓库。" action="查看优品仓库" onAction={()=>setActiveTab('premium')}/>}</>}
       </div>}
     </div>
-    {localEditorProduct&&localEditorDraft&&<EbayLocalListingEditor product={localEditorProduct} draft={localEditorDraft} saving={busy===`local-save:${localEditorProduct.id}`} uploading={busy===`local-media:${localEditorProduct.id}`} preparing={busy===`local-prepare:${localEditorProduct.id}`} categories={categoryWorkspace.categories} onSetCategory={(categoryId,categoryName)=>void setLocalCategory(categoryId,categoryName)} onAutoClassify={()=>void autoClassifyLocal()} platformCategory={overlayPlatformCategory} onChange={setLocalEditorDraft} onSave={()=>void saveLocalEditor()} onPrepare={()=>void prepareLocalEditorInSellerHub()} onUpload={files=>void uploadLocalEditorMedia(files)} gaps={localEditorDraft?requiredFormGaps([],formValuesFromInput(localEditorDraft)):[]} businessPolicies={publishEditorPolicies} readingPolicies={busy==='local-read-policies'} onReadPolicies={()=>{void readBusinessPoliciesFor(localEditorProduct??null,'local-read-policies')}} onClose={()=>{if(!busy.startsWith('local-')){setLocalEditorProductId('');setLocalEditorDraft(null)}}}/>} 
+    {localEditorProduct&&localEditorDraft&&<EbayLocalListingEditor product={localEditorProduct} draft={localEditorDraft} saving={busy===`local-save:${localEditorProduct.id}`} uploading={busy===`local-media:${localEditorProduct.id}`} preparing={busy===`local-prepare:${localEditorProduct.id}`} categories={categoryWorkspace.categories} onSetCategory={(categoryId,categoryName)=>void setLocalCategory(categoryId,categoryName)} onAutoClassify={()=>void autoClassifyLocal()} platformCategory={overlayPlatformCategory} onChange={setLocalEditorDraft} onSave={()=>void saveLocalEditor()} onPrepare={()=>void prepareLocalEditorInSellerHub()} onUpload={files=>void uploadLocalEditorMedia(files)} gaps={localEditorDraft?requiredFormGaps([],formValuesFromInput(localEditorDraft)):[]} businessPolicies={publishEditorPolicies} readingPolicies={busy==='local-read-policies'} onReadPolicies={()=>{void readBusinessPoliciesFor(localEditorProduct??null,'local-read-policies')}} policyCarrierItemId={policyCarrierItemId} onPolicyCarrierItemIdChange={setPolicyCarrierForActiveStore} onClose={()=>{if(!busy.startsWith('local-')){setLocalEditorProductId('');setLocalEditorDraft(null)}}}/>} 
     {directoryProductSyncOpen&&<div className="ebay-store-dialog-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)void closeDirectoryProductSync()}}>
       <div className="ebay-store-dialog ebay-directory-product-dialog" role="dialog" aria-modal="true" aria-labelledby="ebay-directory-product-dialog-title">
         <header><div><small>EBAY DIRECTORY SYNC V2</small><h3 id="ebay-directory-product-dialog-title">按目录增量同步</h3><p>只写入新增或变化商品；仅完整读取的目录会执行安全下架判断。</p></div><button type="button" aria-label="关闭" disabled={directoryProductSyncing} onClick={()=>void closeDirectoryProductSync()}>×</button></header>

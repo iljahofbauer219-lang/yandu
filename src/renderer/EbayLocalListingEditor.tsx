@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EbayItemSpecific, EbayLocalProduct, EbayLocalProductUpdateInput, EbayStoreBusinessPolicy, EbayStoreCategory } from '../shared/contracts'
 import { formatFormGaps, type EbayFormGap } from '../shared/ebayListingForm'
+import { checkEbayPolicyCarrierItemId } from '../shared/ebayPolicyCarrier'
 import type { PlatformCategoryController } from './useEbayPlatformCategory'
 import './ebay-local-listing-editor.css'
 import './ebay-local-listing-pricing.css'
@@ -25,6 +26,8 @@ type Props={
   businessPolicies:EbayStoreBusinessPolicy[]
   readingPolicies:boolean
   onReadPolicies:()=>void
+  policyCarrierItemId:string
+  onPolicyCarrierItemIdChange:(value:string)=>void
   inline?:boolean
 }
 
@@ -126,7 +129,7 @@ function CustomCategoryDropdown({options,value,onChange,disabled,placeholder,sav
   )
 }
 
-export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,gaps,businessPolicies,readingPolicies,onReadPolicies,inline}:Props) {
+export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,gaps,businessPolicies,readingPolicies,onReadPolicies,policyCarrierItemId,onPolicyCarrierItemIdChange,inline}:Props) {
   const fileInput=useRef<HTMLInputElement>(null)
   const [draggedId,setDraggedId]=useState('')
   const [descriptionMode,setDescriptionMode]=useState<'TEXT'|'HTML'>('TEXT')
@@ -141,6 +144,13 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
   // 07 只渲染付款/运输/退货三类下拉（裁决 3）：FULFILLMENT 入库存着但不做第四个控件；kind 收窄用映射表，不用 toUpperCase 断言。
   const KIND_BY_PREFIX:Record<'payment'|'shipping'|'return','PAYMENT'|'SHIPPING'|'RETURN'>={payment:'PAYMENT',shipping:'SHIPPING',return:'RETURN'}
   const POLICY_FIELDS=[['payment','付款政策'],['shipping','运输政策'],['return','退货政策']] as const
+  // R1：读取政策要开一次 eBay 修改页，而本地产品的 listingId 是 PALLET-<货盘编号>，eBay 不认（会落 createOrGetDraft 错误页）。
+  // 故载体由操作员手填一个真实在架商品编号，按店铺记住；它只用于开页，政策本身按店铺入库复用。
+  // 校验用同一个 shared 纯函数：这里先当场点名，App.tsx 的读取入口再据此决定是否发 IPC（不合法就不开页）。
+  const policyCarrierCheck=checkEbayPolicyCarrierItemId(policyCarrierItemId)
+  // 上次抓取时间＝入库记录里最新的 updatedAt：政策是店铺级资产，入库即一次成功读取。
+  const policyFetchedAt=businessPolicies.reduce((latest,item)=>!latest||item.updatedAt>latest?item.updatedAt:latest,'')
+  const policyFetchedAtText=policyFetchedAt?new Date(policyFetchedAt).toLocaleString('zh-CN',{hour12:false}):'尚未抓取过'
   const moveMedia=(sourceId:string,targetId:string)=>{
     if(!sourceId||sourceId===targetId)return
     const media=[...draft.media]
@@ -280,7 +290,10 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
             「保存并准备到 eBay」在中途重新可点。故四类进行中一律禁用，并把原因写进按钮文案：点了没反应会被读成「代码没生效」。
             这是便利按钮不是门禁：只是随流程结束的瞬时锁定，就绪度读数不受影响。 */}
         <section id="ebay-revise-policies" className="ebay-revise-section">
-          <header><div><h2>07 政策与所在地</h2><p>店铺级可复用资产：从 Seller Hub 读一次即入库，之后同类发布直接选用。政策按 eBay 政策 ID 命中，不按名称猜。</p></div><button type="button" disabled={readingPolicies||saving||uploading||preparing} onClick={onReadPolicies}>{readingPolicies?'正在读取…':saving||uploading||preparing?'请等待当前操作完成':'从 Seller Hub 读取政策'}</button></header>
+          <header><div><h2>07 政策与所在地</h2><p>店铺级可复用资产：从 Seller Hub 读一次即入库，之后同类发布直接选用。政策按 eBay 政策 ID 命中，不按名称猜。</p></div>
+            <div className="ebay-policy-carrier"><label><span>在架商品编号（读取载体）</span><input data-policy-carrier inputMode="numeric" placeholder="例如 189035181453" value={policyCarrierItemId} onChange={event=>onPolicyCarrierItemIdChange(event.target.value.replace(/\s+/g,''))}/></label>
+              <p className={policyCarrierCheck.ok?'ebay-policy-carrier-ok':'ebay-revise-category-error'}>{policyCarrierCheck.ok?`读取时只用它开一次修改页，政策入库后本店所有商品都能选用。上次抓取：${policyFetchedAtText}。`:policyCarrierCheck.message}</p></div>
+            <button type="button" disabled={readingPolicies||saving||uploading||preparing} onClick={onReadPolicies}>{readingPolicies?'正在读取…':saving||uploading||preparing?'请等待当前操作完成':'从 Seller Hub 读取政策'}</button></header>
           {businessPolicies.length===0&&<p className="ebay-revise-category-error">尚未读取到店铺政策。点上方按钮开一次修改页即可抓取；读取前这些字段保留 eBay 线上原值。</p>}
           <div className="ebay-revise-form-grid">
             {POLICY_FIELDS.map(([kind,label])=>{
