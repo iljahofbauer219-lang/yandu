@@ -453,6 +453,7 @@ contextBridge.exposeInMainWorld('desktop', {
     updateLocalProduct: (localProductId:string,changes:EbayLocalProductUpdateInput):Promise<EbayLocalProduct> => ipcRenderer.invoke('ebay:local-products:update',localProductId,changes),
     localProductMediaData: (localProductId:string,mediaId:string):Promise<string> => ipcRenderer.invoke('ebay:local-products:media-data',localProductId,mediaId),
     addLocalProductMedia: (localProductId:string,input:EbayLocalProductMediaUploadInput):Promise<EbayLocalProductMedia> => ipcRenderer.invoke('ebay:local-products:media-add',localProductId,input),
+    downloadLocalProductMedia: (localProductId:string,urls:string[]):Promise<{media:EbayLocalProductMedia[];failures:string[]}> => ipcRenderer.invoke('ebay:local-products:media-download',localProductId,urls),
     inspectLocalProductImages: (localProductId:string):Promise<EbayImageVisualInspectionReport> => ipcRenderer.invoke('ebay:local-products:inspect-visual',localProductId),
     inspectFinalImages: (imageUrls:string[]):Promise<EbayImageInspectionReport> => ipcRenderer.invoke('ebay:images:inspect-final',imageUrls),
     localProductImageVisualReport: (localProductId:string):Promise<EbayImageVisualInspectionReport|null> => ipcRenderer.invoke('ebay:local-products:visual-report',localProductId),

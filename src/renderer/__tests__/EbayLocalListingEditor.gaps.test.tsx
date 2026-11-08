@@ -174,3 +174,43 @@ describe('EbayLocalListingEditor · 页眉范围声明', () => {
     expect(sibling).toContain('最终提交按钮仍需由您点击')
   })
 })
+
+// D1 断点：「进入发布」曾把远程 AI 出图标成 DOWNLOADED 且 localPath 为空——编辑器判据偏松于是绿灯，
+// 主进程 updateEbayLocalProduct 的判据偏严（DOWNLOADED 且 localPath 非空）必然拒保存。
+// 这里把两侧钉成同一判据：没有本地文件就不算已下载。
+describe('EbayLocalListingEditor · 图片必须真在本地（D1）', () => {
+  const remoteOnly=(over:Partial<EbayLocalProductUpdateInput['media'][number]>={})=>draftOf({
+    media:[{id:'ai-opt-1',mediaType:'IMAGE',sortOrder:0,remoteUrl:'https://img/a.jpg',localPath:'',mimeType:'image/jpeg',width:0,height:0,fileSize:0,sha256:'',downloadStatus:'DOWNLOADED',...over}]
+  })
+
+  it('DOWNLOADED 但 localPath 为空的远程图判为「至少需要 1 张已保存到本地的商品图片」', () => {
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(remoteOnly())}/>)
+    expect(html).toContain('至少需要 1 张已保存到本地的商品图片')
+  })
+
+  it('落盘失败的 FAILED 行仍用远程地址显示，不因为下载失败出破图', () => {
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(remoteOnly({downloadStatus:'FAILED'}))}/>)
+    expect(html).toContain('src="https://img/a.jpg"')
+    expect(html).not.toContain('cross-media://local')
+    expect(html).toContain('至少需要 1 张已保存到本地的商品图片')
+  })
+
+  it('localPath 真实的 DOWNLOADED 行不再报缺图（判据只认本地文件）', () => {
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(remoteOnly({localPath:'/tmp/a.jpg',width:1200,height:1200,fileSize:1}))}/>)
+    expect(html).not.toContain('至少需要 1 张已保存到本地的商品图片')
+    expect(html).toContain('src="cross-media://local/%2Ftmp%2Fa.jpg"')
+  })
+
+  it('源码守卫：「进入发布」不再伪造 DOWNLOADED，内联编辑器接到真下载与真上传', () => {
+    const appSource=readFileSync(path.resolve(process.cwd(),'src/renderer/App.tsx'),'utf8')
+    expect(appSource).not.toContain("downloadStatus:'DOWNLOADED' as const")
+    expect(appSource).not.toContain("/^https?:\\/\\//.test(url)?'':url")
+    expect(appSource).toContain('downloadLocalProductMedia(')
+    const inline=appSource.split('\n').find(item=>item.includes('<EbayLocalListingEditor inline'))??''
+    expect(inline).not.toBe('')
+    expect(inline).not.toContain('onUpload={()=>{}}')
+    expect(inline).toContain('onUpload={files=>void uploadPublishEditorMedia(files)}')
+    expect(inline).not.toContain('uploading={false}')
+    expect(inline).toContain('uploading={busy===`publish-media:${publishEditorProduct?.id}`}')
+  })
+})

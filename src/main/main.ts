@@ -34,6 +34,7 @@ import { ArkVideoService } from './services/ArkVideoService'
 import { EbayImageComplianceVisionService } from './services/EbayImageComplianceVisionService'
 import { EbayImageGroundingService } from './services/EbayImageGroundingService'
 import { importProductUrl } from './services/ImageSourceService'
+import { downloadUrlsToLocalMedia, type LocalMediaDownloadResult } from './ebayLocalMediaFiles'
 import { imageHashService } from './services/ImageHashService'
 import { parseEbayListingsReport } from './services/EbayReportService'
 import { ServerProcessManager } from './services/ServerProcessManager'
@@ -1051,6 +1052,14 @@ function addEbayLocalProductMedia(localProductId:string,input:EbayLocalProductMe
   fs.writeFileSync(localPath,buffer)
   const dimensions=imageDimensions(buffer,selected.format)
   return {id,mediaType:'IMAGE',sortOrder:product.snapshot.media.length,remoteUrl:'',localPath,mimeType,width:dimensions.width,height:dimensions.height,fileSize:buffer.length,sha256:createHash('sha256').update(buffer).digest('hex'),downloadStatus:'DOWNLOADED'}
+}
+
+/** 优品草稿的 AI 出图（远程地址）真下载到本地目录；单张失败返回 FAILED 行并在 failures 点名，只有本地产品缺失才抛。 */
+async function downloadEbayLocalProductMediaFiles(localProductId:string,urls:string[]):Promise<LocalMediaDownloadResult> {
+  if(!database)throw new Error('数据库尚未初始化')
+  const product=database.getEbayLocalProducts().find(item=>item.id===localProductId)
+  if(!product)throw new Error('本地产品不存在或已删除')
+  return downloadUrlsToLocalMedia(urls,{storeId:product.storeId,listingId:product.listingId,rootDir:path.join(app.getPath('userData'),'ebay-local-products')})
 }
 
 function withEbayLocalMediaFileSizes(products:EbayLocalProduct[]):EbayLocalProduct[] {
@@ -3399,6 +3408,7 @@ ipcMain.handle('ebay:local-products:core-terms', async (_event, localProductId:s
 })
 ipcMain.handle('ebay:local-products:media-data', (_event, localProductId:string, mediaId:string) => readEbayLocalProductMedia(localProductId,mediaId))
 ipcMain.handle('ebay:local-products:media-add', (_event, localProductId:string, input:EbayLocalProductMediaUploadInput) => addEbayLocalProductMedia(localProductId,input))
+ipcMain.handle('ebay:local-products:media-download', (_event, localProductId:string, urls:string[]) => downloadEbayLocalProductMediaFiles(localProductId,urls))
 ipcMain.handle('ebay:local-products:inspect-visual', async (_event, localProductId:string):Promise<EbayImageVisualInspectionReport> => {
   if(!database)throw new Error('eBay 本地产品库尚未初始化')
   const product=database.getEbayLocalProducts().find(item=>item.id===localProductId)

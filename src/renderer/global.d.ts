@@ -392,6 +392,7 @@ declare global {
         updateLocalProduct(localProductId:string,changes:EbayLocalProductUpdateInput):Promise<EbayLocalProduct>
         localProductMediaData(localProductId:string,mediaId:string):Promise<string>
         addLocalProductMedia(localProductId:string,input:EbayLocalProductMediaUploadInput):Promise<EbayLocalProductMedia>
+        downloadLocalProductMedia(localProductId:string,urls:string[]):Promise<{media:EbayLocalProductMedia[];failures:string[]}>
         inspectLocalProductImages(localProductId:string):Promise<EbayImageVisualInspectionReport>
         inspectFinalImages(imageUrls:string[]):Promise<EbayImageInspectionReport>
         localProductImageVisualReport(localProductId:string):Promise<EbayImageVisualInspectionReport|null>
