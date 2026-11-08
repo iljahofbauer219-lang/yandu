@@ -171,10 +171,67 @@ describe('EbayLocalListingEditor · 页眉范围声明', () => {
     expect(line).toContain('未能自动写入')
     expect(line).toContain(`本地 V\${product.versionCount}`)
     expect(line).toContain('图片仍由您在页面人工核对，系统没有提交')
-    // 「进入发布」副本（App.tsx:4172）保持同口径，两处不得各自漂移
-    const sibling=appSource.split('\n').find(item=>item.includes('setNotice(`已在 Seller Hub 填写'))??''
+    // 「进入发布」副本（App.tsx:4172）保持同口径，两处不得各自漂移：路由第一句只能来自同一条 lead
+    const sibling=appSource.split('\n').find(item=>item.includes('setNotice(`${ebayPreparedNoticeLead(result,filled)}'))??''
+    expect(sibling).not.toBe('')
     expect(sibling).toContain('未能自动写入')
     expect(sibling).toContain('最终提交按钮仍需由您点击')
+  })
+})
+
+// (b) 三路由真机取证：PALLET 货盘产品没有 eBay 在架编号，只能按平台类目开首次刊登页；连类目也没有时只能开「List an item」。
+// 对这两类产品继续说「Seller Hub 修改页」「沿用线上原值」是假话，按钮与就绪度句子必须随路由改写；
+// 但门禁只点名不阻断——任何路由下主按钮都得能点（拦截+显示指导会被读成「代码没生效」）。
+describe('EbayLocalListingEditor · 开页路由文案', () => {
+  const primaryTag=(over:Partial<ComponentProps<typeof EbayLocalListingEditor>>={})=>{
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(),over)}/>)
+    const buttons=html.match(/<button class="primary"[^>]*>[\s\S]*?<\/button>/g)??[]
+    return buttons[buttons.length-1]??''
+  }
+  const conditionGap={kind:'FIELD' as const,name:'condition',label:'商品状况'}
+
+  it('未传路由时保持修改页口径：按钮写「修改」，缺口句仍说沿用 eBay 线上原值', () => {
+    expect(primaryTag()).toContain('保存并准备到 eBay 修改')
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({condition:''}),{gaps:[conditionGap]})}/>)
+    expect(html).toContain('商品状况 未在 APP 记录')
+    expect(html).toContain('沿用 eBay 线上原值')
+    expect(html).not.toContain('首次刊登')
+  })
+
+  it('首次刊登路由：按钮写「首次刊登」，点名按平台类目开页，且不再谎称沿用线上原值', () => {
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({condition:''}),{gaps:[conditionGap],routeKind:'add'})}/>)
+    expect(primaryTag({routeKind:'add'})).toContain('保存并准备到 eBay 首次刊登')
+    expect(html).toContain('按上方「平台类目」选定的类目打开 eBay 首次刊登页')
+    expect(html).not.toContain('沿用 eBay 线上原值')
+    expect(html).not.toContain('Seller Hub 修改页')
+  })
+
+  it('新建刊登路由：按钮写「新建刊登」，点名先在「平台类目」定类目，且按钮照样能点', () => {
+    const tag=primaryTag({routeKind:'prelist'})
+    expect(tag).toContain('保存并打开 eBay 新建刊登')
+    expect(tag).not.toContain('disabled')
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(),{routeKind:'prelist'})}/>)
+    expect(html).toContain('请先在上方「平台类目」确定类目')
+    expect(html).not.toContain('沿用 eBay 线上原值')
+  })
+
+  it('准备进行中：主按钮一律禁用，进度文案也按路由说页面名', () => {
+    expect(primaryTag({routeKind:'prelist',preparing:true})).toContain('正在打开 eBay…')
+    expect(primaryTag({routeKind:'prelist',preparing:true})).toContain('disabled')
+    expect(primaryTag({routeKind:'add',preparing:true})).toContain('正在准备 eBay 首次刊登页…')
+  })
+
+  it('源码守卫：两个编辑器调用点都带路由与收缩后的缺口集合，两条准备提示共用同一条路由口径', () => {
+    const appSource=readFileSync(path.resolve(process.cwd(),'src/renderer/App.tsx'),'utf8')
+    const callSites=appSource.split('\n').filter(line=>line.includes('<EbayLocalListingEditor'))
+    expect(callSites.length).toBe(2)
+    callSites.forEach(line=>{
+      expect(line).toContain('routeKind={')
+      expect(line).toContain('ebayHardRequiredFieldsForRoute(')
+    })
+    expect(appSource).toContain('const ebayPreparedNoticeLead=')
+    // 两处 prepare 完成提示只能经同一条 lead，各自漂移即红
+    expect(appSource.match(/ebayPreparedNoticeLead\(result,filled\)/g)).toHaveLength(2)
   })
 })
 

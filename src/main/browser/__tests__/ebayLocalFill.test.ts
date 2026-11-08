@@ -70,6 +70,8 @@ function makeHost(page: { ready?: boolean; submitButtonDetected?: boolean } = {}
       url: 'https://www.ebay.com/sl/list?mode=ReviseItem&itemId=T100',
       login: false,
       verification: false,
+      // (b) 路由改造后页脚本恒带回 errorPage 读数（eBay 把开页拒成错误页时据此立即中止）；这里按「没落到错误页」如实冒充
+      errorPage: { detected: false, reason: '' },
       ready: page.ready ?? true,
       filledFields: ['标题'],
       skippedFields: [],
@@ -314,8 +316,9 @@ describe('Seller Hub 灌字段脚本 · 循环语义守卫', () => {
   })
 
   it('标题字段始终读不到时按既有中文错误硬点名（扩到 11 项后 ready 判定不得被稀释）', async () => {
+    // 这条守的是「修改页」这条老路：PRODUCT 的 T100 会被路由判成首次刊登，所以这里换一个真在架编号，让文案逐字锁回原句。
     const { host, executeJavaScript } = makeHost({ ready: false })
-    await expect(prepareMethod.call(host, 'ebay:s1', PRODUCT))
+    await expect(prepareMethod.call(host, 'ebay:s1', { ...PRODUCT, listingId: '189035181453', platformCategoryId: '' }))
       .rejects
       .toThrow('Seller Hub 修改页尚未加载出标题字段，请确认商品仍在线后重试')
     expect(executeJavaScript).toHaveBeenCalledTimes(20)

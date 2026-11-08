@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { EbayCategorySpecificRequirement, EbayLocalProductUpdateInput, EbayProductDetails } from '../contracts'
-import { EBAY_HARD_REQUIRED_FIELDS, extractPolicyIdFromLabel, formatFormGaps, formValuesFromInput, mergeEbayLocalDetailsEdit, normaliseAspectName, requiredFormGaps } from '../ebayListingForm'
+import { EBAY_HARD_REQUIRED_FIELDS, ebayHardRequiredFieldsForRoute, extractPolicyIdFromLabel, formatFormGaps, formValuesFromInput, mergeEbayLocalDetailsEdit, normaliseAspectName, requiredFormGaps } from '../ebayListingForm'
 
 const requirement=(name:string,required:boolean,value=''):EbayCategorySpecificRequirement=>({name,required,value,options:[],source:'SELLER_HUB'})
 
@@ -183,6 +183,47 @@ describe('requiredFormGaps', () => {
   it('建议零售价 与 零售价 不被归一成同一个键，两条空必填各自点名', () => {
     const gaps=requiredFormGaps([requirement('建议零售价',true),requirement('零售价',true)],filled)
     expect(gaps.filter(item=>item.kind==='ASPECT').map(item=>item.label)).toEqual(['建议零售价','零售价'])
+  })
+})
+
+// (b) 真机取证：AddItem 页上付款/运输政策是 eBay 自带默认值的 combobox，退货政策/商品所在地/邮编根本没有可编辑控件，
+// 按 ReviseItem 的硬必填全集点名「APP 尚未记录」是把 eBay 自己负责的项算成用户的债；首次刊登与新建刊登两条路由必须收缩集合。
+describe('ebayHardRequiredFieldsForRoute', () => {
+  const ebayOwns=['paymentPolicy','shippingPolicy','returnPolicy','itemLocation','postalCode']
+
+  it('revise 路由保持与类目无关的硬必填全集，既有口径零漂移', () => {
+    expect(ebayHardRequiredFieldsForRoute('revise').map(item=>item.key).sort()).toEqual(
+      ['condition','itemLocation','listingFormat','paymentPolicy','postalCode','quantity','returnPolicy','shippingPolicy']
+    )
+    expect(ebayHardRequiredFieldsForRoute('revise')).toEqual(EBAY_HARD_REQUIRED_FIELDS)
+  })
+
+  it('add 路由去掉 eBay 自带默认或无可编辑控件的五项，只留状况/数量/刊登格式', () => {
+    const keys=ebayHardRequiredFieldsForRoute('add').map(item=>item.key)
+    expect(keys.sort()).toEqual(['condition','listingFormat','quantity'])
+    expect(keys.some(key=>ebayOwns.includes(key))).toBe(false)
+  })
+
+  it('prelist 路由同样不把这些算成 APP 的债：APP 一个字段都不灌', () => {
+    expect(ebayHardRequiredFieldsForRoute('prelist').map(item=>item.key).sort()).toEqual(['condition','listingFormat','quantity'])
+  })
+
+  it('不传路由时返回全集，未知路由按最保守口径处理', () => {
+    expect(ebayHardRequiredFieldsForRoute()).toBe(EBAY_HARD_REQUIRED_FIELDS)
+  })
+
+  it('add 路由下空草稿不再谎报缺政策与所在地，收缩后的缺口只剩三项', () => {
+    const empty={}
+    expect(requiredFormGaps([],empty,ebayHardRequiredFieldsForRoute('add'))).toEqual([
+      {kind:'FIELD',name:'condition',label:'商品状况'},
+      {kind:'FIELD',name:'quantity',label:'数量'},
+      {kind:'FIELD',name:'listingFormat',label:'刊登格式'}
+    ])
+  })
+
+  it('收缩只动字段集合，必填类目属性缺口一条不少', () => {
+    const gaps=requiredFormGaps([requirement('Brand',true),requirement('Type',true)],{},ebayHardRequiredFieldsForRoute('add'))
+    expect(gaps.filter(item=>item.kind==='ASPECT').map(item=>item.label)).toEqual(['Brand','Type'])
   })
 })
 

@@ -1,4 +1,5 @@
 import type { EbayCategorySpecificRequirement, EbayFormFieldSchema, EbayLocalProductUpdateInput, EbayProductDetails } from './contracts'
+import type { EbayListingRouteKind } from './ebayListingTarget'
 
 /** 把渲染器提交的编辑合并回旧快照详情：只覆盖本次真正提交的字段，其余（属性/状况/视频/政策/数量/所在地）原样保留。 */
 export function mergeEbayLocalDetailsEdit(previous:EbayProductDetails,changes:EbayLocalProductUpdateInput):EbayProductDetails {
@@ -58,6 +59,15 @@ export const EBAY_HARD_REQUIRED_FIELDS:EbayFormFieldSchema[]=[
   field('itemLocation','商品所在地','TEXT'),
   field('postalCode','所在地邮编','TEXT')
 ]
+
+/** AddItem/prelist 页上这五项由 eBay 自带默认或根本没有可编辑控件（(b) 首次刊登直入取证），APP 既灌不进去也不该把它们算成操作手的债。 */
+const EBAY_SIDE_ONLY_ON_ADD_ROUTE=['paymentPolicy','shippingPolicy','returnPolicy','itemLocation','postalCode']
+
+/** 门禁硬必填按开页路由收缩：未知或未传路由一律按全集，宁可多点名也不漏项。 */
+export function ebayHardRequiredFieldsForRoute(kind?:EbayListingRouteKind):EbayFormFieldSchema[] {
+  if(kind==='add'||kind==='prelist')return EBAY_HARD_REQUIRED_FIELDS.filter(item=>!EBAY_SIDE_ONLY_ON_ADD_ROUTE.includes(item.key))
+  return EBAY_HARD_REQUIRED_FIELDS
+}
 
 /** 只剥离作为标签后缀的必填标记：`Required Parts`、`建议零售价` 本身是 eBay 真属性名，削成 `Parts`、`零售价` 会让两条必填属性在缺口计算里撞成同一个键，缺口静默消失即假绿灯。 */
 export function normaliseAspectName(name:string):string {

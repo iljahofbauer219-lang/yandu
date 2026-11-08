@@ -305,6 +305,10 @@ export interface EbayLocalListingRequirements {
 
 export interface EbayLocalRevisionPreparationResult {
   reviseUrl:string
+  /** 本次实际打开的是哪类 eBay 页面：修改在架商品 / 按类目首次刊登 / eBay 新建刊登首页 */
+  routeKind:'revise'|'add'|'prelist'
+  /** 面向操作手的中文点名：为什么开这个页面、还需要人工补什么 */
+  routeNote:string
   filledFields:string[]
   skippedFields:string[]
   warnings:string[]

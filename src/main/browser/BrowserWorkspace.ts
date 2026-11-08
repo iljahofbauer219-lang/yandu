@@ -10,6 +10,7 @@ import { shouldActivateSupplyView } from '../../shared/supplyAutoEnter'
 import { shouldRetryWithoutProxy } from '../../shared/ebayDirectFallback'
 import { EBAY_SITE_ROOT_DOMAINS } from '../../shared/ebaySites'
 import { extractPolicyIdFromLabel } from '../../shared/ebayListingForm'
+import { resolveEbayListingTargetForProduct } from '../../shared/ebayListingTarget'
 import { EBAY_POLICY_MODEL_FIELDS, parseEbayPolicyModel } from '../../shared/ebayPolicyModel'
 import { EBAY_LOCAL_FILL_TARGETS, ebayLocalFillPayload } from './ebayLocalFill'
 import { pickGigaMainImage } from '../../shared/gigaImageResolve'
@@ -1872,10 +1873,38 @@ export class BrowserWorkspace {
     const snapshot=product.snapshot
     const listing=snapshot.sourceListing
     const details=snapshot.details
-    const reviseUrl=`https://www.ebay.com/sl/list?mode=ReviseItem&itemId=${encodeURIComponent(product.listingId)}&ReturnURL=${encodeURIComponent('https://www.ebay.com/sh/lst/active')}`
-    const tabId=await this.newEbayTab(accountId,`${product.title.slice(0,42)} · 本地版本待确认`,reviseUrl)
+    // 路由判定交给 shared 纯函数：货盘来源的 listingId 是 PALLET-<warehouseProductId>（本地溯源标记，不是 eBay 编号），
+    // 拼进 ReviseItem 只会被 eBay 拒成 lstng/error?reason=createOrGetDraft:…:XS_PROMISE_REJECTED。
+    // 三条 URL 形态（修改页 / 按真叶类目直入首次刊登 / 新建刊登首页）都来自 2026-11-08 现网取证。
+    const target=resolveEbayListingTargetForProduct(product)
+    const routeLabel=target.kind==='revise'?'本地版本待确认':target.kind==='add'?'首次刊登待确认':'新建刊登'
+    const tabId=await this.newEbayTab(accountId,`${product.title.slice(0,42)} · ${routeLabel}`,target.url)
     const tab=this.detailTabs.get(tabId)
     if(!tab)throw new Error('未能创建 Seller Hub 修改页面')
+    if(target.kind==='prelist') {
+      // 「List an item」首页本来就没有刊登字段：只确认落地，绝不跑灌字段脚本，也不谎报填了几项。
+      const probe=String.raw`(() => {
+        const clean=value=>(value||'').replace(/\s+/g,' ').trim();
+        const bodyText=clean(document.body?.innerText).slice(0,20000);
+        const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/signin|login/i.test(location.pathname);
+        const verification=/captcha|security check|verification code|验证码|安全验证|确认是您本人/i.test(bodyText+' '+location.href);
+        const reason=/(?:lstng|sl)\/error\?reason=([^&]*)/.exec(location.href)?.[1]||'';
+        const errorPage={detected:Boolean(reason)||/well, this is embarrassing/i.test(bodyText),reason:decode(reason)};
+        const searchBox=[...document.querySelectorAll('input')].some(input=>/brand, model|enter brand|关键词|商品词/i.test(clean(input.placeholder+' '+input.name+' '+input.id)));
+        return {url:location.href,login,verification,errorPage,ready:searchBox||/list an item|start listing|新建刊登/i.test(clean(document.title)+' '+bodyText)};
+        function decode(raw){try{return decodeURIComponent(raw.replace(/%25/g,'%'))}catch{return raw}}
+      })()`
+      let probeResult:{url:string;login:boolean;verification:boolean;ready:boolean;errorPage:{detected:boolean;reason:string}}={url:target.url,login:false,verification:false,ready:false,errorPage:{detected:false,reason:''}}
+      for(let attempt=0;attempt<20;attempt+=1){
+        probeResult=await tab.view.webContents.executeJavaScript(probe,true) as typeof probeResult
+        if(probeResult.login)throw new Error('eBay 登录会话已失效，请先完成登录')
+        if(probeResult.errorPage.detected)throw new Error(`eBay 把这次打开拒成了错误页（${probeResult.errorPage.reason||'原因未给出'}），未写入任何字段。${target.note}`)
+        if(probeResult.ready)break
+        await this.sleep(750)
+      }
+      if(!probeResult.ready)throw new Error(`eBay「List an item」新建刊登首页尚未加载出来。${target.note}`)
+      return {reviseUrl:probeResult.url,routeKind:target.kind,routeNote:target.note,filledFields:[],skippedFields:[],warnings:[target.note],submitButtonDetected:false,preparedAt:new Date().toISOString()}
+    }
     // 标题/价格沿用「存档 details 优先、线上刊登原值兜底」的既有口径（主进程完成度读数同方向）；
     // 其余字段只认 snapshot.details：APP 没记录就不进 payload，页面保留 eBay 线上原值（Task 8 裁定）。
     const payload={
@@ -1918,12 +1947,14 @@ export class BrowserWorkspace {
       if(desired.localImageCount)warnings.push('本地已保存 '+desired.localImageCount+' 张图片；为防止误覆盖线上媒体，图片仍需在本页人工核对。');
       warnings.push('本次填写标题、描述、价格、数量、商品状况、付款/运输/退货政策、商品所在地、邮编与 SKU；图片、类目与业务政策内容仍需在页面人工核对，且本次尚未提交，最终修改仍由您在 eBay 页面点击确认。');
       let banner=document.getElementById('__cross_border_local_revision_guard');if(!banner){banner=document.createElement('div');banner.id='__cross_border_local_revision_guard';banner.style.cssText='position:fixed;z-index:2147483647;left:20px;right:20px;bottom:20px;padding:14px 18px;border:2px solid #12a9a3;border-radius:12px;background:#e8faf8;color:#075b57;font:700 14px/20px system-ui;box-shadow:0 8px 30px rgba(0,0,0,.18)';document.body.appendChild(banner)}banner.textContent='已从本地版本填写 '+[...new Set(filledFields)].length+' 项，跳过 '+[...new Set(skippedFields)].length+' 项；尚未提交。请逐项核对图片、类目、业务政策和费用，再由您点击 eBay 最终提交按钮。';
-      return {url:location.href,login,verification,ready:Boolean(titleField),filledFields:[...new Set(filledFields)],skippedFields:[...new Set(skippedFields)],warnings,submitButtonDetected};
+      const reason=/(?:lstng|sl)\/error\?reason=([^&]*)/.exec(location.href)?.[1]||'';
+      const errorPage={detected:Boolean(reason)||/well, this is embarrassing/i.test(bodyText),reason:(()=>{try{return decodeURIComponent(reason.replace(/%25/g,'%'))}catch{return reason}})()};
+      return {url:location.href,login,verification,errorPage,ready:Boolean(titleField),filledFields:[...new Set(filledFields)],skippedFields:[...new Set(skippedFields)],warnings,submitButtonDetected};
     })()`
-    let result:{url:string;login:boolean;verification:boolean;ready:boolean;filledFields:string[];skippedFields:string[];warnings:string[];submitButtonDetected:boolean}={url:reviseUrl,login:false,verification:false,ready:false,filledFields:[],skippedFields:[],warnings:[],submitButtonDetected:false}
-    for(let attempt=0;attempt<20;attempt+=1){result=await tab.view.webContents.executeJavaScript(script,true) as typeof result;if(result.login)throw new Error('eBay 登录会话已失效，请先完成登录');if(result.verification)throw new Error('eBay 要求安全验证，请人工完成后重试');if(result.ready&&result.submitButtonDetected)break;await this.sleep(750)}
-    if(!result.ready)throw new Error('Seller Hub 修改页尚未加载出标题字段，请确认商品仍在线后重试')
-    return {reviseUrl:result.url,filledFields:result.filledFields,skippedFields:result.skippedFields,warnings:result.warnings,submitButtonDetected:result.submitButtonDetected,preparedAt:new Date().toISOString()}
+    let result:{url:string;login:boolean;verification:boolean;errorPage:{detected:boolean;reason:string};ready:boolean;filledFields:string[];skippedFields:string[];warnings:string[];submitButtonDetected:boolean}={url:target.url,login:false,verification:false,errorPage:{detected:false,reason:''},ready:false,filledFields:[],skippedFields:[],warnings:[],submitButtonDetected:false}
+    for(let attempt=0;attempt<20;attempt+=1){result=await tab.view.webContents.executeJavaScript(script,true) as typeof result;if(result.login)throw new Error('eBay 登录会话已失效，请先完成登录');if(result.verification)throw new Error('eBay 要求安全验证，请人工完成后重试');if(result.errorPage.detected)throw new Error(`eBay 把这次打开拒成了错误页（${result.errorPage.reason||'原因未给出'}），未写入任何字段。${target.note}`);if(result.ready&&result.submitButtonDetected)break;await this.sleep(750)}
+    if(!result.ready)throw new Error(target.kind==='revise'?'Seller Hub 修改页尚未加载出标题字段，请确认商品仍在线后重试':`eBay 首次刊登页尚未加载出标题字段，请稍后重试或在页面人工填写。${target.note}`)
+    return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledFields:result.filledFields,skippedFields:result.skippedFields,warnings:[target.note,...result.warnings],submitButtonDetected:result.submitButtonDetected,preparedAt:new Date().toISOString()}
   }
 
   async prepareEbayListingRevision(accountId:string,draft:EbayOptimizationDraft):Promise<{reviseUrl:string;categorySpecifics:EbayCategorySpecificRequirement[];filledFields:string[];warnings:string[];submitButtonDetected:boolean}> {
