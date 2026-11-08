@@ -130,7 +130,7 @@ export async function downloadUrlsToLocalMedia(urls:string[],input:{storeId:stri
   fs.mkdirSync(directory,{recursive:true})
   const fetchImpl=input.fetchImpl||globalThis.fetch
   const media:EbayLocalProductMedia[]=new Array(targets.length)
-  const failures:string[]=[]
+  const failures:Array<{index:number;reason:string}>=[]
   let nextIndex=0
   const downloadNext=async()=>{
     while(nextIndex<targets.length) {
@@ -152,8 +152,14 @@ export async function downloadUrlsToLocalMedia(urls:string[],input:{storeId:stri
           mimeType=inline[1].toLowerCase()
           buffer=inline[2]?Buffer.from(inline[3],'base64'):Buffer.from(decodeURIComponent(inline[3]))
         } else {
+          // 抓取地址来自优品草稿（半可信），只放行 http(s)：file:/ftp: 之类会把手写 URLs 变成本地文件读取口。
+          let protocol:string
+          try { protocol=new URL(remoteUrl).protocol } catch { throw new Error('图片地址格式无效') }
+          if(protocol!=='https:'&&protocol!=='http:')throw new Error(`不支持的图片地址协议：${protocol}`)
           const response=await fetchImpl(remoteUrl,{signal:AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),headers:{'User-Agent':'Mozilla/5.0'}})
           if(!response.ok)throw new Error(`HTTP ${response.status}`)
+          const declared=Number(response.headers.get('content-length')||'0')
+          if(declared>MAX_IMAGE_BYTES)throw new Error('单张图片不能超过12MB')
           buffer=Buffer.from(await response.arrayBuffer())
           mimeType=(response.headers.get('content-type')||'').split(';')[0].toLowerCase()
         }
@@ -164,15 +170,25 @@ export async function downloadUrlsToLocalMedia(urls:string[],input:{storeId:stri
         const dimensions=imageDimensions(buffer,selected.format)
         if(!dimensions.width||!dimensions.height)throw new Error('无法识别图片尺寸')
         const localPath=path.join(directory,`${hash}.${selected.extension}`)
-        fs.writeFileSync(localPath,buffer)
+        // 先写临时名再改名：直接写终名的话，中途断电/磁盘写满留下的半张图会被下一轮当成完好缓存复用，
+        // 坏图从此再也重下不回来，还会带着截断后的 sha256 通过主进程校验发布出去。
+        const stagingPath=`${localPath}.${process.pid}.tmp`
+        try {
+          fs.writeFileSync(stagingPath,buffer)
+          fs.renameSync(stagingPath,localPath)
+        } catch(writeError) {
+          try { fs.rmSync(stagingPath,{force:true}) } catch {}
+          throw writeError
+        }
         media[index]=downloadedRow(remoteUrl,index,localPath,buffer,mimeType,dimensions.width,dimensions.height)
       } catch(error) {
         const reason=error instanceof Error?error.message:'未知错误'
-        failures.push(`第 ${index+1} 张：${reason}`)
+        failures.push({index,reason})
         media[index]=failedRow(remoteUrl,index)
       }
     }
   }
   await Promise.all(Array.from({length:Math.min(DOWNLOAD_CONCURRENCY,targets.length)},()=>downloadNext()))
-  return {media,failures}
+  // 并发下载完成顺序不定，点名按张序排好， renderer 只截前 3 条才不会每次报不同张。
+  return {media,failures:failures.sort((left,right)=>left.index-right.index).map(({index,reason})=>`第 ${index+1} 张：${reason}`)}
 }

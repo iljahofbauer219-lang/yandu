@@ -195,4 +195,38 @@ describe('ebayLocalMediaFiles · downloadUrlsToLocalMedia', () => {
     expect(mainEntries.length).toBeGreaterThan(8)
     expect(Object.entries(ebayImageFormats).map(([mimeType,entry])=>`${mimeType}=${entry.format}/${entry.extension}`).sort()).toEqual(mainEntries.sort())
   })
+
+  it('非 http(s) 协议不发请求直接判 FAILED，本地文件读取口封死', async () => {
+    const rootDir=workspace()
+    const fetchImpl=okFetch()
+    const result=await downloadUrlsToLocalMedia(['file:///etc/passwd'],{storeId:'s1',listingId:'L1',rootDir,fetchImpl})
+    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(result.media[0].downloadStatus).toBe('FAILED')
+    expect(result.failures).toEqual(['第 1 张：不支持的图片地址协议：file:'])
+    expect(fs.existsSync(path.join(rootDir,'s1','L1','ai-opt'))?fs.readdirSync(path.join(rootDir,'s1','L1','ai-opt')):[]).toEqual([])
+  })
+
+  it('落盘走「临时名＋改名」，绝不直接写最终路径——半张图一旦被当成完好缓存就再也重下不回来', async () => {
+    const source=fs.readFileSync(path.resolve(process.cwd(),'src/main/ebayLocalMediaFiles.ts'),'utf8')
+    expect(source).toContain('fs.writeFileSync(stagingPath,buffer)')
+    expect(source).toContain('fs.renameSync(stagingPath,localPath)')
+    expect(source).not.toMatch(/fs\.writeFileSync\(localPath/)
+    const rootDir=workspace()
+    const url=urlOf('atomic.jpg')
+    await downloadUrlsToLocalMedia([url],{storeId:'s1',listingId:'L1',rootDir,fetchImpl:okFetch()})
+    expect(fs.readdirSync(path.join(rootDir,'s1','L1','ai-opt'))).toEqual([`${hashOf(url)}.jpg`])
+  })
+
+  it('并发失败的点名按张序输出，第 N 张不随完成顺序漂移', async () => {
+    const rootDir=workspace()
+    const slow=urlOf('slow.jpg')
+    const fast=urlOf('fast.jpg')
+    const fetchImpl=vi.fn(async(input:string)=>{
+      if(input===slow)await new Promise(resolve=>setTimeout(resolve,30))
+      return new Response('',{status:500})
+    })
+    const result=await downloadUrlsToLocalMedia([slow,fast],{storeId:'s1',listingId:'L1',rootDir,fetchImpl:fetchImpl as unknown as typeof fetch})
+    expect(result.failures).toEqual(['第 1 张：HTTP 500','第 2 张：HTTP 500'])
+    expect(result.media.map(item=>item.remoteUrl)).toEqual([slow,fast])
+  })
 })
