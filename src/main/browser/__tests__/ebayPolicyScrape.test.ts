@@ -23,7 +23,8 @@ import { BrowserWorkspace, EBAY_POLICY_SCRAPE_KINDS } from '../BrowserWorkspace'
 
 type Host = Record<string, unknown>
 type RawOption = { kind: string; raw: string; selected: boolean }
-type PageResult = { ready?: boolean; categorySpecifics?: unknown[]; policyOptions?: RawOption[]; url?: string }
+type ModelField = 'paymentPolicy' | 'shippingPolicy' | 'returnPolicy'
+type PageResult = { ready?: boolean; categorySpecifics?: unknown[]; policyOptions?: RawOption[]; policyModels?: Partial<Record<ModelField, string>>; url?: string }
 type InspectMethod = (this: Host, accountId: string, listingId: string, title: string) => Promise<{
   sourceUrl: string
   categorySpecifics: unknown[]
@@ -37,6 +38,19 @@ const source = (relative: string) => readFileSync(path.resolve(process.cwd(), re
 
 const CATEGORY = [{ name: 'Brand', required: true, value: '', options: [], source: 'SELLER_HUB' }]
 
+/** 现网内嵌模型的形状：文案是 textSpans 数组，编号在 option.value，在架数另起一段文字。 */
+const modelSlice = (name: string, selected: number, options: Array<[number, string, string]>): string =>
+  JSON.stringify({
+    name,
+    value: selected,
+    label: { _type: 'TextualDisplay', textSpans: [{ _type: 'TextSpan', text: name }] },
+    options: options.map(([value, text, count]) => ({
+      value,
+      label: { _type: 'TextualDisplay', textSpans: [{ _type: 'TextSpan', text }] },
+      ...(count ? { listingCount: { _type: 'TextualDisplay', textSpans: [{ _type: 'TextSpan', text: count }] } } : {})
+    }))
+  })
+
 /** 用 fixtures 冒充内嵌浏览器：executeJavaScript 收到真实页脚本字符串，返回 page 里给定的原始文本。 */
 function makeHost(page: PageResult = {}) {
   const scripts: string[] = []
@@ -48,7 +62,8 @@ function makeHost(page: PageResult = {}) {
       verification: false,
       ready: page.ready ?? true,
       categorySpecifics: page.categorySpecifics ?? CATEGORY,
-      policyOptions: page.policyOptions ?? []
+      policyOptions: page.policyOptions ?? [],
+      policyModels: { paymentPolicy: '', shippingPolicy: '', returnPolicy: '', ...(page.policyModels ?? {}) }
     }
   })
   const host: Host = {
@@ -110,10 +125,10 @@ describe('ReviseItem 政策抓取 · TS 侧映射', () => {
 })
 
 describe('ReviseItem 政策抓取 · 缺口点名不阻断', () => {
-  it('政策下拉为空时仍正常返回，点名「未读取到政策下拉」而不抛错', async () => {
+  it('整块政策都没读到仍正常返回，点名「未读取到付款/运输/退货政策」而不抛错', async () => {
     const { policies, warnings } = await inspect({ policyOptions: [] })
     expect(policies).toEqual([])
-    expect(warnings).toContain('页面未读取到付款/运输/退货政策下拉；请在 Seller Hub 修改页确认政策区块已加载后重试')
+    expect(warnings).toContain('页面未读取到付款/运输/退货政策；本地政策保持上一次抓取的结果，请在 Seller Hub 修改页确认政策区块已加载后重试')
     expect(warnings).not.toContain('页面未读取到类目属性；可能是页面结构变化或该类目没有可见属性')
   })
 
@@ -121,10 +136,10 @@ describe('ReviseItem 政策抓取 · 缺口点名不阻断', () => {
     const { warnings } = await inspect({ policyOptions: [], categorySpecifics: [] })
     expect(warnings).toHaveLength(2)
     expect(warnings[0]).toContain('页面未读取到类目属性')
-    expect(warnings[1]).toContain('页面未读取到付款/运输/退货政策下拉')
+    expect(warnings[1]).toContain('页面未读取到付款/运输/退货政策')
   })
 
-  it('某类读到选项但全类解析不出编号 → 只点名那一类，与「没读到下拉」区分开', async () => {
+  it('某类读到选项但全类解析不出编号 → 只点名那一类，与「整类没读到」区分开', async () => {
     const { policies, warnings } = await inspect({
       policyOptions: [
         { kind: 'PAYMENT', raw: 'eBay 管理付款 (257217501013)', selected: true },
@@ -134,9 +149,9 @@ describe('ReviseItem 政策抓取 · 缺口点名不阻断', () => {
     })
     expect(policies.filter(item => item.kind === 'RETURN').every(item => item.policyId === undefined)).toBe(true)
     expect(warnings).toHaveLength(1)
-    expect(warnings[0]).toContain('退货政策下拉读到了选项但都解析不出政策编号')
+    expect(warnings[0]).toContain('退货政策读到了选项但都解析不出政策编号')
     expect(warnings[0]).toContain('本地退货政策保持上一次抓取的结果')
-    for (const silent of ['付款', '运输', '发货']) expect(warnings.some(item => item.includes(`${silent}政策下拉`))).toBe(false)
+    for (const silent of ['付款', '运输', '发货']) expect(warnings.some(item => item.includes(`${silent}政策读到了选项`))).toBe(false)
   })
 
   it('多类同时解析不出编号 → 每类各点名一次（不再汇总成一条），且点名用中文不带裸英文类别串', async () => {
@@ -148,14 +163,14 @@ describe('ReviseItem 政策抓取 · 缺口点名不阻断', () => {
       ]
     })
     expect(warnings).toHaveLength(2)
-    expect(warnings[0]).toContain('付款政策下拉读到了选项但都解析不出政策编号')
-    expect(warnings[1]).toContain('发货政策下拉读到了选项但都解析不出政策编号')
-    expect(warnings.some(item => item.includes('退货政策下拉'))).toBe(false)
-    expect(warnings.some(item => item.includes('运输政策下拉'))).toBe(false)
+    expect(warnings[0]).toContain('付款政策读到了选项但都解析不出政策编号')
+    expect(warnings[1]).toContain('发货政策读到了选项但都解析不出政策编号')
+    expect(warnings.some(item => item.includes('退货政策读到了选项'))).toBe(false)
+    expect(warnings.some(item => item.includes('运输政策读到了选项'))).toBe(false)
     expect(warnings.every(item => !/PAYMENT|SHIPPING|RETURN|FULFILLMENT/.test(item))).toBe(true)
   })
 
-  it('全部类别都解析不出编号 → 逐类点名且不误报「未读取到政策下拉」', async () => {
+  it('全部类别都解析不出编号 → 逐类点名且不误报「未读取到政策」', async () => {
     const { warnings } = await inspect({
       policyOptions: [
         { kind: 'PAYMENT', raw: 'eBay 新版付款政策（无编号）', selected: true },
@@ -163,9 +178,9 @@ describe('ReviseItem 政策抓取 · 缺口点名不阻断', () => {
       ]
     })
     expect(warnings).toHaveLength(2)
-    expect(warnings[0]).toContain('付款政策下拉读到了选项')
-    expect(warnings[1]).toContain('退货政策下拉读到了选项')
-    expect(warnings.some(item => item.includes('页面未读取到付款/运输/退货政策下拉'))).toBe(false)
+    expect(warnings[0]).toContain('付款政策读到了选项')
+    expect(warnings[1]).toContain('退货政策读到了选项')
+    expect(warnings.some(item => item.includes('页面未读取到付款/运输/退货政策'))).toBe(false)
   })
 })
 
@@ -213,6 +228,69 @@ describe('ReviseItem 政策抓取 · 页内脚本边界', () => {
     expect(host.newEbayTab).toHaveBeenCalledTimes(1)
     expect(requirements.sourceUrl).toContain('mode=ReviseItem')
     expect(requirements.policies).toHaveLength(1)
+  })
+})
+
+describe('ReviseItem 政策抓取 · 内嵌模型优先（R2 现网控件是 combobox）', () => {
+  const LIVE_MODELS = {
+    paymentPolicy: modelSlice('paymentPolicyId', 257211994013, [[257211994013, 'eBay immediate payment', '[3409 listings]'], [257217501013, 'eBay Managed Payments (257217501013)', '[1 listing]']] as Array<[number, string, string]>),
+    shippingPolicy: modelSlice('shippingPolicyId', 266273287013, [[262233981013, '云仓包邮', '(1901 listings)'], [266273287013, '中国直邮包邮', '(1515 listings)']] as Array<[number, string, string]>),
+    returnPolicy: modelSlice('returnsPolicyId', 262373278013, [[262373278013, '14天大健云仓退货', '(3407 listings)']] as Array<[number, string, string]>)
+  }
+
+  it('现网一页一个政策 <select> 都没有：模型三段照样抓出付款/运输/退货并带出编号', async () => {
+    const { policies, warnings } = await inspect({ policyOptions: [], policyModels: LIVE_MODELS })
+    expect(policies).toStrictEqual([
+      { kind: 'PAYMENT', label: 'eBay immediate payment', policyId: '257211994013', listingCount: 3409, selected: true },
+      { kind: 'PAYMENT', label: 'eBay Managed Payments', policyId: '257217501013', listingCount: 1, selected: false },
+      { kind: 'SHIPPING', label: '云仓包邮', policyId: '262233981013', listingCount: 1901, selected: false },
+      { kind: 'SHIPPING', label: '中国直邮包邮', policyId: '266273287013', listingCount: 1515, selected: true },
+      { kind: 'RETURN', label: '14天大健云仓退货', policyId: '262373278013', listingCount: 3407, selected: true }
+    ])
+    expect(warnings).toEqual([])
+  })
+
+  it('模型命中的那一类不再收旧下拉行（两处来源同政策会互相抹编号），未被模型覆盖的发货类仍走下拉', async () => {
+    const { policies } = await inspect({
+      policyModels: { paymentPolicy: LIVE_MODELS.paymentPolicy },
+      policyOptions: [
+        { kind: 'PAYMENT', raw: 'eBay 管理付款 (257217501013)', selected: true },
+        { kind: 'FULFILLMENT', raw: '标准发货政策 (18510002004)', selected: false }
+      ]
+    })
+    expect(policies).toStrictEqual([
+      { kind: 'PAYMENT', label: 'eBay immediate payment', policyId: '257211994013', listingCount: 3409, selected: true },
+      { kind: 'PAYMENT', label: 'eBay Managed Payments', policyId: '257217501013', listingCount: 1, selected: false },
+      { kind: 'FULFILLMENT', label: '标准发货政策', policyId: '18510002004', selected: false }
+    ])
+  })
+
+  it('模型只有付款一段 → 退货整段回落旧下拉，别把上一版能读到的类别读成空', async () => {
+    const { policies, warnings } = await inspect({
+      policyModels: { paymentPolicy: LIVE_MODELS.paymentPolicy },
+      policyOptions: [{ kind: 'RETURN', raw: '30天退货 (19007008010)', selected: false }]
+    })
+    expect(policies.map(item => `${item.kind}:${item.policyId}`)).toEqual(['PAYMENT:257211994013', 'PAYMENT:257217501013', 'RETURN:19007008010'])
+    expect(warnings).toEqual([])
+  })
+
+  it('模型原文语法坏了 → 该类回落旧下拉且不抛错（eBay 改模型结构不能让按钮变红）', async () => {
+    const { policies } = await inspect({
+      policyModels: { paymentPolicy: '{"options":[{"value":257211994013,', shippingPolicy: 'null', returnPolicy: '' },
+      policyOptions: [{ kind: 'PAYMENT', raw: 'eBay 管理付款 (257217501013)', selected: true }]
+    })
+    expect(policies).toStrictEqual([{ kind: 'PAYMENT', label: 'eBay 管理付款', policyId: '257217501013', selected: true }])
+  })
+
+  it('页内脚本仍只切原文：解析与映射一句都不在页面里做，也绝不点控件', async () => {
+    const { host, scripts } = makeHost({ policyModels: LIVE_MODELS })
+    await inspectMethod.call(host, 'ebay:s1', 'T100', 'Bracket')
+    const script = scripts[0]
+    expect(script).not.toContain('parseEbayPolicyModel')
+    for (const field of ['paymentPolicy', 'shippingPolicy', 'returnPolicy']) expect(script, field).toContain(`"${field}":{"name"`)
+    expect(script).toContain('policyModels')
+    expect(script).not.toContain('d{6,}')
+    expect(script).not.toMatch(/form\.submit\(|\.submit\(|\.click\(|type="submit"/)
   })
 })
 
