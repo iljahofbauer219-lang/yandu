@@ -9,6 +9,7 @@
 // - 翻译范围 = 任何网页（不限制域名）
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import type { BrowserState, BrowserTab, BrowserTranslationMode, EbayCollectedProduct } from '../shared/contracts'
+import { useBrowserFullscreenBounds, useBrowserSurfaceRegistration, type BrowserSurface } from './BrowserFullscreen'
 import { describeTranslateError } from './translateError'
 
 const initialAddress = ''
@@ -18,7 +19,7 @@ const initialAddress = ''
 //   避免 React StrictMode 双调用 + App.tsx IIFE 路由 remount 导致 renderer 端 useEffect 重跑问题。
 // - 本组件只负责：tab 订阅渲染、地址栏、采集插件、翻译、主动关闭兜底。
 
-export function IEBrowserPanel() {
+export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browserFullscreen: boolean; onBrowserSurface: (next: BrowserSurface | null) => void }) {
   const [browserState, setBrowserState] = useState<BrowserState | null>(null)
   const [tabs, setTabs] = useState<BrowserTab[]>([])
   const [address, setAddress] = useState(initialAddress)
@@ -109,6 +110,9 @@ export function IEBrowserPanel() {
       window.removeEventListener('resize', update)
     }
   }, [tabs.length])
+  // 顶栏「全屏」在本页可见期间接管本页浏览器
+  useBrowserSurfaceRegistration('ie', onBrowserSurface)
+  useBrowserFullscreenBounds(slotRef, tabs.length > 0, browserFullscreen)
 
   const navigate = async (event: FormEvent) => {
     event.preventDefault()
@@ -253,7 +257,7 @@ export function IEBrowserPanel() {
   }, [])
 
   return (
-    <section className="ie-browser-page">
+    <section className={`ie-browser-page${browserFullscreen?' app-browser-fullscreen':''}`}>
       <div className="ebay-browser-panel">
         <div className="tabs ebay-browser-tabs">
           <div className="tab-scroll">

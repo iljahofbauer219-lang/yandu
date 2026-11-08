@@ -21,8 +21,8 @@ form label { display:block; color:#67736e; font-size:11px; margin-top:13px; } in
 :root { --tiffany:#0abab5; --tiffany-soft:#e1f8f6; --ink:#1d1d1f; --muted:#86868b; --line:#dfe3e6; --panel:#ffffff; --canvas:#f5f5f7; --bg-app:#f5f5f7; --bg-panel:#ffffff; --bg-soft:#f6f7f8; --bg-sidebar:#fbfbfc; --text-primary:#1d1d1f; --text-secondary:#67736e; --text-muted:#92979c; --border-strong:#d9dde1; --border-soft:#eceff1; --accent:#0abab5; --accent-soft:#e1f8f6; --accent-contrast:#075955; --danger:#a33b32; --danger-bg:#fdedeb; --warn:#ffb340; --ok:#08736f; --card-blur:0px; --glow:none; --shadow-card:0 5px 20px rgba(0,0,0,.035); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue",sans-serif; color:var(--ink); background:var(--canvas); }
 body { background:var(--canvas); }
 .app-shell { grid-template-columns:68px 1fr; background:var(--canvas); }
-/* 自绘顶栏（与豆包顶栏同高 56px）：整条可拖拽，右侧按钮组 no-drag */
-.app-titlebar { grid-area:titlebar; position:relative; display:flex; align-items:center; justify-content:space-between; padding:0 12px; background:var(--yd-surface); border-bottom:1px solid var(--border-soft); -webkit-app-region:drag; }
+/* 自绘顶栏（与豆包顶栏同高 56px）：整条可拖拽，右侧按钮组 no-drag；z-index 高于浏览器全屏面板(700)，全屏时顶栏常驻可点 */
+.app-titlebar { grid-area:titlebar; position:relative; z-index:710; display:flex; align-items:center; justify-content:space-between; padding:0 12px; background:var(--yd-surface); border-bottom:1px solid var(--border-soft); -webkit-app-region:drag; }
 .app-titlebar-left { display:flex; align-items:center; gap:8px; margin-left:76px; }
 .app-titlebar-left .build-stamp, .app-titlebar-left .ip-chip { margin-right:0; }
 .app-titlebar-title { font-size:13px; font-weight:600; color:var(--text-primary); letter-spacing:.02em; }

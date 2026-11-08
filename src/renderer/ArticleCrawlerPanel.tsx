@@ -13,6 +13,7 @@
  */
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import type { KbListView } from '../shared/knowledge'
+import { useBrowserFullscreenBounds, useBrowserSurfaceRegistration, type BrowserSurface } from './BrowserFullscreen'
 
 type CrawlerServiceState = 'STOPPED' | 'STARTING' | 'RUNNING' | 'START_FAILED'
 
@@ -89,8 +90,8 @@ function truncate(s: string, max = 80): string {
   return s.length > max ? `${s.slice(0, max)}…` : s
 }
 
-export function ArticleCrawlerPanel(props: { onBack: () => void }) {
-  const { onBack } = props
+export function ArticleCrawlerPanel(props: { onBack: () => void; browserFullscreen: boolean; onBrowserSurface: (next: BrowserSurface | null) => void }) {
+  const { onBack, browserFullscreen, onBrowserSurface } = props
   const [status, setStatus] = useState<CrawlerStatus | null>(null)
   const [articles, setArticles] = useState<CrawlerArticleSummary[]>([])
   const [busy, setBusy] = useState<'start' | 'stop' | 'extract' | 'import' | null>(null)
@@ -156,6 +157,9 @@ export function ArticleCrawlerPanel(props: { onBack: () => void }) {
       window.removeEventListener('resize', updateBounds)
     }
   }, [])
+  // 顶栏「全屏」在本页可见期间接管本页内嵌 NewsCrawler Web UI
+  useBrowserSurfaceRegistration('crawler', onBrowserSurface)
+  useBrowserFullscreenBounds(slotRef, true, browserFullscreen)
 
   // 一旦 Web UI 可达，自动 navigate 到 NewsCrawler 首页
   useEffect(() => {
@@ -281,7 +285,7 @@ export function ArticleCrawlerPanel(props: { onBack: () => void }) {
   const isRunning = status?.state === 'RUNNING'
   const canStart = status?.dockerAvailable && status?.dockerComposeAvailable && status?.installPathValid
 
-  return <section className="crawler-page">
+  return <section className={`crawler-page${browserFullscreen?' app-browser-fullscreen':''}`}>
     <header className="crawler-header">
       <div className="crawler-header-left">
         <button type="button" className="crawler-back" onClick={onBack}>← 返回 AI总部</button>
