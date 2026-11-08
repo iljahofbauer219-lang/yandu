@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EBAY_POLICY_MODEL_FIELDS, parseEbayPolicyModel } from '../ebayPolicyModel'
+import { EBAY_POLICY_MODEL_FIELDS, parseEbayPolicyModel, parseEbayPolicyModelChoices } from '../ebayPolicyModel'
 
 /**
  * R2 真机 fixtures：2026-11-08 从 Seller Hub 修改页（ebay.com/lstng?draftId=5303065810623&mode=ReviseItem）
@@ -70,5 +70,55 @@ describe('parseEbayPolicyModel · 缺口与脏值不抛错', () => {
     const rows = parseEbayPolicyModel('shippingPolicy', synthetic)
     expect(rows[0].listingCount).toBe(2050)
     expect(rows[1].listingCount === undefined).toBe(true)
+  })
+})
+
+/**
+ * 缺陷 (a)：现网政策控件是 input[role=combobox]，往框里写政策编号只会得到一个框里没有的字符串。
+ * 真正能被选中的是它 aria-controls 列表里的 [role=option]，而选项节点上能找到的是「显示文本」，
+ * 编号只在这些模型选项里。所以灌字段要先把 编号 → 选项显示文本 这一步在 TS 侧算出来：
+ * text 必须是 DOM 里真会出现的那一整串（名称原文 + 在架数原文），不能像 parseEbayPolicyModel
+ * 那样把名称尾部的 (编号) 剥掉——剥完就跟页面上那个 option 的文本对不上，永远选不中。
+ */
+describe('parseEbayPolicyModelChoices · 编号到选项显示文本', () => {
+  it('付款：text 是名称原文加在架数原文，名称尾部的编号不剥（DOM 里就带着它）', () => {
+    expect(parseEbayPolicyModelChoices(PAYMENT_MODEL)).toEqual({
+      controlName: 'paymentPolicyId',
+      options: [
+        { id: '257211994013', text: 'eBay immediate payment [3409 listings]' },
+        { id: '257217501013', text: 'eBay Managed Payments (257217501013) [1 listing]' }
+      ]
+    })
+  })
+
+  it('控件名取模型自己的 name：退货锚点是 returnPolicy、模型里叫 returnsPolicyId', () => {
+    expect(parseEbayPolicyModelChoices(SHIPPING_MODEL).controlName).toBe('shippingPolicyId')
+    expect(parseEbayPolicyModelChoices(RETURN_MODEL).controlName).toBe('returnsPolicyId')
+  })
+
+  it('运输：三条选项各带自己的在架数，中文名称与括号量词之间只留一个空格', () => {
+    expect(parseEbayPolicyModelChoices(SHIPPING_MODEL).options).toEqual([
+      { id: '262233981013', text: '云仓包邮 (1901 listings)' },
+      { id: '266273287013', text: '中国直邮包邮 (1515 listings)' },
+      { id: '265556337013', text: 'Flat: Other free, same business day (265556337013) (1 listing)' }
+    ])
+  })
+
+  it('选项没有在架数 → text 只剩名称，绝不留下尾随空格（页内要按整串相等来命中）', () => {
+    const synthetic = '{"name":"paymentPolicyId","options":[{"value":257211994013,"label":{"_type":"TextualDisplay","textSpans":[{"_type":"TextSpan","text":"eBay immediate payment"}]}}]}'
+    expect(parseEbayPolicyModelChoices(synthetic).options).toEqual([
+      { id: '257211994013', text: 'eBay immediate payment' }
+    ])
+  })
+
+  it('选项值不是纯数字编号就不是可选政策（如 handlingDuration 的 6 天），一条都不产出', () => {
+    const synthetic = '{"name":"handlingDuration","options":[{"value":6,"label":{"_type":"TextualDisplay","textSpans":[{"_type":"TextSpan","text":"6 business days"}]}}]}'
+    expect(parseEbayPolicyModelChoices(synthetic)).toEqual({ controlName: 'handlingDuration', options: [] })
+  })
+
+  it('原文残缺或 JSON 语法坏了 → {controlName:\'\',options:[]}，与 parseEbayPolicyModel 一样绝不抛错', () => {
+    for (const broken of ['', '   ', '{"name":"paymentPolicyId"', '{"options":"不是数组"}', '{}']) {
+      expect(parseEbayPolicyModelChoices(broken), JSON.stringify(broken)).toEqual({ controlName: '', options: [] })
+    }
   })
 })

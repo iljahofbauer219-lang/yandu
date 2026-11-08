@@ -22,8 +22,9 @@ vi.mock('electron', () => ({
 }))
 
 import { BrowserWorkspace } from '../BrowserWorkspace'
-import { EBAY_LOCAL_FILL_TARGETS, ebayLocalFillPayload } from '../ebayLocalFill'
+import { EBAY_LOCAL_FILL_TARGETS, ebayLocalFillPayload, ebayPolicyFillPlan } from '../ebayLocalFill'
 import type { EbayLocalProduct, EbayProductDetails } from '../../../shared/contracts'
+import type { EbayPolicyModelChoices } from '../../../shared/ebayPolicyModel'
 
 const LABELS = ['标题', '价格', '描述', '数量', '商品状况', '付款政策', '运输政策', '退货政策', '商品所在地', '所在地邮编', '自定义编号']
 
@@ -37,7 +38,76 @@ const details: EbayProductDetails = {
 
 const prepareMethod = BrowserWorkspace.prototype.prepareEbayLocalProductRevision as unknown as (
   this: Record<string, unknown>, accountId: string, product: EbayLocalProduct
-) => Promise<{ reviseUrl: string; filledFields: string[]; skippedFields: string[]; warnings: string[]; submitButtonDetected: boolean; preparedAt: string }>
+) => Promise<{ reviseUrl: string; routeKind?: string; filledFields: string[]; skippedFields: string[]; warnings: string[]; submitButtonDetected: boolean; preparedAt: string }>
+
+/** 现网内嵌模型的形状（与 ebayPolicyScrape.test.ts 同款构造器）：文案在 textSpans，编号在 option.value。 */
+type ModelField = 'paymentPolicy' | 'shippingPolicy' | 'returnPolicy'
+const modelSlice = (name: string, selected: number, options: Array<[number, string, string]>): string =>
+  JSON.stringify({
+    name,
+    value: selected,
+    options: options.map(([value, text, count]) => ({
+      value,
+      label: { _type: 'TextualDisplay', textSpans: [{ _type: 'TextSpan', text }] },
+      ...(count ? { listingCount: { _type: 'TextualDisplay', textSpans: [{ _type: 'TextSpan', text: count }] } } : {})
+    }))
+  })
+/** PRODUCT 的三个编号在这里都有唯一命中，所以默认计划是满的三条。 */
+const LIVE_MODELS: Record<ModelField, string> = {
+  paymentPolicy: modelSlice('paymentPolicyId', 257211994013, [[257211994013, 'eBay immediate payment', '[3409 listings]'], [257217501013, 'eBay Managed Payments (257217501013)', '[1 listing]']]),
+  shippingPolicy: modelSlice('shippingPolicyId', 262233981013, [[262233981013, '云仓包邮', '(1901 listings)'], [18510002003, '云仓包邮经济', '(12 listings)']]),
+  returnPolicy: modelSlice('returnsPolicyId', 262373278013, [[19007008009, '14天大健云仓退货', '(3407 listings)']])
+}
+const NO_MODELS: Record<ModelField, string> = { paymentPolicy: '', shippingPolicy: '', returnPolicy: '' }
+
+/**
+ * 用 fixtures 冒充内嵌浏览器：模型读取脚本回 policyModels，灌字段脚本回「已就绪且未提交」。
+ * pending/passes 只服务 A4 的落定复检：
+ *   pending  = 每一轮都报「点了但回读没确认」的政策（2026-11-08 现网取证到的失效率）；
+ *   passes   = 按轮次给不同读数（第 1 轮没确认、第 2 轮确认），用来验主进程会不会重跑同一段脚本。
+ */
+function makeHost(page: {
+  ready?: boolean
+  submitButtonDetected?: boolean
+  models?: Record<ModelField, string> | null
+  pending?: string[]
+  passes?: Array<{ filledFields?: string[]; skippedFields?: string[]; policyPending?: string[] }>
+} = {}) {
+  const scripts: string[] = []
+  const modelScripts: string[] = []
+  const models = page.models === null ? NO_MODELS : page.models ?? LIVE_MODELS
+  let pass = 0
+  const executeJavaScript = vi.fn(async (script: string) => {
+    // 灌字段脚本带 const targets=，模型读取脚本只切三段内嵌模型原文；两类返回值形状不同，靠这个标记分流。
+    if (!script.includes('const targets=')) {
+      modelScripts.push(script)
+      return { url: 'https://www.ebay.com/lstng?draftId=1&mode=ReviseItem', policyModels: models }
+    }
+    const step = page.passes?.[Math.min(pass, (page.passes?.length ?? 1) - 1)]
+    pass += 1
+    scripts.push(script)
+    return {
+      url: 'https://www.ebay.com/sl/list?mode=ReviseItem&itemId=T100',
+      login: false,
+      verification: false,
+      // (b) 路由改造后页脚本恒带回 errorPage 读数（eBay 把开页拒成错误页时据此立即中止）；这里按「没落到错误页」如实冒充
+      errorPage: { detected: false, reason: '' },
+      ready: page.ready ?? true,
+      filledFields: step?.filledFields ?? ['标题'],
+      skippedFields: step?.skippedFields ?? (page.pending || []),
+      // A4：政策点击的落定复检结果由页内带回；没有政策待确认时恒为空数组。
+      policyPending: step?.policyPending ?? (page.pending || []),
+      warnings: [],
+      submitButtonDetected: page.submitButtonDetected ?? true
+    }
+  })
+  const host: Record<string, unknown> = {
+    newEbayTab: vi.fn(async () => 'tab-1'),
+    detailTabs: new Map([['tab-1', { view: { webContents: { executeJavaScript } } }]]),
+    sleep: async () => undefined
+  }
+  return { host, executeJavaScript, scripts, modelScripts }
+}
 
 const PRODUCT: EbayLocalProduct = {
   id: 'local-1', storeId: 's1', marketplaceId: 'EBAY_US', listingId: 'T100',
@@ -61,32 +131,6 @@ const PRODUCT: EbayLocalProduct = {
   }
 }
 
-/** 用 fixtures 冒充内嵌浏览器：executeJavaScript 收到真实页脚本原文，页面一律返回「已就绪且未提交」。 */
-function makeHost(page: { ready?: boolean; submitButtonDetected?: boolean } = {}) {
-  const scripts: string[] = []
-  const executeJavaScript = vi.fn(async (script: string) => {
-    scripts.push(script)
-    return {
-      url: 'https://www.ebay.com/sl/list?mode=ReviseItem&itemId=T100',
-      login: false,
-      verification: false,
-      // (b) 路由改造后页脚本恒带回 errorPage 读数（eBay 把开页拒成错误页时据此立即中止）；这里按「没落到错误页」如实冒充
-      errorPage: { detected: false, reason: '' },
-      ready: page.ready ?? true,
-      filledFields: ['标题'],
-      skippedFields: [],
-      warnings: [],
-      submitButtonDetected: page.submitButtonDetected ?? true
-    }
-  })
-  const host: Record<string, unknown> = {
-    newEbayTab: vi.fn(async () => 'tab-1'),
-    detailTabs: new Map([['tab-1', { view: { webContents: { executeJavaScript } } }]]),
-    sleep: async () => undefined
-  }
-  return { host, executeJavaScript, scripts }
-}
-
 /** 注入页面的目标表线格式：patterns 已是 .source 源串。 */
 type TargetWire = { label: string; key: string; byPolicyId?: boolean; patterns: string[]; selectors?: string }
 
@@ -98,11 +142,12 @@ function literalOf<T = Record<string, unknown>>(script: string, name: string): T
   return JSON.parse(body.endsWith(';') ? body.slice(0, -1) : body) as T
 }
 
-const runPrepare = async (page: { ready?: boolean; submitButtonDetected?: boolean } = {}) => {
-  const { host, scripts, executeJavaScript } = makeHost(page)
+const runPrepare = async (page: { ready?: boolean; submitButtonDetected?: boolean; models?: Record<ModelField, string> | null } = {}) => {
+  const { host, scripts, modelScripts, executeJavaScript } = makeHost(page)
   const result = await prepareMethod.call(host, 'ebay:s1', PRODUCT)
-  expect(executeJavaScript).toHaveBeenCalledTimes(1)
-  return { script: scripts[0], result }
+  // 现在两段：先读一次内嵌模型（现网模型跟页面 HTML 一起来，一次就有），再跑灌字段脚本。
+  expect(executeJavaScript).toHaveBeenCalledTimes(2)
+  return { script: scripts[0], modelScript: modelScripts[0], result }
 }
 
 describe('eBay 本地版本灌字段目标表', () => {
@@ -261,15 +306,18 @@ describe('Seller Hub 灌字段脚本 · 循环语义守卫', () => {
     expect(script).toContain("if(field&&field.type==='checkbox'){skippedFields.push(target.label);continue}")
     const guard = script.indexOf("if(field&&field.type==='checkbox'){skippedFields.push(target.label);continue}")
     expect(guard).toBeGreaterThan(script.indexOf('const field=find('))
-    expect(guard).toBeLessThan(script.indexOf('if(target.byPolicyId)'))
     expect(guard).toBeLessThan(script.indexOf('fill(target.label,'))
   })
 
-  it('全脚本唯一的点击仍是 setValue 既有的复选框分支；除此之外没有任何新点击路径', async () => {
+  it('全脚本只有两处点击：复选框分支与政策选项分支；没有第三条点击路径，也没有任何 form 提交', async () => {
     const { script } = await runPrepare()
-    expect(script.match(/\.click\(/g)).toHaveLength(1)
-    const clickLine = script.split('\n').find(line => line.includes('field.click()'))
-    expect(clickLine).toContain("if(field.type==='checkbox')")
+    expect(script.match(/\.click\(/g)).toHaveLength(2)
+    const clickLines = script.split('\n').filter(line => line.includes('.click()'))
+    expect(clickLines).toHaveLength(2)
+    expect(clickLines.some(line => line.includes("if(field.type==='checkbox')"))).toBe(true)
+    // 第二条只许点在 [role=option] 节点上（政策选项），绝不允许指向提交/保存类按钮
+    expect(clickLines.some(line => /\[role="option"\]|option\b/i.test(line))).toBe(true)
+    expect(clickLines.some(line => /button|submit|form/i.test(line))).toBe(false)
   })
 
   it('零提交底线：不新增 .submit( 调用，type="submit" 只允许留在既有的按钮探测里', async () => {
@@ -281,9 +329,16 @@ describe('Seller Hub 灌字段脚本 · 循环语义守卫', () => {
     expect(script).toContain('尚未提交')
   })
 
-  it('政策三项自己记 filled/skipped，且只允许纯数字 ID 进下拉、名称后缀 (政策ID) 仍是兜底命中', async () => {
+  it('政策三项改由主进程算出的计划驱动：命中不了的政策既不填也不跳，页面保留原值', async () => {
     const { script } = await runPrepare()
-    expect(script).toContain("if(selectByPolicyId(field,desired[target.key]))filledFields.push(target.label);else skippedFields.push(target.label);continue")
+    expect(script).toContain('const plan=policyPlan.find(item=>item.key===target.key);')
+    expect(script).toContain('if(!plan)continue;')
+    expect(script).toContain('if(target.byPolicyId){')
+    expect(script).not.toContain('if(selectByPolicyId(field,desired[target.key]))')
+  })
+
+  it('<select> 老路径一字不动：仍是纯数字 ID 门禁 + option.value 整串相等或 (编号) 文本兜底', async () => {
+    const { script } = await runPrepare()
     expect(script).toContain('/^\\d+$/.test(want)')
     expect(script).toContain('clean(item.value)===want')
     expect(script).toContain("clean(item.textContent).includes('('+want+')')")
@@ -303,15 +358,17 @@ describe('Seller Hub 灌字段脚本 · 循环语义守卫', () => {
     expect(script).not.toContain('const descriptionField=')
   })
 
-  it('warnings 文案点名全部 11 类字段、保留人工核对与未提交口径，旧的「只准备标题、描述和价格」必须消失', async () => {
+  it('warnings 只点名本次真正填上/跳过的字段：固定枚举 11 类（会把没填的政策也说成填了）必须消失', async () => {
     const { script } = await runPrepare()
-    const line = script.split('\n').map(item => item.trim()).find(item => item.startsWith("warnings.push('本次填写"))
+    const line = script.split('\n').map(item => item.trim()).find(item => item.startsWith("warnings.push('本次"))
     expect(line).toBeDefined()
-    for (const name of ['标题', '描述', '价格', '数量', '商品状况', '付款', '运输', '退货政策', '商品所在地', '邮编', 'SKU']) {
-      expect(line).toContain(name)
-    }
+    // 点名内容取自页内回读出来的两份清单，而不是写死的字段表
+    expect(line).toContain('filledFields')
+    expect(line).toContain('skippedFields')
     expect(line).toContain('人工核对')
     expect(line).toContain('尚未提交')
+    expect(line).not.toContain('商品所在地、邮编与 SKU')
+    expect(line).not.toContain('付款/运输/退货政策')
     expect(script).not.toContain('本次只准备标题、描述和价格')
   })
 
@@ -321,6 +378,209 @@ describe('Seller Hub 灌字段脚本 · 循环语义守卫', () => {
     await expect(prepareMethod.call(host, 'ebay:s1', { ...PRODUCT, listingId: '189035181453', platformCategoryId: '' }))
       .rejects
       .toThrow('Seller Hub 修改页尚未加载出标题字段，请确认商品仍在线后重试')
-    expect(executeJavaScript).toHaveBeenCalledTimes(20)
+    expect(executeJavaScript).toHaveBeenCalledTimes(21)
+  })
+})
+
+/**
+ * 缺陷 (a) 第 0 步：现网政策控件是 input[role=combobox]，框里存的是「名称 + 在架数」，往它写编号
+ * 等于在页面上留一个谁都不认识的字符串（还会被报成已填）。要选中一项政策，得先在本页内嵌模型里
+ * 把 APP 存的 政策编号 换成 该选项的显示文本，再把文本交给页面去点那个 [role=option]。
+ * 这一步是纯映射，所以钉在这里：只有「编号是纯数字」且「本页模型里唯一命中该编号」才允许出计划，
+ * 命中不了就一条都不出——宁可让页面保留 eBay 线上原值，也绝不按名称猜一条政策（猜错就是改错政策）。
+ */
+describe('政策灌字段计划 · 编号换选项显示文本', () => {
+  const control = (controlName: string, pairs: Array<[string, string]>): EbayPolicyModelChoices => ({
+    controlName,
+    options: pairs.map(([id, text]) => ({ id, text }))
+  })
+  const models: Partial<Record<'paymentPolicy' | 'shippingPolicy' | 'returnPolicy', EbayPolicyModelChoices>> = {
+    paymentPolicy: control('paymentPolicyId', [['257217501013', 'eBay Managed Payments (257217501013) [1 listing]']]),
+    shippingPolicy: control('shippingPolicyId', [['18510002003', '云仓包邮 (1901 listings)']]),
+    returnPolicy: control('returnsPolicyId', [['19007008009', '14天大健云仓退货 (3407 listings)']])
+  }
+
+  it('三项都能按编号命中 → 出三条计划，中文点名与 anchor 一并带上，顺序跟目标表一致', () => {
+    expect(ebayPolicyFillPlan(details, models)).toEqual([
+      { key: 'paymentPolicy', label: '付款政策', anchor: 'paymentPolicyId', policyId: '257217501013', optionText: 'eBay Managed Payments (257217501013) [1 listing]' },
+      { key: 'shippingPolicy', label: '运输政策', anchor: 'shippingPolicyId', policyId: '18510002003', optionText: '云仓包邮 (1901 listings)' },
+      { key: 'returnPolicy', label: '退货政策', anchor: 'returnsPolicyId', policyId: '19007008009', optionText: '14天大健云仓退货 (3407 listings)' }
+    ])
+  })
+
+  it('APP 没记录的政策一条都不出（页面保留线上原值，既不填也不跳，与 payload 空值口径对称）', () => {
+    const partial = ebayPolicyFillPlan({ ...details, returnPolicy: undefined }, models)
+    expect(partial.map(item => item.key)).toEqual(['paymentPolicy', 'shippingPolicy'])
+    expect(ebayPolicyFillPlan({ ...details, shippingPolicy: '   ' }, models).map(item => item.key)).toEqual(['paymentPolicy', 'returnPolicy'])
+  })
+
+  it('政策键里存的是历史脏名称而不是编号 → 不出计划；这种值写进 combobox 就是把框改坏', () => {
+    expect(ebayPolicyFillPlan({ ...details, paymentPolicy: 'eBay Managed Payments' }, models).map(item => item.key)).toEqual(['shippingPolicy', 'returnPolicy'])
+    expect(ebayPolicyFillPlan({ ...details, paymentPolicy: '25721750101 3' }, models).map(item => item.key)).toEqual(['shippingPolicy', 'returnPolicy'])
+  })
+
+  it('编号在本页模型选项里找不到（政策已删/换店铺）→ 不出计划，也绝不退回按名称猜一条', () => {
+    const absent = { ...models, shippingPolicy: control('shippingPolicyId', [['266273287013', '中国直邮包邮 (1515 listings)']]) }
+    expect(ebayPolicyFillPlan(details, absent).map(item => item.key)).toEqual(['paymentPolicy', 'returnPolicy'])
+    // 名称几乎一样、编号不同的那一条不能被当成命中
+    const nearMiss = { ...models, shippingPolicy: control('shippingPolicyId', [['262233981013', '云仓包邮 (1901 listings)']]) }
+    expect(ebayPolicyFillPlan(details, nearMiss).map(item => item.key)).toEqual(['paymentPolicy', 'returnPolicy'])
+  })
+
+  it('同一编号在本页出现两次 → 歧义，一条都不点（点了也是赌哪个是它）', () => {
+    const duplicated = { ...models, returnPolicy: control('returnsPolicyId', [['19007008009', '14天大健云仓退货 (3407 listings)'], ['19007008009', '14天大健云仓退货 (0 listings)']]) }
+    expect(ebayPolicyFillPlan(details, duplicated).map(item => item.key)).toEqual(['paymentPolicy', 'shippingPolicy'])
+  })
+
+  it('模型没给出控件名 → 页内无从定位这个政策的框，不出计划', () => {
+    const nameless = { ...models, paymentPolicy: control('', [['257217501013', 'eBay Managed Payments (257217501013) [1 listing]']]) }
+    expect(ebayPolicyFillPlan(details, nameless).map(item => item.key)).toEqual(['shippingPolicy', 'returnPolicy'])
+  })
+
+  it('整页模型都没读到 → 空计划，不抛错（政策一项都不动，交回页面人工核对）', () => {
+    expect(ebayPolicyFillPlan(details, {})).toEqual([])
+    expect(ebayPolicyFillPlan(details, undefined)).toEqual([])
+  })
+
+  it('计划里的中文点名必须与目标表三项逐字一致（横幅与 skipped 计数靠同一个字符串对齐）', () => {
+    const plan = ebayPolicyFillPlan(details, models)
+    const tableLabels = EBAY_LOCAL_FILL_TARGETS.filter(item => item.byPolicyId).map(item => item.label)
+    expect(plan.map(item => item.label)).toEqual(tableLabels)
+    expect(plan.map(item => item.key)).toEqual(EBAY_LOCAL_FILL_TARGETS.filter(item => item.byPolicyId).map(item => item.key))
+  })
+})
+
+/**
+ * A4（2026-11-08 真机取证后的缺陷收口）：现网取证到「点中了 option、框里的文本当场变了，但 eBay 随后把政策控件
+ * 按草稿原值重渲染」——同步回读 `combo.value===want` 在那一刻为真，于是 filledFields 谎报已填，页面实际一个字没动。
+ * 同页稳定后再点同一选项却会一直生效（value 立即变、aria-selected 约 400ms 后跟上、20s 不回退），
+ * 所以错的不是点击方式，而是「点得太早 + 回读太早」。这里钉三条：
+ *   1) 政策分支必须等一次再回读，回读没确认就不算填上（进 skipped，同时进 policyPending 让主进程知道还没落定）；
+ *   2) 主进程看到 policyPending 非空时重跑同一段脚本（页面更晚就更稳），但重试有上限，绝不把「准备发布」拖成无限等；
+ *   3) 本页根本没有政策控件时算终局跳过，不许当成「待落定」空转重试。
+ */
+describe('Seller Hub 灌字段脚本 · 政策点击的落定复检与重试', () => {
+  it('政策不许点完当场算填上：脚本改异步、点完等一次再回读，未确认进 policyPending', async () => {
+    const { script } = await runPrepare()
+    expect(script.trimStart().startsWith('(async () =>')).toBe(true)
+    const branch = script.slice(script.indexOf('if(target.byPolicyId){'), script.indexOf('const field=find('))
+    expect(branch).toContain('await wait(')
+    expect(branch).toContain('policyPending.push(target.label)')
+    expect(branch).toContain('skippedFields.push(target.label)')
+    // 旧的那条「点完立刻同步读 value 就算填上」必须消失
+    expect(script).not.toMatch(/hit\[0\]\.click\(\);if\(clean\(combo\.value\)/)
+    // 点击仍只有一处，且只落在选项节点上
+    expect(branch.match(/\.click\(/g)).toHaveLength(1)
+  })
+
+  it('本页没有该政策控件（现网退货政策就是如此）→ 终局跳过，不进 policyPending，免得主进程空转重试', async () => {
+    const { script } = await runPrepare()
+    const legacy = script.split('\n').find(line => line.includes("selectByPolicyId(document.querySelector('select[name=\"")) || ''
+    expect(legacy).toContain('skippedFields.push(target.label)')
+    expect(legacy).not.toContain('policyPending')
+  })
+
+  it('第 1 轮回读没确认、第 2 轮确认 → 主进程重跑同一段脚本，并按最后一轮的分类报（付款政策这次真算填上）', async () => {
+    const { host, executeJavaScript } = makeHost({
+      passes: [
+        { filledFields: ['标题'], skippedFields: ['付款政策'], policyPending: ['付款政策'] },
+        { filledFields: ['标题', '付款政策'], skippedFields: [], policyPending: [] }
+      ]
+    })
+    const result = await prepareMethod.call(host, 'ebay:s1', PRODUCT)
+    expect(executeJavaScript.mock.calls.filter(call => String(call[0]).includes('const targets='))).toHaveLength(2)
+    expect(result.filledFields).toContain('付款政策')
+    expect(result.skippedFields).not.toContain('付款政策')
+  })
+
+  it('一直落不定 → 有上限地重试后按未填处理并如实点名，绝不抛错也绝不限死等下去', async () => {
+    const { host, executeJavaScript } = makeHost({ pending: ['付款政策'] })
+    const result = await prepareMethod.call(host, 'ebay:s1', PRODUCT)
+    const fillCalls = executeJavaScript.mock.calls.filter(call => String(call[0]).includes('const targets=')).length
+    expect(fillCalls).toBeGreaterThan(1)
+    expect(fillCalls).toBeLessThanOrEqual(6)
+    expect(result.filledFields).not.toContain('付款政策')
+    expect(result.skippedFields).toContain('付款政策')
+    const named = result.warnings.filter(text => text.includes('付款政策') && text.includes('人工核对'))
+    expect(named).toHaveLength(1)
+    expect(named[0]).toContain('未计入已填')
+  })
+})
+
+/**
+ * 缺陷 (a) 的落点：计划由主进程算好后注入页面，页面只做三件事——
+ * 按模型给出的控件名定位 combobox、在它 aria-controls 的列表里按整串文本找那唯一一条选项、点完回读。
+ * 回读不认就算跳过：eBay 的 React 控件可以吞掉一次点击，吞掉却报「已填」就是把线上政策当已改。
+ * 另一条底线是把编号写进框里这条路彻底封死：编号不是框认识的文本，写进去既显示不对也不算选中。
+ */
+describe('Seller Hub 灌字段脚本 · 政策 combobox 分支', () => {
+  type PlanWire = { key: string; label: string; anchor: string; policyId: string; optionText: string }
+
+  it('注入的 policyPlan 用本页模型算出：anchor 是模型自己的控件名，optionText 是选项整串（含在架数）', async () => {
+    const { script } = await runPrepare()
+    expect(literalOf<PlanWire[]>(script, 'policyPlan')).toEqual([
+      { key: 'paymentPolicy', label: '付款政策', anchor: 'paymentPolicyId', policyId: '257217501013', optionText: 'eBay Managed Payments (257217501013) [1 listing]' },
+      { key: 'shippingPolicy', label: '运输政策', anchor: 'shippingPolicyId', policyId: '18510002003', optionText: '云仓包邮经济 (12 listings)' },
+      { key: 'returnPolicy', label: '退货政策', anchor: 'returnsPolicyId', policyId: '19007008009', optionText: '14天大健云仓退货 (3407 listings)' }
+    ])
+  })
+
+  it('combobox 按 name 定位、选项只在该控件 aria-controls 的列表里找、整串文本唯一命中才点', async () => {
+    const { script } = await runPrepare()
+    expect(script).toContain('input[role="combobox"][name="')
+    expect(script).toContain("getAttribute('aria-controls')")
+    expect(script).toContain('[role="option"]')
+    expect(script).toContain('clean(node.textContent)===want')
+    expect(script).toContain('hit.length===1')
+    expect(script).toContain('hit[0].click()')
+  })
+
+  it('点完必须回读才算填上：input value 整串相等或该选项 aria-selected=true，否则算跳过', async () => {
+    const { script } = await runPrepare()
+    expect(script).toContain('clean(combo.value)===want')
+    expect(script).toContain("getAttribute('aria-selected')==='true'")
+  })
+
+  it('绝不把政策编号写进 combobox：页内没有任何对 combo 的 setValue 或对它的文本写入', async () => {
+    const { script } = await runPrepare()
+    expect(script).not.toMatch(/setValue\(combo/)
+    expect(script).not.toMatch(/combo\.value=/)
+  })
+
+  it('命中 0 条或多条一律跳过、一次都不点（歧义时点中哪条是赌）', async () => {
+    const { script } = await runPrepare()
+    const branch = script.slice(script.indexOf('if(target.byPolicyId){'), script.indexOf('fill(target.label,'))
+    expect(branch).toContain('else skippedFields.push(target.label)')
+    // 政策分支里唯一的点击只有 hit[0].click() 这一处
+    expect(branch.match(/\.click\(/g)).toHaveLength(1)
+  })
+
+  it('编号在本页选项里没找到 → 该政策不进计划、页面原值不动，并如实点名要人工核对', async () => {
+    const { script, result } = await runPrepare({
+      models: { ...LIVE_MODELS, shippingPolicy: modelSlice('shippingPolicyId', 262233981013, [[262233981013, '云仓包邮', '(1901 listings)']]) }
+    })
+    expect(literalOf<PlanWire[]>(script, 'policyPlan').map(item => item.key)).toEqual(['paymentPolicy', 'returnPolicy'])
+    const named = result.warnings.filter(text => text.includes('运输政策'))
+    expect(named).toHaveLength(1)
+    expect(named[0]).toContain('人工核对')
+    expect(result.warnings.filter(text => text.includes('付款政策'))).toHaveLength(0)
+  })
+
+  it('整页模型都没读到 → 计划为空、一项政策都不动，但绝不抛错打断「准备发布」这个动作', async () => {
+    const { script, result } = await runPrepare({ models: null })
+    expect(literalOf<PlanWire[]>(script, 'policyPlan')).toEqual([])
+    const named = result.warnings.filter(text => text.includes('付款政策') && text.includes('运输政策') && text.includes('退货政策'))
+    expect(named).toHaveLength(1)
+    expect(result.filledFields).toEqual(['标题'])
+  })
+
+  it('模型原文用与政策抓取同一份锚点切片（两处各写一遍迟早漂移）', async () => {
+    const { modelScript, script } = await runPrepare()
+    for (const field of ['paymentPolicy', 'shippingPolicy', 'returnPolicy']) {
+      expect(modelScript).toContain('"' + field + '":{"name"')
+    }
+    expect(modelScript).toContain('objectAt')
+    // 灌字段脚本自己不读模型：编号→文本的映射已经在主进程做完
+    expect(script).not.toContain('"paymentPolicy":{"name"')
   })
 })

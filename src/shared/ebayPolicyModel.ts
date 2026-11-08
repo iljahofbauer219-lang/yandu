@@ -44,6 +44,44 @@ function listingCountOf(text: string): number | undefined {
   return count === undefined ? undefined : Number(count.replace(/,/g, ''))
 }
 
+/**
+ * 缺陷 (a)：现网政策控件是 input[role=combobox]，框里存的是「名称 + 在架数」，政策编号只在这些模型选项里。
+ * 要选中一项政策就得先把 编号 → 选项显示文本 换出来，所以这里的 text 必须是 DOM 里真会出现的那一整串：
+ * 名称原文（不剥尾部编号，剥了就跟 option 文本对不上）+ 空格 + 在架数原文。
+ * 控件名同样取模型自己的 name（退货在模型里叫 returnsPolicyId），eBay 改名时代码不用动。
+ * 选项值不是纯数字编号的直接不产出——那是 handlingDuration 这类「6 business days」的天数选项，
+ * 混进来只会在页面上点出一个谁都不认识的选择。
+ */
+export interface EbayPolicyChoice {
+  id: string
+  text: string
+}
+
+export interface EbayPolicyModelChoices {
+  controlName: string
+  options: EbayPolicyChoice[]
+}
+
+export function parseEbayPolicyModelChoices(raw: string): EbayPolicyModelChoices {
+  let model: { name?: unknown; options?: unknown }
+  try {
+    model = JSON.parse(String(raw || '')) as { name?: unknown; options?: unknown }
+  } catch {
+    return { controlName: '', options: [] }
+  }
+  if (!model || typeof model !== 'object' || !Array.isArray(model.options)) return { controlName: '', options: [] }
+  const options: EbayPolicyChoice[] = []
+  for (const option of model.options as EbayPolicyModelOption[]) {
+    if (!option || typeof option !== 'object') continue
+    const id = String(option.value ?? '').trim()
+    const name = spansText(option.label).replace(/\s+/g, ' ').trim()
+    if (!/^\d{6,}$/.test(id) || !name) continue
+    const listingCount = spansText(option.listingCount).replace(/\s+/g, ' ').trim()
+    options.push({ id, text: listingCount ? `${name} ${listingCount}` : name })
+  }
+  return { controlName: typeof model.name === 'string' ? model.name.trim() : '', options }
+}
+
 export function parseEbayPolicyModel(field: EbayPolicyModelField, raw: string): EbayScrapedPolicyOption[] {
   let model: { value?: unknown; options?: unknown }
   try {

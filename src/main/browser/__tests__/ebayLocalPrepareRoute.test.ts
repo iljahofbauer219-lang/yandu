@@ -31,6 +31,7 @@ type PageResult = {
   errorPage?: { detected: boolean; reason: string }
   filledFields?: string[]
   skippedFields?: string[]
+  policyPending?: string[]
   warnings?: string[]
   submitButtonDetected?: boolean
 }
@@ -60,6 +61,8 @@ function makeHost(page: PageResult | PageResult[] = {}) {
       url: next.url || REVISE_URL, login: false, verification: false, ready: next.ready ?? true,
       errorPage: next.errorPage || { detected: false, reason: '' },
       filledFields: next.filledFields ?? ['标题'], skippedFields: next.skippedFields ?? [],
+      // 现网灌字段脚本恒带回 policyPending（政策点了没落定的那几项）；这里默认空数组＝政策一项都没挂着，收单不再重跑。
+      policyPending: next.policyPending ?? [],
       warnings: next.warnings ?? [], submitButtonDetected: next.submitButtonDetected ?? true
     }
   })

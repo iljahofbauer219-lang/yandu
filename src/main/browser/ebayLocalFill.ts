@@ -1,4 +1,5 @@
 import type { EbayProductDetails } from '../../shared/contracts'
+import type { EbayPolicyModelChoices, EbayPolicyModelField } from '../../shared/ebayPolicyModel'
 
 /**
  * Seller Hub「ReviseItem 本地版本待确认」灌字段引擎的目标表（Task 8，P1 收尾）。
@@ -63,4 +64,39 @@ export function ebayLocalFillPayload(details:EbayProductDetails,fallbacks:{title
     if(value)payload[target.key]=value
   }
   return payload
+}
+
+export interface EbayPolicyFillPlanEntry {
+  key:EbayPolicyModelField
+  label:string
+  anchor:string
+  policyId:string
+  optionText:string
+}
+
+/**
+ * 缺陷 (a)：现网政策控件是 input[role=combobox]，往框里写政策编号只会留下一个框里根本不存在的字符串，
+ * 还被报成「已填」。能选中的是它 aria-controls 列表里的 [role=option]，而选项节点只认显示文本，
+ * 所以「编号 → 本页该编号那条选项的显示文本」这一步必须在主进程先算好，页面只负责按文本点中那一个选项。
+ * 判据三条，任何一条不成立就一条都不出（宁可不填也不按名称猜：猜错就是改错政策，且改的是店铺级资产）：
+ *   1. APP 真的记了编号（纯数字串）——没记录=不动线上原值，与 ebayLocalFillPayload 的空值口径对称；
+ *   2. 这一类的内嵌模型给出了控件名——没有控件名页内就无处定位；
+ *   3. 该编号在本页选项里唯一命中——政策已删、换了店铺、或同一编号出现两次都算命中不了。
+ */
+export function ebayPolicyFillPlan(
+  details:Pick<EbayProductDetails,'paymentPolicy'|'shippingPolicy'|'returnPolicy'>,
+  models?:Partial<Record<EbayPolicyModelField,EbayPolicyModelChoices>>
+):EbayPolicyFillPlanEntry[] {
+  const plan:EbayPolicyFillPlanEntry[]=[]
+  for(const target of EBAY_LOCAL_FILL_TARGETS.filter(item=>item.byPolicyId)) {
+    const key=target.key as EbayPolicyModelField
+    const policyId=String(details[key]||'').trim()
+    if(!/^\d+$/.test(policyId))continue
+    const choices=models?.[key]
+    if(!choices||!choices.controlName)continue
+    const matches=choices.options.filter(option=>option.id===policyId)
+    if(matches.length!==1)continue
+    plan.push({key,label:target.label,anchor:choices.controlName,policyId,optionText:matches[0].text})
+  }
+  return plan
 }
