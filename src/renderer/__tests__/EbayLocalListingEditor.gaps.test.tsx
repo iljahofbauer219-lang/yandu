@@ -78,10 +78,10 @@ const policies:EbayStoreBusinessPolicy[]=[
 // 评审 Important-4：本任务的核心不变量「政策按 eBay 政策 ID 命中，不按名称猜」必须有回归锁。
 // option 的 value 只允许是数字 policyId；中文 label 只许出现在标签文本里。故两侧同时断言：
 // value 里出现 label（把 value={item.policyId} 突变成 value={item.label}）必红。
-describe('EbayLocalListingEditor · 07 政策与所在地', () => {
+describe('EbayLocalListingEditor · 08 政策与所在地', () => {
   it('已有政策时按 kind 分组渲染下拉并选中草稿值', () => {
     const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({policyIds:{shipping:'18510002004'}}),{businessPolicies:policies})}/>)
-    expect(html).toContain('07 政策与所在地')
+    expect(html).toContain('08 政策与所在地')
     // data-policy-kind 挂在 <select> 自身（不是 label 或 option），评审 Minor-2 点名核对：实现本已如此，只在测试侧锁死位置。
     expect(html).toMatch(/<select data-policy-kind="shipping"/)
     expect(html).toContain('<option value="18510002004" selected="">')
@@ -143,7 +143,7 @@ describe('EbayLocalListingEditor · 07 政策与所在地', () => {
   })
 })
 
-// 页眉范围声明：本对话框自 Task 6/7 起已渲染 05 状况与库存、07 政策与所在地，
+// 页眉范围声明：本对话框自 Task 6/7 起已渲染 05 状况与库存、08 政策与所在地（分区顺序对齐 eBay 现网修改页后编号顺延），
 // 「仅保存图片、标题、描述和价格」是对渲染范围的事实错误声明，必须消失；
 // 同时钉住「不代您提交线上刊登」——最终提交按钮恒由操作员点击，任何文案不得暗示代码代提交。
 describe('EbayLocalListingEditor · 页眉范围声明', () => {
@@ -278,7 +278,7 @@ describe('EbayLocalListingEditor · 图片必须真在本地（D1）', () => {
 // R1 断点：本地产品 listingId 是 PALLET-<货盘编号>，直接拼进 ReviseItem 会被 eBay 拒成 createOrGetDraft 错误页，
 // 政策永远抓不到（真机取证见 5.4）。政策是店铺级资产，故开页载体改由操作员手填真实在架商品编号、按店铺记住，
 // 且「不合法就不发 IPC」——开一个必然报错的页签比当场点名缺什么更糟。
-describe('EbayLocalListingEditor · 07 政策读取载体（R1）', () => {
+describe('EbayLocalListingEditor · 08 政策读取载体（R1）', () => {
   const carrierTag=(over:Partial<ComponentProps<typeof EbayLocalListingEditor>>={})=>{
     const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(),over)}/>)
     return /<input data-policy-carrier[^>]*>/.exec(html)?.[0]??''
