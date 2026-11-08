@@ -1136,6 +1136,12 @@ function formatStampLocal(iso?: string | null) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+// 顶栏实时时钟：与 formatStampLocal 同口径，入参为 Date 对象
+function formatClock(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 function SupplyFactsDl({ joined, fallbackCatalog, collectedAt, collectedBy }: { joined?: CollectedSupplyProduct; fallbackCatalog?: { category: string; subcategory: string; tertiaryCategory: string }; collectedAt?: string; collectedBy?: string }) {
   // 无回联记录也渲染参数区（各项待补采），保证卡片更新可见、口径与候选卡一致
   const inventoryText = joined && joined.sellableInventory !== null && joined.sellableInventory !== undefined ? joined.sellableInventory.toLocaleString('zh-CN') : joined?.salesText?.replace(/^(?:Available\s*Stock|可售库存|库存)\s*[:：]?\s*/i,'') || '待补采'
@@ -1529,6 +1535,11 @@ export function App() {
     const timer = setInterval(refreshPublicIp, 5 * 60 * 1000)
     return () => clearInterval(timer)
   }, [refreshPublicIp])
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60 * 1000)
+    return () => clearInterval(id)
+  }, [])
   useEffect(() => { void window.desktop.warehouses.listDelisted().then(setDelistedWarehouseProducts).catch(() => undefined) }, [])
   useEffect(() => { void window.desktop.warehouses.downloads().then(setSupplyDownloads).catch(() => undefined) }, [])
   useEffect(() => {
@@ -2299,7 +2310,7 @@ export function App() {
     <div className="app-titlebar" role="banner">
       <div className="app-titlebar-left">
         <strong className="app-titlebar-title">砚都跨境</strong>
-        <span className="build-stamp" title={`渲染包构建 ${__BUILD_STAMP__}${mainStamp ? ` · 主进程构建 ${formatStampLocal(mainStamp.builtAt)} v${mainStamp.version}` : ' · 主进程水印缺失（旧主进程）'}`}>{__BUILD_STAMP__}</span>
+        <span className="build-stamp" title={`渲染包构建 ${__BUILD_STAMP__}${mainStamp ? ` · 主进程构建 ${formatStampLocal(mainStamp.builtAt)} v${mainStamp.version}` : ' · 主进程水印缺失（旧主进程）'}`}>{formatClock(now)}</span>
         <button type="button" className="ip-chip" title={publicIp ? `${publicIp.ip} · ${publicIp.country}${publicIp.isVpn ? ' (VPN)' : ''} · 点击刷新` : '点击查询出口 IP'} disabled={publicIpLoading} onClick={() => refreshPublicIp()}>
           {publicIpLoading ? '⏳' : publicIp ? `🌐 ${publicIp.ip.includes(':') ? 'IPv6 网络' : publicIp.ip} · ${publicIp.country}${publicIp.isVpn ? ' (VPN)' : ''}` : '🌐 未知'}
         </button>
