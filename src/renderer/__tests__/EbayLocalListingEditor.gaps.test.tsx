@@ -106,8 +106,8 @@ describe('EbayLocalListingEditor · 运输与所在地段', () => {
       const section=html.slice(html.indexOf('id="ebay-revise-policies"'))
       return section.slice(section.indexOf('<button'),section.indexOf('</button>')+'</button>'.length)
     }
-    // 空闲：可点且文案就是动作本身
-    expect(readButton()).toContain('>从 Seller Hub 读取政策<')
+    // 空闲：可点且文案就是动作本身（同一次开页也读回类目属性槽位，文案如实带上）
+    expect(readButton()).toContain('>从 Seller Hub 读取政策与类目属性<')
     expect(readButton()).not.toContain('disabled')
     // 读取中：禁用 + 进度文案
     expect(readButton({readingPolicies:true})).toContain('disabled')

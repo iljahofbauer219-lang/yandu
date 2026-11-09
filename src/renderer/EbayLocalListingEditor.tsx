@@ -3,6 +3,7 @@ import type { EbayItemSpecific, EbayLocalProduct, EbayLocalProductUpdateInput, E
 import { formatFormGaps, type EbayFormGap } from '../shared/ebayListingForm'
 import { checkEbayPolicyCarrierItemId } from '../shared/ebayPolicyCarrier'
 import type { EbayListingRouteKind } from '../shared/ebayListingTarget'
+import type { EbayItemSpecificSlot } from '../shared/ebayItemSpecificsModel'
 import type { PlatformCategoryController } from './useEbayPlatformCategory'
 import './ebay-local-listing-editor.css'
 import './ebay-local-listing-pricing.css'
@@ -31,6 +32,10 @@ type Props={
   onPolicyCarrierItemIdChange:(value:string)=>void
   /** 「保存并准备到 eBay」实际会打开哪一页（修改/首次刊登/新建刊登），由调用方按本地产品判定后传入；缺省按修改页 */
   routeKind?:EbayListingRouteKind
+  /** 本次会话里从 eBay 现网 ITEM SPECIFICS 段读回的槽位清单；为空即「还没读过」，段体退回本地清单态 */
+  attributeSlots?:EbayItemSpecificSlot[]
+  /** 上面那份清单的抓取时刻（requirements.inspectedAt）；清单只活在本次会话，不落库，故时间必须显式标出 */
+  attributeSlotsAt?:string
   inline?:boolean
 }
 
@@ -162,7 +167,7 @@ function CustomCategoryDropdown({options,value,onChange,disabled,placeholder,sav
   )
 }
 
-export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,gaps,businessPolicies,readingPolicies,onReadPolicies,policyCarrierItemId,onPolicyCarrierItemIdChange,routeKind='revise',inline}:Props) {
+export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,gaps,businessPolicies,readingPolicies,onReadPolicies,policyCarrierItemId,onPolicyCarrierItemIdChange,routeKind='revise',attributeSlots=[],attributeSlotsAt='',inline}:Props) {
   const fileInput=useRef<HTMLInputElement>(null)
   const [draggedId,setDraggedId]=useState('')
   const [descriptionMode,setDescriptionMode]=useState<'TEXT'|'HTML'>('TEXT')
@@ -183,6 +188,49 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
   const pendingSpecifics=indexedSpecifics.filter(entry=>Boolean(entry.item.needsConfirmation))
   const visibleSpecifics=specificsExpanded?indexedSpecifics:indexedSpecifics.slice(0,SPECIFICS_VISIBLE_LIMIT)
   const acceptAllSpecifics=()=>set('itemSpecifics',specifics.map(item=>item.needsConfirmation?{...item,needsConfirmation:false}:item))
+  const updateSpecific=(index:number,value:string)=>{const next=[...specifics];next[index]={...next[index],value,source:'MANUAL',needsConfirmation:false};set('itemSpecifics',next)}
+  // 05 段两态：读到现网槽位清单走「现网清单态」（分组/必填/控件形状照 eBay），没读到退回「本地清单态」并点名尚未读取。
+  const specificKey=(name:string)=>name.trim().toLowerCase()
+  const essentialSlots=attributeSlots.filter(item=>item.group==='ESSENTIAL')
+  const optionalSlots=attributeSlots.filter(item=>item.group!=='ESSENTIAL')
+  const slottedNames=new Set(attributeSlots.map(item=>specificKey(item.name)))
+  const localOnlySpecifics=indexedSpecifics.filter(entry=>!slottedNames.has(specificKey(entry.item.name)))
+  // 槽位清单只在本次会话里活着（不落库），故把抓取时刻显式标出来；没给时间就不谎报「已读取于……」。
+  const stampText=(iso:string)=>iso?new Date(iso).toLocaleString('zh-CN',{hour12:false}):''
+  const attributeSlotsAtText=attributeSlots.length?stampText(attributeSlotsAt):''
+  const slotRow=(slot:EbayItemSpecificSlot)=>{
+    const localIndex=specifics.findIndex(item=>specificKey(item.name)===specificKey(slot.name))
+    const local=localIndex>=0?specifics[localIndex]:undefined
+    const value=local?.value??''
+    const writeSlotValue=(next:string)=>{
+      const list=[...specifics]
+      // 现网槽位不一定已有本地行：新增行按同名匹配键写入 itemSpecifics，准备阶段与本地行共用同一份值。
+      if(localIndex>=0)list[localIndex]={...list[localIndex],value:next,source:'MANUAL',needsConfirmation:false}
+      else list.push({name:slot.name,value:next,source:'MANUAL',needsConfirmation:false})
+      set('itemSpecifics',list)
+    }
+    return (
+      <div className="ebay-specific-row ebay-specific-row--slot" key={slot.name}>
+        <span className={`ebay-specific-label${slot.required?' required':''}`} title={slot.name}>{slot.name}{slot.required&&<i className="ebay-specific-star" aria-label="eBay 必填属性">*</i>}</span>
+        <div className="ebay-specific-control">
+          {slot.control==='MENU'?(
+            <div className="ebay-specific-menu">
+              <input name={slot.name} value={value} placeholder={slot.placeholder} onChange={event=>writeSlotValue(event.target.value)}/>
+              <i className="ebay-specific-menu-caret" aria-hidden="true">▾</i>
+            </div>
+          ):slot.control==='TEXTAREA'?(
+            <textarea name={slot.name} value={value} placeholder={slot.placeholder} rows={3} maxLength={slot.maxLength||undefined} onChange={event=>writeSlotValue(event.target.value)}/>
+          ):(
+            <input name={slot.name} value={value} placeholder={slot.placeholder} onChange={event=>writeSlotValue(event.target.value)}/>
+          )}
+          {slot.control==='TEXTAREA'&&slot.maxLength>0&&<span className="ebay-specific-counter">{`${value.length}/${slot.maxLength}`}</span>}
+          {slot.suggested&&<button type="button" className="ebay-specific-suggested" onClick={()=>writeSlotValue(slot.suggested)}>{`Suggested: ${slot.suggested}`}</button>}
+          {Boolean(slot.value)&&slot.value!==value&&<em className="ebay-specific-live">{`eBay 线上原值：${slot.value}`}</em>}
+          {local?.source&&<em className="ebay-specific-source">{`${SOURCE_LABELS[local.source]}${local.needsConfirmation?' · 待确认':''}`}</em>}
+        </div>
+      </div>
+    )
+  }
   const descriptionLength=(descriptionMode==='TEXT'?draft.descriptionText:draft.descriptionHtml).length
   // 只渲染付款/运输/退货三类下拉（裁决 3）：FULFILLMENT 入库存着但不做第四个控件；kind 收窄用映射表，不用 toUpperCase 断言。
   type PolicyKey='payment'|'shipping'|'return'
@@ -307,25 +355,46 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
           </section>
 
           <section id="ebay-revise-specifics" className="ebay-revise-band">
-            <header className="ebay-revise-band-head"><div><h2>类目属性</h2><p>对应 eBay Item specifics 段；来源与待确认状态逐行标出。</p></div><span className="ebay-band-counter" data-ebay-slot="section-action">{specifics.length} 项</span></header>
-            {specifics.length>0?(
-              <>
-                {pendingSpecifics.length>0&&(
-                  <div className="ebay-specific-suggestions">
-                    <div><b>待确认属性 {pendingSpecifics.length} 项</b><span>来源是源页抓取、枚举匹配或 AI 推断的属性，确认后即记为人工确认；采用后照样能在下方逐行改。</span></div>
-                    <button type="button" onClick={acceptAllSpecifics}>全部采用</button>
+            <header className="ebay-revise-band-head"><div><h2>类目属性</h2><p>{attributeSlots.length?'照 eBay 现网 ITEM SPECIFICS 段逐行铺开：分组、必填、控件形状与长度上限都取现网读回的原文，值仍可手改。':'对应 eBay Item specifics 段；来源与待确认状态逐行标出。'}</p>{attributeSlotsAtText&&<p className="ebay-band-stamp">{`现网清单读取于 ${attributeSlotsAtText}`}</p>}</div><span className="ebay-band-counter" data-ebay-slot="section-action">{attributeSlots.length?`${attributeSlots.length} 个现网槽位`:`${specifics.length} 项`}</span></header>
+            {pendingSpecifics.length>0&&(
+              <div className="ebay-specific-suggestions">
+                <div><b>待确认属性 {pendingSpecifics.length} 项</b><span>来源是源页抓取、枚举匹配或 AI 推断的属性，确认后即记为人工确认；采用后照样能在下方逐行改。</span></div>
+                <button type="button" onClick={acceptAllSpecifics}>全部采用</button>
+              </div>
+            )}
+            {attributeSlots.length===0&&(attributeSlotsAt
+              ?<div className="ebay-note-band">{`这次读取（${stampText(attributeSlotsAt)}）没有回现网类目属性槽位：可能是 ITEM SPECIFICS 区块没加载，或该类目没有可见属性。下面先按本地已记录的属性展示；可在 Seller Hub 修改页人工核对这一段的属性行。`}</div>
+              :<div className="ebay-note-band">尚未读取现网类目属性：点下方「运输与所在地」段的「从 Seller Hub 读取政策与类目属性」开一次修改页，eBay 该类目的分组、必填与控件形状会一并读回这里。下面先按本地已记录的属性展示。</div>)}
+            {attributeSlots.length>0?(
+              <div className="ebay-specific-list">
+                {essentialSlots.length>0&&<h3 className="ebay-specific-group">Essential</h3>}
+                {essentialSlots.map(slotRow)}
+                {optionalSlots.length>0&&<h3 className="ebay-specific-group">Optional</h3>}
+                {optionalSlots.map(slotRow)}
+                {localOnlySpecifics.length>0&&(
+                  <div className="ebay-specific-local-only">
+                    <h4>本地已记录但不在现网清单</h4>
+                    <p>eBay 现网该类目没有这些属性槽位；值保留在本地记录里，准备到 Seller Hub 时不会写入现网没有的字段。</p>
+                    {localOnlySpecifics.map(({item,index})=><div className="ebay-specific-row ebay-specific-row--slot" key={`local-only-${item.name}-${index}`}>
+                      <span className="ebay-specific-label" title={item.name}>{item.name}</span>
+                      <div className="ebay-specific-control">
+                        <input name={item.name} value={item.value} onChange={event=>updateSpecific(index,event.target.value)}/>
+                        <em className="ebay-specific-source">{item.source?SOURCE_LABELS[item.source]:'—'}</em>
+                      </div>
+                    </div>)}
                   </div>
                 )}
-                <div className="ebay-specific-list">
-                  {visibleSpecifics.map(({item,index})=><div className="ebay-specific-row" key={`${item.name}-${index}`}>
-                    <span title={item.name}>{item.name}</span>
-                    <input value={item.value} onChange={event=>{const next=[...specifics];next[index]={...next[index],value:event.target.value,source:'MANUAL',needsConfirmation:false};set('itemSpecifics',next)}}/>
-                    <em>{item.source?SOURCE_LABELS[item.source]:'—'}{item.needsConfirmation?' · 待确认':''}</em>
-                  </div>)}
-                </div>
+              </div>
+            ):specifics.length>0?(
+              <div className="ebay-specific-list">
+                {visibleSpecifics.map(({item,index})=><div className="ebay-specific-row" key={`${item.name}-${index}`}>
+                  <span title={item.name}>{item.name}</span>
+                  <input value={item.value} onChange={event=>updateSpecific(index,event.target.value)}/>
+                  <em>{item.source?SOURCE_LABELS[item.source]:'—'}{item.needsConfirmation?' · 待确认':''}</em>
+                </div>)}
                 {indexedSpecifics.length>SPECIFICS_VISIBLE_LIMIT&&!specificsExpanded&&<button type="button" className="ebay-specifics-more" onClick={()=>setSpecificsExpanded(true)}>显示更多（还有 {indexedSpecifics.length-SPECIFICS_VISIBLE_LIMIT} 项）</button>}
-              </>
-            ):<p className="ebay-band-empty">本页类目暂无属性；eBay 侧若要求补齐，会在修改页逐项列出。</p>}
+              </div>
+            ):<p className="ebay-band-empty">本地还没有记录类目属性；eBay 该类目有哪些属性槽位，要点下方「从 Seller Hub 读取政策与类目属性」读取一次才知道。</p>}
           </section>
 
           <section id="ebay-revise-condition" className="ebay-revise-band">
@@ -375,7 +444,7 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
               这是便利按钮不是门禁：只是随流程结束的瞬时锁定，就绪度读数不受影响。 */}
           <section id="ebay-revise-policies" className="ebay-revise-band">
             <header className="ebay-revise-band-head"><div><h2>运输与所在地</h2><p>店铺级可复用资产：从 Seller Hub 读一次即入库，之后同类发布直接选用。政策按 eBay 政策 ID 命中，不按名称猜。</p></div>
-              <button type="button" className="ebay-band-action" data-ebay-slot="section-action" disabled={readingPolicies||saving||uploading||preparing} onClick={onReadPolicies}>{readingPolicies?'正在读取…':saving||uploading||preparing?'请等待当前操作完成':'从 Seller Hub 读取政策'}</button></header>
+              <button type="button" className="ebay-band-action" data-ebay-slot="section-action" disabled={readingPolicies||saving||uploading||preparing} onClick={onReadPolicies}>{readingPolicies?'正在读取…':saving||uploading||preparing?'请等待当前操作完成':'从 Seller Hub 读取政策与类目属性'}</button></header>
             <div className="ebay-policy-carrier"><label><span>在架商品编号（读取载体）</span><input data-policy-carrier inputMode="numeric" placeholder="例如 189035181453" value={policyCarrierItemId} onChange={event=>onPolicyCarrierItemIdChange(event.target.value.replace(/\s+/g,''))}/></label>
               <p className={policyCarrierCheck.ok?'ebay-policy-carrier-ok':'ebay-revise-category-error'}>{policyCarrierCheck.ok?`读取时只用它开一次修改页，政策入库后本店所有商品都能选用。上次抓取：${policyFetchedAtText}。`:policyCarrierCheck.message}</p></div>
             {businessPolicies.length===0&&<p className="ebay-revise-category-error">尚未读取到店铺政策。点上方按钮开一次修改页即可抓取；读取前这些字段保留 eBay 线上原值。</p>}
