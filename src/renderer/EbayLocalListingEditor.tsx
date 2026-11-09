@@ -60,6 +60,9 @@ const ROUTE_COPY:Record<EbayListingRouteKind,RouteCopy>={
   }
 }
 
+// eBay 真页 Item specifics 一次只铺开前若干行，其余收在 Show more 之后；本地按同一读数节流。
+const SPECIFICS_VISIBLE_LIMIT=6
+
 type ValidationIssue={level:'ERROR'|'WARNING';section:string;message:string}
 
 function validateDraft(draft:EbayLocalProductUpdateInput):ValidationIssue[] {
@@ -79,13 +82,14 @@ function validateDraft(draft:EbayLocalProductUpdateInput):ValidationIssue[] {
   if(!draft.descriptionText.trim()&&!draft.descriptionHtml.trim())error('description','商品描述不能为空')
   if(!Number.isFinite(Number(draft.price))||Number(draft.price)<=0)error('pricing','价格必须是大于 0 的数字')
   if(!/^[A-Z]{3}$/.test(draft.currency.trim()))error('pricing','币种必须使用 3 位大写代码，例如 USD')
+  // section 键跟段锚点一一对应：明细按钮跳 #ebay-revise-<section>，故数量与刊登格式归定价段、SKU 归标题段
+  // （eBay 真页把 Quantity 和付款政策排在 Pricing 段，Custom label (SKU) 排在 Title 段）。
   const quantity=draft.quantity===undefined?'':draft.quantity.trim()
-  if(quantity&&!/^[1-9]\d{0,5}$/.test(quantity))error('form','数量必须是大于 0 的整数')
-  if(draft.listingFormat&&!['FIXED_PRICE','AUCTION'].includes(draft.listingFormat))error('form','刊登格式只能是「现在购买」或「拍卖」')
-  if((draft.sku||'').trim().length>50)error('form','自定义编号（SKU）不能超过 50 个字符')
-  // 07 已有「所在地邮编」输入控件（Task 7），但保持 WARNING 不升 ERROR：eBay 国别站点邮编格式差异大，
-  // 旧记录可能本来就没错，硬阻断会让「保存」无从满足（门禁不得 brick 操作）。
-  // section 键指向 policies：明细按钮会跳到 #ebay-revise-policies（07 区块）而不是 05。
+  if(quantity&&!/^[1-9]\d{0,5}$/.test(quantity))error('pricing','数量必须是大于 0 的整数')
+  if(draft.listingFormat&&!['FIXED_PRICE','AUCTION'].includes(draft.listingFormat))error('pricing','刊登格式只能是「现在购买」或「拍卖」')
+  if((draft.sku||'').trim().length>50)error('title','自定义编号（SKU）不能超过 50 个字符')
+  // 「所在地邮编」保持 WARNING 不升 ERROR：eBay 国别站点邮编格式差异大，旧记录可能本来就没错，
+  // 硬阻断会让「保存」无从满足（门禁不得 brick 操作）；键指向运输段锚点，明细按钮跳 policies 段而不是定价段。
   if((draft.postalCode||'').trim()&&!/^[A-Za-z0-9][A-Za-z0-9 -]{2,11}$/.test(draft.postalCode!.trim()))warning('policies','所在地邮编格式不正确')
   return issues
 }
@@ -162,6 +166,9 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
   const fileInput=useRef<HTMLInputElement>(null)
   const [draggedId,setDraggedId]=useState('')
   const [descriptionMode,setDescriptionMode]=useState<'TEXT'|'HTML'>('TEXT')
+  // eBay 真页的 Custom label (SKU) 是标题段里的开关：开关只决定这行显不显示，关掉不清空已记录的编号。
+  const [skuVisible,setSkuVisible]=useState(()=>Boolean((draft.sku||'').trim()))
+  const [specificsExpanded,setSpecificsExpanded]=useState(false)
   const issues=useMemo(()=>validateDraft(draft),[draft])
   const errors=issues.filter(item=>item.level==='ERROR')
   const warnings=issues.filter(item=>item.level==='WARNING')
@@ -171,9 +178,18 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
   const priceSymbol=({USD:'$',GBP:'£',EUR:'€',CAD:'CA$',AUD:'A$',CNY:'¥',RMB:'¥'} as Record<string,string>)[priceCurrency]||priceCurrency
   const set=<K extends keyof EbayLocalProductUpdateInput>(key:K,value:EbayLocalProductUpdateInput[K])=>onChange({...draft,[key]:value})
   const SOURCE_LABELS:Record<NonNullable<EbayItemSpecific['source']>,string>={SOURCE_PAGE:'源页抓取',ENUM_MATCH:'枚举匹配',AI:'AI 推断',MANUAL:'人工确认',CATEGORY_DEFAULT:'类目记忆'}
-  // 07 只渲染付款/运输/退货三类下拉（裁决 3）：FULFILLMENT 入库存着但不做第四个控件；kind 收窄用映射表，不用 toUpperCase 断言。
-  const KIND_BY_PREFIX:Record<'payment'|'shipping'|'return','PAYMENT'|'SHIPPING'|'RETURN'>={payment:'PAYMENT',shipping:'SHIPPING',return:'RETURN'}
-  const POLICY_FIELDS=[['payment','付款政策'],['shipping','运输政策'],['return','退货政策']] as const
+  const specifics=draft.itemSpecifics||[]
+  const indexedSpecifics=specifics.map((item,index)=>({item,index}))
+  const pendingSpecifics=indexedSpecifics.filter(entry=>Boolean(entry.item.needsConfirmation))
+  const visibleSpecifics=specificsExpanded?indexedSpecifics:indexedSpecifics.slice(0,SPECIFICS_VISIBLE_LIMIT)
+  const acceptAllSpecifics=()=>set('itemSpecifics',specifics.map(item=>item.needsConfirmation?{...item,needsConfirmation:false}:item))
+  const descriptionLength=(descriptionMode==='TEXT'?draft.descriptionText:draft.descriptionHtml).length
+  // 只渲染付款/运输/退货三类下拉（裁决 3）：FULFILLMENT 入库存着但不做第四个控件；kind 收窄用映射表，不用 toUpperCase 断言。
+  type PolicyKey='payment'|'shipping'|'return'
+  const KIND_BY_KEY:Record<PolicyKey,'PAYMENT'|'SHIPPING'|'RETURN'>={payment:'PAYMENT',shipping:'SHIPPING',return:'RETURN'}
+  // DAO 无 kind 参数时按 kind,label 排序、不按 isDefault（AppDatabase 注释点名由本组件补），故默认政策在此前置排序。
+  const policyOptions=(key:PolicyKey)=>businessPolicies.filter(item=>item.kind===KIND_BY_KEY[key]).sort((left,right)=>Number(right.isDefault)-Number(left.isDefault)||left.label.localeCompare(right.label,'zh-CN'))
+  const policyReadout=(key:PolicyKey)=>{const picked=policyOptions(key).find(item=>item.policyId===(draft.policyIds?.[key]||''));return picked?`${picked.label}${picked.listingCount?` · ${picked.listingCount} 条`:''}`:'未选择（沿用线上原值）'}
   // R1：读取政策要开一次 eBay 修改页，而本地产品的 listingId 是 PALLET-<货盘编号>，eBay 不认（会落 createOrGetDraft 错误页）。
   // 故载体由操作员手填一个真实在架商品编号，按店铺记住；它只用于开页，政策本身按店铺入库复用。
   // 校验用同一个 shared 纯函数：这里先当场点名，App.tsx 的读取入口再据此决定是否发 IPC（不合法就不开页）。
@@ -216,132 +232,185 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
           {issues.length>0&&<details><summary>查看检查明细</summary><div>{issues.map((issue,index)=><button type="button" key={`${issue.section}-${index}`} className={issue.level.toLowerCase()} onClick={()=>document.getElementById(`ebay-revise-${issue.section}`)?.scrollIntoView({behavior:'smooth',block:'start'})}><b>{issue.level==='ERROR'?'必须修改':'建议优化'}</b><span>{issue.message}</span></button>)}</div></details>}
         </section>
 
-        <section id="ebay-revise-media" className="ebay-revise-section ebay-revise-media-section">
-          <header><div><h2>01 图片与视频</h2><p>本地保存商品媒体；拖动可排序，第一张图片为主图。</p></div><span>{draft.media.length}/24</span></header>
-          <div className="ebay-revise-media-layout">
-            <figure className="ebay-revise-main-media">
-              {draft.media[0]?(
-                draft.media[0].mediaType==='VIDEO'?(
-                  <div className="ebay-revise-main-media-video">
-                    <video src={mediaUrl(draft.media[0].localPath,draft.media[0].remoteUrl)} muted playsInline controls/>
-                  </div>
-                ):(
-                  <img src={mediaUrl(draft.media[0].localPath,draft.media[0].remoteUrl)} alt="商品主图"/>
-                )
-              ):<div>尚未添加图片</div>}
-              {draft.media[0]&&<figcaption>{draft.media[0].mediaType==='VIDEO'?'Video':'Main'}</figcaption>}
-            </figure>
-            <div className="ebay-revise-media-grid">
-              {draft.media.map((media,index)=><figure key={media.id} draggable onDragStart={()=>setDraggedId(media.id)} onDragEnd={()=>setDraggedId('')} onDragOver={event=>event.preventDefault()} onDrop={()=>moveMedia(draggedId,media.id)} className={draggedId===media.id?'dragging':''}>
+        {/* 以下十段的段序、段头「段名左 + 动作或读数右」几何、段内左右两栏与计数读数逐项取自 eBay 现网修改页取证
+            （~/.yandu-acceptance/2026-11-09-R4/P1-ebay-layout.json：Photos & Video → Title → Item category → Variations
+            → Item specifics → Condition → Description → Pricing → Shipping → Item disclosures，内容列 max-width 1024px）。
+            真页有段而本地没有字段支撑的（变体、定价选项、您的设置、其他刊登选项）一律如实说明「APP 未记录、请在页面补齐」，不臆造控件。 */}
+        <div className="ebay-revise-column">
+          <section id="ebay-revise-media" className="ebay-revise-band ebay-revise-media-section">
+            <header className="ebay-revise-band-head"><div><h2>图片与视频</h2><p>本地保存商品媒体；拖动可排序，第一张图片为主图。</p></div><span className="ebay-band-counter" data-ebay-slot="section-action" data-ebay-counter="photos">{draft.media.length}/24</span></header>
+            <div className="ebay-photo-strip">
+              {draft.media.map((media,index)=><figure key={media.id} draggable onDragStart={()=>setDraggedId(media.id)} onDragEnd={()=>setDraggedId('')} onDragOver={event=>event.preventDefault()} onDrop={()=>moveMedia(draggedId,media.id)} data-dragging={draggedId===media.id?'true':undefined} className={index===0?'ebay-photo-tile main':'ebay-photo-tile'}>
                 {media.mediaType==='VIDEO'?(
-                  <div className="ebay-revise-media-video">
+                  <div className="ebay-photo-video">
                     <video src={mediaUrl(media.localPath,media.remoteUrl)} muted playsInline/>
-                    <div className="ebay-revise-media-play-icon">▶</div>
+                    <span className="ebay-photo-play">▶</span>
                   </div>
                 ):(
                   <img src={mediaUrl(media.localPath,media.remoteUrl)} alt={`商品图片 ${index+1}`}/>
                 )}
-                <div><button type="button" onClick={()=>makeMain(media.id)} disabled={media.mediaType==='VIDEO'}>{index===0?'主图':media.mediaType==='VIDEO'?'视频':'设为主图'}</button><button type="button" aria-label="删除媒体" onClick={()=>removeMedia(media.id)}>×</button></div>
+                <figcaption>{media.mediaType==='VIDEO'?`Video ${index+1}`:`Photo ${index+1}`}</figcaption>
+                <div className="ebay-photo-tools"><button type="button" onClick={()=>makeMain(media.id)} disabled={media.mediaType==='VIDEO'}>{index===0?'Main':media.mediaType==='VIDEO'?'视频':'设为主图'}</button><button type="button" aria-label="删除媒体" onClick={()=>removeMedia(media.id)}>×</button></div>
               </figure>)}
-              {draft.media.length<24&&<button className="ebay-revise-add-media" type="button" disabled={uploading} onClick={()=>fileInput.current?.click()}><strong>{uploading?'…':'＋'}</strong><span>{uploading?'正在添加':'添加照片'}</span></button>}
+              {draft.media.length<24&&<button className="ebay-photo-add" type="button" disabled={uploading} onClick={()=>fileInput.current?.click()}><strong>{uploading?'…':'＋'}</strong><span>{uploading?'正在添加':'添加照片'}</span></button>}
             </div>
-          </div>
-          <input ref={fileInput} hidden type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif" onChange={event=>{onUpload(Array.from(event.target.files||[]));event.currentTarget.value=''}}/>
-        </section>
+            <input ref={fileInput} hidden type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif" onChange={event=>{onUpload(Array.from(event.target.files||[]));event.currentTarget.value=''}}/>
+          </section>
 
-        <section id="ebay-revise-title" className="ebay-revise-section">
-          <header><div><h2>02 标题</h2><p>只保存买家在商品页看到的主标题。</p></div></header>
-          <label className="ebay-revise-field"><span>物品标题</span><div><input maxLength={80} value={draft.title} onChange={event=>set('title',event.target.value)}/><small>{draft.title.length}/80</small></div></label>
-        </section>
-
-        <section className="ebay-revise-section ebay-revise-category-section">
-          <header><div><h2>03 类目</h2><p>与 eBay 修改页 Item category 段同序：平台类目在前、店铺类目在后；未匹配可重跑自动分类或手工选择。</p></div><span>{platformCategory?.savedName||product.categoryName||'未分类'}</span></header>
-          {platformCategory&&(<>
-            <div className="ebay-revise-category-row">
-              <CustomCategoryDropdown
-                options={platformCategory.options}
-                value={platformCategory.pick}
-                onChange={platformCategory.setPick}
-                disabled={platformCategory.busy||!(platformCategory.options.length||platformCategory.savedId)}
-                placeholder={platformCategory.busy?'正在获取平台类目…':'暂无候选类目'}
-                savedId={platformCategory.savedId}
-                savedName={platformCategory.savedName}
-              />
-              <button type="button" disabled={platformCategory.busy} onClick={platformCategory.refresh}>{platformCategory.busy?'获取中…':'重新获取'}</button>
-              <button type="button" disabled={platformCategory.busy||!platformCategory.pick||platformCategory.pick===platformCategory.savedId} onClick={platformCategory.confirm}>确定</button>
+          <section id="ebay-revise-title" className="ebay-revise-band">
+            <header className="ebay-revise-band-head"><div><h2>标题</h2><p>只保存买家在商品页看到的主标题。</p></div><span className="ebay-band-counter" data-ebay-slot="section-action" data-ebay-counter="title">{draft.title.length}/80</span></header>
+            <label className="ebay-revise-field"><span>物品标题</span><div><input maxLength={80} value={draft.title} onChange={event=>set('title',event.target.value)}/></div></label>
+            <div className="ebay-revise-field ebay-sku-row">
+              <span>自定义编号（SKU）</span>
+              <div className="ebay-sku-control">
+                <button type="button" role="switch" aria-checked={skuVisible} aria-label="显示自定义编号" onClick={()=>setSkuVisible(!skuVisible)}><i/></button>
+                {skuVisible&&<div className="ebay-sku-input"><input maxLength={50} value={draft.sku??''} onChange={event=>set('sku',event.target.value)}/><small data-ebay-counter="sku">{(draft.sku??'').length}/50</small></div>}
+                {!skuVisible&&(draft.sku||'').trim()&&<em>已记录 {(draft.sku||'').trim().length} 个字符；关掉开关只隐藏这一行，不清空已保存的编号。</em>}
+              </div>
             </div>
-            {platformCategory.error&&<p className="ebay-revise-category-error" role="alert">{platformCategory.error}</p>}
-          </>)}
-          <div className="ebay-revise-category-row">
-            <select aria-label="本地产品类目" value={product.categoryId} onChange={event=>{const found=categories.find(item=>item.categoryId===event.target.value);if(found)onSetCategory(found.categoryId,found.name)}}>
-              <option value="">未分类</option>
-              {categories.map(item=><option key={item.categoryId} value={item.categoryId}>{'　'.repeat(Math.max(0,item.level-1))}{item.name}</option>)}
-            </select>
-            <button type="button" onClick={onAutoClassify}>自动分类</button>
-          </div>
-        </section>
+          </section>
 
-        <section id="ebay-revise-specifics" className="ebay-revise-section">
-          <header><div><h2>04 类目属性</h2><p>对应 eBay Item specifics 段；来源与待确认状态逐行标出。</p></div><span>{draft.itemSpecifics?.length||0} 项</span></header>
-          {(draft.itemSpecifics?.length||0)>0?(
-            <div className="ebay-revise-specifics">
-              {draft.itemSpecifics!.map((item,index)=><div className="ebay-revise-specific-row" key={`${item.name}-${index}`}>
-                <span title={item.name}>{item.name}</span>
-                <input value={item.value} onChange={event=>{const next=[...(draft.itemSpecifics||[])];next[index]={...next[index],value:event.target.value,source:'MANUAL',needsConfirmation:false};set('itemSpecifics',next)}}/>
-                <em>{item.source?SOURCE_LABELS[item.source]:'—'}{item.needsConfirmation?' · 待确认':''}</em>
-              </div>)}
+          <section id="ebay-revise-category" className="ebay-revise-band ebay-revise-category-section">
+            <header className="ebay-revise-band-head"><div><h2>类目</h2><p>与 eBay 修改页同序：左栏平台类目（eBay Item category），右栏店铺类目（Store category）。</p></div><span data-ebay-slot="section-action">{platformCategory?.savedName||product.categoryName||'未分类'}</span></header>
+            <div className="ebay-revise-cols">
+              <div className="ebay-revise-category-row" data-ebay-col="left">
+                <h3>平台类目</h3>
+                {platformCategory?(<>
+                  <CustomCategoryDropdown
+                    options={platformCategory.options}
+                    value={platformCategory.pick}
+                    onChange={platformCategory.setPick}
+                    disabled={platformCategory.busy||!(platformCategory.options.length||platformCategory.savedId)}
+                    placeholder={platformCategory.busy?'正在获取平台类目…':'暂无候选类目'}
+                    savedId={platformCategory.savedId}
+                    savedName={platformCategory.savedName}
+                  />
+                  <button type="button" disabled={platformCategory.busy} onClick={platformCategory.refresh}>{platformCategory.busy?'获取中…':'重新获取'}</button>
+                  <button type="button" disabled={platformCategory.busy||!platformCategory.pick||platformCategory.pick===platformCategory.savedId} onClick={platformCategory.confirm}>确定</button>
+                </>):<p className="ebay-band-empty">本次没有可核对的平台类目；准备到 eBay 页面时在 Item category 逐项选择。</p>}
+                {platformCategory?.error&&<p className="ebay-revise-category-error" role="alert">{platformCategory.error}</p>}
+              </div>
+              <div className="ebay-revise-category-row" data-ebay-col="right">
+                <h3>店铺类目</h3>
+                <select aria-label="本地产品类目" value={product.categoryId} onChange={event=>{const found=categories.find(item=>item.categoryId===event.target.value);if(found)onSetCategory(found.categoryId,found.name)}}>
+                  <option value="">未分类</option>
+                  {categories.map(item=><option key={item.categoryId} value={item.categoryId}>{'　'.repeat(Math.max(0,item.level-1))}{item.name}</option>)}
+                </select>
+                <button type="button" onClick={onAutoClassify}>自动分类</button>
+              </div>
             </div>
-          ):<p>本页类目暂无属性；eBay 侧若要求补齐，会在修改页逐项列出。</p>}
-        </section>
+          </section>
 
-        <section id="ebay-revise-form" className="ebay-revise-section">
-          <header><div><h2>05 状况与库存</h2><p>{route.fieldNote}</p></div></header>
-          <div className="ebay-revise-form-grid">
-            <label className="ebay-revise-field"><span>刊登格式</span><select value={draft.listingFormat||'FIXED_PRICE'} onChange={event=>set('listingFormat',event.target.value as 'FIXED_PRICE'|'AUCTION')}><option value="FIXED_PRICE">现在购买</option><option value="AUCTION">拍卖</option></select></label>
-            <label className="ebay-revise-field"><span>数量</span><input data-gap={gaps.some(item=>item.name==='quantity')?'quantity':undefined} inputMode="numeric" value={draft.quantity??''} onChange={event=>set('quantity',event.target.value.replace(/[^\d]/g,''))}/></label>
-            <label className="ebay-revise-field"><span>eBay 商品状况</span><input data-gap={gaps.some(item=>item.name==='condition')?'condition':undefined} placeholder="New" value={draft.condition??''} onChange={event=>set('condition',event.target.value)}/></label>
-            <label className="ebay-revise-field"><span>自定义编号（SKU）</span><input maxLength={50} value={draft.sku??''} onChange={event=>set('sku',event.target.value)}/></label>
-          </div>
-        </section>
+          <section id="ebay-revise-variations" className="ebay-revise-band">
+            <header className="ebay-revise-band-head"><div><h2>变体</h2><p>eBay 真页有这一段；本地商品按单一规格刊登，没有变体字段。</p></div><span data-ebay-slot="section-action">未启用</span></header>
+            <div className="ebay-note-band">本地没有可写的变体行、变体价与变体图片。若该商品在 eBay 是多变体刊登，Variations 段整段由 Seller Hub 页面人工处理，系统不代您增删变体。</div>
+          </section>
 
-        <section id="ebay-revise-description" className="ebay-revise-section">
-          <header><div><h2>06 描述</h2><p>保留可供 AI 诊断和优化的纯文本与原始 HTML。</p></div><div className="ebay-revise-segment"><button className={descriptionMode==='TEXT'?'active':''} type="button" onClick={()=>setDescriptionMode('TEXT')}>文本</button><button className={descriptionMode==='HTML'?'active':''} type="button" onClick={()=>setDescriptionMode('HTML')}>HTML</button></div></header>
-          {descriptionMode==='TEXT'?<textarea className="ebay-revise-description" value={draft.descriptionText} onChange={event=>set('descriptionText',event.target.value)}/>:<textarea className="ebay-revise-description code" value={draft.descriptionHtml} onChange={event=>set('descriptionHtml',event.target.value)}/>} 
-        </section>
+          <section id="ebay-revise-specifics" className="ebay-revise-band">
+            <header className="ebay-revise-band-head"><div><h2>类目属性</h2><p>对应 eBay Item specifics 段；来源与待确认状态逐行标出。</p></div><span className="ebay-band-counter" data-ebay-slot="section-action">{specifics.length} 项</span></header>
+            {specifics.length>0?(
+              <>
+                {pendingSpecifics.length>0&&(
+                  <div className="ebay-specific-suggestions">
+                    <div><b>待确认属性 {pendingSpecifics.length} 项</b><span>来源是源页抓取、枚举匹配或 AI 推断的属性，确认后即记为人工确认；采用后照样能在下方逐行改。</span></div>
+                    <button type="button" onClick={acceptAllSpecifics}>全部采用</button>
+                  </div>
+                )}
+                <div className="ebay-specific-list">
+                  {visibleSpecifics.map(({item,index})=><div className="ebay-specific-row" key={`${item.name}-${index}`}>
+                    <span title={item.name}>{item.name}</span>
+                    <input value={item.value} onChange={event=>{const next=[...specifics];next[index]={...next[index],value:event.target.value,source:'MANUAL',needsConfirmation:false};set('itemSpecifics',next)}}/>
+                    <em>{item.source?SOURCE_LABELS[item.source]:'—'}{item.needsConfirmation?' · 待确认':''}</em>
+                  </div>)}
+                </div>
+                {indexedSpecifics.length>SPECIFICS_VISIBLE_LIMIT&&!specificsExpanded&&<button type="button" className="ebay-specifics-more" onClick={()=>setSpecificsExpanded(true)}>显示更多（还有 {indexedSpecifics.length-SPECIFICS_VISIBLE_LIMIT} 项）</button>}
+              </>
+            ):<p className="ebay-band-empty">本页类目暂无属性；eBay 侧若要求补齐，会在修改页逐项列出。</p>}
+          </section>
 
-        <section id="ebay-revise-pricing" className="ebay-revise-section ebay-revise-pricing-section">
-          <header><div><h2>07 定价</h2><p>直接使用 eBay 原刊登币种与售价，作为后续成本和利润核算基准。</p></div></header>
-          <div className="ebay-revise-pricing-form">
-            <label className="ebay-revise-format-field"><span>格式</span><select disabled value="FIXED_PRICE"><option value="FIXED_PRICE">现在购买</option></select></label>
-            <label className="ebay-revise-price-field"><span>商品价格</span><div><b>{priceSymbol}</b><input aria-label={`商品价格（${priceCurrency}）`} inputMode="decimal" value={draft.price} onChange={event=>set('price',event.target.value)}/></div><small>{priceCurrency} · eBay 原刊登币种</small></label>
-          </div>
-        </section>
+          <section id="ebay-revise-condition" className="ebay-revise-band">
+            <header className="ebay-revise-band-head"><div><h2>状况</h2><p>{route.fieldNote}</p></div><span data-ebay-slot="section-action">{(draft.condition||'').trim()||'未填写'}</span></header>
+            <div className="ebay-revise-cols">
+              <div className="ebay-band-main" data-ebay-col="left">
+                <h3>物品状况</h3>
+                <label className="ebay-revise-field"><span>eBay 商品状况</span><input data-gap={gaps.some(item=>item.name==='condition')?'condition':undefined} placeholder="New" value={draft.condition??''} onChange={event=>set('condition',event.target.value)}/></label>
+              </div>
+              <div className="ebay-note-band" data-ebay-col="right">eBay 状况取值随站点与类目变（New、Used - Seller refurbished 等）。留空时准备阶段不写入，页面按线上原值保留，请在修改页逐项核对。</div>
+            </div>
+          </section>
 
-        {/* 评审 Important-2：读取政策走的是同一个全局 busy（App.tsx 的 busyKey），只锁 readingPolicies 时，
-            保存/上传/「保存并准备到 eBay」进行中照样能点它——两边互相覆盖 busy，会让 preparing 提前变 false、
-            「保存并准备到 eBay」在中途重新可点。故四类进行中一律禁用，并把原因写进按钮文案：点了没反应会被读成「代码没生效」。
-            这是便利按钮不是门禁：只是随流程结束的瞬时锁定，就绪度读数不受影响。 */}
-        <section id="ebay-revise-policies" className="ebay-revise-section">
-          <header><div><h2>08 政策与所在地</h2><p>店铺级可复用资产：从 Seller Hub 读一次即入库，之后同类发布直接选用。政策按 eBay 政策 ID 命中，不按名称猜。</p></div>
+          <section id="ebay-revise-description" className="ebay-revise-band">
+            <header className="ebay-revise-band-head"><div><h2>描述</h2><p>保留可供 AI 诊断和优化的纯文本与原始 HTML。</p></div><span className="ebay-band-counter" data-ebay-slot="section-action">{descriptionLength} 字符</span></header>
+            <div className="ebay-revise-segment"><button className={descriptionMode==='TEXT'?'active':''} type="button" onClick={()=>setDescriptionMode('TEXT')}>文本</button><button className={descriptionMode==='HTML'?'active':''} type="button" onClick={()=>setDescriptionMode('HTML')}>HTML</button></div>
+            {descriptionMode==='TEXT'?<textarea className="ebay-revise-description" value={draft.descriptionText} onChange={event=>set('descriptionText',event.target.value)}/>:<textarea className="ebay-revise-description code" value={draft.descriptionHtml} onChange={event=>set('descriptionHtml',event.target.value)}/>}
+          </section>
+
+          <section id="ebay-revise-pricing" className="ebay-revise-band">
+            <header className="ebay-revise-band-head"><div><h2>定价</h2><p>直接使用 eBay 原刊登币种与售价，作为后续成本和利润核算基准。</p></div><span className="ebay-band-counter" data-ebay-slot="section-action">{priceCurrency}</span></header>
+            <div className="ebay-revise-cols">
+              <div className="ebay-band-main" data-ebay-col="left">
+                <label className="ebay-revise-field"><span>刊登格式</span><select value={draft.listingFormat||'FIXED_PRICE'} onChange={event=>set('listingFormat',event.target.value as 'FIXED_PRICE'|'AUCTION')}><option value="FIXED_PRICE">现在购买</option><option value="AUCTION">拍卖</option></select></label>
+                <label className="ebay-revise-field ebay-price-field"><span>商品价格</span><div className="ebay-price-box"><b>{priceSymbol}</b><input aria-label={`商品价格（${priceCurrency}）`} inputMode="decimal" value={draft.price} onChange={event=>set('price',event.target.value)}/></div><small className="ebay-field-note">价格必须是大于 0 的数字 · 币种 {priceCurrency} 取自 eBay 原刊登</small></label>
+                <label className="ebay-revise-field"><span>数量</span><input data-gap={gaps.some(item=>item.name==='quantity')?'quantity':undefined} inputMode="numeric" value={draft.quantity??''} onChange={event=>set('quantity',event.target.value.replace(/[^\d]/g,''))}/></label>
+                <label className="ebay-revise-field"><span>付款政策</span><select data-policy-kind="payment" data-gap={gaps.some(item=>item.name==='paymentPolicy')?'paymentPolicy':undefined} value={draft.policyIds?.payment||''} onChange={event=>set('policyIds',{...(draft.policyIds||{}),payment:event.target.value})}>
+                  <option value="">未选择（沿用线上原值）</option>
+                  {policyOptions('payment').map(item=><option key={item.policyId} value={item.policyId}>{item.label}{item.listingCount?` · ${item.listingCount} 条`:''}</option>)}
+                </select></label>
+              </div>
+              <aside className="ebay-pricing-aside" data-ebay-col="right">
+                <h3>定价选项</h3>
+                <dl>
+                  <div><dt>币种</dt><dd>{priceCurrency} · eBay 原刊登币种</dd></div>
+                  <div><dt>格式</dt><dd>{draft.listingFormat==='AUCTION'?'拍卖':'现在购买'}</dd></div>
+                  <div><dt>付款政策</dt><dd>{policyReadout('payment')}</dd></div>
+                </dl>
+                <div className="ebay-note-band">eBay 真页这一段还提供折扣与促销、运费补贴、销售税与市场面板；这些字段 APP 没有记录，准备到页面后请人工核对。</div>
+              </aside>
+            </div>
+          </section>
+
+          {/* 评审 Important-2：读取政策走的是同一个全局 busy（App.tsx 的 busyKey），只锁 readingPolicies 时，
+              保存/上传/「保存并准备到 eBay」进行中照样能点它——两边互相覆盖 busy，会让 preparing 提前变 false、
+              「保存并准备到 eBay」在中途重新可点。故四类进行中一律禁用，并把原因写进按钮文案：点了没反应会被读成「代码没生效」。
+              这是便利按钮不是门禁：只是随流程结束的瞬时锁定，就绪度读数不受影响。 */}
+          <section id="ebay-revise-policies" className="ebay-revise-band">
+            <header className="ebay-revise-band-head"><div><h2>运输与所在地</h2><p>店铺级可复用资产：从 Seller Hub 读一次即入库，之后同类发布直接选用。政策按 eBay 政策 ID 命中，不按名称猜。</p></div>
+              <button type="button" className="ebay-band-action" data-ebay-slot="section-action" disabled={readingPolicies||saving||uploading||preparing} onClick={onReadPolicies}>{readingPolicies?'正在读取…':saving||uploading||preparing?'请等待当前操作完成':'从 Seller Hub 读取政策'}</button></header>
             <div className="ebay-policy-carrier"><label><span>在架商品编号（读取载体）</span><input data-policy-carrier inputMode="numeric" placeholder="例如 189035181453" value={policyCarrierItemId} onChange={event=>onPolicyCarrierItemIdChange(event.target.value.replace(/\s+/g,''))}/></label>
               <p className={policyCarrierCheck.ok?'ebay-policy-carrier-ok':'ebay-revise-category-error'}>{policyCarrierCheck.ok?`读取时只用它开一次修改页，政策入库后本店所有商品都能选用。上次抓取：${policyFetchedAtText}。`:policyCarrierCheck.message}</p></div>
-            <button type="button" disabled={readingPolicies||saving||uploading||preparing} onClick={onReadPolicies}>{readingPolicies?'正在读取…':saving||uploading||preparing?'请等待当前操作完成':'从 Seller Hub 读取政策'}</button></header>
-          {businessPolicies.length===0&&<p className="ebay-revise-category-error">尚未读取到店铺政策。点上方按钮开一次修改页即可抓取；读取前这些字段保留 eBay 线上原值。</p>}
-          <div className="ebay-revise-form-grid">
-            {POLICY_FIELDS.map(([kind,label])=>{
-              // DAO 无 kind 参数时按 kind,label 排序、不按 isDefault（AppDatabase 注释点名由本组件补），故默认政策在此前置排序。
-              const options=businessPolicies.filter(item=>item.kind===KIND_BY_PREFIX[kind]).sort((left,right)=>Number(right.isDefault)-Number(left.isDefault)||left.label.localeCompare(right.label,'zh-CN'))
-              const gapName=`${kind}Policy`
-              return <label className="ebay-revise-field" key={kind}><span>{label}</span><select data-policy-kind={kind} data-gap={gaps.some(item=>item.name===gapName)?gapName:undefined} value={draft.policyIds?.[kind]||''} onChange={event=>set('policyIds',{...(draft.policyIds||{}),[kind]:event.target.value})}>
-                <option value="">未选择（沿用线上原值）</option>
-                {options.map(item=><option key={item.policyId} value={item.policyId}>{item.label}{item.listingCount?` · ${item.listingCount} 条`:''}</option>)}
-              </select></label>
-            })}
-            <label className="ebay-revise-field"><span>发货处理天数</span><input inputMode="numeric" value={draft.handlingTime??''} onChange={event=>set('handlingTime',event.target.value.replace(/[^\d]/g,''))}/></label>
-            <label className="ebay-revise-field"><span>商品所在地</span><input data-gap={gaps.some(item=>item.name==='itemLocation')?'itemLocation':undefined} placeholder="Guangdong, CN" value={draft.itemLocation??''} onChange={event=>set('itemLocation',event.target.value)}/></label>
-            <label className="ebay-revise-field"><span>所在地邮编</span><input data-gap={gaps.some(item=>item.name==='postalCode')?'postalCode':undefined} value={draft.postalCode??''} onChange={event=>set('postalCode',event.target.value)}/></label>
-          </div>
-        </section>
+            {businessPolicies.length===0&&<p className="ebay-revise-category-error">尚未读取到店铺政策。点上方按钮开一次修改页即可抓取；读取前这些字段保留 eBay 线上原值。</p>}
+            <div className="ebay-revise-cols">
+              <div className="ebay-band-main" data-ebay-col="left">
+                <label className="ebay-revise-field"><span>运输政策</span><select data-policy-kind="shipping" data-gap={gaps.some(item=>item.name==='shippingPolicy')?'shippingPolicy':undefined} value={draft.policyIds?.shipping||''} onChange={event=>set('policyIds',{...(draft.policyIds||{}),shipping:event.target.value})}>
+                  <option value="">未选择（沿用线上原值）</option>
+                  {policyOptions('shipping').map(item=><option key={item.policyId} value={item.policyId}>{item.label}{item.listingCount?` · ${item.listingCount} 条`:''}</option>)}
+                </select></label>
+                <label className="ebay-revise-field"><span>退货政策</span><select data-policy-kind="return" data-gap={gaps.some(item=>item.name==='returnPolicy')?'returnPolicy':undefined} value={draft.policyIds?.return||''} onChange={event=>set('policyIds',{...(draft.policyIds||{}),return:event.target.value})}>
+                  <option value="">未选择（沿用线上原值）</option>
+                  {policyOptions('return').map(item=><option key={item.policyId} value={item.policyId}>{item.label}{item.listingCount?` · ${item.listingCount} 条`:''}</option>)}
+                </select></label>
+                <label className="ebay-revise-field"><span>发货处理天数</span><input inputMode="numeric" value={draft.handlingTime??''} onChange={event=>set('handlingTime',event.target.value.replace(/[^\d]/g,''))}/></label>
+                <label className="ebay-revise-field"><span>商品所在地</span><input data-gap={gaps.some(item=>item.name==='itemLocation')?'itemLocation':undefined} placeholder="Guangdong, CN" value={draft.itemLocation??''} onChange={event=>set('itemLocation',event.target.value)}/></label>
+                <label className="ebay-revise-field"><span>所在地邮编</span><input data-gap={gaps.some(item=>item.name==='postalCode')?'postalCode':undefined} value={draft.postalCode??''} onChange={event=>set('postalCode',event.target.value)}/></label>
+              </div>
+              <div className="ebay-your-settings" data-ebay-col="right">
+                <h3>您的设置</h3>
+                <dl>
+                  <div><dt>运输政策</dt><dd>{policyReadout('shipping')}</dd></div>
+                  <div><dt>退货政策</dt><dd>{policyReadout('return')}</dd></div>
+                  <div><dt>商品所在地</dt><dd>{(draft.itemLocation||'').trim()||'未填写'}{(draft.postalCode||'').trim()?` · ${(draft.postalCode||'').trim()}`:''}</dd></div>
+                  <div><dt>处理天数</dt><dd>{(draft.handlingTime||'').trim()?`${draft.handlingTime} 天`:'未填写'}</dd></div>
+                </dl>
+                <div className="ebay-note-band">eBay 真页此处还有 Dispatch time 逐档、International shipping 与销售税面板；本地只记录上面这几项，其余在页面人工核对。</div>
+              </div>
+            </div>
+          </section>
+
+          <section id="ebay-revise-others" className="ebay-revise-band">
+            <header className="ebay-revise-band-head"><div><h2>其他 eBay 刊登选项</h2><p>eBay 真页在定价之后还有发票声明、推广与慈善三段。</p></div><span data-ebay-slot="section-action">APP 未记录</span></header>
+            <div className="ebay-note-band">Item disclosures、Promote your listing（含 Sponsored Products）与 Charity donation 在 eBay 现网修改页各自成段。本地产品没有这些字段，准备到页面后由您逐项决定；系统不代您勾选，也不代您开推广预算。</div>
+          </section>
+        </div>
       </main>
 
       <footer className="ebay-revise-footer"><span>{errors.length?`还有 ${errors.length} 项必须修改后才能保存`:'保存标题、描述、价格、状况、数量、SKU、类目属性与政策所在地；库存与业务政策仍只在 eBay 页面生效'}</span><button type="button" disabled={saving||preparing} onClick={onClose}>取消</button><button type="button" disabled={saving||preparing||uploading||errors.length>0} onClick={onSave}>{saving?'正在保存…':'保存本地新版本'}</button><button className="primary" type="button" disabled={saving||preparing||uploading||errors.length>0} onClick={onPrepare}>{preparing?route.preparing:route.prepare}</button></footer>
