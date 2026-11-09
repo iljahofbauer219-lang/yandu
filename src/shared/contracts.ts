@@ -1,5 +1,5 @@
 import type { SemanticFallbackMark } from './semanticFallback'
-import type { EbayItemSpecificSlot } from './ebayItemSpecificsModel'
+import type { EbayItemSpecificSlot, EbaySuggestedSpecificsCard } from './ebayItemSpecificsModel'
 
 export type Platform = 'ozon' | '1688' | 'web'
 export type SelectionMode = 'FORWARD_SUPPLY' | 'REVERSE_MARKET'
@@ -308,6 +308,12 @@ export interface EbayLocalListingRequirements {
    * 只在本次会话里给编辑器 05 段用，不落库：重启后要再读一次才算拿到。
    */
   attributeSlots:EbayItemSpecificSlot[]
+  /**
+   * ITEM SPECIFICS 段顶部那张 eBay.ai「Suggested item specifics」卡片。
+   * 现网按条件渲染：同一张草稿页重载后可能就不再出现，读不到即为 null，编辑器不画卡片。
+   * 与槽位清单同口径——只在本次会话里用，不落库。
+   */
+  suggestedCard:EbaySuggestedSpecificsCard|null
   inspectedAt:string
   warnings:string[]
   policies:EbayScrapedPolicyOption[]

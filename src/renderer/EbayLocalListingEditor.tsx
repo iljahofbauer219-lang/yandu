@@ -3,7 +3,7 @@ import type { EbayItemSpecific, EbayLocalProduct, EbayLocalProductUpdateInput, E
 import { formatFormGaps, type EbayFormGap } from '../shared/ebayListingForm'
 import { checkEbayPolicyCarrierItemId } from '../shared/ebayPolicyCarrier'
 import type { EbayListingRouteKind } from '../shared/ebayListingTarget'
-import type { EbayItemSpecificSlot } from '../shared/ebayItemSpecificsModel'
+import type { EbayItemSpecificSlot, EbaySuggestedSpecificsCard } from '../shared/ebayItemSpecificsModel'
 import type { PlatformCategoryController } from './useEbayPlatformCategory'
 import './ebay-local-listing-editor.css'
 import './ebay-local-listing-pricing.css'
@@ -36,6 +36,8 @@ type Props={
   attributeSlots?:EbayItemSpecificSlot[]
   /** 上面那份清单的抓取时刻（requirements.inspectedAt）；清单只活在本次会话，不落库，故时间必须显式标出 */
   attributeSlotsAt?:string
+  /** 现网 ITEM SPECIFICS 段顶部的 eBay.ai 建议卡；现网按条件渲染，读不到即为 null，段内不画卡片 */
+  suggestedCard?:EbaySuggestedSpecificsCard|null
   inline?:boolean
 }
 
@@ -167,7 +169,7 @@ function CustomCategoryDropdown({options,value,onChange,disabled,placeholder,sav
   )
 }
 
-export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,gaps,businessPolicies,readingPolicies,onReadPolicies,policyCarrierItemId,onPolicyCarrierItemIdChange,routeKind='revise',attributeSlots=[],attributeSlotsAt='',inline}:Props) {
+export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,gaps,businessPolicies,readingPolicies,onReadPolicies,policyCarrierItemId,onPolicyCarrierItemIdChange,routeKind='revise',attributeSlots=[],attributeSlotsAt='',suggestedCard=null,inline}:Props) {
   const fileInput=useRef<HTMLInputElement>(null)
   const [draggedId,setDraggedId]=useState('')
   const [descriptionMode,setDescriptionMode]=useState<'TEXT'|'HTML'>('TEXT')
@@ -191,6 +193,8 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
   const updateSpecific=(index:number,value:string)=>{const next=[...specifics];next[index]={...next[index],value,source:'MANUAL',needsConfirmation:false};set('itemSpecifics',next)}
   // 05 段两态：读到现网槽位清单走「现网清单态」（分组/必填/控件形状照 eBay），没读到退回「本地清单态」并点名尚未读取。
   const specificKey=(name:string)=>name.trim().toLowerCase()
+  // 建议卡的勾选态只活在本次会话：现网也是「勾上即写入」，取消勾选只撤勾，不回滚已经填进属性行的值。
+  const [suggestionChecked,setSuggestionChecked]=useState<Record<string,boolean>>({})
   const essentialSlots=attributeSlots.filter(item=>item.group==='ESSENTIAL')
   const optionalSlots=attributeSlots.filter(item=>item.group!=='ESSENTIAL')
   const slottedNames=new Set(attributeSlots.map(item=>specificKey(item.name)))
@@ -198,30 +202,44 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
   // 槽位清单只在本次会话里活着（不落库），故把抓取时刻显式标出来；没给时间就不谎报「已读取于……」。
   const stampText=(iso:string)=>iso?new Date(iso).toLocaleString('zh-CN',{hour12:false}):''
   const attributeSlotsAtText=attributeSlots.length?stampText(attributeSlotsAt):''
+  // 现网槽位不一定已有本地行：新增行按同名匹配键写入 itemSpecifics，准备阶段与本地行共用同一份值。
+  const writeSlotInto=(list:EbayItemSpecific[],name:string,value:string)=>{
+    const index=list.findIndex(item=>specificKey(item.name)===specificKey(name))
+    if(index>=0)list[index]={...list[index],value,source:'MANUAL',needsConfirmation:false}
+    else list.push({name,value,source:'MANUAL',needsConfirmation:false})
+    return list
+  }
+  const toggleSuggestion=(item:{name:string;value:string},checked:boolean)=>{
+    setSuggestionChecked(current=>({...current,[specificKey(item.name)]:checked}))
+    // 值只在操作员明确勾选时写入；取消勾选只撤勾，不动已经填进属性行的值。
+    if(checked&&item.value)set('itemSpecifics',writeSlotInto([...specifics],item.name,item.value))
+  }
+  const applyAllSuggestions=()=>{
+    if(!suggestedCard)return
+    setSuggestionChecked(Object.fromEntries(suggestedCard.items.map(item=>[specificKey(item.name),true])))
+    // 一次算完整张清单再交出去：逐条 set 会各自基于同一份旧 specifics，后一条把前一条抹掉。
+    let list=[...specifics]
+    for(const item of suggestedCard.items)if(item.value)list=writeSlotInto(list,item.name,item.value)
+    set('itemSpecifics',list)
+  }
   const slotRow=(slot:EbayItemSpecificSlot)=>{
     const localIndex=specifics.findIndex(item=>specificKey(item.name)===specificKey(slot.name))
     const local=localIndex>=0?specifics[localIndex]:undefined
     const value=local?.value??''
-    const writeSlotValue=(next:string)=>{
-      const list=[...specifics]
-      // 现网槽位不一定已有本地行：新增行按同名匹配键写入 itemSpecifics，准备阶段与本地行共用同一份值。
-      if(localIndex>=0)list[localIndex]={...list[localIndex],value:next,source:'MANUAL',needsConfirmation:false}
-      else list.push({name:slot.name,value:next,source:'MANUAL',needsConfirmation:false})
-      set('itemSpecifics',list)
-    }
+    const writeSlotValue=(next:string)=>set('itemSpecifics',writeSlotInto([...specifics],slot.name,next))
     return (
       <div className="ebay-specific-row ebay-specific-row--slot" key={slot.name}>
         <span className={`ebay-specific-label${slot.required?' required':''}`} title={slot.name}>{slot.name}{slot.required&&<i className="ebay-specific-star" aria-label="eBay 必填属性">*</i>}</span>
         <div className="ebay-specific-control">
           {slot.control==='MENU'?(
             <div className="ebay-specific-menu">
-              <input name={slot.name} value={value} placeholder={slot.placeholder} onChange={event=>writeSlotValue(event.target.value)}/>
-              <i className="ebay-specific-menu-caret" aria-hidden="true">▾</i>
+              <input name={slot.name} value={value} placeholder={slot.placeholderShown} className={slot.placeholderShown?'ebay-specific-menu-input--live':undefined} onChange={event=>writeSlotValue(event.target.value)}/>
+              <svg className="ebay-specific-menu-caret" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M3 5.75 8 10.75l5-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             </div>
           ):slot.control==='TEXTAREA'?(
-            <textarea name={slot.name} value={value} placeholder={slot.placeholder} rows={3} maxLength={slot.maxLength||undefined} onChange={event=>writeSlotValue(event.target.value)}/>
+            <textarea name={slot.name} value={value} placeholder={slot.placeholderShown} rows={3} maxLength={slot.maxLength||undefined} onChange={event=>writeSlotValue(event.target.value)}/>
           ):(
-            <input name={slot.name} value={value} placeholder={slot.placeholder} onChange={event=>writeSlotValue(event.target.value)}/>
+            <input name={slot.name} value={value} placeholder={slot.placeholderShown} onChange={event=>writeSlotValue(event.target.value)}/>
           )}
           {slot.control==='TEXTAREA'&&slot.maxLength>0&&<span className="ebay-specific-counter">{`${value.length}/${slot.maxLength}`}</span>}
           {slot.suggested&&<button type="button" className="ebay-specific-suggested" onClick={()=>writeSlotValue(slot.suggested)}>{`Suggested: ${slot.suggested}`}</button>}
@@ -367,6 +385,21 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
               :<div className="ebay-note-band">尚未读取现网类目属性：点下方「运输与所在地」段的「从 Seller Hub 读取政策与类目属性」开一次修改页，eBay 该类目的分组、必填与控件形状会一并读回这里。下面先按本地已记录的属性展示。</div>)}
             {attributeSlots.length>0?(
               <div className="ebay-specific-list">
+                {suggestedCard&&(
+                  <div className="ebay-specifics-ai-card">
+                    <h4 className="ebay-specifics-ai-title">{suggestedCard.title}</h4>
+                    {suggestedCard.blurb&&<p className="ebay-specifics-ai-blurb">{suggestedCard.blurb}</p>}
+                    <div className="ebay-specifics-ai-items">
+                      {suggestedCard.items.map(item=>(
+                        <label className="ebay-specifics-ai-item" key={`${item.name}-${item.value}`}>
+                          <input type="checkbox" name={item.name} checked={Boolean(suggestionChecked[specificKey(item.name)]??item.checked)} onChange={event=>toggleSuggestion(item,event.target.checked)}/>
+                          <span>{item.value?`${item.name}: ${item.value}`:item.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {suggestedCard.applyAll&&<button type="button" className="ebay-specifics-ai-apply" onClick={applyAllSuggestions}>{suggestedCard.applyAll}</button>}
+                  </div>
+                )}
                 {essentialSlots.length>0&&<h3 className="ebay-specific-group">Essential</h3>}
                 {essentialSlots.map(slotRow)}
                 {optionalSlots.length>0&&<h3 className="ebay-specific-group">Optional</h3>}

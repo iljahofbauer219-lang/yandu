@@ -24,11 +24,12 @@ import { BrowserWorkspace, EBAY_POLICY_SCRAPE_KINDS } from '../BrowserWorkspace'
 type Host = Record<string, unknown>
 type RawOption = { kind: string; raw: string; selected: boolean }
 type ModelField = 'paymentPolicy' | 'shippingPolicy' | 'returnPolicy'
-type PageResult = { ready?: boolean; categorySpecifics?: unknown[]; policyOptions?: RawOption[]; policyModels?: Partial<Record<ModelField, string>>; url?: string; attributeRows?: unknown[]; attributeGroups?: Array<{ text: string; y: number }> }
+type PageResult = { ready?: boolean; categorySpecifics?: unknown[]; policyOptions?: RawOption[]; policyModels?: Partial<Record<ModelField, string>>; url?: string; attributeRows?: unknown[]; attributeGroups?: Array<{ text: string; y: number }>; attributeCard?: { text: string; options: Array<{ label: string; checked: boolean }>; buttons: string[] } }
 type InspectMethod = (this: Host, accountId: string, listingId: string, title: string) => Promise<{
   sourceUrl: string
   categorySpecifics: unknown[]
-  attributeSlots: Array<{ name: string; group: string; control: string; required: boolean; value: string; placeholder: string; suggested: string; maxLength: number; counter: string; tooltip: string; y: number }>
+  attributeSlots: Array<{ name: string; group: string; control: string; required: boolean; value: string; placeholder: string; placeholderShown: string; suggested: string; maxLength: number; counter: string; tooltip: string; y: number }>
+  suggestedCard: { title: string; blurb: string; items: Array<{ name: string; value: string; checked: boolean }>; applyAll: string } | null
   policies: Array<{ kind: string; label: string; policyId?: string; listingCount?: number; selected: boolean }>
   inspectedAt: string
   warnings: string[]
@@ -64,6 +65,19 @@ const ATTRIBUTE_ROWS = [
   { name: 'title', id: '', tag: 'INPUT', controlClass: 'textbox__control', labelText: 'Item title', labelClass: '', text: '', value: 'Compressor', placeholder: '', panelPlaceholder: '', maxLength: '', valueText: '', y: 900 }
 ]
 const ATTRIBUTE_GROUPS = [{ text: 'Essential', y: 1507 }, { text: 'Optional', y: 2006 }]
+/**
+ * 2026-11-09 15:17 现网 ITEM SPECIFICS 段顶部那张 eBay.ai 建议卡的原文（截图
+ * ~/.yandu-acceptance/2026-11-09-R6/C01-ebay-live-item-specifics.png）。卡片按条件渲染：
+ * 同一张草稿页重载后就不再出现，所以这里只有截图原文、没有 DOM 导出。
+ */
+const ATTRIBUTE_CARD = {
+  text: 'Suggested item specifics\nQuickly add item specifics using info from your photos and title, powered by eBay.ai—this helps buyers find your item faster.\nYear Manufactured: 2020\nNumber of Compressors: 1\nApply all',
+  options: [
+    { label: 'Year Manufactured: 2020', checked: false },
+    { label: 'Number of Compressors: 1', checked: false }
+  ],
+  buttons: ['Apply all']
+}
 
 /** 用 fixtures 冒充内嵌浏览器：executeJavaScript 收到真实页脚本字符串，返回 page 里给定的原始文本。 */
 function makeHost(page: PageResult = {}) {
@@ -78,6 +92,7 @@ function makeHost(page: PageResult = {}) {
       categorySpecifics: page.categorySpecifics ?? CATEGORY,
       attributeRows: page.attributeRows ?? [],
       attributeGroups: page.attributeGroups ?? [],
+      attributeCard: page.attributeCard ?? { text: '', options: [], buttons: [] },
       policyOptions: page.policyOptions ?? [],
       policyModels: { paymentPolicy: '', shippingPolicy: '', returnPolicy: '', ...(page.policyModels ?? {}) }
     }
@@ -366,13 +381,62 @@ describe('ReviseItem 类目属性段抓取 · 槽位清单（R5 现网 ITEM SPEC
   })
 })
 
+describe('ReviseItem 类目属性段抓取 · Suggested item specifics 卡片', () => {
+  it('页内回传的卡片原文在 TS 侧解成建议卡：标题/逐项建议/Apply all 都对得上现网', async () => {
+    const { suggestedCard } = await inspect({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS, attributeCard: ATTRIBUTE_CARD })
+    expect(suggestedCard).toMatchObject({
+      title: 'Suggested item specifics',
+      items: [
+        { name: 'Year Manufactured', value: '2020', checked: false },
+        { name: 'Number of Compressors', value: '1', checked: false }
+      ],
+      applyAll: 'Apply all'
+    })
+    expect(suggestedCard?.blurb).toContain('powered by eBay.ai')
+  })
+
+  it('卡片没渲染出来就回 null，槽位清单照旧读到、不抛错（重载后 eBay.ai 卡片确实会消失）', async () => {
+    const { suggestedCard, attributeSlots } = await inspect({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS })
+    expect(suggestedCard).toBeNull()
+    expect(attributeSlots.map(item => item.name)).toContain('Brand')
+  })
+
+  it('卡片整块原文按行抄回：标题与说明的分界是块级换行，页内一把 clean 就把它抹平了', async () => {
+    // 真机取证 2026-11-09 17:38：现网卡片 innerText 本来是 5 行，被 clean(/\s+/g,' ') 合成一行后
+    // TS 侧无法分标题与说明，整段散文全被当成标题画出来。
+    const { host, scripts } = makeHost({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS, attributeCard: ATTRIBUTE_CARD })
+    await inspectMethod.call(host, 'ebay:s1', 'T100', 'Bracket')
+    const script = scripts[0]
+    expect(script).toMatch(/const cleanLines=[^;]*split\('\\n'\)/)
+    expect(script).toContain('attributeCard.text=cleanLines(cardNode.innerText)')
+  })
+
+  it('页内脚本补取卡片：只按文字锚点找块并抄整块原文与勾选态，判据一律不在页内做', async () => {
+    const { host, scripts } = makeHost({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS, attributeCard: ATTRIBUTE_CARD })
+    await inspectMethod.call(host, 'ebay:s1', 'T100', 'Bracket')
+    const script = scripts[0]
+    const start = script.indexOf('const attributeRows=[]')
+    const section = script.slice(start, script.indexOf('return {url:'))
+    expect(start).toBeGreaterThan(-1)
+    expect(section).toContain('attributeCard')
+    expect(section).toContain('input[type=checkbox]')
+    // 标题原文是定位锚点（页内按不区分大小写的正则找），可以出现在页内；解卡片与按钮的判据必须在 TS 侧
+    expect(section).toMatch(/suggested item specifics/i)
+    expect(section).not.toMatch(/parseEbayItemSpecifics|required-field|fake-menu-button|ESSENTIAL|OPTIONAL|applyAll/)
+  })
+})
+
 describe('ReviseItem 政策抓取 · 落库与读取接线', () => {
   it('源码守卫：槽位清单跟着 requirements 走，不落库、不进 publish task', () => {
     expect(source('src/shared/contracts.ts')).toContain('attributeSlots:EbayItemSpecificSlot[]')
     expect(source('src/main/main.ts')).not.toContain('saveEbayItemSpecificSlots')
     const handler = source('src/main/main.ts')
     const body = handler.slice(handler.indexOf("ipcMain.handle('ebay:local-products:requirements'"))
-    expect(body.slice(0, body.indexOf("ipcMain.handle('ebay:local-products:prepare-revision'"))).not.toContain('attributeSlots')
+    const prepare = body.slice(0, body.indexOf("ipcMain.handle('ebay:local-products:prepare-revision'"))
+    expect(prepare).not.toContain('attributeSlots')
+    // 建议卡与槽位清单同口径：只在本次会话里给编辑器用，不落库、不进 publish task
+    expect(source('src/shared/contracts.ts')).toContain('suggestedCard:EbaySuggestedSpecificsCard|null')
+    expect(prepare).not.toContain('suggestedCard')
   })
 
   it('源码守卫：requirements 抓完即入库，且绝不把 DAO 包进外层事务', () => {

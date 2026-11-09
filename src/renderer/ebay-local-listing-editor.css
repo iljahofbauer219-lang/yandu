@@ -132,17 +132,48 @@ button[data-ebay-slot="section-action"]:disabled{background:#ececec;border-color
 /* 05 段现网清单态：几何全部取 2026-11-09 R5 实测（标签列 x=422 w=342、控件列 x=780 w=406、
    input 404×38、textarea 404×40、行距 56px）。全局 ui-readability.css 的 button{min-height:38px}
    与 input{min-height:40px} 会静默顶掉 height，故这里每条控件规则都显式写 min-height:0。 */
+/* eBay.ai「Suggested item specifics」建议卡：几何与配色取 2026-11-09 19:1x 真页 getComputedStyle +
+   getBoundingClientRect 实测（整块 976×185：0.6px #e5e5e5 描边、8px 圆角、透明底、块级排布、
+   内边距 24px 16px、外边距 8px 0 32px）。现网卡片内层还套着一块 .inline-notice（margin 8）与两段 <p>
+   （margin 3），本编辑器是扁平 JSX，把嵌套 margin 直接折进两条规则：
+   标题 14/600 → margin 8+3=11 上、3 下；说明 14px #707070 行高 20 → 上 3、下 8+3=11。
+   勾选项网格 repeat(auto-fit,minmax(280px,max-content)) 来自现网 fieldset，margin 0 2px；
+   每条 item 实测 256×20，自身 margin 16px 24px 0 0，勾选框 18×18 与文字间距 12px。
+   Apply all 距勾选项 16px、14px 700 #191919 带下划线、无底无边框、实测高 17。
+   每条规则都挂在段落 id 下：全局 ui-readability.css 的 .ebay-platform-page :where(label,summary)
+   与 .ebay-platform-page :where(p) 特异度 (0,1,0)，单类选择器与它相同、只靠书写顺序取胜，
+   真机实测卡片 label/p 被它压回 12px（2026-11-09 18:52 取证），挂上 id 后 (1,1,0) 才稳。 */
+#ebay-revise-specifics .ebay-specifics-ai-card{display:block;margin:8px 0 32px;padding:24px 16px;border:.6px solid #e5e5e5;border-radius:8px;background:transparent;font-size:14px;line-height:20px;color:#191919}
+#ebay-revise-specifics .ebay-specifics-ai-title{margin:11px 0 3px;font-size:14px;font-weight:600;line-height:20px;color:#191919}
+#ebay-revise-specifics .ebay-specifics-ai-blurb{margin:3px 0 11px;font-size:14px;line-height:20px;color:#707070}
+#ebay-revise-specifics .ebay-specifics-ai-items{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,max-content));margin:0 2px}
+#ebay-revise-specifics .ebay-specifics-ai-item{display:flex;align-items:center;gap:12px;min-width:0;margin:16px 24px 0 0;font-size:14px;line-height:20px;color:#191919;cursor:pointer}
+/* styles.css 的裸 input{margin-top:5px} 只声明 margin，镜像规则不写它就会静默生效；
+   现网实测控件顶与行顶偏移 0，故每条控件规则显式写 margin:0。 */
+#ebay-revise-specifics .ebay-specifics-ai-item input{flex:none;width:18px;height:18px;margin:0}
+#ebay-revise-specifics .ebay-specifics-ai-apply{min-height:0;padding:0;border:0;background:none;font:inherit;font-size:14px;font-weight:700;line-height:normal;color:#191919;text-decoration:underline;cursor:pointer;margin-top:16px;display:inline-block}
 .ebay-specific-group{margin:6px 0 0;font-size:13px;font-weight:700;color:#191919}
 .ebay-specific-row--slot{grid-template-columns:342px minmax(0,406px);gap:0 16px;min-height:56px;align-items:start}
 .ebay-specific-row--slot .ebay-specific-label{line-height:38px}
 .ebay-specific-star{margin-left:4px;font-style:normal;font-weight:700;color:#d62020}
 .ebay-specific-control{display:grid;gap:6px;min-width:0}
-.ebay-specific-row--slot input,.ebay-specific-row--slot textarea{width:100%;height:38px;min-height:0;padding:0 12px;border:1px solid #767676;border-radius:8px;background:#fff;font:inherit;font-size:13px;color:#191919;box-sizing:border-box}
-.ebay-specific-row--slot textarea{height:40px;min-height:0;line-height:1.4;resize:vertical}
+/* 与菜单槽同一原因：全局 ui-readability.css 的 input:not([type=checkbox]):not([type=radio]) 是 (0,2,1)，
+   它的 min-height:var(--ui-control-height)=40px 会顶掉现网实测的 38 高，单类 (0,1,1) 排在后面也压不住，
+   故 TEXT / TEXTAREA 两条一并挂段落 id；styles.css 裸 input 的 margin-top:5px 也显式清成 0。 */
+#ebay-revise-specifics .ebay-specific-row--slot input,#ebay-revise-specifics .ebay-specific-row--slot textarea{width:100%;height:38px;min-height:0;margin:0;padding:0 12px;border:1px solid #767676;border-radius:8px;background:#fff;font:inherit;font-size:13px;color:#191919;box-sizing:border-box}
+#ebay-revise-specifics .ebay-specific-row--slot textarea{height:40px;min-height:0;line-height:1.4;resize:vertical}
 .ebay-specific-row--slot input:focus,.ebay-specific-row--slot textarea:focus{border-color:#08766d;outline:2px solid rgba(8,118,109,.18)}
 .ebay-specific-menu{position:relative;display:block;min-width:0}
-.ebay-specific-menu input{padding-right:32px}
-.ebay-specific-menu-caret{position:absolute;top:0;right:12px;display:flex;align-items:center;height:38px;font-style:normal;font-size:11px;color:#767676;pointer-events:none}
+/* 菜单槽按现网 fake-menu-button 的 computed style 画：灰底 #f7f7f7、0.6px #8f8f8f 描边、8px 圆角、
+   40 高、左内边距 20px、14px 字号（2026-11-09 真页 getComputedStyle 实测 406×40 / padding 0 20px / font 14px）。
+   右侧留给 16px 箭头，箭头外边距实测 20px，故 padding-right 取 20+16=36px，文字不会压到箭头下面。
+   选择器必须带段落的 id：全局 ui-readability.css 的 input:not([type=checkbox]):not([type=radio])
+   是 (0,2,1)，单类选择器 (0,1,1) 排在它后面也压不住——真机实测就被它顶回 0 12px / 13px（2026-11-09 18:38 取证）。 */
+#ebay-revise-specifics .ebay-specific-menu input{width:100%;height:40px;min-height:0;margin:0;padding:0 36px 0 20px;border:.6px solid #8f8f8f;border-radius:8px;background:#f7f7f7;font:inherit;font-size:14px;color:#191919}
+/* 现网把菜单按钮的选中值当按钮自身文字画（2026-11-09 19:52 实测 color rgb(25,25,25)），只有 textbox__control
+   的占位才是 rgb(112,112,112)。同形读数框用 placeholder 承载线上原值，不改色就整块画成占位灰，与真页一眼可辨。 */
+#ebay-revise-specifics .ebay-specific-menu-input--live::placeholder{color:#191919;opacity:1}
+.ebay-specific-menu-caret{position:absolute;top:50%;right:20px;transform:translateY(-50%);width:16px;height:16px;color:#191919;pointer-events:none}
 .ebay-specific-suggested{justify-self:start;min-height:0;padding:0;border:0;background:none;font:inherit;font-size:12px;color:#3665f3;text-decoration:underline;cursor:pointer}
 .ebay-specific-counter{justify-self:end;font-size:12px;line-height:1.2;color:#707070}
 .ebay-specific-source{font-style:normal;font-size:12px;line-height:1.4;color:#707070}

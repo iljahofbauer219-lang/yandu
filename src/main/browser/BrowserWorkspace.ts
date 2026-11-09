@@ -17,7 +17,7 @@ import { EBAY_SITE_ROOT_DOMAINS } from '../../shared/ebaySites'
 import { extractPolicyIdFromLabel } from '../../shared/ebayListingForm'
 import { resolveEbayListingTargetForProduct } from '../../shared/ebayListingTarget'
 import { EBAY_POLICY_MODEL_FIELDS, parseEbayPolicyModel, parseEbayPolicyModelChoices, type EbayPolicyModelChoices, type EbayPolicyModelField } from '../../shared/ebayPolicyModel'
-import { parseEbayItemSpecifics, type EbayItemSpecificsRaw } from '../../shared/ebayItemSpecificsModel'
+import { parseEbayItemSpecifics, parseEbayItemSpecificsCard, type EbayItemSpecificsCardRaw, type EbayItemSpecificsRaw } from '../../shared/ebayItemSpecificsModel'
 import { EBAY_LOCAL_FILL_TARGETS, ebayLocalFillPayload, ebayPolicyFillPlan } from './ebayLocalFill'
 import { pickGigaMainImage } from '../../shared/gigaImageResolve'
 import type { BrowserBounds, BrowserState, BrowserTab, BuiltInCollectorState, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, EbayBrowserPluginState, EbayCategorySpecificRequirement, EbayCollectedProduct, EbayDeliveryLocationResult, EbayDirectoryProductScanCategory, EbayLoginResult, EbayMarketResearchFilter, EbayMarketResearchMetric, EbayMarketResearchSample, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayPlatformCategoryOption, EbayProductDetails, EbaySellerHubAcceptanceSnapshot, EbayStoreCategory, MarketplacePlatformCode, NetworkStrategy, Platform, SelectionTask, SupplyActivationResult } from '../../shared/contracts'
@@ -1961,6 +1961,34 @@ export class BrowserWorkspace {
       ${EBAY_POLICY_MODEL_SLICE}
       const attributeRows=[];
       const attributeGroups=[];
+      // 现网 ITEM SPECIFICS 段顶部还有一张 eBay.ai 建议卡，按条件渲染：同一张草稿页重载后整块就不出现了（2026-11-09 R6 取证）。
+      // 这里同样只抄原文——整块可见文字、每个勾选项的标签原文与选中态、按钮原文；
+      // 标题与说明的分界、「属性名: 建议值」的切分、按钮的认法全留给 TS 侧解，可离线跑现网 fixtures。
+      // clean 会把整块压成一行，卡片标题与说明的分界就没了；按行抄回，分行判据留给 TS 侧。
+      const cleanLines=value=>String(value||'').split('\n').map(clean).filter(Boolean).join('\n');
+      const attributeCard={text:'',options:[],buttons:[]};
+      const hasCheckbox=node=>Boolean(node.querySelector('input[type=checkbox],[role=checkbox]'));
+      const cardTitles=[...document.querySelectorAll('h3,h4,strong,b,p,div,span')].filter(node=>{
+        if(!node.getClientRects().length)return false;
+        // 只认直接文本节点：抓到把整段包起来的外层容器就没有意义了
+        return [...node.childNodes].some(child=>child.nodeType===3&&/suggested item specifics/i.test(child.textContent||''));
+      });
+      for(const cardTitle of cardTitles){
+        let cardNode=cardTitle;
+        // 往上找到第一个「含勾选项、又没把整段属性表包进去」的块，那才是卡片本身
+        while(cardNode&&cardNode!==document.body){
+          if(hasCheckbox(cardNode)&&!cardNode.querySelector('.summary__attributes'))break;
+          cardNode=cardNode.parentElement;
+        }
+        if(!cardNode||cardNode===document.body)continue;
+        attributeCard.text=cleanLines(cardNode.innerText);
+        for(const box of cardNode.querySelectorAll('input[type=checkbox],[role=checkbox]')){
+          const labelNode=box.labels&&box.labels.length?box.labels[0]:(box.closest('label')||box.parentElement);
+          attributeCard.options.push({label:clean(labelNode&&labelNode.innerText),checked:Boolean(box.checked)||/true/i.test(box.getAttribute('aria-checked')||'')});
+        }
+        for(const action of cardNode.querySelectorAll('button,a')){if(action.getClientRects().length)attributeCard.buttons.push(clean(action.innerText))}
+        break;
+      }
       // R5 现网：类目属性段是 div.summary__attributes，一行 = 标签列 + 值列，控件 name 直接带属性显示名（含空格与括号）。
       // 这里只把原文抄回去：id（里面带分组记号）、class、标签列文本与类、占位、maxlength、值列可见文字、行 y。
       // 分组 / 必填 / 控件类型 / 建议值 / 计数的判据全在 TS 侧解，可离线跑现网 fixtures（见 src/shared/__tests__/ebayItemSpecificsModel.test.ts）。
@@ -1994,9 +2022,9 @@ export class BrowserWorkspace {
           });
         }
       }
-      return {url:location.href,login,verification,ready:Boolean(titleField),categorySpecifics,policyOptions,policyModels,attributeGroups,attributeRows};
+      return {url:location.href,login,verification,ready:Boolean(titleField),categorySpecifics,policyOptions,policyModels,attributeGroups,attributeRows,attributeCard};
     })()`
-    let result:{url:string;login:boolean;verification:boolean;ready:boolean;categorySpecifics:EbayCategorySpecificRequirement[];policyOptions:Array<{kind:string;raw:string;selected:boolean}>;policyModels:Record<string,string>;attributeGroups:EbayItemSpecificsRaw['groups'];attributeRows:EbayItemSpecificsRaw['rows']}={url:reviseUrl,login:false,verification:false,ready:false,categorySpecifics:[],policyOptions:[],policyModels:{paymentPolicy:'',shippingPolicy:'',returnPolicy:''},attributeGroups:[],attributeRows:[]}
+    let result:{url:string;login:boolean;verification:boolean;ready:boolean;categorySpecifics:EbayCategorySpecificRequirement[];policyOptions:Array<{kind:string;raw:string;selected:boolean}>;policyModels:Record<string,string>;attributeGroups:EbayItemSpecificsRaw['groups'];attributeRows:EbayItemSpecificsRaw['rows'];attributeCard:EbayItemSpecificsCardRaw}={url:reviseUrl,login:false,verification:false,ready:false,categorySpecifics:[],policyOptions:[],policyModels:{paymentPolicy:'',shippingPolicy:'',returnPolicy:''},attributeGroups:[],attributeRows:[],attributeCard:{text:'',options:[],buttons:[]}}
     for(let attempt=0;attempt<20;attempt+=1){result=await tab.view.webContents.executeJavaScript(script,true) as typeof result;if(result.login)throw new Error('eBay 登录会话已失效，请先完成登录');if(result.verification)throw new Error('eBay 要求安全验证，请人工完成后重试');if(result.ready)break;await this.sleep(750)}
     if(!result.ready)throw new Error('Seller Hub 修改页尚未加载完成，请确认商品仍在线后重试')
     // 解析全留在 TS：页内脚本只回下拉的原始文本与选中态、三段模型对象原文，编号与在架数一律在这里解出，
@@ -2026,7 +2054,9 @@ export class BrowserWorkspace {
     // 槽位清单与旧 categorySpecifics 各算各的：后者按标签文本正则剔掉了 Unit Quantity 这类行，
     // 前者只认控件 name 里的 attributes 前缀，现网 27 行加 UPC 一行都能读回来。读不到只点名缺口，绝不抛错。
     const attributeSlots=parseEbayItemSpecifics({groups:result.attributeGroups,rows:result.attributeRows})
-    return {sourceUrl:result.url,categorySpecifics:result.categorySpecifics,attributeSlots,policies,inspectedAt:new Date().toISOString(),warnings:[
+    // 建议卡按条件渲染，读不到就是 null：编辑器宁可不画，也不凭标题文字拼一张假卡片出来。
+    const suggestedCard=parseEbayItemSpecificsCard(result.attributeCard)
+    return {sourceUrl:result.url,categorySpecifics:result.categorySpecifics,attributeSlots,suggestedCard,policies,inspectedAt:new Date().toISOString(),warnings:[
       ...(result.categorySpecifics.length||attributeSlots.length?[]:['页面未读取到类目属性；可能是页面结构变化或该类目没有可见属性']),
       ...(policies.length?[]:['页面未读取到付款/运输/退货政策；本地政策保持上一次抓取的结果，请在 Seller Hub 修改页确认政策区块已加载后重试']),
       ...stalePolicyWarnings

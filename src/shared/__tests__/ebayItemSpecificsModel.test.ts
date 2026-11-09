@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { parseEbayItemSpecifics, type EbayItemSpecificsRaw, type EbayItemSpecificsRawRow } from '../ebayItemSpecificsModel'
+import {
+  parseEbayItemSpecifics, parseEbayItemSpecificsCard,
+  type EbayItemSpecificsCardRaw, type EbayItemSpecificsRaw, type EbayItemSpecificsRawRow
+} from '../ebayItemSpecificsModel'
 
 /**
  * 2026-11-09 从 ebay.com/lstng?draftId=5306791224420&mode=ReviseItem 的 ITEM SPECIFICS 段
@@ -166,5 +169,96 @@ describe('parseEbayItemSpecifics · 现网 ITEM SPECIFICS 原文', () => {
     expect(parseEbayItemSpecifics({ groups: GROUPS, rows: [] })).toEqual([])
     expect(parseEbayItemSpecifics(undefined as unknown as EbayItemSpecificsRaw)).toEqual([])
     expect(parseEbayItemSpecifics({ groups: GROUPS, rows: [{} as EbayItemSpecificsRawRow] })).toEqual([])
+  })
+})
+
+/**
+ * 2026-11-09 现网 ITEM SPECIFICS 段顶部那张 eBay.ai 建议卡（截图 ~/.yandu-acceptance/2026-11-09-R6/C01-ebay-live-item-specifics.png）。
+ * 卡片是条件渲染的：同一张草稿页重载后就不再出现（R6 探针 cardVisibleNodes:0）。
+ * 2026-11-09 19:52 已从真页 DOM 取回原文逐字对账（draftId=5307768937121，attributeCard.text 五行、
+ * options 两条 checked:false、buttons 一条 Apply all），这份 fixture 就是那次导出的原文，不是截图转写。
+ * 口径与行清单一致：页内脚本只抄卡片整块可见原文、每个勾选项的标签原文与选中态、按钮原文，
+ * 标题/说明的分界、「属性名: 建议值」的切分和 Apply all 的认法全留在这里。
+ */
+const CARD: EbayItemSpecificsCardRaw = {
+  text: 'Suggested item specifics\nQuickly add item specifics using info from your photos and title, powered by eBay.ai—this helps buyers find your item faster.\nYear Manufactured: 2020\nNumber of Compressors: 1\nApply all',
+  options: [
+    { label: 'Year Manufactured: 2020', checked: false },
+    { label: 'Number of Compressors: 1', checked: false }
+  ],
+  buttons: ['Apply all']
+}
+
+describe('parseEbayItemSpecificsCard · 现网 Suggested item specifics 卡片原文', () => {
+  it('标题取第一行、说明取其余行，逐项建议按第一个冒号切名与值', () => {
+    const card = parseEbayItemSpecificsCard(CARD)
+    expect(card?.title).toBe('Suggested item specifics')
+    expect(card?.blurb).toBe('Quickly add item specifics using info from your photos and title, powered by eBay.ai—this helps buyers find your item faster.')
+    expect(card?.items).toEqual([
+      { name: 'Year Manufactured', value: '2020', checked: false },
+      { name: 'Number of Compressors', value: '1', checked: false }
+    ])
+  })
+
+  it('Apply all 取按钮原文', () => {
+    expect(parseEbayItemSpecificsCard(CARD)?.applyAll).toBe('Apply all')
+  })
+
+  it('勾选态照抄原文：勾上的项留 true，没勾的留 false', () => {
+    const card = parseEbayItemSpecificsCard({
+      ...CARD,
+      options: [
+        { label: 'Year Manufactured: 2020', checked: true },
+        { label: 'Number of Compressors: 1', checked: false }
+      ]
+    })
+    expect(card?.items.map(item => item.checked)).toEqual([true, false])
+  })
+
+  it('建议值里带冒号时只切第一个：95200-64JB1 这种带冒号的值不被截断', () => {
+    const card = parseEbayItemSpecificsCard({ ...CARD, options: [{ label: 'Model: Suzuki: J20A', checked: false }], buttons: [] })
+    expect(card?.items).toEqual([{ name: 'Model', value: 'Suzuki: J20A', checked: false }])
+  })
+
+  it('标签没有冒号时整条当属性名、建议值留空，不猜', () => {
+    const card = parseEbayItemSpecificsCard({ ...CARD, options: [{ label: 'Brand', checked: false }], buttons: [] })
+    expect(card?.items).toEqual([{ name: 'Brand', value: '', checked: false }])
+  })
+
+  it('按钮原文里没有 Apply all 时留空串，绝不伪造一个按钮', () => {
+    expect(parseEbayItemSpecificsCard({ ...CARD, buttons: ['Show more'] })?.applyAll).toBe('')
+  })
+
+  it('卡片没渲染出来就回 null：原文缺失、整块空文、没有勾选项三种都算没卡片', () => {
+    expect(parseEbayItemSpecificsCard(undefined as unknown as EbayItemSpecificsCardRaw)).toBeNull()
+    expect(parseEbayItemSpecificsCard({ text: '', options: [], buttons: [] })).toBeNull()
+    expect(parseEbayItemSpecificsCard({ text: CARD.text, options: [], buttons: ['Apply all'] })).toBeNull()
+  })
+
+  it('缺字段与脏原文都不抛错：options 非数组时按没有卡片处理', () => {
+    expect(parseEbayItemSpecificsCard({ text: CARD.text } as unknown as EbayItemSpecificsCardRaw)).toBeNull()
+    expect(parseEbayItemSpecificsCard({ text: 'Suggested item specifics', options: [{} as { label: string; checked: boolean }], buttons: [] })).toBeNull()
+  })
+})
+
+describe('parseEbayItemSpecifics · 控件里该画什么原文（现网菜单按钮不画占位）', () => {
+  it('菜单行的占位画线上原值：Brand 画 Unbranded，没原值的 Type 就什么都不画', () => {
+    const slots = parseEbayItemSpecifics(LIVE)
+    expect(slots.find(item => item.name === 'Brand')?.placeholderShown).toBe('Unbranded')
+    expect(slots.find(item => item.name === 'Type')?.placeholderShown).toBe('')
+  })
+
+  it('输入行与 textarea 行画自身占位原文，eBay 的检索占位只在菜单行被换掉', () => {
+    const slots = parseEbayItemSpecifics(LIVE)
+    expect(slots.find(item => item.name === 'Model')?.placeholderShown).toBe('Enter your own')
+    expect(slots.find(item => item.name === 'Durability Guarantee')?.placeholderShown).toBe('Enter the number of years (3-99)')
+    expect(slots.find(item => item.name === 'California Prop 65 Warning')?.placeholderShown).toBe('Enter your own')
+    expect(slots.find(item => item.name === 'UPC')?.placeholderShown).toBe('Enter your own')
+  })
+
+  it('placeholder 原文仍然照抄，面板检索占位不被画法判据覆盖', () => {
+    const slots = parseEbayItemSpecifics(LIVE)
+    expect(slots.find(item => item.name === 'Brand')?.placeholder).toBe('Search or enter your own')
+    expect(slots.find(item => item.name === 'Year Manufactured')?.placeholder).toBe('Search')
   })
 })
