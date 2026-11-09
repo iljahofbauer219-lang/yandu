@@ -458,7 +458,7 @@ contextBridge.exposeInMainWorld('desktop', {
     inspectFinalImages: (imageUrls:string[]):Promise<EbayImageInspectionReport> => ipcRenderer.invoke('ebay:images:inspect-final',imageUrls),
     localProductImageVisualReport: (localProductId:string):Promise<EbayImageVisualInspectionReport|null> => ipcRenderer.invoke('ebay:local-products:visual-report',localProductId),
     reviewLocalProductImageRule: (input:EbayImageVisualReviewInput):Promise<EbayImageVisualInspectionReport> => ipcRenderer.invoke('ebay:local-products:visual-review',input),
-    localProductRequirements: (storeId:string,listingId:string,title:string):Promise<EbayLocalListingRequirements> => ipcRenderer.invoke('ebay:local-products:requirements',storeId,listingId,title),
+    localProductRequirements: (storeId:string,listingId:string,title:string,categoryId=''):Promise<EbayLocalListingRequirements> => ipcRenderer.invoke('ebay:local-products:requirements',storeId,listingId,title,categoryId),
     businessPolicies: (storeId:string,kind?:EbayBusinessPolicyKind):Promise<EbayStoreBusinessPolicy[]> => ipcRenderer.invoke('ebay:business-policies:list',storeId,kind),
     prepareLocalProductRevision: (localProductId:string):Promise<EbayLocalRevisionPreparationResult> => ipcRenderer.invoke('ebay:local-products:prepare-revision',localProductId),
     removeLocalProduct: (localProductId:string):Promise<boolean> => ipcRenderer.invoke('ebay:local-products:remove',localProductId),

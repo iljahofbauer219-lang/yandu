@@ -1,5 +1,5 @@
 import type { SemanticFallbackMark } from './semanticFallback'
-import type { EbayItemSpecificSlot, EbaySuggestedSpecificsCard } from './ebayItemSpecificsModel'
+import type { EbayItemSpecificsSection, EbaySuggestedSpecificsCard } from './ebayItemSpecificsModel'
 
 export type Platform = 'ozon' | '1688' | 'web'
 export type SelectionMode = 'FORWARD_SUPPLY' | 'REVERSE_MARKET'
@@ -304,10 +304,11 @@ export interface EbayLocalListingRequirements {
   sourceUrl:string
   categorySpecifics:EbayCategorySpecificRequirement[]
   /**
-   * 现网 ITEM SPECIFICS 段的槽位清单（分组/控件类型/必填/占位/长度上限/Suggested）。
+   * 现网 ITEM SPECIFICS 段整段原文的本地可读形：槽位清单（分组/控件类型/必填/占位/长度上限/Suggested/
+   * Yes-No pill/标签旁 meta/0-800 计数）、组标题带说明句、折叠开关两态文字、加属性按钮文字、折叠态行名。
    * 只在本次会话里给编辑器 05 段用，不落库：重启后要再读一次才算拿到。
    */
-  attributeSlots:EbayItemSpecificSlot[]
+  attributeSection:EbayItemSpecificsSection
   /**
    * ITEM SPECIFICS 段顶部那张 eBay.ai「Suggested item specifics」卡片。
    * 现网按条件渲染：同一张草稿页重载后可能就不再出现，读不到即为 null，编辑器不画卡片。

@@ -3431,10 +3431,10 @@ ipcMain.handle('ebay:local-products:visual-review', (_event, input:EbayImageVisu
   if(!database)throw new Error('eBay 本地产品库尚未初始化')
   return database.reviewEbayImageVisualRule(input)
 })
-ipcMain.handle('ebay:local-products:requirements', async (_event, storeId:string, listingId:string, title:string) => {
+ipcMain.handle('ebay:local-products:requirements', async (_event, storeId:string, listingId:string, title:string, categoryId='') => {
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
   if(!database)throw new Error('数据库尚未初始化')
-  const requirements=await workspace.inspectEbayListingRequirements(`ebay:${storeId}`,listingId,title)
+  const requirements=await workspace.inspectEbayListingRequirements(`ebay:${storeId}`,listingId,title,categoryId)
   // saveEbayBusinessPolicies 自开 BEGIN IMMEDIATE：这里绝不能包任何外层事务（node:sqlite 嵌套 BEGIN 会让内层 ROLLBACK 毁掉外层）。
   // 落库失败只点名缺口、保留页面本次读到的结果，绝不把「读取刊登规则」这个既有动作变成硬阻断。
   try {

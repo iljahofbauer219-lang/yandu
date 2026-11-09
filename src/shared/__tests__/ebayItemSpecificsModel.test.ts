@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  parseEbayItemSpecifics, parseEbayItemSpecificsCard,
+  parseEbayItemSpecifics, parseEbayItemSpecificsCard, parseEbayItemSpecificsSection,
   type EbayItemSpecificsCardRaw, type EbayItemSpecificsRaw, type EbayItemSpecificsRawRow
 } from '../ebayItemSpecificsModel'
 
@@ -260,5 +260,118 @@ describe('parseEbayItemSpecifics · 控件里该画什么原文（现网菜单�
     const slots = parseEbayItemSpecifics(LIVE)
     expect(slots.find(item => item.name === 'Brand')?.placeholder).toBe('Search or enter your own')
     expect(slots.find(item => item.name === 'Year Manufactured')?.placeholder).toBe('Search')
+  })
+})
+
+/**
+ * 2026-11-09 22:1x 现网 AddItem 草稿页（draftId=5307809928220&mode=AddItem）ITEM SPECIFICS 段原文，
+ * 经运行中应用内该页视图导出（展开态 19 行 + 点 Show less 后的折叠态 10 行，导出后已点回 Show less 复原）。
+ * 与 ReviseItem 同容器 .summary__attributes，但形状多四样：Yes/No 双 pill、标签旁「~ x searches」/「Trending」
+ * meta、textarea 的 0/800 计数、组标题带说明句；UPC 行控件 name 是 universalProductCode 而不是 attributes.*。
+ */
+const ADD_ITEM_ROW = (over: Record<string, unknown>) => ({
+  id: '', labelClass: '', text: '', panelPlaceholder: '', hidden: false, pills: [], metaText: '',
+  ...over
+}) as unknown as EbayItemSpecificsRawRow
+const MENU_CLS = 'se-expand-button__button fake-menu-button__button btn btn--fluid btn--truncated btn--form'
+const ADD_ITEM: EbayItemSpecificsRaw & { toggles: Array<{ text: string }>; customAction: string; collapsed?: { rows: EbayItemSpecificsRawRow[]; toggles: Array<{ text: string }> } } = {
+  groups: [
+    { text: 'Required', y: 1417, blurb: 'Buyers need these details to find your item.' },
+    { text: 'Additional (optional)', y: 1557, blurb: 'Buyers also search for these details.' }
+  ] as Array<{ text: string; y: number; blurb?: string }>,
+  rows: [
+    ADD_ITEM_ROW({ name: 'attributes.Brand', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Brand', y: 1477 }),
+    ADD_ITEM_ROW({ name: 'attributes.Placement on Vehicle', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Placement on Vehicle ~ 67.9K searches', metaText: '~ 67.9K searches', y: 1617 }),
+    ADD_ITEM_ROW({ name: 'attributes.Color', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Color ~ 37.5K searches', metaText: '~ 37.5K searches', y: 1673 }),
+    ADD_ITEM_ROW({ name: 'attributes.Features', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Features ~ 19.3K searches', metaText: '~ 19.3K searches', y: 1729 }),
+    ADD_ITEM_ROW({ name: 'attributes.Seat Type', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Seat Type Trending', metaText: 'Trending', y: 1785 }),
+    ADD_ITEM_ROW({ name: 'attributes.Headrest Type', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Headrest Type', y: 1841 }),
+    ADD_ITEM_ROW({ name: 'attributes.Manufacturer Part Number', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Manufacturer Part Number', y: 1897 }),
+    ADD_ITEM_ROW({ name: 'attributes.OE/OEM Part Number', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'OE/OEM Part Number', y: 1953 }),
+    ADD_ITEM_ROW({ name: 'attributes.Material', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Material ~ 28K searches', metaText: '~ 28K searches', y: 2009 }),
+    ADD_ITEM_ROW({ name: 'attributes.Items Included', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Items Included ~ 2.1K searches', metaText: '~ 2.1K searches', y: 2065 }),
+    ADD_ITEM_ROW({ name: 'attributes.Country of Origin', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Country of Origin ~ 365 searches', metaText: '~ 365 searches', y: 2121 }),
+    ADD_ITEM_ROW({ name: 'Vintage Part', tag: 'PILLS', controlClass: '', labelText: 'Vintage Part ~ 209 searches', metaText: '~ 209 searches', pills: [{ text: 'Yes', pressed: false }, { text: 'No', pressed: false }], valueText: 'Yes No', y: 2177 }),
+    ADD_ITEM_ROW({ name: 'Universal Fitment', tag: 'PILLS', controlClass: '', labelText: 'Universal Fitment ~ 104 searches', metaText: '~ 104 searches', pills: [{ text: 'Yes', pressed: false }, { text: 'No', pressed: false }], valueText: 'Yes No', y: 2233 }),
+    ADD_ITEM_ROW({ name: 'Performance Part', tag: 'PILLS', controlClass: '', labelText: 'Performance Part', pills: [{ text: 'Yes', pressed: false }, { text: 'No', pressed: false }], valueText: 'Yes No', y: 2289 }),
+    ADD_ITEM_ROW({ name: 'attributes.Manufacturer Warranty', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Manufacturer Warranty', y: 2345 }),
+    ADD_ITEM_ROW({ name: 'attributes.Interchange Part Number', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Interchange Part Number', y: 2401 }),
+    ADD_ITEM_ROW({ name: 'attributes.Superseded Part Number', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Superseded Part Number', y: 2457 }),
+    ADD_ITEM_ROW({ name: 'attributes.California Prop 65 Warning', tag: 'TEXTAREA', controlClass: 'textbox__control', labelText: 'California Prop 65 Warning', placeholder: 'Enter your own', maxLength: '800', valueText: '0/800', y: 2513 }),
+    ADD_ITEM_ROW({ name: 'universalProductCode', tag: 'INPUT', controlClass: 'textbox__control', labelText: 'UPC', placeholder: 'Enter number', maxLength: '20', y: 2591 })
+  ],
+  toggles: [{ text: 'Show less' }],
+  customAction: 'Add custom item specific',
+  collapsed: {
+    rows: [
+      ADD_ITEM_ROW({ name: 'attributes.Brand', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Brand', y: 1477 }),
+      ADD_ITEM_ROW({ name: 'attributes.Placement on Vehicle', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Placement on Vehicle ~ 67.9K searches', metaText: '~ 67.9K searches', y: 1617 }),
+      ADD_ITEM_ROW({ name: 'attributes.Color', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Color ~ 37.5K searches', metaText: '~ 37.5K searches', y: 1673 }),
+      ADD_ITEM_ROW({ name: 'attributes.Features', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Features ~ 19.3K searches', metaText: '~ 19.3K searches', y: 1729 }),
+      ADD_ITEM_ROW({ name: 'attributes.Seat Type', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Seat Type Trending', metaText: 'Trending', y: 1785 }),
+      ADD_ITEM_ROW({ name: 'attributes.Headrest Type', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Headrest Type', y: 1841 }),
+      ADD_ITEM_ROW({ name: 'attributes.Manufacturer Part Number', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Manufacturer Part Number', y: 1897 }),
+      ADD_ITEM_ROW({ name: 'attributes.OE/OEM Part Number', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'OE/OEM Part Number', y: 1953 }),
+      ADD_ITEM_ROW({ name: 'attributes.Material', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Material ~ 28K searches', metaText: '~ 28K searches', y: 2009 }),
+      ADD_ITEM_ROW({ name: 'attributes.Items Included', tag: 'BUTTON', controlClass: MENU_CLS, labelText: 'Items Included ~ 2.1K searches', metaText: '~ 2.1K searches', y: 2065 })
+    ],
+    toggles: [{ text: 'Show more' }]
+  }
+}
+
+describe('parseEbayItemSpecificsSection · AddItem 现网原文（图1-4 形状）', () => {
+  it('19 行全读回：UPC 走 universalProductCode 认名，Yes/No 双 pill 认成 YESNO 控件', () => {
+    const section = parseEbayItemSpecificsSection(ADD_ITEM)
+    expect(section.slots).toHaveLength(19)
+    const upc = section.slots.find(item => item.name === 'UPC')
+    expect(upc).toMatchObject({ control: 'TEXT', placeholder: 'Enter number', maxLength: 20 })
+    const pills = section.slots.find(item => item.name === 'Vintage Part')
+    expect(pills?.control).toBe('YESNO')
+    expect(pills?.options).toEqual([{ text: 'Yes', pressed: false }, { text: 'No', pressed: false }])
+    expect(pills?.value).toBe('')
+  })
+
+  it('pill 的选中态就是值：aria-pressed 落在 Yes 上值就是 Yes', () => {
+    const pressed = { ...ADD_ITEM, rows: ADD_ITEM.rows.map(row => (row.name === 'Universal Fitment' ? { ...row, pills: [{ text: 'Yes', pressed: true }, { text: 'No', pressed: false }], valueText: 'Yes No' } : row)) }
+    const section = parseEbayItemSpecificsSection(pressed)
+    expect(section.slots.find(item => item.name === 'Universal Fitment')?.value).toBe('Yes')
+  })
+
+  it('标签旁 meta 原文照抄并分类：搜索量与 Trending 不混', () => {
+    const section = parseEbayItemSpecificsSection(ADD_ITEM)
+    expect(section.slots.find(item => item.name === 'Placement on Vehicle')).toMatchObject({ meta: '~ 67.9K searches', metaKind: 'SEARCH_COUNT' })
+    expect(section.slots.find(item => item.name === 'Seat Type')).toMatchObject({ meta: 'Trending', metaKind: 'TRENDING' })
+    expect(section.slots.find(item => item.name === 'Brand')?.metaKind).toBe('')
+  })
+
+  it('textarea 行照抄占位与 0/800 计数', () => {
+    const section = parseEbayItemSpecificsSection(ADD_ITEM)
+    expect(section.slots.find(item => item.name === 'California Prop 65 Warning')).toMatchObject({ control: 'TEXTAREA', placeholder: 'Enter your own', counter: '0/800', maxLength: 800 })
+  })
+
+  it('组标题带说明句照抄，行按 y 归组：Required 与 Additional (optional)', () => {
+    const section = parseEbayItemSpecificsSection(ADD_ITEM)
+    expect(section.groups).toEqual([
+      { name: 'Required', blurb: 'Buyers need these details to find your item.' },
+      { name: 'Additional (optional)', blurb: 'Buyers also search for these details.' }
+    ])
+    expect(section.slots.find(item => item.name === 'Brand')).toMatchObject({ groupLabel: 'Required', group: 'ESSENTIAL' })
+    expect(section.slots.find(item => item.name === 'Color')).toMatchObject({ groupLabel: 'Additional (optional)', group: 'OPTIONAL' })
+  })
+
+  it('折叠开关与加属性按钮原文照抄，折叠态行名单独回传供镜像本地折叠', () => {
+    const section = parseEbayItemSpecificsSection(ADD_ITEM)
+    expect(section.toggleExpandedText).toBe('Show less')
+    expect(section.toggleCollapsedText).toBe('Show more')
+    expect(section.customActionText).toBe('Add custom item specific')
+    expect(section.collapsedSlotNames).toEqual(['Brand', 'Placement on Vehicle', 'Color', 'Features', 'Seat Type', 'Headrest Type', 'Manufacturer Part Number', 'OE/OEM Part Number', 'Material', 'Items Included'])
+  })
+
+  it('ReviseItem 旧原文走同一入口不回归：菜单原值画法与分组照旧', () => {
+    const section = parseEbayItemSpecificsSection(LIVE)
+    expect(section.slots.find(item => item.name === 'Brand')?.placeholderShown).toBe('Unbranded')
+    expect(section.slots.find(item => item.name === 'Type')?.placeholderShown).toBe('')
+    expect(section.toggleExpandedText).toBe('')
+    expect(section.collapsedSlotNames).toEqual([])
   })
 })

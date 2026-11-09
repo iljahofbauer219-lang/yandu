@@ -152,7 +152,9 @@ button[data-ebay-slot="section-action"]:disabled{background:#ececec;border-color
    现网实测控件顶与行顶偏移 0，故每条控件规则显式写 margin:0。 */
 #ebay-revise-specifics .ebay-specifics-ai-item input{flex:none;width:18px;height:18px;margin:0}
 #ebay-revise-specifics .ebay-specifics-ai-apply{min-height:0;padding:0;border:0;background:none;font:inherit;font-size:14px;font-weight:700;line-height:normal;color:#191919;text-decoration:underline;cursor:pointer;margin-top:16px;display:inline-block}
-.ebay-specific-group{margin:6px 0 0;font-size:13px;font-weight:700;color:#191919}
+/* 现网 AddItem 组标题实测 2026-11-09 22:3x：600 16px/24px rgb(25,25,25)；说明句 400 14px/20px rgb(112,112,112)。 */
+.ebay-specific-group{margin:16px 0 4px;font-size:16px;line-height:24px;font-weight:600;color:#191919}
+.ebay-specific-group-blurb{margin:0 0 8px;font-size:14px;line-height:20px;color:#707070}
 .ebay-specific-row--slot{grid-template-columns:342px minmax(0,406px);gap:0 16px;min-height:56px;align-items:start}
 .ebay-specific-row--slot .ebay-specific-label{line-height:38px}
 .ebay-specific-star{margin-left:4px;font-style:normal;font-weight:700;color:#d62020}
@@ -240,3 +242,14 @@ button[data-ebay-slot="section-action"]:disabled{background:#ececec;border-color
   .ebay-specific-row--slot{grid-template-columns:minmax(0,1fr)}
   .ebay-specific-row--slot .ebay-specific-label{grid-column:1/-1;line-height:1.4}
 }
+/* AddItem 现网新形状（2026-11-09 22:3x 实测）：标签旁 meta 13.33px rgb(112,112,112)；Yes/No pill 高 32、
+   半径 20、padding 6px 16px、底 rgb(247,247,247)、边框同底色；折叠开关是 fake-link 下划线字；加属性按钮高 40 半径 20 同灰底。
+   pill 的选中态现网没给可测样本（草稿上没点过），这里只加描边不编配色，aria-pressed 才是真判据。 */
+#ebay-revise-specifics .ebay-specific-meta{margin-left:8px;font-size:13.33px;line-height:18px;color:#707070;white-space:nowrap}
+#ebay-revise-specifics .ebay-specific-meta--trending{font-weight:600}
+#ebay-revise-specifics .ebay-specific-pills{display:flex;gap:8px;min-height:32px}
+#ebay-revise-specifics .ebay-specific-pill{min-height:0;margin:0;padding:6px 16px;border:.6px solid #f7f7f7;border-radius:20px;background:#f7f7f7;font:inherit;font-size:14px;color:#191919;cursor:pointer}
+#ebay-revise-specifics .ebay-specific-pill--on{border-color:#8f8f8f}
+#ebay-revise-specifics .ebay-specific-toggle{justify-self:start;min-height:0;padding:0;border:0;background:none;font:inherit;font-size:14px;color:#191919;text-decoration:underline;cursor:pointer}
+#ebay-revise-specifics .ebay-specific-toggle:disabled{cursor:default}
+#ebay-revise-specifics .ebay-specific-custom{justify-self:start;height:40px;margin:8px 0 0;padding:0 20px;border:0;border-radius:20px;background:#f7f7f7;font:inherit;font-size:14px;line-height:20px;color:#191919}

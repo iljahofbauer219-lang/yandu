@@ -24,11 +24,18 @@ import { BrowserWorkspace, EBAY_POLICY_SCRAPE_KINDS } from '../BrowserWorkspace'
 type Host = Record<string, unknown>
 type RawOption = { kind: string; raw: string; selected: boolean }
 type ModelField = 'paymentPolicy' | 'shippingPolicy' | 'returnPolicy'
-type PageResult = { ready?: boolean; categorySpecifics?: unknown[]; policyOptions?: RawOption[]; policyModels?: Partial<Record<ModelField, string>>; url?: string; attributeRows?: unknown[]; attributeGroups?: Array<{ text: string; y: number }>; attributeCard?: { text: string; options: Array<{ label: string; checked: boolean }>; buttons: string[] } }
-type InspectMethod = (this: Host, accountId: string, listingId: string, title: string) => Promise<{
+type PageResult = { ready?: boolean; categorySpecifics?: unknown[]; policyOptions?: RawOption[]; policyModels?: Partial<Record<ModelField, string>>; url?: string; attributeRows?: unknown[]; attributeGroups?: Array<{ text: string; y: number; blurb?: string }>; attributeToggles?: Array<{ text: string }>; attributeCustomAction?: string; attributeCollapsedRows?: unknown[]; attributeCollapsedToggles?: Array<{ text: string }>; attributeCard?: { text: string; options: Array<{ label: string; checked: boolean }>; buttons: string[] } }
+type InspectMethod = (this: Host, accountId: string, listingId: string, title: string, categoryId?: string) => Promise<{
   sourceUrl: string
   categorySpecifics: unknown[]
-  attributeSlots: Array<{ name: string; group: string; control: string; required: boolean; value: string; placeholder: string; placeholderShown: string; suggested: string; maxLength: number; counter: string; tooltip: string; y: number }>
+  attributeSection: {
+    slots: Array<{ name: string; group: string; groupLabel: string; control: string; required: boolean; value: string; placeholder: string; placeholderShown: string; suggested: string; maxLength: number; counter: string; meta: string; metaKind: string; options: Array<{ text: string; pressed: boolean }>; y: number }>
+    groups: Array<{ name: string; blurb: string }>
+    toggleExpandedText: string
+    toggleCollapsedText: string
+    customActionText: string
+    collapsedSlotNames: string[]
+  }
   suggestedCard: { title: string; blurb: string; items: Array<{ name: string; value: string; checked: boolean }>; applyAll: string } | null
   policies: Array<{ kind: string; label: string; policyId?: string; listingCount?: number; selected: boolean }>
   inspectedAt: string
@@ -92,6 +99,10 @@ function makeHost(page: PageResult = {}) {
       categorySpecifics: page.categorySpecifics ?? CATEGORY,
       attributeRows: page.attributeRows ?? [],
       attributeGroups: page.attributeGroups ?? [],
+      attributeToggles: page.attributeToggles ?? [],
+      attributeCustomAction: page.attributeCustomAction ?? '',
+      attributeCollapsedRows: page.attributeCollapsedRows ?? [],
+      attributeCollapsedToggles: page.attributeCollapsedToggles ?? [],
       attributeCard: page.attributeCard ?? { text: '', options: [], buttons: [] },
       policyOptions: page.policyOptions ?? [],
       policyModels: { paymentPolicy: '', shippingPolicy: '', returnPolicy: '', ...(page.policyModels ?? {}) }
@@ -105,7 +116,7 @@ function makeHost(page: PageResult = {}) {
   return { host, executeJavaScript, scripts }
 }
 
-const inspect = (page: PageResult = {}) => inspectMethod.call(makeHost(page).host, 'ebay:s1', 'T100', 'Bracket')
+const inspect = (page: PageResult = {}) => inspectMethod.call(makeHost(page).host, 'ebay:s1', '189035181453', 'Bracket')
 
 describe('ReviseItem 政策抓取 · TS 侧映射', () => {
   it('括号里的 ≥6 位数字进 policyId、带 listings 量词的短数字进 listingCount、纯文本两者都不进', async () => {
@@ -218,7 +229,7 @@ describe('ReviseItem 政策抓取 · 缺口点名不阻断', () => {
 describe('ReviseItem 政策抓取 · 页内脚本边界', () => {
   it('真机待验（Task 9）：脚本只回原始文本，解析与类别白名单都在 TS 一侧', async () => {
     const { host, scripts } = makeHost({ policyOptions: [{ kind: 'PAYMENT', raw: 'eBay Managed Payments (257217501013)', selected: true }] })
-    await inspectMethod.call(host, 'ebay:s1', 'T100', 'Bracket')
+    await inspectMethod.call(host, 'ebay:s1', '189035181453', 'Bracket')
     const script = scripts[0]
     // 原始文本 + 选中态：政策解析（id / 在架数）一律不在页内做
     expect(script).toContain("policyOptions.push({kind:group.kind,raw,selected:option.selected})")
@@ -228,12 +239,16 @@ describe('ReviseItem 政策抓取 · 页内脚本边界', () => {
     const pageKinds = [...script.matchAll(/\{kind:'([A-Z]+)',patterns:/g)].map(match => match[1])
     expect(pageKinds).toEqual(EBAY_POLICY_SCRAPE_KINDS)
     // 零新 API 底线：只读 DOM，绝不提交、绝不点按钮
-    expect(script).not.toMatch(/form\.submit\(|\.submit\(|\.click\(|type="submit"/)
+    // 零新 API 底线：只读 DOM，绝不提交；唯一例外是视觉折叠开关 Show more 的一次点击，
+    // 它只改页面折叠态、折叠遍与展开遍都如实回传由 TS 侧解（AddItem 取证 2026-11-09 22:1x）
+    expect(script).not.toMatch(/form\.submit\(|\.submit\(|type="submit"/)
+    expect(script.match(/\.click\(/g) || []).toHaveLength(1)
+    expect(script).toContain('showMore.click()')
   })
 
   it('页内一个下拉只认一个类别：已认领的节点会被后续类别跳过（双认领会让 DAO 互抹政策）', async () => {
     const { host, scripts } = makeHost({ policyOptions: [{ kind: 'SHIPPING', raw: '运输政策 (18510002004)', selected: true }] })
-    await inspectMethod.call(host, 'ebay:s1', 'T100', 'Bracket')
+    await inspectMethod.call(host, 'ebay:s1', '189035181453', 'Bracket')
     const script = scripts[0]
     expect(script).toContain('const claimed=new Set();')
     expect(script).toContain('field.tagName===\'SELECT\'&&!claimed.has(field)&&group.patterns.some(')
@@ -244,7 +259,7 @@ describe('ReviseItem 政策抓取 · 页内脚本边界', () => {
 
   it('页内命中优先取可见下拉，全不可见才回落第一个（隐藏的旧控件不再直接决定入库内容）', async () => {
     const { host, scripts } = makeHost({ policyOptions: [{ kind: 'RETURN', raw: '退货政策 (19007008010)', selected: true }] })
-    await inspectMethod.call(host, 'ebay:s1', 'T100', 'Bracket')
+    await inspectMethod.call(host, 'ebay:s1', '189035181453', 'Bracket')
     const script = scripts[0]
     expect(script).toContain('const matches=fields.filter(field=>field.tagName===\'SELECT\'&&!claimed.has(field)')
     expect(script).toContain('const select=matches.find(field=>visible(field))||matches[0];')
@@ -254,7 +269,7 @@ describe('ReviseItem 政策抓取 · 页内脚本边界', () => {
 
   it('政策区块与标题字段在同一次开页里一起读，不额外开第二个标签', async () => {
     const { host, executeJavaScript } = makeHost({ policyOptions: [{ kind: 'RETURN', raw: '退货 (19007008009)', selected: true }] })
-    const requirements = await inspectMethod.call(host, 'ebay:s1', 'T100', 'Bracket')
+    const requirements = await inspectMethod.call(host, 'ebay:s1', '189035181453', 'Bracket')
     expect(executeJavaScript).toHaveBeenCalledTimes(1)
     expect(host.newEbayTab).toHaveBeenCalledTimes(1)
     expect(requirements.sourceUrl).toContain('mode=ReviseItem')
@@ -315,19 +330,22 @@ describe('ReviseItem 政策抓取 · 内嵌模型优先（R2 现网控件是 com
 
   it('页内脚本仍只切原文：解析与映射一句都不在页面里做，也绝不点控件', async () => {
     const { host, scripts } = makeHost({ policyModels: LIVE_MODELS })
-    await inspectMethod.call(host, 'ebay:s1', 'T100', 'Bracket')
+    await inspectMethod.call(host, 'ebay:s1', '189035181453', 'Bracket')
     const script = scripts[0]
     expect(script).not.toContain('parseEbayPolicyModel')
     for (const field of ['paymentPolicy', 'shippingPolicy', 'returnPolicy']) expect(script, field).toContain(`"${field}":{"name"`)
     expect(script).toContain('policyModels')
     expect(script).not.toContain('d{6,}')
-    expect(script).not.toMatch(/form\.submit\(|\.submit\(|\.click\(|type="submit"/)
+    expect(script).not.toMatch(/form\.submit\(|\.submit\(|type="submit"/)
+    expect(script.match(/\.click\(/g) || []).toHaveLength(1)
+    expect(script).toContain('showMore.click()')
   })
 })
 
 describe('ReviseItem 类目属性段抓取 · 槽位清单（R5 现网 ITEM SPECIFICS）', () => {
   it('页内回传的原文行在 TS 侧解成槽位：分组/控件类型/必填/占位/Suggested 全对得上现网', async () => {
-    const { attributeSlots } = await inspect({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS })
+    const { attributeSection } = await inspect({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS })
+    const attributeSlots = attributeSection.slots
     expect(attributeSlots.map(item => item.name)).toEqual(['Brand', 'Type', 'Model', 'Item Width', 'California Prop 65 Warning', 'Unit Quantity'])
     expect(attributeSlots.find(item => item.name === 'Brand')).toMatchObject({ group: 'ESSENTIAL', control: 'MENU', required: true, value: 'Unbranded', placeholder: 'Search or enter your own' })
     expect(attributeSlots.find(item => item.name === 'Item Width')?.group).toBe('OPTIONAL')
@@ -337,44 +355,49 @@ describe('ReviseItem 类目属性段抓取 · 槽位清单（R5 现网 ITEM SPEC
   })
 
   it('槽位与旧 categorySpecifics 各走各的：Unit Quantity 这类带 quantity 的行不再被标签正则误删', async () => {
-    const { attributeSlots, categorySpecifics } = await inspect({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS })
+    const { attributeSection, categorySpecifics } = await inspect({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS })
+    const attributeSlots = attributeSection.slots
     expect(attributeSlots.map(item => item.name)).toContain('Unit Quantity')
     expect(categorySpecifics).toEqual(CATEGORY)
   })
 
   it('一页只开一次就把槽位读回来，不额外开标签、不点任何控件', async () => {
     const { host, executeJavaScript } = makeHost({ attributeRows: ATTRIBUTE_ROWS })
-    await inspectMethod.call(host, 'ebay:s1', 'T100', 'Bracket')
+    await inspectMethod.call(host, 'ebay:s1', '189035181453', 'Bracket')
     expect(executeJavaScript).toHaveBeenCalledTimes(1)
     expect(host.newEbayTab).toHaveBeenCalledTimes(1)
   })
 
   it('页内脚本只抄原文：分组/必填/控件类型判据一律不在属性采样这一段里做', async () => {
     const { host, scripts } = makeHost({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS })
-    await inspectMethod.call(host, 'ebay:s1', 'T100', 'Bracket')
+    await inspectMethod.call(host, 'ebay:s1', '189035181453', 'Bracket')
     const script = scripts[0]
-    const start = script.indexOf('const attributeRows=[]')
+    const start = script.indexOf('const collectAttributes=()=>{')
     // 采样段必须真实存在且排在 return 之前，否则下面所有「段内不含判据」的断言都是空跑
     expect(start).toBeGreaterThan(-1)
     expect(script.indexOf('return {url:')).toBeGreaterThan(start)
     const section = script.slice(start, script.indexOf('return {url:'))
-    expect(section).toContain('attributeRows.push(')
-    expect(section).toContain('attributeGroups.push(')
+    expect(section).toContain('rows.push(')
+    expect(section).toContain('groups.push(')
     expect(section).toContain('summary__attributes')
     expect(section).not.toContain('parseEbayItemSpecifics')
     // 判据用的类名与组名一个都不许出现在页内：页面只把 className/标签文本当原文抄走
-    expect(section).not.toMatch(/parseEbayItemSpecifics|required-field|fake-menu-button|ESSENTIAL|OPTIONAL/)
-    expect(script).not.toMatch(/form\.submit\(|\.submit\(|\.click\(|type="submit"/)
+    expect(section).not.toMatch(/parseEbayItemSpecifics|required-field|fake-menu-button|ESSENTIAL|OPTIONAL|YESNO|TRENDING|SEARCH_COUNT/)
+    expect(script).not.toMatch(/form\.submit\(|\.submit\(|type="submit"/)
+    expect(script.match(/\.click\(/g) || []).toHaveLength(1)
+    expect(script).toContain('showMore.click()')
   })
 
   it('一段槽位都没读到 → 点名「页面未读取到类目属性」且返回空数组，不抛错（门禁不能 brick 读取动作）', async () => {
-    const { attributeSlots, warnings } = await inspect({ categorySpecifics: [], attributeRows: [], attributeGroups: [] })
+    const { attributeSection, warnings } = await inspect({ categorySpecifics: [], attributeRows: [], attributeGroups: [] })
+    const attributeSlots = attributeSection.slots
     expect(attributeSlots).toEqual([])
     expect(warnings.filter(item => item.includes('页面未读取到类目属性'))).toHaveLength(1)
   })
 
   it('旧版页面根本没有 summary__attributes 区块 → 槽位为空但 categorySpecifics 照旧返回，且不误报类目属性缺口', async () => {
-    const { attributeSlots, categorySpecifics, warnings } = await inspect({ attributeRows: [], attributeGroups: [] })
+    const { attributeSection, categorySpecifics, warnings } = await inspect({ attributeRows: [], attributeGroups: [] })
+    const attributeSlots = attributeSection.slots
     expect(attributeSlots).toEqual([])
     expect(categorySpecifics).toEqual(CATEGORY)
     expect(warnings.some(item => item.includes('页面未读取到类目属性'))).toBe(false)
@@ -396,7 +419,8 @@ describe('ReviseItem 类目属性段抓取 · Suggested item specifics 卡片', 
   })
 
   it('卡片没渲染出来就回 null，槽位清单照旧读到、不抛错（重载后 eBay.ai 卡片确实会消失）', async () => {
-    const { suggestedCard, attributeSlots } = await inspect({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS })
+    const { suggestedCard, attributeSection } = await inspect({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS })
+    const attributeSlots = attributeSection.slots
     expect(suggestedCard).toBeNull()
     expect(attributeSlots.map(item => item.name)).toContain('Brand')
   })
@@ -405,7 +429,7 @@ describe('ReviseItem 类目属性段抓取 · Suggested item specifics 卡片', 
     // 真机取证 2026-11-09 17:38：现网卡片 innerText 本来是 5 行，被 clean(/\s+/g,' ') 合成一行后
     // TS 侧无法分标题与说明，整段散文全被当成标题画出来。
     const { host, scripts } = makeHost({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS, attributeCard: ATTRIBUTE_CARD })
-    await inspectMethod.call(host, 'ebay:s1', 'T100', 'Bracket')
+    await inspectMethod.call(host, 'ebay:s1', '189035181453', 'Bracket')
     const script = scripts[0]
     expect(script).toMatch(/const cleanLines=[^;]*split\('\\n'\)/)
     expect(script).toContain('attributeCard.text=cleanLines(cardNode.innerText)')
@@ -413,10 +437,10 @@ describe('ReviseItem 类目属性段抓取 · Suggested item specifics 卡片', 
 
   it('页内脚本补取卡片：只按文字锚点找块并抄整块原文与勾选态，判据一律不在页内做', async () => {
     const { host, scripts } = makeHost({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS, attributeCard: ATTRIBUTE_CARD })
-    await inspectMethod.call(host, 'ebay:s1', 'T100', 'Bracket')
+    await inspectMethod.call(host, 'ebay:s1', '189035181453', 'Bracket')
     const script = scripts[0]
-    const start = script.indexOf('const attributeRows=[]')
-    const section = script.slice(start, script.indexOf('return {url:'))
+    const start = script.indexOf('const collectAttributes=()=>{')
+    const section = script.slice(script.indexOf('const cleanLines='), script.indexOf('return {url:'))
     expect(start).toBeGreaterThan(-1)
     expect(section).toContain('attributeCard')
     expect(section).toContain('input[type=checkbox]')
@@ -428,7 +452,7 @@ describe('ReviseItem 类目属性段抓取 · Suggested item specifics 卡片', 
 
 describe('ReviseItem 政策抓取 · 落库与读取接线', () => {
   it('源码守卫：槽位清单跟着 requirements 走，不落库、不进 publish task', () => {
-    expect(source('src/shared/contracts.ts')).toContain('attributeSlots:EbayItemSpecificSlot[]')
+    expect(source('src/shared/contracts.ts')).toContain('attributeSection:EbayItemSpecificsSection')
     expect(source('src/main/main.ts')).not.toContain('saveEbayItemSpecificSlots')
     const handler = source('src/main/main.ts')
     const body = handler.slice(handler.indexOf("ipcMain.handle('ebay:local-products:requirements'"))
@@ -453,5 +477,80 @@ describe('ReviseItem 政策抓取 · 落库与读取接线', () => {
     expect(source('src/main/main.ts')).toContain("ipcMain.handle('ebay:business-policies:list', (_event, storeId:string, kind?:EbayBusinessPolicyKind) => database?.getEbayBusinessPolicies(storeId,kind)||[])")
     expect(source('src/preload/preload.ts')).toContain("businessPolicies: (storeId:string,kind?:EbayBusinessPolicyKind):Promise<EbayStoreBusinessPolicy[]> => ipcRenderer.invoke('ebay:business-policies:list',storeId,kind)")
     expect(source('src/renderer/global.d.ts')).toContain('businessPolicies(storeId:string,kind?:EbayBusinessPolicyKind):Promise<EbayStoreBusinessPolicy[]>')
+  })
+})
+
+/** 2026-11-09 22:1x AddItem 草稿页现网原文（导出与复原记录见会话）：pill 行、meta 按钮、组说明句、折叠两态。 */
+const ADD_ITEM_ROWS = [
+  { name: 'attributes.Brand', id: '', tag: 'BUTTON', controlClass: 'se-expand-button__button fake-menu-button__button btn', labelText: 'Brand', labelClass: '', text: '', value: '', placeholder: '', panelPlaceholder: '', maxLength: '', valueText: '', metaText: '', pills: [], hidden: false, y: 1477 },
+  { name: 'attributes.Seat Type', id: '', tag: 'BUTTON', controlClass: 'se-expand-button__button fake-menu-button__button btn', labelText: 'Seat Type Trending', labelClass: '', text: '', value: '', placeholder: '', panelPlaceholder: '', maxLength: '', valueText: '', metaText: 'Trending', pills: [], hidden: false, y: 1785 },
+  { name: 'Vintage Part', id: '', tag: 'PILLS', controlClass: '', labelText: 'Vintage Part ~ 209 searches', labelClass: '', text: '', value: '', placeholder: '', panelPlaceholder: '', maxLength: '', valueText: 'Yes No', metaText: '~ 209 searches', pills: [{ text: 'Yes', pressed: false }, { text: 'No', pressed: false }], hidden: false, y: 2177 },
+  { name: 'universalProductCode', id: '', tag: 'INPUT', controlClass: 'textbox__control', labelText: 'UPC', labelClass: '', text: '', value: '', placeholder: 'Enter number', panelPlaceholder: '', maxLength: '20', valueText: '', metaText: '', pills: [], hidden: false, y: 2591 }
+]
+const ADD_ITEM_GROUPS = [
+  { text: 'Required', y: 1417, blurb: 'Buyers need these details to find your item.' },
+  { text: 'Additional (optional)', y: 1557, blurb: 'Buyers also search for these details.' }
+]
+
+describe('AddItem 现网形状回传 · TS 侧映射', () => {
+  it('pill/meta/组说明句/折叠两态/加属性按钮都进 section，判据不在页内', async () => {
+    const { attributeSection } = await inspect({
+      attributeRows: ADD_ITEM_ROWS,
+      attributeGroups: ADD_ITEM_GROUPS,
+      attributeToggles: [{ text: 'Show less' }],
+      attributeCustomAction: 'Add custom item specific',
+      attributeCollapsedRows: ADD_ITEM_ROWS.slice(0, 2),
+      attributeCollapsedToggles: [{ text: 'Show more' }]
+    })
+    expect(attributeSection.slots.find(item => item.name === 'Vintage Part')).toMatchObject({ control: 'YESNO', meta: '~ 209 searches', metaKind: 'SEARCH_COUNT' })
+    expect(attributeSection.slots.find(item => item.name === 'Vintage Part')?.options).toEqual([{ text: 'Yes', pressed: false }, { text: 'No', pressed: false }])
+    expect(attributeSection.slots.find(item => item.name === 'UPC')).toMatchObject({ control: 'TEXT', placeholder: 'Enter number' })
+    expect(attributeSection.slots.find(item => item.name === 'Seat Type')?.metaKind).toBe('TRENDING')
+    expect(attributeSection.groups).toEqual([
+      { name: 'Required', blurb: 'Buyers need these details to find your item.' },
+      { name: 'Additional (optional)', blurb: 'Buyers also search for these details.' }
+    ])
+    expect(attributeSection.toggleExpandedText).toBe('Show less')
+    expect(attributeSection.toggleCollapsedText).toBe('Show more')
+    expect(attributeSection.customActionText).toBe('Add custom item specific')
+    expect(attributeSection.collapsedSlotNames).toEqual(['Brand', 'Seat Type'])
+  })
+
+  it('页内脚本只抄原文：pill 选中态与 meta 按钮照抄，判据词一个都不带', async () => {
+    const made = makeHost({ attributeRows: [], attributeGroups: [] })
+    await inspectMethod.call(made.host, 'ebay:s1', '189035181453', 'Bracket')
+    const pageScript = made.scripts[0]
+    expect(pageScript).toContain('aria-pressed')
+    expect(pageScript).toContain('infotip__host')
+    expect(pageScript).toContain('--custom-specific')
+    expect(pageScript).toContain('show more')
+    expect(pageScript).not.toContain('YESNO')
+    expect(pageScript).not.toContain('SEARCH_COUNT')
+    expect(pageScript).not.toContain('TRENDING')
+  })
+})
+
+describe('读取刊登规则 · 开页路由（C5：载体优先 revise，缺载体按类目直入 AddItem）', () => {
+  it('产品自身编号不是 eBay 在架编号时按平台类目直入首次刊登页，不再硬拼 ReviseItem', async () => {
+    const made = makeHost({ attributeRows: [], attributeGroups: [] })
+    await inspectMethod.call(made.host, 'ebay:s1', 'PALLET-W1739S00002', 'Bracket', '33701')
+    const opened = (made.host.newEbayTab as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(String(opened[2])).toContain('mode=AddItem')
+    expect(String(opened[2])).toContain('categoryId=33701')
+    expect(String(opened[2])).not.toContain('mode=ReviseItem')
+  })
+
+  it('在架编号合法时照旧开修改页', async () => {
+    const made = makeHost({ attributeRows: [], attributeGroups: [] })
+    await inspectMethod.call(made.host, 'ebay:s1', '189035181453', 'Bracket', '')
+    const opened = (made.host.newEbayTab as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(String(opened[2])).toContain('mode=ReviseItem&itemId=189035181453')
+  })
+
+  it('既无在架编号也无合格类目时不开页：把路由点名原句抛给操作员', async () => {
+    const made = makeHost({ attributeRows: [], attributeGroups: [] })
+    await expect(inspectMethod.call(made.host, 'ebay:s1', 'PALLET-X', 'Bracket', 'not-a-category'))
+      .rejects.toThrow(/List an item|新建刊登/)
+    expect((made.host.newEbayTab as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0)
   })
 })

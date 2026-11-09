@@ -18,12 +18,13 @@ import { formValuesFromInput, requiredFormGaps } from '../../shared/ebayListingF
 const product = { id: 'lp1', storeId: 's1', listingId: 'T1', title: 'Air Conditioner', imageUrl: '', imageUrls: [], price: '9.9', currency: 'USD', quantity: 12, status: 'ACTIVE', versionCount: 1, updatedAt: '', categoryId: '', categoryName: '', snapshot: { details: { url: '', itemSpecifics: [], condition: 'New', imageUrls: [], quantity: '12', paymentPolicy: '', shippingPolicy: '', returnPolicy: '', itemLocation: '', postalCode: '', listingFormat: 'FIXED_PRICE', descriptionText: 'x' }, media: [], sourceListing: {} as never, completeness: 100, missingFields: [], contentHash: '', capturedAt: '', id: 'snap1', localProductId: 'lp1', version: 1 } } as unknown as EbayLocalProduct
 
 const slot = (patch: Partial<EbayItemSpecificSlot>): EbayItemSpecificSlot => ({
-  name: '', group: 'ESSENTIAL', control: 'MENU', required: false, placeholder: 'Search or enter your own',
-  placeholderShown: '', maxLength: 0, value: '', suggested: '', counter: '', y: 0, ...patch
+  name: '', group: 'ESSENTIAL', groupLabel: '', control: 'MENU', required: false, placeholder: 'Search or enter your own',
+  placeholderShown: '', maxLength: 0, value: '', suggested: '', counter: '', meta: '', metaKind: '', options: [], y: 0, ...patch
 })
 
 // placeholderShown 一律照 shared 的判据填：菜单行画线上原值（没原值就空），输入行画自身占位原文。
 const SLOTS: EbayItemSpecificSlot[] = [
+
   slot({ name: 'Brand', required: true, value: 'Unbranded', placeholderShown: 'Unbranded', y: 1547 }),
   slot({ name: 'Type', placeholderShown: '', y: 1603 }),
   slot({ name: 'Model', control: 'TEXT', placeholder: 'Enter your own', placeholderShown: 'Enter your own', suggested: 'Suzuki Grand Vitara II 2.0 J20A 95200-64JB1 95200-64JB0', y: 1659 }),
@@ -31,6 +32,8 @@ const SLOTS: EbayItemSpecificSlot[] = [
   slot({ name: 'California Prop 65 Warning', group: 'OPTIONAL', control: 'TEXTAREA', placeholder: 'Enter your own', placeholderShown: 'Enter your own', maxLength: 800, counter: '0/800', y: 2773 }),
   slot({ name: 'UPC', group: 'OPTIONAL', control: 'TEXT', placeholder: '', placeholderShown: '', value: 'Does not apply', y: 3201 })
 ]
+
+const sectionOf=(slots: typeof SLOTS, extra: Record<string, unknown>={}) => ({ slots, groups: [] as Array<{ name: string; blurb: string }>, toggleExpandedText: '', toggleCollapsedText: '', customActionText: '', collapsedSlotNames: [] as string[], ...extra })
 
 /** 2026-11-09 15:17 现网 ITEM SPECIFICS 段顶部的 eBay.ai 建议卡（截图 R6/C01-ebay-live-item-specifics.png），条件渲染、重载后可能不再出现。 */
 const CARD: EbaySuggestedSpecificsCard = {
@@ -71,7 +74,7 @@ const controlTag = (band: string, name: string) =>
 
 describe('EbayLocalListingEditor · 05 类目属性段（现网清单态）', () => {
   it('读到清单就按现网两个分组渲染，行序照清单序', () => {
-    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSlots: SLOTS })} />))
+    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSection: sectionOf(SLOTS) })} />))
     const heads = [...band.matchAll(/<h3[^>]*>([^<]+)<\/h3>/g)].map(match => match[1])
     expect(heads).toEqual(['Essential', 'Optional'])
     const names = [...band.matchAll(/class(?:Name)?="ebay-specific-label[^"]*"[^>]*>([^<]+)/g)].map(match => match[1])
@@ -79,7 +82,7 @@ describe('EbayLocalListingEditor · 05 类目属性段（现网清单态）', ()
   })
 
   it('必填星号只给现网标了必填的行，别的行一个都不加', () => {
-    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSlots: SLOTS })} />))
+    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSection: sectionOf(SLOTS) })} />))
     const starred = [...band.matchAll(/<span class(?:Name)?="ebay-specific-label([^"]*)"[^>]*>([^<]+)</g)]
       .filter(match => /required/.test(match[1])).map(match => match[2])
     expect(starred).toEqual(['Brand'])
@@ -87,7 +90,7 @@ describe('EbayLocalListingEditor · 05 类目属性段（现网清单态）', ()
   })
 
   it('菜单槽是同形读数框：照现网画法只画选中值、不画 eBay 的检索占位，也绝不渲染候选列表', () => {
-    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [] }), { attributeSlots: SLOTS })} />))
+    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [] }), { attributeSection: sectionOf(SLOTS) })} />))
     expect(band).toContain('class="ebay-specific-menu"')
     expect(band).toContain('class="ebay-specific-menu-caret"')
     // 现网箭头是 <svg class="icon icon--16"> 的 16×16，渲染出来就是同一形状，不再拿文字三角凑数
@@ -104,7 +107,7 @@ describe('EbayLocalListingEditor · 05 类目属性段（现网清单态）', ()
   it('菜单槽的线上原值画黑字不画占位灰：现网 fake-menu-button 实测 color rgb(25,25,25)', () => {
     // 真机取证 2026-11-09 19:52：现网 Brand 按钮 shownText=Unbranded、color:rgb(25,25,25)、font 14/400，
     // 而 Model 这类输入框的 placeholderColor 才是 rgb(112,112,112)。同形读数框把线上原值当占位画会整块变灰。
-    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [] }), { attributeSlots: SLOTS })} />))
+    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [] }), { attributeSection: sectionOf(SLOTS) })} />))
     expect(controlTag(band, 'Brand')).toContain('ebay-specific-menu-input--live')
     // 只有菜单行的线上原值走黑字；输入行仍按现网占位灰，不给它挂这个标记。
     expect(controlTag(band, 'Model')).not.toContain('ebay-specific-menu-input--live')
@@ -112,7 +115,7 @@ describe('EbayLocalListingEditor · 05 类目属性段（现网清单态）', ()
   })
 
   it('本地已记录的同名值优先显示，eBay 线上原值另起一行如实标出，不冒充本地值', () => {
-    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSlots: SLOTS })} />))
+    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSection: sectionOf(SLOTS) })} />))
     expect(band).toMatch(/name="Brand"[\s\S]{0,160}?value="OEM"/)
     expect(band).toContain('eBay 线上原值：Unbranded')
     // 逐行切片断言：现网该行没值（Item Width）就绝不冒出「eBay 线上原值」，有值（UPC）就如实标出，不整段一刀切。
@@ -123,36 +126,36 @@ describe('EbayLocalListingEditor · 05 类目属性段（现网清单态）', ()
   })
 
   it('长文本槽是 textarea，计数按当前长度/现网 maxLength 现算，不照抄页面原文的 0/800', () => {
-    const empty = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [] }), { attributeSlots: SLOTS })} />))
+    const empty = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [] }), { attributeSection: sectionOf(SLOTS) })} />))
     expect(empty).toContain('<textarea')
     expect(empty).toMatch(/maxLength="800"/)
     expect(empty).toContain('0/800')
-    const typed = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [{ name: 'California Prop 65 Warning', value: 'Warning: cancer risk', source: 'MANUAL' }] }), { attributeSlots: SLOTS })} />))
+    const typed = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [{ name: 'California Prop 65 Warning', value: 'Warning: cancer risk', source: 'MANUAL' }] }), { attributeSection: sectionOf(SLOTS) })} />))
     expect(typed).toContain('20/800')
   })
 
   it('建议值只在现网给出建议的行出现，文案与现网同形且点得到', () => {
-    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSlots: SLOTS })} />))
+    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSection: sectionOf(SLOTS) })} />))
     expect(band).toContain('Suggested: Suzuki Grand Vitara II 2.0 J20A 95200-64JB1 95200-64JB0')
     expect(band).not.toMatch(/Suggested: *<\/|Suggested: *Unbranded/)
     expect(band.match(/ebay-specific-suggested/g)).toHaveLength(1)
   })
 
   it('本地有但现网清单里没有的属性仍然显示，不静默丢数据', () => {
-    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [{ name: '压缩机类型', value: '涡旋', source: 'SOURCE_PAGE' }] }), { attributeSlots: SLOTS })} />))
+    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [{ name: '压缩机类型', value: '涡旋', source: 'SOURCE_PAGE' }] }), { attributeSection: sectionOf(SLOTS) })} />))
     expect(band).toContain('本地已记录但不在现网清单')
     expect(band).toMatch(/name="压缩机类型"[\s\S]{0,160}?value="涡旋"/)
   })
 
   it('没读到清单时退回本地清单态，且点名「尚未读取」而不是谎报类目没有属性', () => {
-    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSlots: [] })} />))
+    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSection: sectionOf([]) })} />))
     expect(band).toContain('尚未读取现网类目属性')
     expect(band).toContain('从 Seller Hub 读取政策与类目属性')
     expect(band).not.toContain('class="ebay-specific-menu"')
   })
 
   it('读回来是空清单时如实点名「这一次没读到槽位」，不混成「还没读过」', () => {
-    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSlots: [], attributeSlotsAt: '2026-11-09T06:00:00.000Z' })} />))
+    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSection: sectionOf([]), attributeSlotsAt: '2026-11-09T06:00:00.000Z' })} />))
     expect(band).toContain('没有回现网类目属性槽位')
     expect(band).toContain('这次读取')
     expect(band).not.toContain('尚未读取现网类目属性')
@@ -160,17 +163,17 @@ describe('EbayLocalListingEditor · 05 类目属性段（现网清单态）', ()
 
   it('现网清单态不再挂 6 项截断：现网整段全展开，只有本地清单态才用显示更多', () => {
     const many: EbayItemSpecificSlot[] = Array.from({ length: 12 }, (_, index) => slot({ name: `Attr${index}`, group: index < 2 ? 'ESSENTIAL' : 'OPTIONAL' }))
-    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [] }), { attributeSlots: many })} />))
+    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [] }), { attributeSection: sectionOf(many) })} />))
     expect(band).toContain('Attr11')
     expect(band).not.toContain('显示更多')
   })
 
   it('清单带读取时间上屏：槽位只活在本次会话，操作员得知道这份清单是什么时候开页读回的', () => {
     const at = '2026-11-09T06:00:00.000Z'
-    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSlots: SLOTS, attributeSlotsAt: at })} />))
+    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSection: sectionOf(SLOTS), attributeSlotsAt: at })} />))
     expect(band).toContain(`现网清单读取于 ${new Date(at).toLocaleString('zh-CN',{hour12:false})}`)
     // 没给时间就绝不编一个「刚刚」，也不把时间行谎报成已读取
-    const unstamped = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSlots: SLOTS })} />))
+    const unstamped = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSection: sectionOf(SLOTS) })} />))
     expect(unstamped).not.toContain('现网清单读取于')
   })
 })
@@ -180,7 +183,7 @@ describe('EbayLocalListingEditor · 05 段顶部 Suggested item specifics 卡片
     specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [] }), over)} />))
 
   it('读到卡片就照现网画：标题、说明、逐项建议原文与 Apply all，整块排在 Essential 分组之前', () => {
-    const band = bandWith({ attributeSlots: SLOTS, suggestedCard: CARD })
+    const band = bandWith({ attributeSection: sectionOf(SLOTS), suggestedCard: CARD })
     expect(band).toContain('Suggested item specifics')
     expect(band).toContain('powered by eBay.ai')
     expect(band).toContain('Year Manufactured: 2020')
@@ -190,7 +193,7 @@ describe('EbayLocalListingEditor · 05 段顶部 Suggested item specifics 卡片
   })
 
   it('逐项建议画成勾选框行，选中态照抄现网原文：这张草稿上两项都没勾', () => {
-    const band = bandWith({ attributeSlots: SLOTS, suggestedCard: CARD })
+    const band = bandWith({ attributeSection: sectionOf(SLOTS), suggestedCard: CARD })
     expect(band.match(/type="checkbox"/g)).toHaveLength(2)
     expect(band).not.toMatch(/type="checkbox"[^>]*checked/)
     // 容器 class 是 items，带引号的 item" 只勾得出逐行 label，不会把容器自己当成第一行
@@ -200,25 +203,25 @@ describe('EbayLocalListingEditor · 05 段顶部 Suggested item specifics 卡片
   })
 
   it('现网勾着的建议项保持勾着上屏，不把用户的勾选态抹平成未勾', () => {
-    const band = bandWith({ attributeSlots: SLOTS, suggestedCard: { ...CARD, items: [{ ...CARD.items[0], checked: true }, CARD.items[1]] } })
+    const band = bandWith({ attributeSection: sectionOf(SLOTS), suggestedCard: { ...CARD, items: [{ ...CARD.items[0], checked: true }, CARD.items[1]] } })
     expect(band).toMatch(/type="checkbox"[^>]*checked/)
   })
 
   it('没读到卡片就一块都不画：绝不凭标题拼一张假卡片出来', () => {
-    const band = bandWith({ attributeSlots: SLOTS })
+    const band = bandWith({ attributeSection: sectionOf(SLOTS) })
     expect(band).not.toContain('Suggested item specifics')
     expect(band).not.toContain('Apply all')
     expect(band).not.toContain('ebay-specifics-ai-card')
   })
 
   it('Apply all 只在现网有这句原文时出现，其余卡片内容照旧', () => {
-    const band = bandWith({ attributeSlots: SLOTS, suggestedCard: { ...CARD, applyAll: '' } })
+    const band = bandWith({ attributeSection: sectionOf(SLOTS), suggestedCard: { ...CARD, applyAll: '' } })
     expect(band).not.toContain('Apply all')
     expect(band).toContain('Year Manufactured: 2020')
   })
 
   it('卡片只在操作员明确点/勾时才写值：勾选框与按钮都带上要写的属性名', () => {
-    const band = bandWith({ attributeSlots: SLOTS, suggestedCard: CARD })
+    const band = bandWith({ attributeSection: sectionOf(SLOTS), suggestedCard: CARD })
     expect(band).toMatch(/name="Year Manufactured"/)
     expect(band).toMatch(/name="Number of Compressors"/)
     expect(band).toContain('ebay-specifics-ai-apply')
@@ -227,7 +230,7 @@ describe('EbayLocalListingEditor · 05 段顶部 Suggested item specifics 卡片
   })
 
   it('标题与说明是两块元素：现网说明是灰色独立一段，不许折进加粗标题里', () => {
-    const band = bandWith({ attributeSlots: SLOTS, suggestedCard: CARD })
+    const band = bandWith({ attributeSection: sectionOf(SLOTS), suggestedCard: CARD })
     expect(band).toMatch(/ebay-specifics-ai-title">Suggested item specifics<\/h4>/)
     expect(band).toMatch(/<p class="ebay-specifics-ai-blurb">Quickly add item specifics/)
   })
@@ -238,11 +241,11 @@ describe('EbayLocalListingEditor · 05 段接线（App.tsx 会话状态，不落
 
   it('槽位清单与建议卡按产品 id 存在同一份会话状态里，两个编辑器调用点都接上清单、卡片与读取时间', () => {
     const app = appSource()
-    expect(app).toContain('useState<Record<string,{slots:EbayItemSpecificSlot[];card:EbaySuggestedSpecificsCard|null;at:string}>>({})')
+    expect(app).toContain('useState<Record<string,{section:EbayItemSpecificsSection;card:EbaySuggestedSpecificsCard|null;at:string}>>({})')
     const callSites = app.split('\n').filter(line => line.includes('<EbayLocalListingEditor'))
     expect(callSites).toHaveLength(2)
     callSites.forEach(line => {
-      expect(line).toContain('attributeSlots={')
+      expect(line).toContain('attributeSection={')
       expect(line).toContain('attributeSlotsAt={')
       expect(line).toContain('suggestedCard={')
     })
@@ -252,7 +255,7 @@ describe('EbayLocalListingEditor · 05 段接线（App.tsx 会话状态，不落
     const app = appSource()
     const reader = app.slice(app.indexOf('const readBusinessPoliciesFor='))
     const body = reader.slice(0, reader.indexOf('const localCategoryBackfillAttempted'))
-    expect(body).toContain('requirements.attributeSlots')
+    expect(body).toContain('requirements.attributeSection')
     expect(body).toContain('card:requirements.suggestedCard')
     expect(body).toContain('requirements.inspectedAt')
     expect(body).toContain('setAttributeSlots(current=>({...current,[product.id')
@@ -376,5 +379,55 @@ describe('EbayLocalListingEditor · 05 段样式与真页实测对齐', () => {
     for (const declaration of ['font-size:14px', 'font-weight:700', 'color:#191919', 'text-decoration:underline', 'background:none', 'margin-top:16px']) {
       expect(apply, declaration).toContain(declaration)
     }
+  })
+})
+
+describe('EbayLocalListingEditor · 05 段 AddItem 现网形状镜像', () => {
+  const pillSlot = { name: 'Vintage Part', group: 'OPTIONAL' as const, groupLabel: 'Additional (optional)', control: 'YESNO' as const, required: false, placeholder: '', placeholderShown: '', maxLength: 0, value: '', suggested: '', counter: '', meta: '~ 209 searches', metaKind: 'SEARCH_COUNT' as const, options: [{ text: 'Yes', pressed: false }, { text: 'No', pressed: false }], y: 2177 }
+  const trendSlot = { ...pillSlot, name: 'Seat Type', control: 'MENU' as const, options: [], meta: 'Trending', metaKind: 'TRENDING' as const }
+  const section = sectionOf([pillSlot, trendSlot], {
+    groups: [{ name: 'Required', blurb: 'Buyers need these details to find your item.' }, { name: 'Additional (optional)', blurb: 'Buyers also search for these details.' }],
+    toggleExpandedText: 'Show less',
+    toggleCollapsedText: 'Show more',
+    customActionText: 'Add custom item specific',
+    collapsedSlotNames: ['Seat Type']
+  })
+  it('组标题与说明句照现网原文画，行归到各自组下', () => {
+    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [] }), { attributeSection: section })} />))
+    expect(band).toContain('Additional (optional)')
+    expect(band).toContain('Buyers also search for these details.')
+    expect(band.indexOf('Required')).toBeLessThan(band.indexOf('Vintage Part'))
+  })
+  it('Yes/No 双 pill 照画且选中态跟本地值走：没值时两个都不压', () => {
+    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [] }), { attributeSection: section })} />))
+    const row = band.slice(band.indexOf('Vintage Part'))
+    expect(row).toContain('ebay-specific-pills')
+    expect(row.match(/ebay-specific-pill[" ]/g)?.length).toBeGreaterThanOrEqual(2)
+    expect(row).not.toContain('ebay-specific-pill--on')
+  })
+  it('标签旁 meta 照抄：搜索量与 Trending 两类画法分开', () => {
+    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [] }), { attributeSection: section })} />))
+    expect(band).toContain('ebay-specific-meta--trending')
+    expect(band).toContain('~ 209 searches')
+  })
+  it('折叠开关与加属性按钮照抄原文：读回折叠态行名时开关才可点', () => {
+    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [] }), { attributeSection: section })} />))
+    expect(band).toContain('Show less')
+    expect(band).toContain('Add custom item specific')
+    const toggle = band.slice(band.indexOf('ebay-specific-toggle'))
+    expect(toggle.slice(0, toggle.indexOf('</button>'))).not.toContain('disabled')
+  })
+  it('没读回折叠态行名时开关只当读数画：禁用且不编折叠范围', () => {
+    const readOnly = sectionOf([trendSlot], { groups: [], toggleExpandedText: 'Show less', toggleCollapsedText: '', customActionText: '', collapsedSlotNames: [] })
+    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({ itemSpecifics: [] }), { attributeSection: readOnly })} />))
+    const toggle = band.slice(band.indexOf('ebay-specific-toggle'))
+    expect(toggle.slice(0, toggle.indexOf('</button>'))).toContain('disabled')
+  })
+  it('新形状样式挂段落 id 作用域：pill 半径 20 与灰底照现网实测', () => {
+    const live = readFileSync(path.resolve(process.cwd(), 'src/renderer/ebay-local-listing-editor.css'), 'utf8')
+    expect(live).toContain('#ebay-revise-specifics .ebay-specific-pill{')
+    expect(live).toContain('border-radius:20px')
+    expect(live).toContain('.ebay-specific-group-blurb{')
+    expect(live).toContain('#ebay-revise-specifics .ebay-specific-meta{')
   })
 })

@@ -32,8 +32,8 @@ type Props={
   onPolicyCarrierItemIdChange:(value:string)=>void
   /** 「保存并准备到 eBay」实际会打开哪一页（修改/首次刊登/新建刊登），由调用方按本地产品判定后传入；缺省按修改页 */
   routeKind?:EbayListingRouteKind
-  /** 本次会话里从 eBay 现网 ITEM SPECIFICS 段读回的槽位清单；为空即「还没读过」，段体退回本地清单态 */
-  attributeSlots?:EbayItemSpecificSlot[]
+  /** 本次会话里从 eBay 现网 ITEM SPECIFICS 段读回的整段原文形（槽位+组说明+折叠两态+加属性按钮）；为空即「还没读过」，段体退回本地清单态 */
+  attributeSection?:EbayItemSpecificsSection
   /** 上面那份清单的抓取时刻（requirements.inspectedAt）；清单只活在本次会话，不落库，故时间必须显式标出 */
   attributeSlotsAt?:string
   /** 现网 ITEM SPECIFICS 段顶部的 eBay.ai 建议卡；现网按条件渲染，读不到即为 null，段内不画卡片 */
@@ -169,7 +169,7 @@ function CustomCategoryDropdown({options,value,onChange,disabled,placeholder,sav
   )
 }
 
-export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,gaps,businessPolicies,readingPolicies,onReadPolicies,policyCarrierItemId,onPolicyCarrierItemIdChange,routeKind='revise',attributeSlots=[],attributeSlotsAt='',suggestedCard=null,inline}:Props) {
+export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,gaps,businessPolicies,readingPolicies,onReadPolicies,policyCarrierItemId,onPolicyCarrierItemIdChange,routeKind='revise',attributeSection,attributeSlotsAt='',suggestedCard=null,inline}:Props) {
   const fileInput=useRef<HTMLInputElement>(null)
   const [draggedId,setDraggedId]=useState('')
   const [descriptionMode,setDescriptionMode]=useState<'TEXT'|'HTML'>('TEXT')
@@ -195,8 +195,16 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
   const specificKey=(name:string)=>name.trim().toLowerCase()
   // 建议卡的勾选态只活在本次会话：现网也是「勾上即写入」，取消勾选只撤勾，不回滚已经填进属性行的值。
   const [suggestionChecked,setSuggestionChecked]=useState<Record<string,boolean>>({})
-  const essentialSlots=attributeSlots.filter(item=>item.group==='ESSENTIAL')
-  const optionalSlots=attributeSlots.filter(item=>item.group!=='ESSENTIAL')
+  const attributeSlots=attributeSection?.slots??[]
+  const sectionGroups=attributeSection?.groups??[]
+  const sectionToggleExpanded=attributeSection?.toggleExpandedText??''
+  const sectionToggleCollapsed=attributeSection?.toggleCollapsedText??''
+  const sectionCustomAction=attributeSection?.customActionText??''
+  const sectionCollapsedNames=attributeSection?.collapsedSlotNames??[]
+  // 现网折叠开关的镜像只在「折叠态行名也读回来」时才给真开关；读不到就照画开关文字当读数，不自己编折叠范围。
+  const [sectionExpanded,setSectionExpanded]=useState(true)
+  const sectionCollapsible=Boolean(sectionCollapsedNames.length&&sectionToggleExpanded&&sectionToggleCollapsed)
+  const visibleSlots=(sectionCollapsible&&!sectionExpanded)?attributeSlots.filter(slot=>sectionCollapsedNames.includes(slot.name)):attributeSlots
   const slottedNames=new Set(attributeSlots.map(item=>specificKey(item.name)))
   const localOnlySpecifics=indexedSpecifics.filter(entry=>!slottedNames.has(specificKey(entry.item.name)))
   // 槽位清单只在本次会话里活着（不落库），故把抓取时刻显式标出来；没给时间就不谎报「已读取于……」。
@@ -229,9 +237,13 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
     const writeSlotValue=(next:string)=>set('itemSpecifics',writeSlotInto([...specifics],slot.name,next))
     return (
       <div className="ebay-specific-row ebay-specific-row--slot" key={slot.name}>
-        <span className={`ebay-specific-label${slot.required?' required':''}`} title={slot.name}>{slot.name}{slot.required&&<i className="ebay-specific-star" aria-label="eBay 必填属性">*</i>}</span>
+        <span className={`ebay-specific-label${slot.required?' required':''}`} title={slot.name}>{slot.name}{slot.required&&<i className="ebay-specific-star" aria-label="eBay 必填属性">*</i>}{slot.meta&&<span className={slot.metaKind==='TRENDING'?'ebay-specific-meta ebay-specific-meta--trending':'ebay-specific-meta'}>{slot.meta}</span>}</span>
         <div className="ebay-specific-control">
-          {slot.control==='MENU'?(
+          {slot.control==='YESNO'?(
+            <div className="ebay-specific-pills" role="group" aria-label={slot.name}>
+              {slot.options.map(option=>(<button type="button" className={`ebay-specific-pill${value===option.text?' ebay-specific-pill--on':''}`} key={option.text} aria-pressed={value===option.text} onClick={()=>writeSlotValue(value===option.text?'':option.text)}>{option.text}</button>))}
+            </div>
+          ):slot.control==='MENU'?(
             <div className="ebay-specific-menu">
               <input name={slot.name} value={value} placeholder={slot.placeholderShown} className={slot.placeholderShown?'ebay-specific-menu-input--live':undefined} onChange={event=>writeSlotValue(event.target.value)}/>
               <svg className="ebay-specific-menu-caret" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M3 5.75 8 10.75l5-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -249,6 +261,18 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
       </div>
     )
   }
+  // 组标题与说明句照现网原文画；读不到组标题时按槽位 group 记号合成 Essential/Optional，保持旧现网页的画法。
+  const groupLabelOf=(slot:EbayItemSpecificSlot)=>slot.groupLabel||(slot.group==='ESSENTIAL'?'Essential':'Optional')
+  const effectiveGroups=sectionGroups.length?sectionGroups:[...new Set(attributeSlots.map(slot=>slot.group))].map(group=>({name:group==='ESSENTIAL'?'Essential':'Optional',blurb:''}))
+  const sectionNodes:ReactNode[]=[]
+  for(const group of effectiveGroups){
+    const groupSlots=visibleSlots.filter(slot=>groupLabelOf(slot)===group.name)
+    sectionNodes.push(<h3 className="ebay-specific-group" key={`group-${group.name}`}>{group.name}</h3>)
+    if(group.blurb)sectionNodes.push(<p className="ebay-specific-group-blurb" key={`group-blurb-${group.name}`}>{group.blurb}</p>)
+    for(const slot of groupSlots)sectionNodes.push(slotRow(slot))
+  }
+  const groupedNames=new Set(effectiveGroups.map(group=>group.name))
+  for(const slot of visibleSlots.filter(item=>!groupedNames.has(groupLabelOf(item))))sectionNodes.push(slotRow(slot))
   const descriptionLength=(descriptionMode==='TEXT'?draft.descriptionText:draft.descriptionHtml).length
   // 只渲染付款/运输/退货三类下拉（裁决 3）：FULFILLMENT 入库存着但不做第四个控件；kind 收窄用映射表，不用 toUpperCase 断言。
   type PolicyKey='payment'|'shipping'|'return'
@@ -400,10 +424,7 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
                     {suggestedCard.applyAll&&<button type="button" className="ebay-specifics-ai-apply" onClick={applyAllSuggestions}>{suggestedCard.applyAll}</button>}
                   </div>
                 )}
-                {essentialSlots.length>0&&<h3 className="ebay-specific-group">Essential</h3>}
-                {essentialSlots.map(slotRow)}
-                {optionalSlots.length>0&&<h3 className="ebay-specific-group">Optional</h3>}
-                {optionalSlots.map(slotRow)}
+                {sectionNodes}
                 {localOnlySpecifics.length>0&&(
                   <div className="ebay-specific-local-only">
                     <h4>本地已记录但不在现网清单</h4>
@@ -417,6 +438,8 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
                     </div>)}
                   </div>
                 )}
+                {sectionToggleExpanded&&<button type="button" className="ebay-specific-toggle" disabled={!sectionCollapsible} onClick={()=>setSectionExpanded(current=>!current)}>{sectionCollapsible&&!sectionExpanded?sectionToggleCollapsed:sectionToggleExpanded}</button>}
+                {sectionCustomAction&&<button type="button" className="ebay-specific-custom" disabled>{sectionCustomAction}</button>}
               </div>
             ):specifics.length>0?(
               <div className="ebay-specific-list">

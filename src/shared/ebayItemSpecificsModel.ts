@@ -10,7 +10,7 @@ export interface EbayItemSpecificsRawRow {
   name: string
   /** 控件 id 原文，现网在里面带 [..[ESSENTIAL]] / [..[OPTIONAL]] 分组记号 */
   id: string
-  /** 控件标签名原文：BUTTON|INPUT|TEXTAREA|SELECT */
+  /** 控件标签名原文：BUTTON|INPUT|TEXTAREA|SELECT|PILLS */
   tag: string
   /** 控件 class 原文，判菜单按钮用 */
   controlClass: string
@@ -30,17 +30,35 @@ export interface EbayItemSpecificsRawRow {
   valueText: string
   /** 行左上角文档纵坐标，读不到 id 记号时用来跟分组标题对齐 */
   y: number
+  /** AddItem 现网标签旁的 meta 按钮原文：「~ 67.9K searches」或「Trending」；ReviseItem 没有 */
+  metaText?: string
+  /** AddItem 现网 Yes/No 双 pill 的原文与 aria-pressed 选中态；别的控件没有 */
+  pills?: Array<{ text: string; pressed: boolean }>
+  /** 该行在读取当下是否可见；折叠态被现网摘掉的行不会进 rows，此位只作如实记录 */
+  hidden?: boolean
 }
 
 export interface EbayItemSpecificsRaw {
-  groups: Array<{ text: string; y: number }>
+  groups: Array<{ text: string; y: number; blurb?: string }>
   rows: EbayItemSpecificsRawRow[]
+}
+
+/**
+ * AddItem 现网比 ReviseItem 多抄的三样原文：折叠开关按钮文字、加属性按钮文字、
+ * 以及折叠态那一遍的行清单（读取时若页上是折叠的，先抄一遍再展开抄全量，两遍都只抄原文）。
+ */
+export interface EbayItemSpecificsSectionRaw extends EbayItemSpecificsRaw {
+  toggles?: Array<{ text: string }>
+  customAction?: string
+  collapsed?: { rows: EbayItemSpecificsRawRow[]; toggles?: Array<{ text: string }> }
 }
 
 export interface EbayItemSpecificSlot {
   name: string
   group: 'ESSENTIAL' | 'OPTIONAL'
-  control: 'MENU' | 'TEXT' | 'TEXTAREA'
+  /** 现网组标题原文（Required / Additional (optional) / Essential / Optional）；读不到则空串 */
+  groupLabel: string
+  control: 'MENU' | 'TEXT' | 'TEXTAREA' | 'YESNO'
   required: boolean
   placeholder: string
   /**
@@ -53,12 +71,31 @@ export interface EbayItemSpecificSlot {
   value: string
   suggested: string
   counter: string
+  /** 标签旁 meta 按钮原文照抄；没有则空串 */
+  meta: string
+  /** meta 原文的类别判据：Trending 徽标与搜索量是两种画法 */
+  metaKind: 'TRENDING' | 'SEARCH_COUNT' | ''
+  /** Yes/No 双 pill 的原文与选中态；非 pill 控件为空数组 */
+  options: Array<{ text: string; pressed: boolean }>
   y: number
+}
+
+/** 整段级原文：组标题带说明句、折叠开关两态文字、加属性按钮文字、折叠态行名清单。 */
+export interface EbayItemSpecificsSection {
+  slots: EbayItemSpecificSlot[]
+  groups: Array<{ name: string; blurb: string }>
+  toggleExpandedText: string
+  toggleCollapsedText: string
+  customActionText: string
+  collapsedSlotNames: string[]
 }
 
 const ATTRIBUTE_NAME = /^(?:search-box-)?attributes[._-]?(.+)$/i
 const MENU_CLASS = /fake-menu-button__button|se-expand-button__button|combobox__control|menu__control/i
 const NON_SLOT_TAGS = new Set(['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT'])
+/** AddItem 现网 UPC 行的控件 name 不带 attributes 前缀，就认这一个全名。 */
+const UPC_NAME = 'universalProductCode'
+const TRENDING = /^trending$/i
 
 const clean = (value?: string): string => (value || '').replace(/\s+/g, ' ').trim()
 
@@ -69,53 +106,100 @@ const slotName = (rawName: string): string => {
   return clean(matched[1].replace(/([a-z])([A-Z])/g, '$1 $2'))
 }
 
+/** 行原文 → 槽位名：attributes 前缀优先，其次 UPC 全名，再次 pill 行的 ul[aria-label] 原名。 */
+const rowName = (row: EbayItemSpecificsRawRow): string => {
+  const prefixed = slotName(row?.name || '')
+  if (prefixed) return prefixed
+  const raw = clean(row?.name || '')
+  if (raw.toLowerCase() === UPC_NAME.toLowerCase()) return 'UPC'
+  if ((row?.pills ?? []).length) return raw
+  return ''
+}
+
 /** 现网把建议值写成「Suggested: xxx」，改版后连冒号都没有（Suggested12 V），所以冒号与空格都可省。 */
 const SUGGESTED = /Suggested:?\s*(\S.*)/i
 const COUNTER = /\d+\s*\/\s*\d+/
 
-export function parseEbayItemSpecifics(raw?: EbayItemSpecificsRaw): EbayItemSpecificSlot[] {
+export function parseEbayItemSpecificsSection(raw?: EbayItemSpecificsSectionRaw): EbayItemSpecificsSection {
   const rows = Array.isArray(raw?.rows) ? raw!.rows : []
   const groups = Array.isArray(raw?.groups) ? raw!.groups : []
-  const optionalY = groups.find(group => /optional/i.test(clean(group.text)))?.y
-  const seen = new Set<string>()
-  const slots: EbayItemSpecificSlot[] = []
-  for (const row of rows) {
-    const name = slotName(row?.name || '')
+  const headings = groups
+    .map(group => ({ name: clean(group?.text), blurb: clean(group?.blurb), y: Number(group?.y) }))
+    .filter(group => group.name)
+    .sort((left, right) => left.y - right.y)
+  const optionalY = headings.find(group => /optional/i.test(group.name))?.y
+  const mapRow = (row: EbayItemSpecificsRawRow): EbayItemSpecificSlot | null => {
+    const name = rowName(row)
+    const pills = Array.isArray(row?.pills) ? row.pills : []
     const tag = clean(row?.tag).toUpperCase()
-    if (!name || !NON_SLOT_TAGS.has(tag)) continue
-    const key = name.toLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
+    if (!name || (!NON_SLOT_TAGS.has(tag) && !pills.length)) return null
     const controlClass = clean(row.controlClass)
-    const control = MENU_CLASS.test(controlClass) || tag === 'SELECT' ? 'MENU'
-      : tag === 'TEXTAREA' ? 'TEXTAREA'
-        : tag === 'BUTTON' ? 'MENU'
-          : 'TEXT'
+    const control = pills.length ? 'YESNO'
+      : MENU_CLASS.test(controlClass) || tag === 'SELECT' ? 'MENU'
+        : tag === 'TEXTAREA' ? 'TEXTAREA'
+          : tag === 'BUTTON' ? 'MENU'
+            : 'TEXT'
     const placeholder = control === 'MENU' ? clean(row.panelPlaceholder) || clean(row.placeholder) : clean(row.placeholder)
     const maxLength = Number(row.maxLength)
     const valueText = clean(row.valueText)
     const id = clean(row.id)
     const suggested = valueText.match(SUGGESTED)?.[1] || ''
-    const value = clean(row.text) || clean(row.value)
-    slots.push({
+    const pressed = pills.find(pill => pill?.pressed)
+    const value = control === 'YESNO' ? clean(pressed?.text) : clean(row.text) || clean(row.value)
+    // 组归属：id 里的分组记号是现网自己标的，比 y 准；没记号才按行 y 落在哪个组标题下面认。
+    const heading = headings.filter(item => item.y <= row.y).pop()
+    const groupLabel = heading?.name || ''
+    const meta = clean(row.metaText)
+    return {
       name,
-      // id 里的分组记号是现网自己标的，比 y 准；没记号才退回 Optional 标题的 y。
-      // 两种都读不到时一律按 OPTIONAL 记，绝不把行谎报成 Essential。
       group: /\[ESSENTIAL\]/i.test(id) ? 'ESSENTIAL'
         : /\[OPTIONAL\]/i.test(id) ? 'OPTIONAL'
-          : optionalY === undefined || row.y >= optionalY ? 'OPTIONAL' : 'ESSENTIAL',
+          : /required|essential/i.test(groupLabel) ? 'ESSENTIAL'
+            : heading ? 'OPTIONAL'
+              : optionalY === undefined || row.y >= optionalY ? 'OPTIONAL' : 'ESSENTIAL',
+      groupLabel,
       control,
-      required: /\*/.test(clean(row.labelText)) || /required-field/i.test(clean(row.labelClass)),
+      required: /\*/.test(clean(row.labelText)) || /required-field/i.test(clean(row.labelClass)) || /required/i.test(groupLabel),
       placeholder,
       placeholderShown: control === 'MENU' ? value : placeholder,
       maxLength: Number.isFinite(maxLength) && maxLength > 0 ? maxLength : 0,
       value,
       suggested,
       counter: valueText.match(COUNTER)?.[0] || '',
+      meta,
+      metaKind: TRENDING.test(meta) ? 'TRENDING' : meta ? 'SEARCH_COUNT' : '',
+      options: pills.map(pill => ({ text: clean(pill?.text), pressed: Boolean(pill?.pressed) })),
       y: row.y
-    })
+    }
   }
-  return slots
+  const seen = new Set<string>()
+  const slots: EbayItemSpecificSlot[] = []
+  for (const row of rows) {
+    const slot = mapRow(row)
+    if (!slot) continue
+    const key = slot.name.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    slots.push(slot)
+  }
+  const collapsed = raw?.collapsed
+  const collapsedRows = Array.isArray(collapsed?.rows) ? collapsed!.rows : []
+  const collapsedSlotNames = [...new Set(collapsedRows.map(rowName).filter(Boolean))]
+  const expandedToggle = clean(raw?.toggles?.[0]?.text)
+  const collapsedToggle = clean(collapsed?.toggles?.[0]?.text)
+  return {
+    slots,
+    groups: headings.map(group => ({ name: group.name, blurb: group.blurb })),
+    // 两遍都抄到时各归各态；只抄到一遍时，按现网开关文字认它当时是哪一态，另一态留空。
+    toggleExpandedText: collapsedRows.length ? expandedToggle : /show less/i.test(expandedToggle) ? expandedToggle : '',
+    toggleCollapsedText: collapsedRows.length ? collapsedToggle : /show more/i.test(expandedToggle) ? expandedToggle : '',
+    customActionText: clean(raw?.customAction),
+    collapsedSlotNames
+  }
+}
+
+export function parseEbayItemSpecifics(raw?: EbayItemSpecificsRaw): EbayItemSpecificSlot[] {
+  return parseEbayItemSpecificsSection(raw).slots
 }
 
 /**

@@ -15,9 +15,9 @@ import { buildSemanticDigest, mergeSemanticFallback, shouldAttemptSemanticFallba
 import type { SemanticExtractionResult, SemanticField } from '../../shared/semanticFallback'
 import { EBAY_SITE_ROOT_DOMAINS } from '../../shared/ebaySites'
 import { extractPolicyIdFromLabel } from '../../shared/ebayListingForm'
-import { resolveEbayListingTargetForProduct } from '../../shared/ebayListingTarget'
+import { resolveEbayListingTarget, resolveEbayListingTargetForProduct } from '../../shared/ebayListingTarget'
 import { EBAY_POLICY_MODEL_FIELDS, parseEbayPolicyModel, parseEbayPolicyModelChoices, type EbayPolicyModelChoices, type EbayPolicyModelField } from '../../shared/ebayPolicyModel'
-import { parseEbayItemSpecifics, parseEbayItemSpecificsCard, type EbayItemSpecificsCardRaw, type EbayItemSpecificsRaw } from '../../shared/ebayItemSpecificsModel'
+import { parseEbayItemSpecificsSection, parseEbayItemSpecificsCard, type EbayItemSpecificsCardRaw, type EbayItemSpecificsRaw } from '../../shared/ebayItemSpecificsModel'
 import { EBAY_LOCAL_FILL_TARGETS, ebayLocalFillPayload, ebayPolicyFillPlan } from './ebayLocalFill'
 import { pickGigaMainImage } from '../../shared/gigaImageResolve'
 import type { BrowserBounds, BrowserState, BrowserTab, BuiltInCollectorState, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, EbayBrowserPluginState, EbayCategorySpecificRequirement, EbayCollectedProduct, EbayDeliveryLocationResult, EbayDirectoryProductScanCategory, EbayLoginResult, EbayMarketResearchFilter, EbayMarketResearchMetric, EbayMarketResearchSample, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayPlatformCategoryOption, EbayProductDetails, EbaySellerHubAcceptanceSnapshot, EbayStoreCategory, MarketplacePlatformCode, NetworkStrategy, Platform, SelectionTask, SupplyActivationResult } from '../../shared/contracts'
@@ -1929,12 +1929,16 @@ export class BrowserWorkspace {
     return result
   }
 
-  async inspectEbayListingRequirements(accountId:string,listingId:string,title:string):Promise<EbayLocalListingRequirements> {
-    const reviseUrl=`https://www.ebay.com/sl/list?mode=ReviseItem&itemId=${encodeURIComponent(listingId)}&ReturnURL=${encodeURIComponent('https://www.ebay.com/sh/lst/active')}`
+  async inspectEbayListingRequirements(accountId:string,listingId:string,title:string,categoryId=''):Promise<EbayLocalListingRequirements> {
+    // C5：开页与准备发布共用同一条 shared 路由判据——产品在架编号合法走修改页，否则按平台类目直入首次刊登页；
+    // 两者都没有时不开必然报错的页签，把路由点名原句抛给操作员。
+    const target=resolveEbayListingTarget({itemId:listingId,categoryId})
+    if(target.kind==='prelist')throw new Error(`读取刊登规则前还缺开页载体：${target.note}`)
+    const reviseUrl=target.url
     const tabId=await this.newEbayTab(accountId,`${title.slice(0,42)} · 读取刊登规则`,reviseUrl)
     const tab=this.detailTabs.get(tabId)
     if(!tab)throw new Error('未能创建 Seller Hub 修改页面')
-    const script=String.raw`(() => {
+    const script=String.raw`(async () => {
       const clean=value=>(value||'').replace(/\s+/g,' ').trim();
       const visible=node=>Boolean(node&&node.getClientRects().length&&!node.disabled);
       const bodyText=clean(document.body?.innerText).slice(0,30000);
@@ -1959,8 +1963,8 @@ export class BrowserWorkspace {
       // 编号只存在于页面内嵌模型。这里按锚点切出对象原文（平衡花括号，字符串内的括号不算深度），
       // 政策编号 / 在架数的判据仍全留给 TS 侧，页内不解析、不点任何控件。切片代码与准备发布共用同一份常量。
       ${EBAY_POLICY_MODEL_SLICE}
-      const attributeRows=[];
-      const attributeGroups=[];
+      const attributeBox=document.querySelector('.summary__attributes');
+      const docY=node=>Math.round((node?node.getBoundingClientRect().top:0)+window.scrollY);
       // 现网 ITEM SPECIFICS 段顶部还有一张 eBay.ai 建议卡，按条件渲染：同一张草稿页重载后整块就不出现了（2026-11-09 R6 取证）。
       // 这里同样只抄原文——整块可见文字、每个勾选项的标签原文与选中态、按钮原文；
       // 标题与说明的分界、「属性名: 建议值」的切分、按钮的认法全留给 TS 侧解，可离线跑现网 fixtures。
@@ -1989,42 +1993,93 @@ export class BrowserWorkspace {
         for(const action of cardNode.querySelectorAll('button,a')){if(action.getClientRects().length)attributeCard.buttons.push(clean(action.innerText))}
         break;
       }
-      // R5 现网：类目属性段是 div.summary__attributes，一行 = 标签列 + 值列，控件 name 直接带属性显示名（含空格与括号）。
-      // 这里只把原文抄回去：id（里面带分组记号）、class、标签列文本与类、占位、maxlength、值列可见文字、行 y。
-      // 分组 / 必填 / 控件类型 / 建议值 / 计数的判据全在 TS 侧解，可离线跑现网 fixtures（见 src/shared/__tests__/ebayItemSpecificsModel.test.ts）。
-      const attributeBox=document.querySelector('.summary__attributes');
-      const docY=node=>Math.round((node?node.getBoundingClientRect().top:0)+window.scrollY);
-      if(attributeBox){
-        for(const head of attributeBox.querySelectorAll('h3')){if(head.getClientRects().length)attributeGroups.push({text:clean(head.textContent),y:docY(head)})}
-        // 认 name 而不是认行容器：现网的 UPC 那一行不带 summary__attributes--field，只按行容器抓就会整行漏掉。
-        for(const control of [...attributeBox.querySelectorAll('[name]')]){
-          const controlName=control.getAttribute('name')||'';
-          if(!/^attributes[._-]/i.test(controlName))continue;
-          if(!control.getClientRects().length)continue;
-          const field=control.closest('.summary__attributes--field')||control.parentElement;
-          const labelNode=(field&&field.querySelector('[class*="--label"]'))||(control.id?document.querySelector('label[for="'+CSS.escape(control.id)+'"]'):null);
+      // R7 现网（AddItem 草稿页取证 2026-11-09 22:1x）：同容器比 ReviseItem 多四样原文——组标题带说明句、
+      // 标签旁 meta 按钮（~ x searches / Trending）、Yes/No 双 pill（ul[aria-label] 里 aria-pressed）、
+      // 折叠开关与加属性按钮。这里依旧只抄原文（含 aria-pressed 选中态与行可见性），判据全在 TS 侧。
+      const collectAttributes=()=>{
+        const groups=[];
+        const rows=[];
+        const sections=[...attributeBox.querySelectorAll('.summary__attributes--section-container')];
+        if(sections.length){
+          for(const section of sections){
+            const head=section.querySelector('legend h3,h3');
+            const blurb=section.querySelector('[class*="--description"]');
+            if(head&&head.getClientRects().length)groups.push({text:clean(head.textContent),blurb:clean(blurb?blurb.textContent:''),y:docY(head)});
+          }
+        }else{
+          for(const head of attributeBox.querySelectorAll('h3')){if(head.getClientRects().length)groups.push({text:clean(head.textContent),blurb:'',y:docY(head)})}
+        }
+        const pushRow=(field,control,pills,pillList)=>{
+          const controlName=control?(control.getAttribute('name')||''):(pillList?(pillList.getAttribute('aria-label')||''):'');
+          const labelNode=(field&&field.querySelector('[class*="--label"]'))||(control&&control.id?document.querySelector('label[for="'+CSS.escape(control.id)+'"]'):null);
+          const metaNode=field&&field.querySelector('button[class*="infotip__host"]');
           const valueNode=field&&field.querySelector('[class*="--value"]');
           const panelInput=field&&field.querySelector('[id^="search-box-"],[name^="search-box-"]');
-          attributeRows.push({
+          const anchor=field||control||pillList;
+          rows.push({
             name:controlName,
-            id:control.id||'',
-            tag:control.tagName,
-            controlClass:String(control.className||''),
+            id:control?(control.id||''):'',
+            tag:control?control.tagName:(pills.length?'PILLS':''),
+            controlClass:control?String(control.className||''):'',
             labelText:clean(labelNode&&labelNode.innerText),
             labelClass:String((labelNode&&labelNode.className)||''),
-            text:control.tagName==='INPUT'||control.tagName==='TEXTAREA'||control.tagName==='SELECT'?'':clean(control.innerText),
-            value:clean(control.value),
-            placeholder:control.getAttribute('placeholder')||'',
+            text:control&&(control.tagName==='INPUT'||control.tagName==='TEXTAREA'||control.tagName==='SELECT')?'':clean(control?control.innerText:''),
+            value:clean(control?control.value:''),
+            placeholder:control?(control.getAttribute('placeholder')||''):'',
             panelPlaceholder:clean(panelInput&&panelInput.getAttribute('placeholder')),
-            maxLength:control.getAttribute('maxlength')||'',
+            maxLength:control?(control.getAttribute('maxlength')||''):'',
             valueText:clean(valueNode&&valueNode.innerText),
-            y:docY(field||control)
+            metaText:clean(metaNode&&metaNode.textContent),
+            pills,
+            hidden:anchor?!anchor.getClientRects().length:false,
+            y:docY(anchor)
           });
+        };
+        const handled=new Set();
+        for(const field of attributeBox.querySelectorAll('.summary__attributes--field,[data-testid="attribute"]')){
+          const control=field.querySelector('[name]');
+          const pills=[...field.querySelectorAll('button[class*="--pill"]')].map(pill=>({text:clean(pill.textContent),pressed:pill.getAttribute('aria-pressed')==='true'}));
+          const pillList=field.querySelector('ul[aria-label]');
+          if(!control&&!pills.length)continue;
+          if(control)handled.add(control);
+          pushRow(field,control,pills,pillList);
+        }
+        // 认 name 而不是只认行容器：ReviseItem 现网的 UPC 那一行不带 summary__attributes--field，
+        // 没被上面行容器循环收进去的具名控件在这里补抄，形状与行容器路径完全一致。
+        for(const control of [...attributeBox.querySelectorAll('[name]')]){
+          const controlName=control.getAttribute('name')||'';
+          if(!/^attributes[._-]/i.test(controlName)&&controlName!=='universalProductCode')continue;
+          if(handled.has(control))continue;
+          if(!control.getClientRects().length)continue;
+          pushRow(control.closest('.summary__attributes--field')||control.parentElement,control,[],null);
+        }
+        const toggles=[...attributeBox.querySelectorAll('button')].filter(node=>/show more|show less/i.test(node.innerText||'')).map(node=>({text:clean(node.innerText)}));
+        const custom=attributeBox.querySelector('button[class*="--custom-specific"]');
+        return {groups,rows,toggles,customAction:clean(custom?custom.textContent:'')};
+      };
+      // 折叠态现网会把尾巴行整块摘出 DOM：先抄当下这一遍，页上若有 Show more 就点开再抄全量遍，
+      // 两遍都只抄原文；点开关只改页面视觉折叠态，读取收尾不替用户保留展开（由 TS 侧如实回传两遍）。
+      let collected=attributeBox?collectAttributes():{groups:[],rows:[],toggles:[],customAction:''};
+      let attributeCollapsed=null;
+      if(attributeBox){
+        const showMore=[...attributeBox.querySelectorAll('button')].find(node=>/show more/i.test(node.innerText||''));
+        if(showMore){
+          const before=collected;
+          showMore.click();
+          await new Promise(resolve=>setTimeout(resolve,600));
+          collected=collectAttributes();
+          attributeCollapsed={rows:before.rows,toggles:before.toggles};
         }
       }
-      return {url:location.href,login,verification,ready:Boolean(titleField),categorySpecifics,policyOptions,policyModels,attributeGroups,attributeRows,attributeCard};
+      const attributeGroups=collected.groups;
+      const attributeRows=collected.rows;
+      const attributeToggles=collected.toggles;
+      const attributeCustomAction=collected.customAction;
+      const attributeCollapsedRows=attributeCollapsed?attributeCollapsed.rows:[];
+      const attributeCollapsedToggles=attributeCollapsed?attributeCollapsed.toggles:[];
+      return {url:location.href,login,verification,ready:Boolean(titleField),categorySpecifics,policyOptions,policyModels,attributeGroups,attributeRows,attributeToggles,attributeCustomAction,attributeCollapsedRows,attributeCollapsedToggles,attributeCard};
     })()`
-    let result:{url:string;login:boolean;verification:boolean;ready:boolean;categorySpecifics:EbayCategorySpecificRequirement[];policyOptions:Array<{kind:string;raw:string;selected:boolean}>;policyModels:Record<string,string>;attributeGroups:EbayItemSpecificsRaw['groups'];attributeRows:EbayItemSpecificsRaw['rows'];attributeCard:EbayItemSpecificsCardRaw}={url:reviseUrl,login:false,verification:false,ready:false,categorySpecifics:[],policyOptions:[],policyModels:{paymentPolicy:'',shippingPolicy:'',returnPolicy:''},attributeGroups:[],attributeRows:[],attributeCard:{text:'',options:[],buttons:[]}}
+    let result:{url:string;login:boolean;verification:boolean;ready:boolean;categorySpecifics:EbayCategorySpecificRequirement[];policyOptions:Array<{kind:string;raw:string;selected:boolean}>;policyModels:Record<string,string>;attributeGroups:EbayItemSpecificsRaw['groups'];attributeRows:EbayItemSpecificsRaw['rows'];attributeToggles:Array<{text:string}>;attributeCustomAction:string;attributeCollapsedRows:EbayItemSpecificsRaw['rows'];attributeCollapsedToggles:Array<{text:string}>;attributeCard:EbayItemSpecificsCardRaw}={url:reviseUrl,login:false,verification:false,ready:false,categorySpecifics:[],policyOptions:[],policyModels:{paymentPolicy:'',shippingPolicy:'',returnPolicy:''},attributeGroups:[],attributeRows:[],attributeToggles:[],attributeCustomAction:'',attributeCollapsedRows:[],attributeCollapsedToggles:[],attributeCard:{text:'',options:[],buttons:[]}}
     for(let attempt=0;attempt<20;attempt+=1){result=await tab.view.webContents.executeJavaScript(script,true) as typeof result;if(result.login)throw new Error('eBay 登录会话已失效，请先完成登录');if(result.verification)throw new Error('eBay 要求安全验证，请人工完成后重试');if(result.ready)break;await this.sleep(750)}
     if(!result.ready)throw new Error('Seller Hub 修改页尚未加载完成，请确认商品仍在线后重试')
     // 解析全留在 TS：页内脚本只回下拉的原始文本与选中态、三段模型对象原文，编号与在架数一律在这里解出，
@@ -2051,13 +2106,14 @@ export class BrowserWorkspace {
       const label=EBAY_POLICY_SCRAPE_KIND_LABELS[kind]
       return `${label}政策读到了选项但都解析不出政策编号，本地${label}政策保持上一次抓取的结果；请重新读取一次，或在 Seller Hub 修改页人工核对${label}政策编号`
     })
-    // 槽位清单与旧 categorySpecifics 各算各的：后者按标签文本正则剔掉了 Unit Quantity 这类行，
-    // 前者只认控件 name 里的 attributes 前缀，现网 27 行加 UPC 一行都能读回来。读不到只点名缺口，绝不抛错。
-    const attributeSlots=parseEbayItemSpecifics({groups:result.attributeGroups,rows:result.attributeRows})
+    // 整段原文（槽位+组标题说明+折叠两态+加属性按钮）与旧 categorySpecifics 各算各的：后者按标签文本正则
+    // 剔掉了 Unit Quantity 这类行，前者只认控件 name 的 attributes 前缀 / UPC 全名 / pill 行 aria-label。
+    // 读不到只点名缺口，绝不抛错。
+    const attributeSection=parseEbayItemSpecificsSection({groups:result.attributeGroups,rows:result.attributeRows,toggles:result.attributeToggles,customAction:result.attributeCustomAction,collapsed:result.attributeCollapsedRows.length?{rows:result.attributeCollapsedRows,toggles:result.attributeCollapsedToggles}:undefined})
     // 建议卡按条件渲染，读不到就是 null：编辑器宁可不画，也不凭标题文字拼一张假卡片出来。
     const suggestedCard=parseEbayItemSpecificsCard(result.attributeCard)
-    return {sourceUrl:result.url,categorySpecifics:result.categorySpecifics,attributeSlots,suggestedCard,policies,inspectedAt:new Date().toISOString(),warnings:[
-      ...(result.categorySpecifics.length||attributeSlots.length?[]:['页面未读取到类目属性；可能是页面结构变化或该类目没有可见属性']),
+    return {sourceUrl:result.url,categorySpecifics:result.categorySpecifics,attributeSection,suggestedCard,policies,inspectedAt:new Date().toISOString(),warnings:[
+      ...(result.categorySpecifics.length||attributeSection.slots.length?[]:['页面未读取到类目属性；可能是页面结构变化或该类目没有可见属性']),
       ...(policies.length?[]:['页面未读取到付款/运输/退货政策；本地政策保持上一次抓取的结果，请在 Seller Hub 修改页确认政策区块已加载后重试']),
       ...stalePolicyWarnings
     ]}

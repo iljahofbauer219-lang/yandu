@@ -397,7 +397,7 @@ declare global {
         inspectFinalImages(imageUrls:string[]):Promise<EbayImageInspectionReport>
         localProductImageVisualReport(localProductId:string):Promise<EbayImageVisualInspectionReport|null>
         reviewLocalProductImageRule(input:EbayImageVisualReviewInput):Promise<EbayImageVisualInspectionReport>
-        localProductRequirements(storeId:string,listingId:string,title:string):Promise<EbayLocalListingRequirements>
+        localProductRequirements(storeId:string,listingId:string,title:string,categoryId?:string):Promise<EbayLocalListingRequirements>
         businessPolicies(storeId:string,kind?:EbayBusinessPolicyKind):Promise<EbayStoreBusinessPolicy[]>
         prepareLocalProductRevision(localProductId:string):Promise<EbayLocalRevisionPreparationResult>
         removeLocalProduct(localProductId:string):Promise<boolean>
