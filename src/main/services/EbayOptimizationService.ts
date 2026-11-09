@@ -4,6 +4,8 @@ import { parseCategoryClassifyReply } from '../../shared/palletCategoryMatch'
 import { containsCjk, englishSpecificLabel, normalizeEnglishDescription } from '../../shared/ebaySpecificsEnglish'
 import { reorderDescriptionSections } from '../../shared/ebayDescriptionSections'
 import { describeLlmHttpStatus, describeLlmTransportFailure, type LlmTransportFailure } from '../../shared/llmTransportError'
+import { buildSemanticExtractionMessages, parseSemanticExtractionReply } from '../../shared/semanticFallback'
+import type { SemanticExtractionResult, SemanticField } from '../../shared/semanticFallback'
 
 interface ChatResponse {
   choices?:Array<{finish_reason?:string;message?:{content?:string|null;reasoning_content?:string|null}}>
@@ -280,6 +282,20 @@ export class EbayOptimizationService {
     private readonly baseUrl='https://api.deepseek.com',
     private readonly model='deepseek-v4-flash'
   ) {}
+
+  /** #6 语义兜底：只按页面原文摘要逐字摘录缺失字段。闸门、提示词与拒收理由都在 shared/semanticFallback，此处只管传输与降级。 */
+  async extractSemanticFallback(digest:string,fields:SemanticField[]):Promise<SemanticExtractionResult> {
+    if(!this.apiKey)return {applied:false,fields:{},rejected:fields.map(field=>({field,reason:'未配置 DeepSeek API Key，语义兜底不可用'}))}
+    if(!fields.length)return {applied:false,fields:{},rejected:[]}
+    const {messages}=buildSemanticExtractionMessages(digest,fields)
+    try {
+      const {ok,status,payload}=await postDeepSeekChat(this.baseUrl,this.apiKey,JSON.stringify({model:this.model,temperature:0,max_tokens:1_200,thinking:{type:'disabled'},response_format:{type:'json_object'},messages}),30_000)
+      if(!ok)return {applied:false,fields:{},rejected:fields.map(field=>({field,reason:`语义兜底：${describeLlmHttpStatus(status,payload.error?.message)}`}))}
+      return parseSemanticExtractionReply(payload.choices?.[0]?.message?.content?.trim()||'',digest,fields)
+    } catch (error) {
+      return {applied:false,fields:{},rejected:fields.map(field=>({field,reason:`语义兜底调用失败：${String(error&&(error as Error).message)}`}))}
+    }
+  }
 
   async classifyCategory(input:{title:string;sourceCategory:string;nodes:Array<{categoryId:string;path:string}>;description?:string}):Promise<{categoryId:string|null;reason:string}> {
     if(!this.apiKey)return {categoryId:null,reason:'未配置 DeepSeek API Key，语义归类不可用'}

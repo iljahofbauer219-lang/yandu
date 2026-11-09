@@ -4132,8 +4132,9 @@ function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lo
       const downloaded=product.snapshot.media.filter(media=>media.downloadStatus==='DOWNLOADED').length
       const failed=product.snapshot.media.filter(media=>media.downloadStatus==='FAILED').length
       const missing=product.snapshot.missingFields
-      const partial=failed>0||missing.length>0||product.status==='INCOMPLETE'
-      const detail=`已保存本地快照 V${product.versionCount}，成功下载 ${downloaded} 张图片${failed?`，失败 ${failed} 张`:''}，完整度 ${product.snapshot.completeness}%${missing.length?`；仍缺少：${missing.join('、')}`:''}。`
+      const fallbackNote=product.snapshot.details.semanticFallback?.note||''
+      const partial=failed>0||missing.length>0||Boolean(fallbackNote)||product.status==='INCOMPLETE'
+      const detail=`已保存本地快照 V${product.versionCount}，成功下载 ${downloaded} 张图片${failed?`，失败 ${failed} 张`:''}，完整度 ${product.snapshot.completeness}%${missing.length?`；仍缺少：${missing.join('、')}`:''}${fallbackNote?`；${fallbackNote}`:''}。`
       setDownloadToast({kind:partial?'warning':'success',message:partial?`下载部分完成：${detail} 可稍后重试更新本地版本。`:`下载成功：${detail}`})
     } catch(reason) {
       const message=readableError(reason,'下载本地产品失败')
@@ -5053,6 +5054,7 @@ function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lo
         })}</div>:<EbayEmpty title="暂无待发布版本" description="请先在AI优化中完成内容与合规检查，再保存到优品仓库。" action="查看优品仓库" onAction={()=>setActiveTab('premium')}/>}</>}
       </div>}
     </div>
+    {localEditorProduct&&localEditorProduct.snapshot.details.semanticFallback&&<div className="ebay-config-notice"><b>来源标记：{localEditorProduct.snapshot.details.semanticFallback.label}</b><span>{localEditorProduct.snapshot.details.semanticFallback.note}（读取时间 {new Date(localEditorProduct.snapshot.details.semanticFallback.at).toLocaleString('zh-CN')}）</span></div>}
     {localEditorProduct&&localEditorDraft&&<EbayLocalListingEditor product={localEditorProduct} draft={localEditorDraft} saving={busy===`local-save:${localEditorProduct.id}`} uploading={busy===`local-media:${localEditorProduct.id}`} preparing={busy===`local-prepare:${localEditorProduct.id}`} categories={categoryWorkspace.categories} onSetCategory={(categoryId,categoryName)=>void setLocalCategory(categoryId,categoryName)} onAutoClassify={()=>void autoClassifyLocal()} platformCategory={overlayPlatformCategory} onChange={setLocalEditorDraft} onSave={()=>void saveLocalEditor()} onPrepare={()=>void prepareLocalEditorInSellerHub()} onUpload={files=>void uploadLocalEditorMedia(files)} gaps={localEditorDraft?requiredFormGaps([],formValuesFromInput(localEditorDraft),ebayHardRequiredFieldsForRoute(localEditorRouteKind)):[]} routeKind={localEditorRouteKind} businessPolicies={publishEditorPolicies} readingPolicies={busy==='local-read-policies'} onReadPolicies={()=>{void readBusinessPoliciesFor(localEditorProduct??null,'local-read-policies')}} policyCarrierItemId={policyCarrierItemId} onPolicyCarrierItemIdChange={setPolicyCarrierForActiveStore} onClose={()=>{if(!busy.startsWith('local-')){setLocalEditorProductId('');setLocalEditorDraft(null)}}}/>} 
     {directoryProductSyncOpen&&<div className="ebay-store-dialog-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)void closeDirectoryProductSync()}}>
       <div className="ebay-store-dialog ebay-directory-product-dialog" role="dialog" aria-modal="true" aria-labelledby="ebay-directory-product-dialog-title">

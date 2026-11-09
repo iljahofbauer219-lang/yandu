@@ -44,6 +44,12 @@ describe('palletItemToEbayLocalInput', () => {
     expect(listing.categoryName).toBe('未分类')
   })
 
+  it('货盘来源不读 eBay 页面，合成详情绝不能带语义兜底标记（送入落库口因此无需裁剪）', () => {
+    const { details } = palletItemToEbayLocalInput(item, 's', 'EBAY_US', 't')
+    expect(details.semanticFallback).toBeUndefined()
+    expect(Object.keys(details)).not.toContain('semanticFallback')
+  })
+
   it('parsePalletPrice 兼容千分位与无币种文本', () => {
     expect(parsePalletPrice('￥1,280.00')).toEqual({ price: '1280.00', currency: '' })
     expect(parsePalletPrice('面议')).toEqual({ price: '', currency: '' })

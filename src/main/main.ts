@@ -58,6 +58,7 @@ import { backCoreTermVariants, parseCoreTermVariants } from '../shared/ebayMarke
 import { parseEstimatedTotal } from '../shared/supplyEstimatedTotal'
 import { EBAY_SITE_ROOT_DOMAINS } from '../shared/ebaySites'
 import { mergeEbayLocalDetailsEdit } from '../shared/ebayListingForm'
+import { pruneSemanticFallbackMark } from '../shared/semanticFallback'
 import { MARKETING_FACTS_VERSION, cleanMarketingFeatureLines, pickMarketingSpecifications } from '../shared/ebayImageCategoryPlan'
 
 const execFileAsync = promisify(execFile)
@@ -627,6 +628,8 @@ async function downloadEbayLocalProduct(storeId:string,listingId:string):Promise
     imageUrls,
     videoUrl
   }
+  // 基线标记描述的是上一次读取的值，直接沿用会把旧兜底标签挂到本次实测值上（或反过来让兜底值冒充实测）
+  mergedDetails.semanticFallback=pruneSemanticFallbackMark(liveDetails.semanticFallback,mergedDetails,liveDetails)
   if(!mergedDetails.imageUrls.length)throw new Error('原商品页没有识别到可下载图片，请确认商品图片正常显示后重试')
   const capturedAt=new Date().toISOString()
   const directory=path.join(app.getPath('userData'),'ebay-local-products',safeLocalSegment(storeId),safeLocalSegment(listingId),capturedAt.replace(/[:.]/g,'-'))
@@ -967,9 +970,10 @@ async function readEbayProductByUrl(storeId:string,rawUrl:string):Promise<EbayLo
   if(!title)throw new Error('未能从商品页识别到标题，请确认链接是有效的 eBay 商品页')
   const marketplaceId=store.marketplaceId||'EBAY_US'
   const now=new Date().toISOString()
+  const titleFallback=Boolean(details.semanticFallback?.fields.includes('title'))
   const listing:EbayListing={
     id:`${store.id}:${marketplaceId}:${listingId}`,storeId:store.id,marketplaceId,listingId,sku:'',
-    title,originalTitle:title,translatedTitle:'',originalTitleVerified:true,titleSource:'EBAY_STRUCTURED_DATA',
+    title,originalTitle:title,translatedTitle:'',originalTitleVerified:!titleFallback,titleSource:titleFallback?'SEMANTIC_FALLBACK':'EBAY_STRUCTURED_DATA',
     price:details.price||'',currency:(details.currency||'').trim().toUpperCase()||ebayMarketplaceCurrency(marketplaceId),
     quantity:0,
     imageUrl:details.imageUrls[0]||'',imageUrls:details.imageUrls||[],
@@ -1007,6 +1011,8 @@ function updateEbayLocalProduct(localProductId:string,changes:EbayLocalProductUp
     updatedAt:capturedAt
   }
   const details=mergeEbayLocalDetailsEdit(product.snapshot.details,{...changes,title,price:listing.price,currency:listing.currency})
+  // 人工改过的值不再是兜底值，标记必须跟着摘掉，否则界面上会把卖家手改的内容标成「语义兜底」
+  details.semanticFallback=pruneSemanticFallbackMark(product.snapshot.details.semanticFallback,details,product.snapshot.details)
   const sourceMedia=new Map(product.snapshot.media.map(media=>[media.id,media]))
   const media=changes.media.slice(0,24).map((media,index)=>({...(sourceMedia.get(media.id)||media),sortOrder:index}))
   return database.saveEbayLocalProductSnapshot(completeEbayLocalSnapshot({listing,details,media,capturedAt}))
@@ -2082,6 +2088,8 @@ function createWindow() {
   mainWindow.on('unmaximize', () => shellWebContents?.send('window:maximized', false))
 
   workspace = new BrowserWorkspace(mainWindow, shell.webContents)
+  // #6 语义兜底走既有 DeepSeek 服务；Key 缺失或调用失败时服务侧返回拒收结果，读取行为退回 C4 口径的原文案
+  workspace.setSemanticFallbackRunner((digest, fields) => ebayOptimizationService.extractSemanticFallback(digest, fields))
   startFeishuBot()
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -3650,6 +3658,8 @@ async function enrichContentRequestWithProductPageFacts(request:EbayContentOptim
   const local=database.getEbayLocalProducts().find(item=>item.listingId===request.listingId)
   if(local&&resolved.refreshed&&local.snapshot.details.descriptionText!==descriptionText){
     const mergedDetails={...local.snapshot.details,descriptionText,itemSpecifics:local.snapshot.details.itemSpecifics?.length?local.snapshot.details.itemSpecifics:specifics}
+    // 描述换成服务器产品页原文后，原先标在描述上的兜底来源就不成立了
+    mergedDetails.semanticFallback=pruneSemanticFallbackMark(local.snapshot.details.semanticFallback,mergedDetails,local.snapshot.details)
     database.saveEbayLocalProductSnapshot(completeEbayLocalSnapshot({listing:local.snapshot.sourceListing,details:mergedDetails,media:local.snapshot.media,capturedAt:new Date().toISOString()}))
   }
   return {request:{...request,...resolved.source,sourceDescriptionLabel:'服务器产品页原始详情'},palletFactsMissing:false}

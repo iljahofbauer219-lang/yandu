@@ -1,3 +1,6 @@
+import type { SemanticFallbackMark } from './semanticFallback'
+import type { EbayItemSpecificSlot } from './ebayItemSpecificsModel'
+
 export type Platform = 'ozon' | '1688' | 'web'
 export type SelectionMode = 'FORWARD_SUPPLY' | 'REVERSE_MARKET'
 export type SupplyPlatformCode = '1688' | 'TAOBAO' | 'TMALL' | 'JD' | 'PINDUODUO' | 'DOUYIN' | 'XIAOHONGSHU' | 'KUAISHOU' | 'GIGACLOUD' | 'YIWUGO' | 'CUSTOM'
@@ -118,7 +121,7 @@ export interface EbayStore {
   listingCount:number
 }
 
-export type EbayTitleSource = 'EBAY_STORE_LINK'|'EBAY_STRUCTURED_DATA'|'EBAY_API'|'EBAY_REPORT'|'UNVERIFIED_PAGE_TEXT'
+export type EbayTitleSource = 'EBAY_STORE_LINK'|'EBAY_STRUCTURED_DATA'|'EBAY_API'|'EBAY_REPORT'|'UNVERIFIED_PAGE_TEXT'|'SEMANTIC_FALLBACK'
 
 export interface EbayListing {
   id:string
@@ -177,6 +180,8 @@ export interface EbayProductDetails {
   itemLocation?:string
   postalCode?:string
   handlingTime?:string
+  /** #6 语义兜底来源标记：只有「结构化实测读空、由页面原文逐字摘录补齐」的字段才会出现在这里，与实测字段分开标 */
+  semanticFallback?:SemanticFallbackMark
 }
 
 export interface EbayLocalProductMedia {
@@ -298,6 +303,11 @@ export interface EbayScrapedPolicyOption {
 export interface EbayLocalListingRequirements {
   sourceUrl:string
   categorySpecifics:EbayCategorySpecificRequirement[]
+  /**
+   * 现网 ITEM SPECIFICS 段的槽位清单（分组/控件类型/必填/占位/长度上限/Suggested）。
+   * 只在本次会话里给编辑器 05 段用，不落库：重启后要再读一次才算拿到。
+   */
+  attributeSlots:EbayItemSpecificSlot[]
   inspectedAt:string
   warnings:string[]
   policies:EbayScrapedPolicyOption[]

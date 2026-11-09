@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs'
-import { BaseWindow, BrowserWindow, WebContents, WebContentsView, clipboard } from 'electron'
+import { app, BaseWindow, BrowserWindow, WebContents, WebContentsView, clipboard } from 'electron'
 import { AMAZON_LISTING_EVIDENCE_SCRIPT, AMAZON_REVIEW_EVIDENCE_SCRIPT, AMAZON_SAMPLES_SCRIPT, type AmazonListingEvidence, type AmazonMarketSample, type AmazonReviewEvidence } from '../../shared/amazonScraper'
 import { matchSellableInventoryText } from '../../shared/sellableInventory'
 import { pickSupplyDescriptionText } from '../../shared/supplyDescription'
@@ -8,10 +8,16 @@ import { pickDropshipShippingFee } from '../../shared/supplyDropshipFee'
 import { parseEbayAggregateMetrics, parseEbayResearchRows } from '../../shared/ebayMarketResearchParse'
 import { shouldActivateSupplyView } from '../../shared/supplyAutoEnter'
 import { shouldRetryWithoutProxy } from '../../shared/ebayDirectFallback'
+import { challengeRegexSource, loginRegexSource } from '../../shared/browserChallenge'
+import { pollUntil } from '../../shared/pageReadyPoll'
+import { decideEbayReadOutcome, ebayReadFailureMessage } from '../../shared/ebayReadOutcome'
+import { buildSemanticDigest, mergeSemanticFallback, shouldAttemptSemanticFallback } from '../../shared/semanticFallback'
+import type { SemanticExtractionResult, SemanticField } from '../../shared/semanticFallback'
 import { EBAY_SITE_ROOT_DOMAINS } from '../../shared/ebaySites'
 import { extractPolicyIdFromLabel } from '../../shared/ebayListingForm'
 import { resolveEbayListingTargetForProduct } from '../../shared/ebayListingTarget'
 import { EBAY_POLICY_MODEL_FIELDS, parseEbayPolicyModel, parseEbayPolicyModelChoices, type EbayPolicyModelChoices, type EbayPolicyModelField } from '../../shared/ebayPolicyModel'
+import { parseEbayItemSpecifics, type EbayItemSpecificsRaw } from '../../shared/ebayItemSpecificsModel'
 import { EBAY_LOCAL_FILL_TARGETS, ebayLocalFillPayload, ebayPolicyFillPlan } from './ebayLocalFill'
 import { pickGigaMainImage } from '../../shared/gigaImageResolve'
 import type { BrowserBounds, BrowserState, BrowserTab, BuiltInCollectorState, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, EbayBrowserPluginState, EbayCategorySpecificRequirement, EbayCollectedProduct, EbayDeliveryLocationResult, EbayDirectoryProductScanCategory, EbayLoginResult, EbayMarketResearchFilter, EbayMarketResearchMetric, EbayMarketResearchSample, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayPlatformCategoryOption, EbayProductDetails, EbaySellerHubAcceptanceSnapshot, EbayStoreCategory, MarketplacePlatformCode, NetworkStrategy, Platform, SelectionTask, SupplyActivationResult } from '../../shared/contracts'
@@ -126,6 +132,16 @@ const HOME: Record<Platform, string> = {
   web: 'about:blank'
 }
 
+/** 页面向只读诊断账本：回答「这次采集失败是渲染崩了、页面挂死、加载被拒还是脚本报错」。 */
+interface PageDiagnostics {
+  gone: Array<{ reason: string; exitCode: number; at: number }>
+  unresponsive: Array<{ startedAt: number; recoveredAt: number | null }>
+  mainFrameFailures: Array<{ code: number; description: string; url: string; at: number }>
+  resourceFailureCount: number
+  consoleErrorCount: number
+  consoleErrors: Array<{ message: string; source: string; at: number }>
+}
+
 export class BrowserWorkspace {
   private readonly views = new Map<Platform, WebContentsView>()
   private readonly supplyViews = new Map<'1688'|'GIGACLOUD', WebContentsView>()
@@ -158,8 +174,69 @@ export class BrowserWorkspace {
   private gigaLoginInFlight: { version: number; promise: Promise<SupplyActivationResult | null> } | null = null
   private readonly ebayAutoLoginAttemptedAt = new Map<string,number>()
   private productLoginWindow: BrowserWindow | null = null
+  private readonly pageDiagnostics = new Map<number, PageDiagnostics>()
 
-  constructor(private readonly window: BaseWindow, private readonly shellContents: WebContents) {}
+  constructor(private readonly window: BaseWindow, private readonly shellContents: WebContents) {
+    // 旁挂在进程创建上，覆盖所有可见 Tab、隐藏采集窗口与弹层，不给 20+ 处 view 创建点各加一遍
+    app.on('web-contents-created', (_event, contents) => this.trackPageDiagnostics(contents))
+  }
+
+  /** #6 语义兜底：由 main.ts 注入，指向既有 DeepSeek 服务；未注入即整套兜底不参与，读取行为与 C4 完全一致 */
+  private semanticFallbackRunner?: (digest: string, fields: SemanticField[]) => Promise<SemanticExtractionResult>
+
+  setSemanticFallbackRunner(runner: (digest: string, fields: SemanticField[]) => Promise<SemanticExtractionResult>): void {
+    this.semanticFallbackRunner = runner
+  }
+
+  private diagnosticsOf(id: number): PageDiagnostics {
+    let entry = this.pageDiagnostics.get(id)
+    if (!entry) {
+      entry = { gone: [], unresponsive: [], mainFrameFailures: [], resourceFailureCount: 0, consoleErrorCount: 0, consoleErrors: [] }
+      this.pageDiagnostics.set(id, entry)
+    }
+    return entry
+  }
+
+  /** 只记账与打日志，不拦截、不重试、不改任何判定；账本随页面销毁回收，且只经 [page-diagnostics] 日志出口，不写入 BrowserState，避免这轮改动渲染层契约 */
+  private trackPageDiagnostics(contents: WebContents) {
+    const id = contents.id
+    const note = (layer: string, detail: Record<string, unknown>) => {
+      let url = ''
+      try { url = contents.getURL() } catch { url = '' }
+      console.log(`[page-diagnostics] ${layer} id=${id} url=${url.slice(0, 180)} ${JSON.stringify(detail)}`)
+    }
+    contents.on('render-process-gone', (_event, details) => {
+      const entry = this.diagnosticsOf(id)
+      entry.gone.unshift({ reason: details.reason, exitCode: details.exitCode, at: Date.now() })
+      entry.gone.length = Math.min(entry.gone.length, 4)
+      note('render-process-gone', { reason: details.reason, exitCode: details.exitCode })
+    })
+    contents.on('unresponsive', () => {
+      this.diagnosticsOf(id).unresponsive.unshift({ startedAt: Date.now(), recoveredAt: null })
+      note('unresponsive', {})
+    })
+    contents.on('responsive', () => {
+      const latest = this.diagnosticsOf(id).unresponsive[0]
+      if (latest && latest.recoveredAt === null) latest.recoveredAt = Date.now()
+    })
+    contents.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
+      const entry = this.diagnosticsOf(id)
+      if (isMainFrame) {
+        entry.mainFrameFailures.unshift({ code: errorCode, description: errorDescription, url: validatedUrl, at: Date.now() })
+        entry.mainFrameFailures.length = Math.min(entry.mainFrameFailures.length, 8)
+      } else entry.resourceFailureCount += 1
+      if (isMainFrame) note('did-fail-load', { code: errorCode, description: errorDescription, url: validatedUrl })
+    })
+    contents.on('console-message', (details) => {
+      if (details.level !== 'error') return
+      const entry = this.diagnosticsOf(id)
+      entry.consoleErrorCount += 1
+      entry.consoleErrors.unshift({ message: String(details.message).slice(0, 300), source: String(details.sourceId ?? '').slice(0, 180), at: Date.now() })
+      entry.consoleErrors.length = Math.min(entry.consoleErrors.length, 8)
+      if (entry.consoleErrorCount <= 5) note('console-error', { message: String(details.message).slice(0, 300) })
+    })
+    contents.once('destroyed', () => { this.pageDiagnostics.delete(id) })
+  }
 
   private sleep(milliseconds:number) { return new Promise(resolve=>setTimeout(resolve,milliseconds)) }
 
@@ -203,7 +280,7 @@ export class BrowserWorkspace {
     const maxRunMinutes=task.collectionMaxRunMinutes||20
     if (Date.now()-startedAt>maxRunMinutes*60_000) throw new Error(`采集保护已暂停：连续运行达到${maxRunMinutes}分钟，请稍后重新启动`)
     if (task.collectionAutoPause!==false) {
-      const issue=await view.webContents.executeJavaScript(`(() => { const text=(document.body?.innerText||'').slice(0,12000); const url=location.href; if (/captcha|verify|安全验证|滑块|验证码|访问频繁|操作异常|请求过于频繁|too many requests/i.test(text+' '+url)) return '检测到安全验证或访问频繁'; if (/account\/login|请登录|重新登录|登录已失效/i.test(text+' '+url)) return '登录状态可能已失效'; return ''; })()` ) as string
+      const issue=await view.webContents.executeJavaScript(`(() => { const text=(document.body?.innerText||'').slice(0,12000); const url=location.href; if (${challengeRegexSource('VERIFY_RATE')}.test(text+' '+url)) return '检测到安全验证或访问频繁'; if (${loginRegexSource('SUPPLY_ACCOUNT')}.test(text+' '+url)) return '登录状态可能已失效'; return ''; })()` ) as string
       if (issue) throw new Error(`采集保护已暂停：${issue}。请在右侧浏览器人工处理后重新启动`)
     }
     const actionRange=task.collectionProtectionMode==='CAUTIOUS'?[1400,2800]:task.collectionProtectionMode==='FAST'?[350,900]:[700,1600]
@@ -280,8 +357,8 @@ export class BrowserWorkspace {
     await this.sleep(1_200)
     const issue = await view.webContents.executeJavaScript(String.raw`(() => {
       const text=(document.body?.innerText||'').slice(0,12000), url=location.href;
-      if (/punish|captcha|verify|安全验证|滑块|验证码|访问频繁|操作异常|请求过于频繁|cloud_ip_bl/i.test(text+' '+url)) return 'VERIFY';
-      if (/login\.1688\.com|请登录|重新登录|登录已失效/i.test(text+' '+url)) return 'LOGIN';
+      if (${challengeRegexSource('VERIFY_RATE')}.test(text+' '+url)) return 'VERIFY';
+      if (${loginRegexSource('SUPPLY_1688')}.test(text+' '+url)) return 'LOGIN';
       return '';
     })()` ) as string
     if (issue) {
@@ -354,8 +431,8 @@ export class BrowserWorkspace {
       await this.sleep(1500)
       const issue = await window.webContents.executeJavaScript(String.raw`(() => {
         const text=(document.body?.innerText||'').slice(0,12000), url=location.href
-        if (/punish|captcha|verify|安全验证|滑块|验证码|访问频繁|操作异常|请求过于频繁|cloud_ip_bl|too many requests/i.test(text+' '+url)) return 'VERIFY'
-        if (/route=account\/login|login\.1688\.com|account\/login|请登录|重新登录|登录已失效|sign in to continue/i.test(text+' '+url)) return 'LOGIN'
+        if (${challengeRegexSource('VERIFY_RATE')}.test(text+' '+url)) return 'VERIFY'
+        if (${loginRegexSource('SUPPLY_FULL')}.test(text+' '+url)) return 'LOGIN'
         return ''
       })()`) as string
       if (issue === 'LOGIN') throw new Error(`${name}登录状态已失效，请先在 IE浏览 中登录${name}后重试`)
@@ -446,26 +523,34 @@ export class BrowserWorkspace {
             stage.click()
             return true
           })()`) as boolean
-          await this.sleep(4000)
-          pageProbe = await window.webContents.executeJavaScript(String.raw`(() => {
-            const vids = [...document.querySelectorAll('video, video source')].map(node => node.currentSrc || node.src || node.getAttribute('src') || '')
-            const scan = (document.documentElement.outerHTML.match(/https?:\/\/[^"'\s<>\\)]+(?:\.mp4|\.m3u8|\/video\/)[^"'\s<>\\)]*/gi) || [])
-            window.__yanduVideos = [...new Set([...vids.filter(u => /^https?:\/\//i.test(u)), ...scan])].slice(0, 8)
-            return {
-              blob: vids.some(u => u.startsWith('blob:')),
-              videoNodes: vids.length,
-              dialogs: [...document.querySelectorAll('.el-dialog__wrapper, .el-dialog')].filter(d => !/display:\s*none/.test(d.getAttribute('style') || '')).length,
-              scan: scan.length
-            }
-          })()`) as typeof pageProbe
+          // 上界沿用原 4000ms 盲等：无视频页面耗时不变，有视频页面在连续两次读到素材地址即提前取数
+          const videoSettled = await pollUntil(async () => {
+            pageProbe = await window.webContents.executeJavaScript(String.raw`(() => {
+              const vids = [...document.querySelectorAll('video, video source')].map(node => node.currentSrc || node.src || node.getAttribute('src') || '')
+              const scan = (document.documentElement.outerHTML.match(/https?:\/\/[^"'\s<>\\)]+(?:\.mp4|\.m3u8|\/video\/)[^"'\s<>\\)]*/gi) || [])
+              window.__yanduVideos = [...new Set([...vids.filter(u => /^https?:\/\//i.test(u)), ...scan])].slice(0, 8)
+              return {
+                blob: vids.some(u => u.startsWith('blob:')),
+                videoNodes: vids.length,
+                dialogs: [...document.querySelectorAll('.el-dialog__wrapper, .el-dialog')].filter(d => !/display:\s*none/.test(d.getAttribute('style') || '')).length,
+                scan: scan.length
+              }
+            })()`) as typeof pageProbe
+            return Boolean(pageProbe.videoNodes || pageProbe.scan || pageProbe.blob)
+          }, { intervalMs: 400, timeoutMs: 4000, stableHits: 2 })
+          console.log(`[page-poll] 主窗口视频就绪判定 ready=${videoSettled.ready} ${videoSettled.elapsedMs}ms polls=${videoSettled.polls}（上界 4000ms 不变）`)
           const popup = getPopup()
           if (popup && !popup.isDestroyed()) {
-            await this.sleep(1500)
-            const popupVideos = await popup.webContents.executeJavaScript(String.raw`(() => {
-              const vids = [...document.querySelectorAll('video, video source')].map(node => node.currentSrc || node.src || '')
-              const scan = (document.documentElement.outerHTML.match(/https?:\/\/[^"'\s<>\\)]+(?:\.mp4|\.m3u8|\/video\/)[^"'\s<>\\)]*/gi) || [])
-              return [...new Set([...vids.filter(u => /^https?:\/\//i.test(u)), ...scan])].slice(0, 8)
-            })()`) as string[]
+            let popupVideos: string[] = []
+            const popupSettled = await pollUntil(async () => {
+              popupVideos = await popup.webContents.executeJavaScript(String.raw`(() => {
+                const vids = [...document.querySelectorAll('video, video source')].map(node => node.currentSrc || node.src || '')
+                const scan = (document.documentElement.outerHTML.match(/https?:\/\/[^"'\s<>\\)]+(?:\.mp4|\.m3u8|\/video\/)[^"'\s<>\\)]*/gi) || [])
+                return [...new Set([...vids.filter(u => /^https?:\/\//i.test(u)), ...scan])].slice(0, 8)
+              })()`) as string[]
+              return popupVideos.length > 0
+            }, { intervalMs: 300, timeoutMs: 1500, stableHits: 2 })
+            console.log(`[page-poll] 弹窗视频就绪判定 ready=${popupSettled.ready} ${popupSettled.elapsedMs}ms polls=${popupSettled.polls}（上界 1500ms 不变）`)
             networkVideos.push(...popupVideos)
           }
         }
@@ -844,8 +929,8 @@ export class BrowserWorkspace {
   private async extractGigaFacts(wc: WebContents): Promise<Partial<CollectedSupplyProduct>> {
       const issue = await wc.executeJavaScript(String.raw`(() => {
         const text=(document.body?.innerText||'').slice(0,12000), url=location.href
-        if (/punish|captcha|verify|安全验证|滑块|验证码|访问频繁|操作异常|请求过于频繁|cloud_ip_bl|too many requests/i.test(text+' '+url)) return 'VERIFY'
-        if (/route=account\/login|login\.1688\.com|account\/login|请登录|重新登录|登录已失效|sign in to continue/i.test(text+' '+url)) return 'LOGIN'
+        if (${challengeRegexSource('VERIFY_RATE')}.test(text+' '+url)) return 'VERIFY'
+        if (${loginRegexSource('SUPPLY_FULL')}.test(text+' '+url)) return 'LOGIN'
         return ''
       })()`) as string
       if (issue === 'LOGIN') throw new Error(`${name}登录状态已失效，请先在 IE浏览 中登录${name}后重试`)
@@ -1657,32 +1742,53 @@ export class BrowserWorkspace {
       const paymentPolicy=sectionText('payment');
       const sellerNotes=sectionText('seller');
       const text=clean(document.body?.innerText);
-      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/signin|login/i.test(location.pathname);
-      const verification=/captcha|security check|verification code|验证码|安全验证|确认是您本人/i.test(text+' '+location.href);
-      return {url:location.href,itemSpecifics:pairs.filter(item=>!/^condition$/i.test(item.name)),condition,imageUrls:images,videoUrl,title,subtitle,descriptionHtml,descriptionText,price,currency,shippingPolicy,returnPolicy,paymentPolicy,sellerNotes,login,verification};
+      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||${loginRegexSource('EBAY_PATH')}.test(location.pathname);
+      const verification=${challengeRegexSource('VERIFY')}.test(text+' '+location.href);
+      return {url:location.href,itemSpecifics:pairs.filter(item=>!/^condition$/i.test(item.name)),condition,imageUrls:images,videoUrl,title,subtitle,descriptionHtml,descriptionText,price,currency,shippingPolicy,returnPolicy,paymentPolicy,sellerNotes,login,verification,pageTitle:clean(document.title),pageHeadings:headings.map(node=>clean(node.textContent)).filter(Boolean).slice(0,12),pageText:text.slice(0,20000)};
     })()`
-    let details:EbayProductDetails&{login?:boolean;verification?:boolean}={url:targetUrl,itemSpecifics:[],condition:'',imageUrls:[]}
+    let details:EbayProductDetails&{login?:boolean;verification?:boolean;pageTitle?:string;pageHeadings?:string[];pageText?:string}={url:targetUrl,itemSpecifics:[],condition:'',imageUrls:[]}
+    // 加载事件只做软等待：eBay 商品页长连接常见，did-finish-load 慢不代表读不到内容，成败由下面的内容轮询决定
+    let loadEventSettled=false
     try {
       await Promise.race([
-        view.webContents.loadURL(target.toString()),
-        this.sleep(25_000).then(()=>{throw new Error('eBay 原商品页加载超时，请检查网络或登录状态后重试')})
+        view.webContents.loadURL(target.toString()).then(()=>{loadEventSettled=true}),
+        this.sleep(25_000)
       ])
       let previousImageCount=-1,stableImageReads=0
       for(let attempt=0;attempt<12;attempt+=1) {
         details=await view.webContents.executeJavaScript(script) as typeof details
-        if(details.login)throw new Error('eBay登录会话已失效，请先返回店铺采集完成登录')
-        if(details.verification)throw new Error('eBay要求安全验证，请先在店铺采集浏览器中完成人工验证')
+        const verdict=decideEbayReadOutcome(details,item=>Boolean(item.imageUrls.length||item.itemSpecifics.length||item.condition))
+        if(verdict==='LOGIN')throw new Error('eBay登录会话已失效，请先返回店铺采集完成登录')
+        if(verdict==='VERIFY')throw new Error('eBay要求安全验证，请先在店铺采集浏览器中完成人工验证')
         if(details.imageUrls.length===previousImageCount&&details.imageUrls.length)stableImageReads+=1
         else stableImageReads=0
         previousImageCount=details.imageUrls.length
-        if(stableImageReads>=2&&(details.itemSpecifics.length||details.condition||attempt>=3))break
+        if(verdict==='READY'&&stableImageReads>=2&&(details.itemSpecifics.length||details.condition||attempt>=3))break
         await this.sleep(750)
       }
     } finally {
       if(!view.webContents.isDestroyed())view.webContents.close()
     }
-    if(!details.imageUrls.length&&!details.itemSpecifics.length&&!details.condition)throw new Error('未从原商品页识别到图片或商品属性，请确认商品页已完整加载后重试')
-    return {url:details.url,itemSpecifics:details.itemSpecifics,condition:details.condition,imageUrls:details.imageUrls,videoUrl:details.videoUrl,title:details.title,subtitle:details.subtitle,descriptionHtml:details.descriptionHtml,descriptionText:details.descriptionText,price:details.price,currency:details.currency,shippingPolicy:details.shippingPolicy,returnPolicy:details.returnPolicy,paymentPolicy:details.paymentPolicy,sellerNotes:details.sellerNotes}
+    if(!details.imageUrls.length&&!details.itemSpecifics.length&&!details.condition)throw new Error(ebayReadFailureMessage({pageLabel:'eBay 原商品页',loadEventSettled,sawContent:Boolean(details.title||details.descriptionText||details.price)}))
+    // #6 语义兜底：只补结构化实测读空的字段（condition 不参与，它是上面 C4 成败判据之一），实测值一律不被覆盖，且逐字闸门在 shared
+    const semanticMissing=(['title','price','descriptionText'] as SemanticField[]).filter(field=>!String(details[field]??'').trim())
+    const semanticPage={url:details.url||targetUrl,documentTitle:details.pageTitle||'',headings:details.pageHeadings||[],bodyText:details.pageText||''}
+    let semanticFallback:EbayProductDetails['semanticFallback']
+    if(this.semanticFallbackRunner&&shouldAttemptSemanticFallback({page:semanticPage,missingFields:semanticMissing})) {
+      try {
+        const digest=buildSemanticDigest(semanticPage)
+        const result=await this.semanticFallbackRunner(digest.markdown,semanticMissing)
+        const merged=mergeSemanticFallback(details as unknown as Record<string,unknown>,result,new Date().toISOString())
+        if(merged.mark) {
+          details=merged.target as unknown as typeof details
+          semanticFallback=merged.mark
+          console.log(`[semantic-fallback] ${merged.mark.note}（摘要${digest.markdown.length}字${digest.truncated?'，已截断':''}，拒收${result.rejected.length}项）`)
+        }
+      } catch(error) {
+        console.warn('[semantic-fallback] 语义兜底未启用：',String(error&&(error as Error).message))
+      }
+    }
+    return {url:details.url,itemSpecifics:details.itemSpecifics,condition:details.condition,imageUrls:details.imageUrls,videoUrl:details.videoUrl,title:details.title,subtitle:details.subtitle,descriptionHtml:details.descriptionHtml,descriptionText:details.descriptionText,price:details.price,currency:details.currency,shippingPolicy:details.shippingPolicy,returnPolicy:details.returnPolicy,paymentPolicy:details.paymentPolicy,sellerNotes:details.sellerNotes,semanticFallback}
   }
 
   async readEbayRevisionCore(accountId:string,listingId:string,currency:string):Promise<{price:string;currency:string;descriptionText:string;descriptionHtml:string}> {
@@ -1697,8 +1803,8 @@ export class BrowserWorkspace {
       const preserveDescription=value=>String(value||'').replace(/\r\n?/g,'\n').replace(/\u00a0/g,' ');
       const visible=node=>Boolean(node&&node.getClientRects().length&&!node.disabled);
       const bodyText=clean(document.body?.innerText).slice(0,40000);
-      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/signin|login/i.test(location.pathname);
-      const verification=/captcha|security check|verification code|验证码|安全验证|确认是您本人/i.test(bodyText+' '+location.href);
+      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||${loginRegexSource('EBAY_PATH')}.test(location.pathname);
+      const verification=${challengeRegexSource('VERIFY')}.test(bodyText+' '+location.href);
       const roots=[document];
       for(let index=0;index<roots.length;index+=1){roots[index].querySelectorAll('*').forEach(node=>{if(node.shadowRoot&&!roots.includes(node.shadowRoot))roots.push(node.shadowRoot)})}
       const queryAll=selector=>roots.flatMap(root=>[...root.querySelectorAll(selector)]);
@@ -1744,20 +1850,27 @@ export class BrowserWorkspace {
       return {url:location.href,login,verification,priceReady:Boolean(priceField&&price),descriptionReady:Boolean(description.text&&description.score>=100),price,descriptionText:description.text,descriptionHtml:description.html};
     })()`
     let result:{url:string;login:boolean;verification:boolean;priceReady:boolean;descriptionReady:boolean;price:string;descriptionText:string;descriptionHtml:string}={url:reviseUrl,login:false,verification:false,priceReady:false,descriptionReady:false,price:'',descriptionText:'',descriptionHtml:''}
+    // 加载事件只做软等待：Seller Hub 修改页同样有长连接，did-finish-load 慢不代表读不到字段，成败由下面的轮询决定
+    let loadEventSettled=false
     try {
       await Promise.race([
-        view.webContents.loadURL(reviseUrl),
-        this.sleep(25_000).then(()=>{throw new Error('Seller Hub 修改页加载超时，请检查网络或登录状态后重试')})
+        view.webContents.loadURL(reviseUrl).then(()=>{loadEventSettled=true}),
+        this.sleep(25_000)
       ])
       for(let attempt=0;attempt<24;attempt+=1) {
         result=await view.webContents.executeJavaScript(script,true) as typeof result
-        if(result.login)throw new Error('eBay 登录会话已失效，请先完成登录')
-        if(result.verification)throw new Error('eBay 要求安全验证，请人工完成后重试')
-        if(result.priceReady&&result.descriptionReady)break
+        const verdict=decideEbayReadOutcome(result,item=>item.priceReady&&item.descriptionReady)
+        if(verdict==='LOGIN')throw new Error('eBay 登录会话已失效，请先完成登录')
+        if(verdict==='VERIFY')throw new Error('eBay 要求安全验证，请人工完成后重试')
+        if(verdict==='READY')break
         await this.sleep(750)
       }
-      if(!result.priceReady)throw new Error('未能从 Seller Hub 修改页读取原刊登价格')
-      if(!result.descriptionReady)throw new Error('未能从 Seller Hub 修改页读取真实 DESCRIPTION 编辑器内容')
+      if(!result.priceReady||!result.descriptionReady) {
+        const missing:string[]=[]
+        if(!result.priceReady)missing.push('原刊登价格')
+        if(!result.descriptionReady)missing.push('真实 DESCRIPTION 编辑器内容')
+        throw new Error(`${ebayReadFailureMessage({pageLabel:'Seller Hub 修改页',loadEventSettled,sawContent:Boolean(result.price||result.descriptionText)})}仍未读到：${missing.join('、')}。`)
+      }
       return {price:result.price,currency,descriptionText:result.descriptionText,descriptionHtml:result.descriptionHtml}
     } finally {
       if(!view.webContents.isDestroyed())view.webContents.close()
@@ -1825,8 +1938,8 @@ export class BrowserWorkspace {
       const clean=value=>(value||'').replace(/\s+/g,' ').trim();
       const visible=node=>Boolean(node&&node.getClientRects().length&&!node.disabled);
       const bodyText=clean(document.body?.innerText).slice(0,30000);
-      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/signin|login/i.test(location.pathname);
-      const verification=/captcha|security check|verification code|验证码|安全验证|确认是您本人/i.test(bodyText+' '+location.href);
+      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||${loginRegexSource('EBAY_PATH')}.test(location.pathname);
+      const verification=${challengeRegexSource('VERIFY')}.test(bodyText+' '+location.href);
       const fields=[...document.querySelectorAll('input,textarea,select,[contenteditable="true"]')];
       const labelFor=field=>{const attributeName=(field.name||'').match(/^(?:search-box-)?attributes[._-]?(.+)$/i)?.[1];if(attributeName)return clean(attributeName.replace(/([a-z])([A-Z])/g,'$1 $2').replace(/[._-]+/g,' '));const explicit=field.id?document.querySelector('label[for="'+CSS.escape(field.id)+'"]'):null;return clean(explicit?.textContent||field.closest('label')?.textContent||field.getAttribute('aria-label')||field.getAttribute('placeholder')||field.name||field.id)};
       const categorySpecifics=[];
@@ -1846,9 +1959,44 @@ export class BrowserWorkspace {
       // 编号只存在于页面内嵌模型。这里按锚点切出对象原文（平衡花括号，字符串内的括号不算深度），
       // 政策编号 / 在架数的判据仍全留给 TS 侧，页内不解析、不点任何控件。切片代码与准备发布共用同一份常量。
       ${EBAY_POLICY_MODEL_SLICE}
-      return {url:location.href,login,verification,ready:Boolean(titleField),categorySpecifics,policyOptions,policyModels};
+      const attributeRows=[];
+      const attributeGroups=[];
+      // R5 现网：类目属性段是 div.summary__attributes，一行 = 标签列 + 值列，控件 name 直接带属性显示名（含空格与括号）。
+      // 这里只把原文抄回去：id（里面带分组记号）、class、标签列文本与类、占位、maxlength、值列可见文字、行 y。
+      // 分组 / 必填 / 控件类型 / 建议值 / 计数的判据全在 TS 侧解，可离线跑现网 fixtures（见 src/shared/__tests__/ebayItemSpecificsModel.test.ts）。
+      const attributeBox=document.querySelector('.summary__attributes');
+      const docY=node=>Math.round((node?node.getBoundingClientRect().top:0)+window.scrollY);
+      if(attributeBox){
+        for(const head of attributeBox.querySelectorAll('h3')){if(head.getClientRects().length)attributeGroups.push({text:clean(head.textContent),y:docY(head)})}
+        // 认 name 而不是认行容器：现网的 UPC 那一行不带 summary__attributes--field，只按行容器抓就会整行漏掉。
+        for(const control of [...attributeBox.querySelectorAll('[name]')]){
+          const controlName=control.getAttribute('name')||'';
+          if(!/^attributes[._-]/i.test(controlName))continue;
+          if(!control.getClientRects().length)continue;
+          const field=control.closest('.summary__attributes--field')||control.parentElement;
+          const labelNode=(field&&field.querySelector('[class*="--label"]'))||(control.id?document.querySelector('label[for="'+CSS.escape(control.id)+'"]'):null);
+          const valueNode=field&&field.querySelector('[class*="--value"]');
+          const panelInput=field&&field.querySelector('[id^="search-box-"],[name^="search-box-"]');
+          attributeRows.push({
+            name:controlName,
+            id:control.id||'',
+            tag:control.tagName,
+            controlClass:String(control.className||''),
+            labelText:clean(labelNode&&labelNode.innerText),
+            labelClass:String((labelNode&&labelNode.className)||''),
+            text:control.tagName==='INPUT'||control.tagName==='TEXTAREA'||control.tagName==='SELECT'?'':clean(control.innerText),
+            value:clean(control.value),
+            placeholder:control.getAttribute('placeholder')||'',
+            panelPlaceholder:clean(panelInput&&panelInput.getAttribute('placeholder')),
+            maxLength:control.getAttribute('maxlength')||'',
+            valueText:clean(valueNode&&valueNode.innerText),
+            y:docY(field||control)
+          });
+        }
+      }
+      return {url:location.href,login,verification,ready:Boolean(titleField),categorySpecifics,policyOptions,policyModels,attributeGroups,attributeRows};
     })()`
-    let result:{url:string;login:boolean;verification:boolean;ready:boolean;categorySpecifics:EbayCategorySpecificRequirement[];policyOptions:Array<{kind:string;raw:string;selected:boolean}>;policyModels:Record<string,string>}={url:reviseUrl,login:false,verification:false,ready:false,categorySpecifics:[],policyOptions:[],policyModels:{paymentPolicy:'',shippingPolicy:'',returnPolicy:''}}
+    let result:{url:string;login:boolean;verification:boolean;ready:boolean;categorySpecifics:EbayCategorySpecificRequirement[];policyOptions:Array<{kind:string;raw:string;selected:boolean}>;policyModels:Record<string,string>;attributeGroups:EbayItemSpecificsRaw['groups'];attributeRows:EbayItemSpecificsRaw['rows']}={url:reviseUrl,login:false,verification:false,ready:false,categorySpecifics:[],policyOptions:[],policyModels:{paymentPolicy:'',shippingPolicy:'',returnPolicy:''},attributeGroups:[],attributeRows:[]}
     for(let attempt=0;attempt<20;attempt+=1){result=await tab.view.webContents.executeJavaScript(script,true) as typeof result;if(result.login)throw new Error('eBay 登录会话已失效，请先完成登录');if(result.verification)throw new Error('eBay 要求安全验证，请人工完成后重试');if(result.ready)break;await this.sleep(750)}
     if(!result.ready)throw new Error('Seller Hub 修改页尚未加载完成，请确认商品仍在线后重试')
     // 解析全留在 TS：页内脚本只回下拉的原始文本与选中态、三段模型对象原文，编号与在架数一律在这里解出，
@@ -1875,8 +2023,11 @@ export class BrowserWorkspace {
       const label=EBAY_POLICY_SCRAPE_KIND_LABELS[kind]
       return `${label}政策读到了选项但都解析不出政策编号，本地${label}政策保持上一次抓取的结果；请重新读取一次，或在 Seller Hub 修改页人工核对${label}政策编号`
     })
-    return {sourceUrl:result.url,categorySpecifics:result.categorySpecifics,policies,inspectedAt:new Date().toISOString(),warnings:[
-      ...(result.categorySpecifics.length?[]:['页面未读取到类目属性；可能是页面结构变化或该类目没有可见属性']),
+    // 槽位清单与旧 categorySpecifics 各算各的：后者按标签文本正则剔掉了 Unit Quantity 这类行，
+    // 前者只认控件 name 里的 attributes 前缀，现网 27 行加 UPC 一行都能读回来。读不到只点名缺口，绝不抛错。
+    const attributeSlots=parseEbayItemSpecifics({groups:result.attributeGroups,rows:result.attributeRows})
+    return {sourceUrl:result.url,categorySpecifics:result.categorySpecifics,attributeSlots,policies,inspectedAt:new Date().toISOString(),warnings:[
+      ...(result.categorySpecifics.length||attributeSlots.length?[]:['页面未读取到类目属性；可能是页面结构变化或该类目没有可见属性']),
       ...(policies.length?[]:['页面未读取到付款/运输/退货政策；本地政策保持上一次抓取的结果，请在 Seller Hub 修改页确认政策区块已加载后重试']),
       ...stalePolicyWarnings
     ]}
@@ -1899,8 +2050,8 @@ export class BrowserWorkspace {
       const probe=String.raw`(() => {
         const clean=value=>(value||'').replace(/\s+/g,' ').trim();
         const bodyText=clean(document.body?.innerText).slice(0,20000);
-        const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/signin|login/i.test(location.pathname);
-        const verification=/captcha|security check|verification code|验证码|安全验证|确认是您本人/i.test(bodyText+' '+location.href);
+        const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||${loginRegexSource('EBAY_PATH')}.test(location.pathname);
+        const verification=${challengeRegexSource('VERIFY')}.test(bodyText+' '+location.href);
         const reason=/(?:lstng|sl)\/error\?reason=([^&]*)/.exec(location.href)?.[1]||'';
         const errorPage={detected:Boolean(reason)||/well, this is embarrassing/i.test(bodyText),reason:decode(reason)};
         const searchBox=[...document.querySelectorAll('input')].some(input=>/brand, model|enter brand|关键词|商品词/i.test(clean(input.placeholder+' '+input.name+' '+input.id)));
@@ -1954,8 +2105,8 @@ export class BrowserWorkspace {
       const namesOf=list=>{const unique=[...new Set(list)];return unique.length?unique.join('、'):'无'};
       const visible=node=>Boolean(node&&node.getClientRects().length&&!node.disabled);
       const bodyText=clean(document.body?.innerText).slice(0,40000);
-      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/signin|login/i.test(location.pathname);
-      const verification=/captcha|security check|verification code|验证码|安全验证|确认是您本人/i.test(bodyText+' '+location.href);
+      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||${loginRegexSource('EBAY_PATH')}.test(location.pathname);
+      const verification=${challengeRegexSource('VERIFY')}.test(bodyText+' '+location.href);
       const allFields=[...document.querySelectorAll('input,textarea,select,[contenteditable="true"]')];
       const fields=allFields.filter(visible);
       const labelFor=field=>{const explicit=field.id?document.querySelector('label[for="'+CSS.escape(field.id)+'"]'):null;return clean(explicit?.textContent||field.closest('label')?.textContent||field.getAttribute('aria-label')||field.getAttribute('placeholder')||field.name||field.id)};
@@ -2022,8 +2173,8 @@ export class BrowserWorkspace {
       const clean=value=>(value||'').replace(/\s+/g,' ').trim();
       const visible=node=>Boolean(node&&node.getClientRects().length&&!node.disabled);
       const bodyText=clean(document.body?.innerText).slice(0,30000);
-      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/signin|login/i.test(location.pathname);
-      const verification=/captcha|security check|verification code|验证码|安全验证|确认是您本人/i.test(bodyText+' '+location.href);
+      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||${loginRegexSource('EBAY_PATH')}.test(location.pathname);
+      const verification=${challengeRegexSource('VERIFY')}.test(bodyText+' '+location.href);
       const allFields=[...document.querySelectorAll('input,textarea,select,[contenteditable="true"]')];const fields=allFields.filter(visible);
       const labelFor=field=>{const attributeName=(field.name||'').match(/^(?:search-box-)?attributes[._]?(.+)$/i)?.[1];if(attributeName)return clean(attributeName.replace(/([a-z])([A-Z])/g,'$1 $2'));const explicit=field.id?document.querySelector('label[for="'+CSS.escape(field.id)+'"]'):null;return clean(explicit?.textContent||field.closest('label')?.textContent||field.getAttribute('aria-label')||field.getAttribute('placeholder')||field.name||field.id)};
       const setValue=(field,value)=>{if(!field||!value)return false;if(field.tagName==='SELECT'){const option=[...field.options].find(item=>clean(item.value).toLowerCase()===clean(value).toLowerCase()||clean(item.textContent).toLowerCase()===clean(value).toLowerCase());if(!option)return false;field.value=option.value}else if(field.isContentEditable){field.textContent=value;field.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:value}))}else{const proto=field.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value')?.set?.call(field,value)}field.dispatchEvent(new Event('input',{bubbles:true}));field.dispatchEvent(new Event('change',{bubbles:true}));field.dispatchEvent(new Event('blur',{bubbles:true}));return true};
@@ -2058,8 +2209,8 @@ export class BrowserWorkspace {
       const clean=value=>(value||'').replace(/\s+/g,' ').trim();
       const visible=node=>Boolean(node&&node.getClientRects().length&&!node.disabled);
       const bodyText=clean(document.body?.innerText).slice(0,30000);
-      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/signin|login/i.test(location.pathname);
-      const verification=/captcha|security check|verification code|验证码|安全验证|确认是您本人/i.test(bodyText+' '+location.href);
+      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||${loginRegexSource('EBAY_PATH')}.test(location.pathname);
+      const verification=${challengeRegexSource('VERIFY')}.test(bodyText+' '+location.href);
       const selector='input[type="file"][accept*="video"],input[type="file"][id*="video"],input[type="file"][name*="video"]';
       let input=document.querySelector(selector);
       if(!input){const action=[...document.querySelectorAll('button,[role="button"],a')].find(node=>visible(node)&&/^(add video|upload video|video|添加视频|上传视频)$/i.test(clean(node.textContent||node.getAttribute('aria-label'))));if(action)action.click()}
@@ -2109,8 +2260,8 @@ export class BrowserWorkspace {
       const clean=value=>(value||'').replace(/\s+/g,' ').trim();
       const visible=node=>Boolean(node&&node.getClientRects().length&&!node.disabled);
       const bodyText=clean(document.body?.innerText).slice(0,40000);
-      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/signin|login/i.test(location.pathname);
-      const verification=/captcha|security check|verification code|验证码|安全验证|确认是您本人/i.test(bodyText+' '+location.href);
+      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||${loginRegexSource('EBAY_PATH')}.test(location.pathname);
+      const verification=${challengeRegexSource('VERIFY')}.test(bodyText+' '+location.href);
       const fields=[...document.querySelectorAll('input,textarea,select,[contenteditable="true"]')];
       const labelFor=field=>{const explicit=field.id?document.querySelector('label[for="'+CSS.escape(field.id)+'"]'):null;return clean(explicit?.textContent||field.closest('label')?.textContent||field.getAttribute('aria-label')||field.getAttribute('placeholder')||field.name||field.id)};
       const titleField=fields.find(field=>visible(field)&&/^(title|listing title|item title|物品标题|商品标题|刊登标题)(?:\s|$)/i.test(labelFor(field)))||document.querySelector('input[name="title"],input[id="title"]');
@@ -2159,8 +2310,8 @@ export class BrowserWorkspace {
       const parseResearchFn=${parseEbayResearchRows.toString()};
       const parseMetricsFn=${parseEbayAggregateMetrics.toString()};
       const bodyText=clean(document.body?.innerText);const lower=bodyText.toLowerCase();
-      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/signin|login/.test(location.pathname.toLowerCase());
-      const verification=/captcha|security check|verification code|验证码|安全验证|确认是您本人/i.test(bodyText+' '+location.href);
+      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||${loginRegexSource('EBAY_PATH')}.test(location.pathname.toLowerCase());
+      const verification=${challengeRegexSource('VERIFY')}.test(bodyText+' '+location.href);
       // Seller Hub「Research products」结果表用稳定 BEM 列名；此处按列直读，避免落到下方公开搜索卡片解析上（那套选择器在本页取到的是价格单元格当标题）
       const researchRows=[...document.querySelectorAll('tr.research-table-row')].map(row=>{
         const cell=name=>clean(row.querySelector('td.research-table-row__'+name)?.innerText);
@@ -2254,7 +2405,7 @@ export class BrowserWorkspace {
     const extractScript=`(()=>{
       const clean=value=>(value||'').replace(/\\s+/g,' ').trim();
       const bodyText=clean(document.body?.innerText);
-      const verification=/captcha|security check|verification code|验证码|安全验证|确认是您本人|pardon the interruption/i.test(bodyText+' '+location.href);
+      const verification=${challengeRegexSource('VERIFY')}.test(bodyText+' '+location.href);
       const options=[];
 
       // 真叶类目 ID 只存在于页面服务端状态的 CategoryViewModel：{"_type":"CategoryViewModel",...,"value":"33697",...,"text":"eBay Motors > … > Floor Mats, Carpets & Cargo Liners"}
@@ -2308,7 +2459,7 @@ export class BrowserWorkspace {
       // 按 soldCount 降序（Best match 置顶），其余保持原始顺序
       options.sort((a,b)=>b.soldCount-a.soldCount);
       
-      return {options:options.slice(0,40),ready:options.length>0,verification,login:Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/signin|login/.test(location.pathname.toLowerCase()),bodyText:bodyText.slice(0,200)};
+      return {options:options.slice(0,40),ready:options.length>0,verification,login:Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||${loginRegexSource('EBAY_PATH')}.test(location.pathname.toLowerCase()),bodyText:bodyText.slice(0,200)};
     })()`
     try {
       await view.webContents.loadURL(url.toString())
@@ -2532,8 +2683,8 @@ export class BrowserWorkspace {
           const text=(document.body?.innerText||'').replace(/\\s+/g,' ');
           const url=location.href.toLowerCase();
           const table=[...document.querySelectorAll('table')].find(node=>/类别编号|category number/i.test(node.innerText||''));
-          const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/signin|login/.test(url);
-          const verification=/captcha|security check|verification code|验证码|安全验证|确认是您本人/i.test(text+' '+url);
+          const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||${loginRegexSource('EBAY_PATH')}.test(url);
+          const verification=${challengeRegexSource('VERIFY')}.test(text+' '+url);
           return {table:Boolean(table),login,verification};
         })()`,true) as {table:boolean;login:boolean;verification:boolean}
         if(state.verification)throw new Error('eBay要求安全验证，请先在店铺采集浏览器中完成人工验证')
@@ -2599,8 +2750,8 @@ export class BrowserWorkspace {
       const state=await view.webContents.executeJavaScript(`(() => {
         const text=(document.body?.innerText||'').replace(/\\s+/g,' ').slice(0,30000);
         const url=location.href.toLowerCase();
-        const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/signin|login/.test(url);
-        const verification=/captcha|security check|verification code|验证码|安全验证|确认是您本人/i.test(text+' '+url);
+        const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||${loginRegexSource('EBAY_PATH')}.test(url);
+        const verification=${challengeRegexSource('VERIFY')}.test(text+' '+url);
         const missing=/page not found|we looked everywhere|该页面不存在|找不到页面/i.test(text);
         return {login,verification,missing,ready:document.readyState==='complete'};
       })()`,true) as {login:boolean;verification:boolean;missing:boolean;ready:boolean}
@@ -2683,9 +2834,9 @@ export class BrowserWorkspace {
             const snapshot=await view.webContents.executeJavaScript(`(() => {
               const bodyText=(document.body?.innerText||'').replace(/\\s+/g,' ');
               const pageUrl=location.href.toLowerCase();
-              if(/captcha|security check|verification code|验证码|安全验证|确认是您本人/i.test(bodyText+' '+pageUrl))return {issue:'eBay要求安全验证，请在店铺浏览器完成验证后重试',products:[]};
+              if(${challengeRegexSource('VERIFY')}.test(bodyText+' '+pageUrl))return {issue:'eBay要求安全验证，请在店铺浏览器完成验证后重试',products:[]};
               if(/too many requests|access denied|temporarily blocked|unusual traffic|访问频繁|请求过多|稍后再试/i.test(bodyText))return {issue:'eBay检测到访问频繁，任务已自动暂停，请稍后继续',products:[]};
-              if(document.querySelector('#userid,#pass,input[type="password"]')||/signin|login/.test(pageUrl))return {issue:'eBay登录会话已失效，请重新登录后重试',products:[]};
+              if(document.querySelector('#userid,#pass,input[type="password"]')||${loginRegexSource('EBAY_PATH')}.test(pageUrl))return {issue:'eBay登录会话已失效，请重新登录后重试',products:[]};
               const clean=value=>(value||'').replace(/\\s+/g,' ').trim();
               const normalize=raw=>{try{const value=new URL(raw,location.href);const match=value.pathname.match(/\\/itm\\/(?:[^/]+\\/)?(\\d+)/);return match?{url:value.origin+'/itm/'+match[1],listingId:match[1]}:null}catch{return null}};
               const grouped=new Map();
