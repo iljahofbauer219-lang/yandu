@@ -24,10 +24,11 @@ import { BrowserWorkspace, EBAY_POLICY_SCRAPE_KINDS } from '../BrowserWorkspace'
 type Host = Record<string, unknown>
 type RawOption = { kind: string; raw: string; selected: boolean }
 type ModelField = 'paymentPolicy' | 'shippingPolicy' | 'returnPolicy'
-type PageResult = { ready?: boolean; categorySpecifics?: unknown[]; policyOptions?: RawOption[]; policyModels?: Partial<Record<ModelField, string>>; url?: string }
+type PageResult = { ready?: boolean; categorySpecifics?: unknown[]; policyOptions?: RawOption[]; policyModels?: Partial<Record<ModelField, string>>; url?: string; attributeRows?: unknown[]; attributeGroups?: Array<{ text: string; y: number }> }
 type InspectMethod = (this: Host, accountId: string, listingId: string, title: string) => Promise<{
   sourceUrl: string
   categorySpecifics: unknown[]
+  attributeSlots: Array<{ name: string; group: string; control: string; required: boolean; value: string; placeholder: string; suggested: string; maxLength: number; counter: string; tooltip: string; y: number }>
   policies: Array<{ kind: string; label: string; policyId?: string; listingCount?: number; selected: boolean }>
   inspectedAt: string
   warnings: string[]
@@ -51,6 +52,19 @@ const modelSlice = (name: string, selected: number, options: Array<[number, stri
     }))
   })
 
+/** 2026-11-09 现网 draftId=5306791224420 的 ITEM SPECIFICS 段原文（见 ~/.yandu-acceptance/2026-11-09-R5/R5-rows.json 与 R5-section.json），页内脚本应当照这几项回传。 */
+const ATTRIBUTE_ROWS = [
+  { name: 'attributes.Brand', id: '', tag: 'BUTTON', controlClass: 'se-expand-button__button fake-menu-button__button btn', labelText: 'Brand *', labelClass: 'summary__attributes--label required-field', text: 'Unbranded', value: '', placeholder: '', panelPlaceholder: 'Search or enter your own', maxLength: '', valueText: 'Unbranded', y: 1547 },
+  { name: 'attributes.Type', id: '', tag: 'BUTTON', controlClass: 'se-expand-button__button fake-menu-button__button btn', labelText: 'Type', labelClass: 'summary__attributes--label', text: '', value: '', placeholder: '', panelPlaceholder: 'Search or enter your own', maxLength: '', valueText: '', y: 1603 },
+  { name: 'attributes.Model', id: 's0-1-0-25-15-@ATTRIBUTES-1-34-4-2[2[ESSENTIAL]]-2-se-textbox', tag: 'INPUT', controlClass: 'textbox__control', labelText: 'Model', labelClass: 'summary__attributes--label', text: '', value: '', placeholder: 'Enter your own', panelPlaceholder: '', maxLength: '', valueText: 'Suggested: Suzuki Grand Vitara II 2.0 J20A 95200-64JB1 95200-64JB0', y: 1659 },
+  { name: 'attributes.Item Width', id: '', tag: 'BUTTON', controlClass: 'se-expand-button__button fake-menu-button__button btn', labelText: 'Item Width', labelClass: 'summary__attributes--label', text: '', value: '', placeholder: '', panelPlaceholder: 'Search or enter your own', maxLength: '', valueText: '', y: 2046 },
+  { name: 'attributes.California Prop 65 Warning', id: 's0-1-0-25-15-@ATTRIBUTES-1-34-4-27[13[OPTIONAL]]-4-se-textarea', tag: 'TEXTAREA', controlClass: 'textbox__control', labelText: 'California Prop 65 Warning', labelClass: 'summary__attributes--label', text: '', value: '', placeholder: 'Enter your own', panelPlaceholder: '', maxLength: '800', valueText: '0/800', y: 2773 },
+  { name: 'attributes.Unit Quantity', id: '', tag: 'INPUT', controlClass: 'textbox__control', labelText: 'Unit Quantity', labelClass: 'summary__attributes--label', text: '', value: '', placeholder: 'Enter your own', panelPlaceholder: '', maxLength: '', valueText: '', y: 2853 },
+  // 段外噪声：标题/描述也在这页上，name 不带 attributes 前缀，页内脚本就该整行跳过
+  { name: 'title', id: '', tag: 'INPUT', controlClass: 'textbox__control', labelText: 'Item title', labelClass: '', text: '', value: 'Compressor', placeholder: '', panelPlaceholder: '', maxLength: '', valueText: '', y: 900 }
+]
+const ATTRIBUTE_GROUPS = [{ text: 'Essential', y: 1507 }, { text: 'Optional', y: 2006 }]
+
 /** 用 fixtures 冒充内嵌浏览器：executeJavaScript 收到真实页脚本字符串，返回 page 里给定的原始文本。 */
 function makeHost(page: PageResult = {}) {
   const scripts: string[] = []
@@ -62,6 +76,8 @@ function makeHost(page: PageResult = {}) {
       verification: false,
       ready: page.ready ?? true,
       categorySpecifics: page.categorySpecifics ?? CATEGORY,
+      attributeRows: page.attributeRows ?? [],
+      attributeGroups: page.attributeGroups ?? [],
       policyOptions: page.policyOptions ?? [],
       policyModels: { paymentPolicy: '', shippingPolicy: '', returnPolicy: '', ...(page.policyModels ?? {}) }
     }
@@ -294,7 +310,71 @@ describe('ReviseItem 政策抓取 · 内嵌模型优先（R2 现网控件是 com
   })
 })
 
+describe('ReviseItem 类目属性段抓取 · 槽位清单（R5 现网 ITEM SPECIFICS）', () => {
+  it('页内回传的原文行在 TS 侧解成槽位：分组/控件类型/必填/占位/Suggested 全对得上现网', async () => {
+    const { attributeSlots } = await inspect({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS })
+    expect(attributeSlots.map(item => item.name)).toEqual(['Brand', 'Type', 'Model', 'Item Width', 'California Prop 65 Warning', 'Unit Quantity'])
+    expect(attributeSlots.find(item => item.name === 'Brand')).toMatchObject({ group: 'ESSENTIAL', control: 'MENU', required: true, value: 'Unbranded', placeholder: 'Search or enter your own' })
+    expect(attributeSlots.find(item => item.name === 'Item Width')?.group).toBe('OPTIONAL')
+    expect(attributeSlots.find(item => item.name === 'Model')).toMatchObject({ control: 'TEXT', suggested: 'Suzuki Grand Vitara II 2.0 J20A 95200-64JB1 95200-64JB0' })
+    expect(attributeSlots.find(item => item.name === 'California Prop 65 Warning')).toMatchObject({ control: 'TEXTAREA', maxLength: 800, counter: '0/800' })
+    expect(attributeSlots.find(item => item.name === 'Type')?.required).toBe(false)
+  })
+
+  it('槽位与旧 categorySpecifics 各走各的：Unit Quantity 这类带 quantity 的行不再被标签正则误删', async () => {
+    const { attributeSlots, categorySpecifics } = await inspect({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS })
+    expect(attributeSlots.map(item => item.name)).toContain('Unit Quantity')
+    expect(categorySpecifics).toEqual(CATEGORY)
+  })
+
+  it('一页只开一次就把槽位读回来，不额外开标签、不点任何控件', async () => {
+    const { host, executeJavaScript } = makeHost({ attributeRows: ATTRIBUTE_ROWS })
+    await inspectMethod.call(host, 'ebay:s1', 'T100', 'Bracket')
+    expect(executeJavaScript).toHaveBeenCalledTimes(1)
+    expect(host.newEbayTab).toHaveBeenCalledTimes(1)
+  })
+
+  it('页内脚本只抄原文：分组/必填/控件类型判据一律不在属性采样这一段里做', async () => {
+    const { host, scripts } = makeHost({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS })
+    await inspectMethod.call(host, 'ebay:s1', 'T100', 'Bracket')
+    const script = scripts[0]
+    const start = script.indexOf('const attributeRows=[]')
+    // 采样段必须真实存在且排在 return 之前，否则下面所有「段内不含判据」的断言都是空跑
+    expect(start).toBeGreaterThan(-1)
+    expect(script.indexOf('return {url:')).toBeGreaterThan(start)
+    const section = script.slice(start, script.indexOf('return {url:'))
+    expect(section).toContain('attributeRows.push(')
+    expect(section).toContain('attributeGroups.push(')
+    expect(section).toContain('summary__attributes')
+    expect(section).not.toContain('parseEbayItemSpecifics')
+    // 判据用的类名与组名一个都不许出现在页内：页面只把 className/标签文本当原文抄走
+    expect(section).not.toMatch(/parseEbayItemSpecifics|required-field|fake-menu-button|ESSENTIAL|OPTIONAL/)
+    expect(script).not.toMatch(/form\.submit\(|\.submit\(|\.click\(|type="submit"/)
+  })
+
+  it('一段槽位都没读到 → 点名「页面未读取到类目属性」且返回空数组，不抛错（门禁不能 brick 读取动作）', async () => {
+    const { attributeSlots, warnings } = await inspect({ categorySpecifics: [], attributeRows: [], attributeGroups: [] })
+    expect(attributeSlots).toEqual([])
+    expect(warnings.filter(item => item.includes('页面未读取到类目属性'))).toHaveLength(1)
+  })
+
+  it('旧版页面根本没有 summary__attributes 区块 → 槽位为空但 categorySpecifics 照旧返回，且不误报类目属性缺口', async () => {
+    const { attributeSlots, categorySpecifics, warnings } = await inspect({ attributeRows: [], attributeGroups: [] })
+    expect(attributeSlots).toEqual([])
+    expect(categorySpecifics).toEqual(CATEGORY)
+    expect(warnings.some(item => item.includes('页面未读取到类目属性'))).toBe(false)
+  })
+})
+
 describe('ReviseItem 政策抓取 · 落库与读取接线', () => {
+  it('源码守卫：槽位清单跟着 requirements 走，不落库、不进 publish task', () => {
+    expect(source('src/shared/contracts.ts')).toContain('attributeSlots:EbayItemSpecificSlot[]')
+    expect(source('src/main/main.ts')).not.toContain('saveEbayItemSpecificSlots')
+    const handler = source('src/main/main.ts')
+    const body = handler.slice(handler.indexOf("ipcMain.handle('ebay:local-products:requirements'"))
+    expect(body.slice(0, body.indexOf("ipcMain.handle('ebay:local-products:prepare-revision'"))).not.toContain('attributeSlots')
+  })
+
   it('源码守卫：requirements 抓完即入库，且绝不把 DAO 包进外层事务', () => {
     const main = source('src/main/main.ts')
     const handler = main.slice(main.indexOf("ipcMain.handle('ebay:local-products:requirements'"))
