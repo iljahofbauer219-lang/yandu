@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 /**
@@ -78,6 +80,9 @@ function makeHost(page: {
   const models = page.models === null ? NO_MODELS : page.models ?? LIVE_MODELS
   let pass = 0
   const executeJavaScript = vi.fn(async (script: string) => {
+    // E 批两段回读/横幅脚本：RTE 写入回读如实返 true（假页接受写入），横幅更新无返回值。
+    if (script.includes('se-rte-frame')) return true
+    if (script.includes('if(banner)banner.textContent=')) return undefined
     // 灌字段脚本带 const targets=，模型读取脚本只切三段内嵌模型原文；两类返回值形状不同，靠这个标记分流。
     if (!script.includes('const targets=')) {
       modelScripts.push(script)
@@ -145,8 +150,9 @@ function literalOf<T = Record<string, unknown>>(script: string, name: string): T
 const runPrepare = async (page: { ready?: boolean; submitButtonDetected?: boolean; models?: Record<ModelField, string> | null } = {}) => {
   const { host, scripts, modelScripts, executeJavaScript } = makeHost(page)
   const result = await prepareMethod.call(host, 'ebay:s1', PRODUCT)
-  // 现在两段：先读一次内嵌模型（现网模型跟页面 HTML 一起来，一次就有），再跑灌字段脚本。
-  expect(executeJavaScript).toHaveBeenCalledTimes(2)
+  // 现在四段：先读一次内嵌模型（现网模型跟页面 HTML 一起来，一次就有），再跑灌字段脚本，
+  // E 批之后还有描述 RTE 回读落定与横幅按实际填/跳重写两次（harness 无 debugger，媒体段跳过）。
+  expect(executeJavaScript).toHaveBeenCalledTimes(4)
   return { script: scripts[0], modelScript: modelScripts[0], result }
 }
 
@@ -378,6 +384,7 @@ describe('Seller Hub 灌字段脚本 · 循环语义守卫', () => {
     await expect(prepareMethod.call(host, 'ebay:s1', { ...PRODUCT, listingId: '189035181453', platformCategoryId: '' }))
       .rejects
       .toThrow('Seller Hub 修改页尚未加载出标题字段，请确认商品仍在线后重试')
+    // ready 抛错发生在 E 批两段回读之前：模型 1 次 + 轮询 20 次，不多不少。
     expect(executeJavaScript).toHaveBeenCalledTimes(21)
   })
 })
@@ -571,7 +578,8 @@ describe('Seller Hub 灌字段脚本 · 政策 combobox 分支', () => {
     expect(literalOf<PlanWire[]>(script, 'policyPlan')).toEqual([])
     const named = result.warnings.filter(text => text.includes('付款政策') && text.includes('运输政策') && text.includes('退货政策'))
     expect(named).toHaveLength(1)
-    expect(result.filledFields).toEqual(['标题'])
+    // E 批后描述走 RTE 回读落定：假页接受写入，故描述与标题同记已填。
+    expect(result.filledFields).toEqual(['标题', '描述'])
   })
 
   it('模型原文用与政策抓取同一份锚点切片（两处各写一遍迟早漂移）', async () => {
@@ -582,5 +590,30 @@ describe('Seller Hub 灌字段脚本 · 政策 combobox 分支', () => {
     expect(modelScript).toContain('objectAt')
     // 灌字段脚本自己不读模型：编号→文本的映射已经在主进程做完
     expect(script).not.toContain('"paymentPolicy":{"name"')
+  })
+})
+
+describe('AddItem 页图片与描述写入（E 批静态守卫）', () => {
+  const source = readFileSync(path.resolve(process.cwd(), 'src/main/browser/BrowserWorkspace.ts'), 'utf8')
+  it('图片走既有的 debugger 选文件通道：认 fehelix 上传控件，多文件一次投递', () => {
+    expect(source).toContain('fehelix-uploader')
+    expect(source).toContain('DOM.setFileInputFiles')
+    expect(source).toContain('planEbayUploadMedia')
+  })
+  it('图片写入后回读缩略图计数落定才记 filled：不凭 setFileInputFiles 返回就谎报', () => {
+    expect(source).toContain(')\\\\s*\\\\/\\\\s*25')
+    expect(source).toContain('图片')
+  })
+  it('描述认 RTE 同源 iframe：写 contenteditable 并派 input 事件，回读文本长度落定', () => {
+    expect(source).toContain('se-rte-frame')
+    expect(source).toContain('contenteditable')
+    expect(source).toContain('InputEvent')
+  })
+  it('判据不在页内：编排上限与丢弃原因都在 TS/shared 侧', () => {
+    const pageScriptStart = source.indexOf('const fill=(label,field,value)')
+    const pageScript = source.slice(pageScriptStart, source.indexOf('const POLICY_SETTLE_MAX_ATTEMPTS=6', pageScriptStart))
+    expect(pageScriptStart).toBeGreaterThan(-1)
+    expect(pageScript).not.toContain('planEbayUploadMedia(')
+    expect(pageScript).not.toContain('EBAY_IMAGE_LIMIT')
   })
 })

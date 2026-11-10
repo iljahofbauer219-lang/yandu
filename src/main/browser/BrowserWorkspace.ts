@@ -16,6 +16,7 @@ import type { SemanticExtractionResult, SemanticField } from '../../shared/seman
 import { EBAY_SITE_ROOT_DOMAINS } from '../../shared/ebaySites'
 import { extractPolicyIdFromLabel } from '../../shared/ebayListingForm'
 import { resolveEbayListingTarget, resolveEbayListingTargetForProduct } from '../../shared/ebayListingTarget'
+import { planEbayUploadMedia, type EbayUploadMediaPlanRow } from '../../shared/ebayUploadMediaPlan'
 import { EBAY_POLICY_MODEL_FIELDS, parseEbayPolicyModel, parseEbayPolicyModelChoices, type EbayPolicyModelChoices, type EbayPolicyModelField } from '../../shared/ebayPolicyModel'
 import { parseEbayItemSpecificsSection, parseEbayItemSpecificsCard, type EbayItemSpecificsCardRaw, type EbayItemSpecificsRaw } from '../../shared/ebayItemSpecificsModel'
 import { EBAY_LOCAL_FILL_TARGETS, ebayLocalFillPayload, ebayPolicyFillPlan } from './ebayLocalFill'
@@ -2245,7 +2246,71 @@ export class BrowserWorkspace {
     for(let attempt=0;attempt<20;attempt+=1){result=await tab.view.webContents.executeJavaScript(script,true) as typeof result;if(result.login)throw new Error('eBay 登录会话已失效，请先完成登录');if(result.verification)throw new Error('eBay 要求安全验证，请人工完成后重试');if(result.errorPage.detected)throw new Error(`eBay 把这次打开拒成了错误页（${result.errorPage.reason||'原因未给出'}），未写入任何字段。${target.note}`);if(result.ready&&result.submitButtonDetected&&(!result.policyPending.length||attempt+1>=POLICY_SETTLE_MAX_ATTEMPTS))break;await this.sleep(750)}
     if(!result.ready)throw new Error(target.kind==='revise'?'Seller Hub 修改页尚未加载出标题字段，请确认商品仍在线后重试':`eBay 首次刊登页尚未加载出标题字段，请稍后重试或在页面人工填写。${target.note}`)
     const policyPendingWarnings=result.policyPending.length?[`${result.policyPending.join('、')}：已在页面点选该政策，但回读时控件又回到了草稿原值（eBay 在页面加载完成时重渲染了政策控件），已按未填处理、未计入已填，请在页面人工核对后重做`] : []
-    return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledFields:result.filledFields,skippedFields:result.skippedFields,warnings:[target.note,...policyWarnings,...policyPendingWarnings,...result.warnings],submitButtonDetected:result.submitButtonDetected,preparedAt:new Date().toISOString()}
+    // E 批其一：本地媒体写进 PHOTOS & VIDEO 上传控件（与视频链路同款的 debugger 选文件通道，零新 API）。
+    // 写完回读现网缩略图计数落定才记 filled；setFileInputFiles 返回不等于 eBay 收下了图。
+    const mediaPlan=planEbayUploadMedia((snapshot?.media??[]) as EbayUploadMediaPlanRow[])
+    const mediaFiles=[...mediaPlan.images,...mediaPlan.videos].map(item=>item.localPath)
+    let mediaCount=0
+    const debuggerApi=tab.view.webContents.debugger
+    if(mediaFiles.length&&debuggerApi&&typeof debuggerApi.isAttached==='function'){
+      const attachedHere=!debuggerApi.isAttached()
+      try{
+        if(attachedHere)debuggerApi.attach('1.3')
+        const documentResult=await debuggerApi.sendCommand('DOM.getDocument',{depth:-1,pierce:true}) as {root:{nodeId:number}}
+        const selected=await debuggerApi.sendCommand('DOM.querySelector',{nodeId:documentResult.root.nodeId,selector:'#fehelix-uploader,input[type="file"][accept*="image"]'}) as {nodeId:number}
+        if(selected.nodeId){
+          await debuggerApi.sendCommand('DOM.setFileInputFiles',{nodeId:selected.nodeId,files:mediaFiles})
+          for(let attempt=0;attempt<15;attempt+=1){
+            await this.sleep(1000)
+            mediaCount=await tab.view.webContents.executeJavaScript(`(()=>{const m=(document.body&&document.body.innerText||'').match(/(\\d+)\\s*\\/\\s*25/);return m?Number(m[1]):0})()`,true) as number
+            if(mediaCount>=mediaPlan.images.length)break
+          }
+        }
+      }catch(error){
+        console.warn('[ebay-fill-media] 图片自动选择失败：',error instanceof Error?error.message:error)
+      }finally{
+        if(attachedHere&&debuggerApi.isAttached())debuggerApi.detach()
+      }
+      result.filledFields=result.filledFields.filter(label=>label!=='图片与视频')
+      result.skippedFields=result.skippedFields.filter(label=>label!=='图片与视频')
+      if(mediaCount>0)result.filledFields.push(`图片与视频 ${mediaCount}/${mediaFiles.length}`)
+      else result.skippedFields.push('图片与视频')
+      for(const drop of mediaPlan.dropped)result.warnings.push(`媒体未写入 ${drop.localPath||'（无本地路径）'}：${drop.reason}`)
+    }
+    // E 批其二：AddItem 页描述是同源 iframe 富文本编辑器（#se-rte-frame__summary），通用 setValue 只认
+    // textarea/contenteditable，会谎报已填；这里按「先回读、缺了重写」落定，有上限重试，写不进记 skipped 并点名。
+    // RTE 是纯文本编辑器：优先纯文本详情；只有 HTML 时剥标签再写，不把 <p> 原文糊进编辑器。
+    const stripTags=(value:string)=>String(value||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim()
+    const wantedDescription=(String(details.descriptionText||'').trim()||stripTags(details.descriptionHtml||''))
+    if(wantedDescription){
+      let descriptionSettled=false
+      for(let attempt=0;attempt<4&&!descriptionSettled;attempt+=1){
+        descriptionSettled=await tab.view.webContents.executeJavaScript(String.raw`(()=>{
+          const clean=value=>(value||'').replace(/\s+/g,' ').trim();
+          const want=${JSON.stringify(wantedDescription)};
+          const probe=clean(want).slice(0,60);
+          const editors=[...document.querySelectorAll('textarea,[contenteditable="true"]')].filter(node=>node.getClientRects().length);
+          const frame=document.getElementById('se-rte-frame__summary')||[...document.querySelectorAll('iframe')].find(node=>node.getClientRects().length&&/rte/i.test(node.id+' '+node.className));
+          const frameBody=frame&&frame.contentDocument?(frame.contentDocument.querySelector('[contenteditable="true"]')||frame.contentDocument.body):null;
+          const nodes=frameBody?[...editors,frameBody]:editors;
+          const hit=nodes.find(node=>clean(node.innerText||node.value||'').includes(probe));
+          if(hit)return true;
+          const writeTarget=frameBody||editors.find(node=>/description|详情|描述/i.test((node.getAttribute&&node.getAttribute('aria-label')||'')+node.id+node.className));
+          if(!writeTarget)return false;
+          writeTarget.innerText=want;
+          writeTarget.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:want}));
+          return clean(writeTarget.innerText||'').includes(probe);
+        })()`,true) as boolean
+        if(!descriptionSettled)await this.sleep(1200)
+      }
+      result.filledFields=result.filledFields.filter(label=>label!=='描述')
+      result.skippedFields=result.skippedFields.filter(label=>label!=='描述')
+      if(descriptionSettled)result.filledFields.push('描述')
+      else result.skippedFields.push('描述')
+    }
+    const bannerText=`已从本地版本填写 ${[...new Set(result.filledFields)].length} 项，跳过 ${[...new Set(result.skippedFields)].length} 项；尚未提交。请逐项核对图片、类目、业务政策和费用，再由您点击 eBay 最终提交按钮。`
+    await tab.view.webContents.executeJavaScript(`(()=>{const banner=document.getElementById('__cross_border_local_revision_guard');if(banner)banner.textContent=${JSON.stringify(bannerText)}})()`,true).catch(()=>undefined)
+return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledFields:result.filledFields,skippedFields:result.skippedFields,warnings:[target.note,...policyWarnings,...policyPendingWarnings,...result.warnings],submitButtonDetected:result.submitButtonDetected,preparedAt:new Date().toISOString()}
   }
 
   async prepareEbayListingRevision(accountId:string,draft:EbayOptimizationDraft):Promise<{reviseUrl:string;categorySpecifics:EbayCategorySpecificRequirement[];filledFields:string[];warnings:string[];submitButtonDetected:boolean}> {
