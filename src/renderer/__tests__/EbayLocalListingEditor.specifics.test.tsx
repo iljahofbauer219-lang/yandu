@@ -431,3 +431,30 @@ describe('EbayLocalListingEditor · 05 段 AddItem 现网形状镜像', () => {
     expect(live).toContain('#ebay-revise-specifics .ebay-specific-meta{')
   })
 })
+
+describe('05 段清单持久化与静默自读（D 批接线守卫）', () => {
+  const preloadSource = () => readFileSync(path.resolve(process.cwd(), 'src/preload/preload.ts'), 'utf8')
+  const mainSource = () => readFileSync(path.resolve(process.cwd(), 'src/main/main.ts'), 'utf8')
+  const appSource = () => readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8')
+  it('preload 暴露按产品取持久化清单的通道，读取 IPC 带产品 id', () => {
+    expect(preloadSource()).toContain("localProductSpecificsSection: (productId:string)")
+    expect(preloadSource()).toContain("localProductRequirements: (storeId:string,listingId:string,title:string,categoryId='',productId='')")
+  })
+  it('读取成功即按产品落库：section、来源与时间三样一起写，失败只点名不阻断', () => {
+    const body = mainSource()
+    expect(body).toContain('database.saveEbaySpecificsSection({productId,storeId,section:requirements.attributeSection,sourceUrl:requirements.sourceUrl,readAt:requirements.inspectedAt})')
+    expect(body).toContain("ipcMain.handle('ebay:local-products:specifics-section'")
+  })
+  it('静默自读不切浏览器表面：silent 选项守住 setActiveTab，且每产品每会话至多一次', () => {
+    const app = appSource()
+    expect(app).toContain("const readBusinessPoliciesFor=async(product:EbayLocalProduct|null,busyKey:string,options:{silent?:boolean}={})=>{")
+    expect(app).toContain("if(!options.silent)setActiveTab('browser')")
+    expect(app).toContain("specificsAutoReadDone.current[lp.id]=true")
+    expect(app).toContain("void readBusinessPoliciesFor(lp,'publish-read-policies',{silent:true})")
+  })
+  it('进编辑器先库态兜底种子：持久化读取时间直接当段头时间戳，不谎报本次会话读取', () => {
+    const app = appSource()
+    expect(app).toContain('const persisted=await window.desktop.ebay.localProductSpecificsSection(product.id)')
+    expect(app).toContain('{section:persisted.section,card:null,at:persisted.readAt}')
+  })
+})

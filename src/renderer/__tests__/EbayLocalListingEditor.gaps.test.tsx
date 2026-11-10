@@ -314,7 +314,7 @@ describe('EbayLocalListingEditor · 运输与所在地段的政策读取载体�
     // 两者都缺（prelist）才当场点名且不发 IPC。载体输入框只在产品自身没编号时兜底。
     expect(body).toContain('const readTarget=resolveEbayListingTarget({itemId:product.listingId||policyCarrierItemId,categoryId:product.platformCategoryId||\'\'})')
     expect(body).toContain("if(readTarget.kind==='prelist'){setEbayError(")
-    expect(body).toContain("localProductRequirements(storeId,product.listingId||policyCarrierItemId,title,product.platformCategoryId||'')")
+    expect(body).toContain("localProductRequirements(storeId,product.listingId||policyCarrierItemId,title,product.platformCategoryId||'',product.id)")
     // 不再拿 PALLET 本地编号当载体开页；setBusy 也必须在把关之后，否则空载体照样进入「正在读取…」
     expect(body).not.toMatch(/localProductRequirements\(storeId,listingId/)
     expect(body.indexOf("if(readTarget.kind==='prelist')")).toBeLessThan(body.indexOf('setBusy(busyKey)'))

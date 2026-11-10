@@ -3426,15 +3426,25 @@ ipcMain.handle('ebay:local-products:inspect-visual', async (_event, localProduct
   return database.saveEbayImageVisualInspection(localProductId,hydrated.snapshot,report)
 })
 ipcMain.handle('ebay:images:inspect-final', (_event, imageUrls:string[]):Promise<EbayImageInspectionReport> => inspectEbayImages(imageUrls))
+ipcMain.handle('ebay:local-products:specifics-section', (_event, productId:string) => database?.getEbaySpecificsSection(productId) ?? null)
 ipcMain.handle('ebay:local-products:visual-report', (_event, localProductId:string):EbayImageVisualInspectionReport|null => database?.getEbayImageVisualInspection(localProductId) ?? null)
 ipcMain.handle('ebay:local-products:visual-review', (_event, input:EbayImageVisualReviewInput):EbayImageVisualInspectionReport => {
   if(!database)throw new Error('eBay 本地产品库尚未初始化')
   return database.reviewEbayImageVisualRule(input)
 })
-ipcMain.handle('ebay:local-products:requirements', async (_event, storeId:string, listingId:string, title:string, categoryId='') => {
+ipcMain.handle('ebay:local-products:requirements', async (_event, storeId:string, listingId:string, title:string, categoryId='', productId='') => {
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
   if(!database)throw new Error('数据库尚未初始化')
   const requirements=await workspace.inspectEbayListingRequirements(`ebay:${storeId}`,listingId,title,categoryId)
+  // D 批：读取成功即按产品 id 落库（section JSON+来源+时间），进编辑器时库态兜底种子；落库失败只点名不阻断。
+  if(productId){
+    try {
+      database.saveEbaySpecificsSection({productId,storeId,section:requirements.attributeSection,sourceUrl:requirements.sourceUrl,readAt:requirements.inspectedAt})
+    } catch (error) {
+      console.warn('[ebay-specifics-section] 清单落库失败：', error instanceof Error?error.message:error)
+      return {...requirements,warnings:[...requirements.warnings,'类目属性清单已读取但未能写入本地库；下次进入发布编辑器仍会回退到兜底态，请重新读取一次']}
+    }
+  }
   // saveEbayBusinessPolicies 自开 BEGIN IMMEDIATE：这里绝不能包任何外层事务（node:sqlite 嵌套 BEGIN 会让内层 ROLLBACK 毁掉外层）。
   // 落库失败只点名缺口、保留页面本次读到的结果，绝不把「读取刊登规则」这个既有动作变成硬阻断。
   try {

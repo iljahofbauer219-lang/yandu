@@ -4,6 +4,7 @@ import type { ComplianceBatchRecheckResult, EbayImageInspectionReport } from '..
 import type { EbayMarketingFacts } from '../shared/ebayImageCategoryPlan'
 import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
 import type { EbayBusinessPolicyKind, EbayLocalListingRequirements, EbayLocalRevisionPreparationResult, EbayStoreBusinessPolicy } from '../shared/contracts'
+import type { EbayItemSpecificsSection } from '../shared/ebayItemSpecificsModel'
 import type { EbayTitleDecision, EbayTitleDecisionInput } from '../shared/contracts'
 import type { ImagePackageTextExtractionRequest, ImagePackageTextExtractionResult, LinduoChatModelView, LinduoMemberTierView, LinduoModelTierView, UserLinduoExceptionView } from '../shared/contracts'
 import type { AdvisorApprovalDecision, AdvisorChatEvent, AdvisorChatRequest, AdvisorIncomingDocument, AdvisorIncomingImage, AdvisorPersonalizationSettings, AdvisorRemoteSession } from '../shared/advisor'
@@ -458,7 +459,8 @@ contextBridge.exposeInMainWorld('desktop', {
     inspectFinalImages: (imageUrls:string[]):Promise<EbayImageInspectionReport> => ipcRenderer.invoke('ebay:images:inspect-final',imageUrls),
     localProductImageVisualReport: (localProductId:string):Promise<EbayImageVisualInspectionReport|null> => ipcRenderer.invoke('ebay:local-products:visual-report',localProductId),
     reviewLocalProductImageRule: (input:EbayImageVisualReviewInput):Promise<EbayImageVisualInspectionReport> => ipcRenderer.invoke('ebay:local-products:visual-review',input),
-    localProductRequirements: (storeId:string,listingId:string,title:string,categoryId=''):Promise<EbayLocalListingRequirements> => ipcRenderer.invoke('ebay:local-products:requirements',storeId,listingId,title,categoryId),
+    localProductRequirements: (storeId:string,listingId:string,title:string,categoryId='',productId=''):Promise<EbayLocalListingRequirements> => ipcRenderer.invoke('ebay:local-products:requirements',storeId,listingId,title,categoryId,productId),
+    localProductSpecificsSection: (productId:string):Promise<{section:EbayItemSpecificsSection;sourceUrl:string;readAt:string}|null> => ipcRenderer.invoke('ebay:local-products:specifics-section',productId),
     businessPolicies: (storeId:string,kind?:EbayBusinessPolicyKind):Promise<EbayStoreBusinessPolicy[]> => ipcRenderer.invoke('ebay:business-policies:list',storeId,kind),
     prepareLocalProductRevision: (localProductId:string):Promise<EbayLocalRevisionPreparationResult> => ipcRenderer.invoke('ebay:local-products:prepare-revision',localProductId),
     removeLocalProduct: (localProductId:string):Promise<boolean> => ipcRenderer.invoke('ebay:local-products:remove',localProductId),

@@ -5,6 +5,7 @@ import type { InboundCategorySuggestion } from '../shared/inboundCategorySuggest
 import type { EbayImageInspectionReport, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayLocalProductMedia, EbayLocalProductMediaUploadInput } from '../shared/contracts'
 import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
 import type { EbayBusinessPolicyKind, EbayLocalListingRequirements, EbayLocalRevisionPreparationResult, EbayStoreBusinessPolicy } from '../shared/contracts'
+import type { EbayItemSpecificsSection } from '../shared/ebayItemSpecificsModel'
 import type { EbayTitleDecision, EbayTitleDecisionInput, EbayImageStage, EbayStageFactCard, EbayStageGroundingRequest, EbayStageModelRecommendation, EbayStageStoryboardCard, EbayStageStoryboardRequest } from '../shared/contracts'
 import type { AdvisorDesktopApi } from '../shared/advisor'
 import type { AiEmployeeAskRequest, AiEmployeeChatModelProfile, AiEmployeePickResult } from '../shared/aiEmployee'
@@ -397,7 +398,8 @@ declare global {
         inspectFinalImages(imageUrls:string[]):Promise<EbayImageInspectionReport>
         localProductImageVisualReport(localProductId:string):Promise<EbayImageVisualInspectionReport|null>
         reviewLocalProductImageRule(input:EbayImageVisualReviewInput):Promise<EbayImageVisualInspectionReport>
-        localProductRequirements(storeId:string,listingId:string,title:string,categoryId?:string):Promise<EbayLocalListingRequirements>
+        localProductRequirements(storeId:string,listingId:string,title:string,categoryId?:string,productId?:string):Promise<EbayLocalListingRequirements>
+        localProductSpecificsSection(productId:string):Promise<{section:EbayItemSpecificsSection;sourceUrl:string;readAt:string}|null>
         businessPolicies(storeId:string,kind?:EbayBusinessPolicyKind):Promise<EbayStoreBusinessPolicy[]>
         prepareLocalProductRevision(localProductId:string):Promise<EbayLocalRevisionPreparationResult>
         removeLocalProduct(localProductId:string):Promise<boolean>

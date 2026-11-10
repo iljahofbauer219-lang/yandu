@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { DatabaseSync } from 'node:sqlite'
 import path from 'node:path'
 import type { CandidateCollectionRecord, CandidateCollectionRun, CandidateUpdateRequest, CandidateWorkspace, CollectedOzonProduct, CollectedSupplyProduct, CollectorDuplicateProduct, CollectorDuplicateStage, CollectorPluginImportResult, ComparisonCostSettings, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonRecordView, ComparisonSupplierMatch, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceAuditEvent, ComplianceBatchRecheckResult, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementAction, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceFinding, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReleasePermit, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceRuleVersion, ComplianceSource, ComplianceSourceChange, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, DelistedPalletItem, EbayAcceptanceBatch, EbayBusinessPolicyKind, EbayCategoryChange, EbayCategorySyncSummary, EbayCategoryWorkspace, EbayCollectedProduct, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayDirectoryProductScanCategory, EbayDirectoryProductSyncCheckpoint, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductSnapshot, EbayLocalProductSnapshotInput, EbayMarketResearchDecisionRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayProductDetails, EbayProductSyncChange, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayScrapedPolicyOption, EbayStore, EbayStoreBusinessPolicy, EbayStoreCategory, EbayTitleDecision, EbayTitleDecisionInput, EbayTitleHandoff, EliminatedOrigin, EliminatedProductRecord, EliminatedRecordStatus, EliminateRequest, InboundErpIntakeInput, InboundOrigin, InboundProcessingItem, InboundSnapshot, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, SelectionCatalogItem, SelectionDecision, SelectionImportRequest, SelectionTask, SupplyProductDownload, SupplyWarehouseCode, SupplyWarehouseProduct } from '../../shared/contracts'
+import type { EbayItemSpecificsSection } from '../../shared/ebayItemSpecificsModel'
 import { complianceCheckFingerprint } from '../../shared/complianceFingerprint'
 import { mergeCandidateFacts } from '../../shared/candidateFactsMerge'
 import { badgeFallbackScore } from '../../shared/badgeScore'
@@ -357,6 +358,16 @@ export class AppDatabase {
         FOREIGN KEY (store_id) REFERENCES ebay_stores(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_ebay_acceptance_batches_store ON ebay_acceptance_batches(store_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS ebay_specifics_sections (
+        product_id TEXT PRIMARY KEY,
+        store_id TEXT NOT NULL,
+        section_json TEXT NOT NULL,
+        source_url TEXT NOT NULL DEFAULT '',
+        read_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      /* 不挂 ebay_local_products 外键：产品删除后的孤儿行无害（读取只按现有产品 id 查），
+         挂外键反而会让「先落清单、产品行后到」的并发顺序整行写失败。 */
       CREATE TABLE IF NOT EXISTS ebay_market_research (
         id TEXT PRIMARY KEY,
         store_id TEXT NOT NULL,
@@ -1773,6 +1784,28 @@ export class AppDatabase {
       isDefault:Boolean(row.is_default),
       updatedAt:row.updated_at
     }))
+  }
+
+  /**
+   * 05 段现网清单持久化（2026-11-10 D 批）：读取成功按产品 id 整行 UPSERT；
+   * 进编辑器时库态兜底种子，会话态优先。坏 JSON 按没读过处理并点名，绝不抛错把编辑器带崩。
+   */
+  saveEbaySpecificsSection(input:{productId:string;storeId:string;section:EbayItemSpecificsSection;sourceUrl:string;readAt:string}):void {
+    const now=new Date().toISOString()
+    this.database.prepare(`INSERT INTO ebay_specifics_sections (product_id,store_id,section_json,source_url,read_at,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(product_id) DO UPDATE SET store_id=excluded.store_id,section_json=excluded.section_json,source_url=excluded.source_url,read_at=excluded.read_at,updated_at=excluded.updated_at`).run(input.productId,input.storeId,JSON.stringify(input.section),input.sourceUrl||'',input.readAt||now,now)
+  }
+
+  getEbaySpecificsSection(productId:string):{section:EbayItemSpecificsSection;sourceUrl:string;readAt:string}|null {
+    const row=this.database.prepare('SELECT section_json,source_url,read_at FROM ebay_specifics_sections WHERE product_id=?').get(productId) as {section_json:string;source_url:string;read_at:string}|undefined
+    if(!row)return null
+    try {
+      const section=JSON.parse(row.section_json) as EbayItemSpecificsSection
+      if(!section||!Array.isArray(section.slots)||!Array.isArray(section.groups))return null
+      return {section,sourceUrl:row.source_url||'',readAt:row.read_at||''}
+    } catch {
+      console.warn('[ebay-specifics-section] 持久化行内容损坏，按没读过处理：',productId)
+      return null
+    }
   }
 
   saveEbayBusinessPolicies(storeId:string,rows:EbayScrapedPolicyOption[]):EbayStoreBusinessPolicy[] {

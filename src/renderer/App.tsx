@@ -3463,6 +3463,15 @@ function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lo
   // 05 段的现网槽位清单与建议卡按产品 id 只存在本次会话：它们来自 eBay 修改页 DOM 的一次读取，没有落库（类目属性随类目变，
   // 与店铺级政策不是一类资产），所以重启或换店后必须再点一次读取才有；at 就是那一次读取的时刻。
   const [attributeSlotsByProduct,setAttributeSlots]=useState<Record<string,{section:EbayItemSpecificsSection;card:EbaySuggestedSpecificsCard|null;at:string}>>({})
+  // D 批：进编辑器先拿库态兜底种子；完全没有记录才静默自读一次（不切浏览器表面、每产品每会话至多一次）。
+  const specificsAutoReadDone=useRef<Record<string,boolean>>({})
+  const seedSpecificsFromStore=async(product:EbayLocalProduct)=>{
+    if(attributeSlotsByProduct[product.id])return true
+    const persisted=await window.desktop.ebay.localProductSpecificsSection(product.id)
+    if(!persisted)return false
+    setAttributeSlots(current=>current[product.id]?current:{...current,[product.id]:{section:persisted.section,card:null,at:persisted.readAt}})
+    return true
+  }
   // R1：政策抓取的「载体商品编号」。本地产品 listingId 是 PALLET-<货盘编号>，不是 eBay itemId，拿它开 ReviseItem
   // 会被 eBay 拒成 createOrGetDraft 错误页；政策按店铺入库复用，所以载体交给操作员手填一个真实在架编号，并按店铺记住。
   const [policyCarrierItemId,setPolicyCarrierItemId]=useState('')
@@ -4212,6 +4221,14 @@ function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lo
     setPublishEditorProduct(lp)
     setPublishEditorDraft({...ebayLocalProductFormSeed(lp),title:premium.selectedTitle,descriptionText:premium.description||'',descriptionHtml:'',price:premium.salePrice||premium.listing.price||'0',currency:premium.saleCurrency||premium.listing.currency||'USD',media})
     setActiveTab('publish')
+    // D 批：重启/离开平台页后再进发布，05 段直接画上次阅读的镜像形状；没读过才静默自读，失败只点名不阻断。
+    void (async()=>{
+      const seeded=await seedSpecificsFromStore(lp)
+      if(!seeded&&!specificsAutoReadDone.current[lp.id]){
+        specificsAutoReadDone.current[lp.id]=true
+        void readBusinessPoliciesFor(lp,'publish-read-policies',{silent:true})
+      }
+    })()
   }
   const uploadPublishEditorMedia=async(files:File[])=>{if(!publishEditorProduct||!publishEditorDraft||!files.length)return;const productId=publishEditorProduct.id;const remaining=Math.max(0,24-publishEditorDraft.media.length);const selected=files.slice(0,remaining);if(!selected.length){setEbayError('eBay 商品图片最多保留 24 张');return}setBusy(`publish-media:${productId}`);setEbayError('');try{const uploaded:EbayLocalProductUpdateInput['media']=[];for(const file of selected){const base64=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||'').split(',')[1]||'');reader.onerror=()=>reject(reader.error||new Error('读取图片失败'));reader.readAsDataURL(file)});uploaded.push(await window.desktop.ebay.addLocalProductMedia(productId,{fileName:file.name,mimeType:file.type||'image/jpeg',base64}))}setPublishEditorDraft(current=>current?({...current,media:[...current.media,...uploaded].slice(0,24).map((media,sortOrder)=>({...media,sortOrder}))}):current);setNotice(`已添加 ${uploaded.length} 张图片，保存新版本后写入本地产品。`)}catch(reason){setEbayError(readableError(reason,'添加本地商品图片失败'))}finally{setBusy('')}}
   // 「保存并准备到 eBay」完成提示的第一句：路由不同，说「Seller Hub 修改页」/「首次刊登页」/「新建刊登首页」不能混用，
@@ -4254,7 +4271,7 @@ function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lo
   // 「07 政策与所在地」读取：开一次 ReviseItem 修改页即抓政策入库（Task 5 引擎），两个编辑器共用这一个读取函数与一份政策状态。
   // 裁决 5：与 preparePublishEditorInSellerHub 同款顺序，调用前先 setActiveTab('browser')——真开了 eBay 页签就必须让用户看见，静默后台开页会被当成「代码没生效」。
   const setPolicyCarrierForActiveStore=(value:string)=>{setPolicyCarrierItemId(value);writePolicyCarrierItemId(activeStore?.id||'',value)}
-  const readBusinessPoliciesFor=async(product:EbayLocalProduct|null,busyKey:string)=>{
+  const readBusinessPoliciesFor=async(product:EbayLocalProduct|null,busyKey:string,options:{silent?:boolean}={})=>{
     if(!product||!activeStore)return
     // 评审 Important-3（其二，读取本身也要抗竞态）：店铺 id 与载体编号在入口钉死——抓取只针对点按钮那一刻的
     // 那家店、那个载体；每次 await 之后核对 activeStoreIdRef，店已切走就丢弃结果、不写任何政策状态。
@@ -4270,10 +4287,10 @@ function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lo
     if(readTarget.kind==='prelist'){setEbayError(`读取刊登规则前还缺开页载体：${readTarget.note}`);return}
     setBusy(busyKey);setEbayError('')
     try {
-      setActiveTab('browser')
+      if(!options.silent)setActiveTab('browser')
       // 评审 Important-1：这个 IPC 对「政策已读到但没写进本地库」是 return warnings（Task 5 的落库兜底），
       // 不抛错。返回值必须接下来，否则照样弹下面的成功提示就是在骗操作员——下拉用的还是上一次入库的旧政策。
-      const requirements=await window.desktop.ebay.localProductRequirements(storeId,product.listingId||policyCarrierItemId,title,product.platformCategoryId||'')
+      const requirements=await window.desktop.ebay.localProductRequirements(storeId,product.listingId||policyCarrierItemId,title,product.platformCategoryId||'',product.id)
       if(!isCurrentStore())return
       // 政策清单两种结果都重载：库里可能留着上一次成功抓取的行，警告只说明「这一次没写进去」。
       const policies=await window.desktop.ebay.businessPolicies(storeId)
