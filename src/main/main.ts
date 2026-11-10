@@ -35,6 +35,7 @@ import { EbayImageComplianceVisionService } from './services/EbayImageCompliance
 import { EbayImageGroundingService } from './services/EbayImageGroundingService'
 import { importProductUrl } from './services/ImageSourceService'
 import { downloadUrlsToLocalMedia, type LocalMediaDownloadResult } from './ebayLocalMediaFiles'
+import { EBAY_IMAGE_LIMIT } from '../shared/ebayUploadMediaPlan'
 import { imageHashService } from './services/ImageHashService'
 import { parseEbayListingsReport } from './services/EbayReportService'
 import { ServerProcessManager } from './services/ServerProcessManager'
@@ -997,10 +998,10 @@ function updateEbayLocalProduct(localProductId:string,changes:EbayLocalProductUp
   if(!/^[A-Z]{3}$/.test(changes.currency.trim()))validationErrors.push('币种必须使用 3 位大写代码')
   const downloadedMedia=changes.media.filter(item=>item.downloadStatus==='DOWNLOADED'&&item.localPath)
   if(!downloadedMedia.length)validationErrors.push('至少需要 1 张已保存到本地的商品图片')
-  if(changes.media.length>24)validationErrors.push('商品图片不能超过 24 张')
   if(downloadedMedia.some(item=>item.width>0&&item.height>0&&Math.max(item.width,item.height)<500))validationErrors.push('存在最长边不足 500px 的商品图片')
   if(downloadedMedia.some(item=>(item.fileSize||0)>12*1024*1024))validationErrors.push('存在单张超过 12MB 的商品图片')
   if(downloadedMedia.some(item=>!ebayImageFormat(item.mimeType)))validationErrors.push('存在 eBay 不支持的商品图片格式')
+  if(changes.media.length>EBAY_IMAGE_LIMIT)validationErrors.push(`商品图片与视频不能超过 ${EBAY_IMAGE_LIMIT} 项`)
   if(validationErrors.length)throw new Error(`本地刊登资料未通过校验：${validationErrors.join('；')}`)
   const capturedAt=new Date().toISOString()
   const listing={

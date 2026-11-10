@@ -21,7 +21,12 @@ const source = readFileSync(path.join(__dirname, '..', 'EbayLocalListingEditor.t
 // 组件名在文件顶部有 import，顺序断言必须只看 <main> 之后的 JSX 正文
 const body = source.slice(source.indexOf('<main'))
 
-const h2Sequence = () => [...body.matchAll(/<h2>([^<]+)<\/h2>/g)].map(match => match[1].trim())
+// 图片段按用户口径改成双语（2026-11-10 F1 取证）：h2 里是 <Bi en="Photos & Video" zh="图片与视频"/>，
+// 段名以现网英文原文为准，中文对照画在它下面。
+const h2Sequence = () => [...body.matchAll(/<h2>([\s\S]*?)<\/h2>/g)].map(match => {
+  const bilingual = match[1].match(/en="([^"]+)"/)
+  return (bilingual ? bilingual[1] : match[1]).trim()
+})
 
 /** 按段起始锚点切出该段源码：每个 `<section>` 都以自己的 id 打头，故用 id 做段界最稳。 */
 const band = (name: string) => {
@@ -35,7 +40,7 @@ const band = (name: string) => {
 describe('本地产品编辑器 · 逐段复刻 eBay 现网修改页布局', () => {
   it('段序与 eBay 一致且不带数字编号（真页段名是 PHOTOS & VIDEO 这类，没有 01/02）', () => {
     expect(h2Sequence()).toEqual([
-      '图片与视频',
+      'Photos & Video',
       '标题',
       '类目',
       '变体',

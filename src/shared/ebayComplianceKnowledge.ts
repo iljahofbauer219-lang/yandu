@@ -1,4 +1,5 @@
 import type { EbayImageVisualInspectionReport, EbayImageVisualRuleCode, EbayListing, EbayLocalProductMedia } from './contracts'
+import { EBAY_IMAGE_LIMIT } from './ebayUploadMediaPlan'
 
 export type EbayComplianceRiskLevel = 'P0' | 'P1' | 'P2' | 'P3'
 export type EbayComplianceDecision = 'BLOCKED' | 'MANUAL_REVIEW' | 'REMEDIATION_REQUIRED' | 'PASSED'
@@ -108,7 +109,8 @@ export function evaluateEbayCompliance(item:EbayListing,localMedia:EbayLocalProd
   } else if(!downloadedMedia.length) {
     findings.push(finding('EBAY-PICTURE-GUIDE','P1','图片技术资料尚未保存','当前记录有线上图片，但没有可供检查的本地原图。','系统无法确认图片尺寸、格式和单文件大小是否符合 eBay 官方要求。','重新下载该线上产品后再执行检查。'))
   } else {
-    if(downloadedMedia.length>24)findings.push(finding('EBAY-PICTURE-GUIDE','P0','图片数量超过上限',`当前本地产品保存了 ${downloadedMedia.length} 张图片。`,'eBay 单个刊登最多允许 24 张图片。','删除多余图片，将图片总数控制在 24 张以内。'))
+    // 上限不再写死 24：取现网 PHOTOS & VIDEO 计数器原文（2026-11-10 取证 17/25，读屏文「17 out of 25 photos or videos uploaded」）
+    if(downloadedMedia.length>EBAY_IMAGE_LIMIT)findings.push(finding('EBAY-PICTURE-GUIDE','P0','图片数量超过上限',`当前本地产品保存了 ${downloadedMedia.length} 项媒体。`,`eBay 单个刊登的上传上限是 ${EBAY_IMAGE_LIMIT} 张照片或视频。`,`删除多余媒体，把照片与视频总数控制在 ${EBAY_IMAGE_LIMIT} 项以内。`))
     if(readableMedia.length<downloadedMedia.length)findings.push(finding('EBAY-PICTURE-GUIDE','P1','本地图片技术信息不完整',`已下载 ${downloadedMedia.length} 张图片，其中 ${downloadedMedia.length-readableMedia.length} 张缺少尺寸、文件大小或校验值。`,'系统无法完整确认这些图片是否达到 eBay 的尺寸和文件大小要求。','重新同步缺少技术信息的图片，再执行详情页检查。'))
     if(undersizedMedia.length)findings.push(finding('EBAY-PICTURE-GUIDE','P0','图片尺寸低于最低要求',`${undersizedMedia.length} 张本地图片的最长边低于 500 像素；最小为 ${Math.min(...undersizedMedia.map(media=>Math.max(media.width,media.height)))} 像素。`,'图片尺寸不符合 eBay 最低展示要求。','替换为最长边至少 500 像素的原商品图片，推荐约 1600×1600。'))
     if(oversizedMedia.length)findings.push(finding('EBAY-PICTURE-GUIDE','P0','图片文件超过 12MB',`${oversizedMedia.length} 张本地图片超过 eBay 单张 12MB 上限；最大为 ${(Math.max(...oversizedMedia.map(media=>media.fileSize))/1024/1024).toFixed(2)}MB。`,'文件大小不符合 eBay 图片上传要求。','压缩或替换超限图片，确保每张图片不超过 12MB。'))

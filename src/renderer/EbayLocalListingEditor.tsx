@@ -1,9 +1,11 @@
+import type { ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EbayItemSpecific, EbayLocalProduct, EbayLocalProductUpdateInput, EbayStoreBusinessPolicy, EbayStoreCategory } from '../shared/contracts'
 import { formatFormGaps, type EbayFormGap } from '../shared/ebayListingForm'
 import { checkEbayPolicyCarrierItemId } from '../shared/ebayPolicyCarrier'
+import { EBAY_IMAGE_LIMIT } from '../shared/ebayUploadMediaPlan'
 import type { EbayListingRouteKind } from '../shared/ebayListingTarget'
-import type { EbayItemSpecificSlot, EbaySuggestedSpecificsCard } from '../shared/ebayItemSpecificsModel'
+import type { EbayItemSpecificSlot, EbayItemSpecificsSection, EbaySuggestedSpecificsCard } from '../shared/ebayItemSpecificsModel'
 import type { PlatformCategoryController } from './useEbayPlatformCategory'
 import './ebay-local-listing-editor.css'
 import './ebay-local-listing-pricing.css'
@@ -83,9 +85,9 @@ function validateDraft(draft:EbayLocalProductUpdateInput):ValidationIssue[] {
   // 与主进程 updateEbayLocalProduct 同一判据：只有真落盘（localPath 非空）才算已下载，否则编辑器绿灯、保存必被拒。
   const downloaded=draft.media.filter(item=>item.downloadStatus==='DOWNLOADED'&&item.localPath)
   if(!downloaded.length)error('media','至少需要 1 张已保存到本地的商品图片')
-  if(draft.media.length>24)error('media','商品图片不能超过 24 张')
   downloaded.filter(item=>item.width&&item.height&&Math.max(item.width,item.height)<500).forEach((_,index)=>error('media',`第 ${index+1} 张图片最长边不足 500px`))
   if(downloaded.length>0&&downloaded.length<3)warning('media','建议保留多个角度的高清商品图片')
+  if(draft.media.length>EBAY_IMAGE_LIMIT)error('media',`商品图片与视频不能超过 ${EBAY_IMAGE_LIMIT} 项`)
   if(!draft.descriptionText.trim()&&!draft.descriptionHtml.trim())error('description','商品描述不能为空')
   if(!Number.isFinite(Number(draft.price))||Number(draft.price)<=0)error('pricing','价格必须是大于 0 的数字')
   if(!/^[A-Z]{3}$/.test(draft.currency.trim()))error('pricing','币种必须使用 3 位大写代码，例如 USD')
@@ -103,6 +105,19 @@ function validateDraft(draft:EbayLocalProductUpdateInput):ValidationIssue[] {
 
 function mediaUrl(localPath:string,remoteUrl:string) {
   return localPath?`cross-media://local/${encodeURIComponent(localPath)}`:remoteUrl
+}
+
+/**
+ * 现网原文在上、中文对照在下：图片段按用户口径（2026-11-10）逐字复刻 eBay PHOTOS & VIDEO，
+ * 英文取 DOM 原文（~/.yandu-acceptance/2026-11-10-F1/F1-photos-section.json），中文只做对照不改判据。
+ */
+function Bi({en,zh}:{en:string;zh:string}) {
+  return <span className="ebay-bilingual"><span className="ebay-en">{en}</span><span className="ebay-zh">{zh}</span></span>
+}
+
+/** 视频瓦片左上的时长徽章照现网 mm:ss（现网原文「00:41」）；只画真的从媒体元素读到的时长。 */
+function clockOf(seconds:number) {
+  return `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(Math.round(seconds%60)).padStart(2,'0')}`
 }
 
 function CustomCategoryDropdown({options,value,onChange,disabled,placeholder,savedId,savedName}: {
@@ -172,6 +187,8 @@ function CustomCategoryDropdown({options,value,onChange,disabled,placeholder,sav
 export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,gaps,businessPolicies,readingPolicies,onReadPolicies,policyCarrierItemId,onPolicyCarrierItemIdChange,routeKind='revise',attributeSection,attributeSlotsAt='',suggestedCard=null,inline}:Props) {
   const fileInput=useRef<HTMLInputElement>(null)
   const [draggedId,setDraggedId]=useState('')
+  // 视频瓦片左上的时长徽章照现网画（现网原文「00:41」）：只画媒体元素真读到的秒数，读不到就不画，不编 00:00
+  const [videoSeconds,setVideoSeconds]=useState<Record<string,number>>({})
   const [descriptionMode,setDescriptionMode]=useState<'TEXT'|'HTML'>('TEXT')
   // eBay 真页的 Custom label (SKU) 是标题段里的开关：开关只决定这行显不显示，关掉不清空已记录的编号。
   const [skuVisible,setSkuVisible]=useState(()=>Boolean((draft.sku||'').trim()))
@@ -327,22 +344,44 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
             → Item specifics → Condition → Description → Pricing → Shipping → Item disclosures，内容列 max-width 1024px）。
             真页有段而本地没有字段支撑的（变体、定价选项、您的设置、其他刊登选项）一律如实说明「APP 未记录、请在页面补齐」，不臆造控件。 */}
         <div className="ebay-revise-column">
+          {/* 现网这一列最上方是页面级标题 Complete your listing（24px/600），就压在 PHOTOS & VIDEO 段头上。 */}
+          <div className="ebay-revise-pagehead"><h1><Bi en="Complete your listing" zh="完成您的刊登"/></h1></div>
           <section id="ebay-revise-media" className="ebay-revise-band ebay-revise-media-section">
-            <header className="ebay-revise-band-head"><div><h2>图片与视频</h2><p>本地保存商品媒体；拖动可排序，第一张图片为主图。</p></div><span className="ebay-band-counter" data-ebay-slot="section-action" data-ebay-counter="photos">{draft.media.length}/24</span></header>
+            <header className="ebay-revise-band-head">
+              <div>
+                <h2><Bi en="Photos & Video" zh="图片与视频"/></h2>
+                <p><Bi en="You can add up to 40 photos and a 1-minute video. Buyers want to see all details and angles." zh="最多可上传 40 张照片和 1 段 1 分钟视频；买家想看到全部细节与角度。"/></p>
+                <p className="ebay-band-local-note">本地保存商品媒体；拖动可排序，第一张图片为主图。</p>
+              </div>
+              {/* 现网这一处是菜单（Upload photos from mobile / from web）；APP 没有这两条通道，只画文字并如实说明，不做假按钮。 */}
+              <span className="ebay-band-action-pill" data-ebay-slot="section-action" title="现网这一处是菜单：从手机上传 / 从网页上传。APP 没有这两条通道，请用下方 Select 或 Add 从本机选文件。"><Bi en="See photo options" zh="查看照片选项"/></span>
+            </header>
+            <details className="ebay-media-tips">
+              <summary><Bi en="Tips for taking pro photos" zh="专业拍照技巧"/></summary>
+              <div className="ebay-media-tips-pop"><strong><Bi en="Photo tips" zh="拍照技巧"/></strong><p><Bi en="Learn how to take photos that attract buyers and help avoid returns." zh="了解如何拍出能吸引买家、并有助于减少退货的照片。"/></p></div>
+            </details>
+            <div className="ebay-media-counter">
+              <span className="ebay-media-count" data-ebay-counter="photos"><Bi en={`${draft.media.length}/${EBAY_IMAGE_LIMIT}`} zh={`已上传 ${EBAY_IMAGE_LIMIT} 张照片或视频中的 ${draft.media.length} 张`}/></span>
+              <button type="button" className="ebay-media-select" disabled={uploading} onClick={()=>fileInput.current?.click()}><Bi en="Select" zh="选择文件"/></button>
+            </div>
             <div className="ebay-photo-strip">
-              {draft.media.map((media,index)=><figure key={media.id} draggable onDragStart={()=>setDraggedId(media.id)} onDragEnd={()=>setDraggedId('')} onDragOver={event=>event.preventDefault()} onDrop={()=>moveMedia(draggedId,media.id)} data-dragging={draggedId===media.id?'true':undefined} className={index===0?'ebay-photo-tile main':'ebay-photo-tile'}>
+              {draft.media.map((media,index)=><figure key={media.id} draggable onDragStart={()=>setDraggedId(media.id)} onDragEnd={()=>setDraggedId('')} onDragOver={event=>event.preventDefault()} onDrop={()=>moveMedia(draggedId,media.id)} data-dragging={draggedId===media.id?'true':undefined} className={index===0?'ebay-photo-tile main':'ebay-photo-tile'} aria-label={media.mediaType==='VIDEO'?`Video ${index+1} 视频 ${index+1}`:`Photo ${index+1} 照片 ${index+1}`}>
                 {media.mediaType==='VIDEO'?(
                   <div className="ebay-photo-video">
-                    <video src={mediaUrl(media.localPath,media.remoteUrl)} muted playsInline/>
+                    <video src={mediaUrl(media.localPath,media.remoteUrl)} muted playsInline onLoadedMetadata={event=>{const seconds=event.currentTarget.duration;if(Number.isFinite(seconds)&&seconds>0)setVideoSeconds(previous=>previous[media.id]===seconds?previous:{...previous,[media.id]:seconds})}}/>
                     <span className="ebay-photo-play">▶</span>
+                    {videoSeconds[media.id]?<span className="ebay-photo-duration">{clockOf(videoSeconds[media.id])}</span>:null}
                   </div>
                 ):(
                   <img src={mediaUrl(media.localPath,media.remoteUrl)} alt={`商品图片 ${index+1}`}/>
                 )}
-                <figcaption>{media.mediaType==='VIDEO'?`Video ${index+1}`:`Photo ${index+1}`}</figcaption>
-                <div className="ebay-photo-tools"><button type="button" onClick={()=>makeMain(media.id)} disabled={media.mediaType==='VIDEO'}>{index===0?'Main':media.mediaType==='VIDEO'?'视频':'设为主图'}</button><button type="button" aria-label="删除媒体" onClick={()=>removeMedia(media.id)}>×</button></div>
+                {index===0&&<span className="ebay-photo-pill"><Bi en="Main" zh="主图"/></span>}
+                <div className="ebay-photo-tools">
+                  {index>0&&media.mediaType!=='VIDEO'&&<button type="button" onClick={()=>makeMain(media.id)}>设为主图</button>}
+                  <button type="button" aria-label="删除媒体" onClick={()=>removeMedia(media.id)}>×</button>
+                </div>
               </figure>)}
-              {draft.media.length<24&&<button className="ebay-photo-add" type="button" disabled={uploading} onClick={()=>fileInput.current?.click()}><strong>{uploading?'…':'＋'}</strong><span>{uploading?'正在添加':'添加照片'}</span></button>}
+              {draft.media.length<EBAY_IMAGE_LIMIT&&<button className="ebay-photo-add" type="button" disabled={uploading} onClick={()=>fileInput.current?.click()}><strong>{uploading?'…':'＋'}</strong><Bi en="Add" zh={uploading?'正在添加':'添加'}/></button>}
             </div>
             <input ref={fileInput} hidden type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif" onChange={event=>{onUpload(Array.from(event.target.files||[]));event.currentTarget.value=''}}/>
           </section>

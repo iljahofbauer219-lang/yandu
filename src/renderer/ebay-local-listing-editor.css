@@ -39,24 +39,54 @@ button[data-ebay-slot="section-action"]:disabled{background:#ececec;border-color
 .ebay-band-counter{font-variant-numeric:tabular-nums}
 .ebay-band-empty{margin:0;font-size:13px;line-height:1.5;color:#707070}
 
-/* 01 图片与视频：真页每行 8 格 × 114px + 9px 间距 = 975px，主图 3×114+2×9 = 360 ≈ 实测 359px。
-   minmax 的 min 必须小于 114，否则 auto-fill 只排得下 7 格、每格被拉宽到 130px。 */
-.ebay-photo-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:9px;align-items:start}
-.ebay-photo-tile{position:relative;aspect-ratio:1;margin:0;overflow:hidden;background:#f6f6f6;border:1px solid #ddd;border-radius:10px}
+/* 01 图片与视频 = 现网 AddItem PHOTOS & VIDEO 段逐值复刻（2026-11-10 量测，
+   ~/.yandu-acceptance/2026-11-10-F1/F1-photos-section.json）：页面级 H1「Complete your listing」24px/600 lh32；
+   段头 H2 16px/700 + text-transform:uppercase（所以肉眼是 PHOTOS & VIDEO），右侧「See photo options」是
+   12px/700、bg rgb(247,247,247)、padding 8px 16px、radius 50px、h32 的灰胶囊；说明行 14px/400 深色 #191919；
+   「Tips for taking pro photos」14px/400 下划线；计数行 h48，左「17/25」14px/400 rgb(112,112,112)，
+   右「Select」14px/400 下划线；瓦片墙主图 360×360、小瓦片 115×115、间距 8、圆角 16；
+   「Main」「Under review」胶囊都是 12px/700 白字 + rgb(112,112,112) 底 + padding 8px 12px + radius 30 + 底部居中离底 10px；
+   空位「Add」瓦片 bg rgb(247,247,247)、radius 16、图标与文字间距 8。
+   用户口径「上面是英文，下面是标中文对照」，所以每处文案都走 .ebay-bilingual 两行。
+   时长徽章的 text-shadow 是本地加的：现网那格底图本身暗（量到透明底白字），亮色帧上要能读。 */
+.ebay-bilingual{display:grid;gap:2px;min-width:0}
+.ebay-en{display:block;min-width:0}
+.ebay-zh{display:block;font-size:12px;line-height:18px;font-weight:400;color:#707070;text-transform:none}
+.ebay-revise-pagehead{padding:0 24px;margin:0 0 4px}
+.ebay-revise-pagehead h1{margin:0;font-size:24px;font-weight:600;line-height:32px;color:#191919}
+#ebay-revise-media .ebay-revise-band-head h2{text-transform:uppercase}
+#ebay-revise-media .ebay-revise-band-head p{font-size:14px;line-height:20px;color:#191919;max-width:784px}
+#ebay-revise-media .ebay-revise-band-head p.ebay-band-local-note{font-size:13px;line-height:18px;color:#707070}
+.ebay-band-action-pill{display:inline-flex;align-items:center;font-size:12px;font-weight:700;background:#f7f7f7;padding:8px 16px;border-radius:50px;color:#191919;text-align:left}
+.ebay-media-tips{margin:2px 0 0}
+.ebay-media-tips summary{display:inline-flex;cursor:pointer;font-size:14px;line-height:20px;color:#191919;text-decoration:underline;list-style:none}
+.ebay-media-tips summary::-webkit-details-marker{display:none}
+.ebay-media-tips-pop{margin:8px 0 0;padding:12px 16px;background:#f7f7f7;border-radius:16px;max-width:420px}
+.ebay-media-tips-pop strong{font-size:14px;font-weight:700;color:#191919}
+.ebay-media-tips-pop p{margin:4px 0 0;font-size:14px;line-height:20px;color:#191919}
+.ebay-media-counter{display:flex;align-items:center;justify-content:space-between;gap:24px;min-height:48px;margin:4px 0 0}
+.ebay-media-count{font-size:14px;line-height:20px;color:#707070;font-variant-numeric:tabular-nums}
+.ebay-media-select{padding:0;border:0;background:none;font:inherit;font-size:14px;color:#191919;text-decoration:underline;cursor:pointer}
+.ebay-media-select:disabled{color:#767676;cursor:progress}
+.ebay-photo-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(115px,1fr));gap:8px;align-items:start}
+.ebay-photo-tile{position:relative;aspect-ratio:1;margin:0;overflow:hidden;background:#fff;border:1.2px solid #fff;border-radius:16px}
 .ebay-photo-tile.main{grid-column:span 3;grid-row:span 3}
 .ebay-photo-tile[data-dragging="true"]{opacity:.45}
-.ebay-photo-tile img,.ebay-photo-video video{width:100%;height:100%;object-fit:contain;background:#f6f6f6}
-.ebay-photo-tile figcaption{position:absolute;left:8px;bottom:8px;padding:3px 9px;border-radius:10px;background:rgba(0,0,0,.72);color:#fff;font-size:11px;font-weight:600}
+.ebay-photo-tile img{width:100%;height:100%;object-fit:contain;background:#fff}
+/* 现网视频瓦片是视频帧铺满整格（量到 .uploader-thumbnails-ux__video-icon 透明底白字叠在帧上），contain 会留白边 */
+.ebay-photo-video video{width:100%;height:100%;object-fit:cover;background:#000}
+.ebay-photo-pill{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:inline-flex;padding:8px 12px;background:#707070;color:#fff;border-radius:30px;font-size:12px;font-weight:700;line-height:14px;pointer-events:none}
+.ebay-photo-pill .ebay-zh{color:#fff;font-size:11px;line-height:14px}
+.ebay-photo-duration{position:absolute;top:9px;left:9px;font-size:12px;font-weight:700;line-height:16px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.75);pointer-events:none}
 .ebay-photo-tools{position:absolute;top:6px;right:6px;display:flex;gap:4px}
 .ebay-photo-tools button{border:0;border-radius:9px;padding:4px 8px;background:rgba(255,255,255,.94);color:#333;font:inherit;font-size:11px;font-weight:600;cursor:pointer}
 .ebay-photo-tools button:last-child{padding:2px 6px;color:#b3261e;font-size:14px;line-height:1.2}
-.ebay-photo-tools button:disabled{color:#555;cursor:default}
 .ebay-photo-video{position:relative;width:100%;height:100%;display:grid;place-items:center;background:#000}
 .ebay-photo-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:40px;height:40px;display:grid;place-items:center;border-radius:50%;background:rgba(0,0,0,.65);color:#fff;font-size:15px;pointer-events:none}
-.ebay-photo-add{aspect-ratio:1;display:grid;place-content:center;justify-items:center;gap:4px;border:1px dashed #bbb;border-radius:10px;background:#fafafa;color:#333;font:inherit;cursor:pointer}
+.ebay-photo-add{aspect-ratio:1;display:grid;place-content:center;justify-items:center;gap:8px;border:0;background:#f7f7f7;border-radius:16px;color:#191919;font:inherit;font-size:14px;cursor:pointer}
 .ebay-photo-add strong{font-size:26px;font-weight:400;line-height:1}
-.ebay-photo-add span{font-size:12px;font-weight:600}
-.ebay-photo-add:hover:not(:disabled){border-color:#10aaa3;color:#0d8b85}
+.ebay-photo-add .ebay-en{font-size:14px;font-weight:400;line-height:20px}
+.ebay-photo-add:hover:not(:disabled){background:#ececec}
 .ebay-photo-add:disabled{opacity:.6;cursor:progress}
 
 /* 字段行：现网 Title/Pricing/Shipping/Condition 一律「标签在上、控件在下」（EBAY-02/06/08/09 取证），
