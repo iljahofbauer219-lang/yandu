@@ -35,6 +35,47 @@ export interface EbaySpecificsFillPlan {
 
 const sameName = (left: string, right: string) => left.trim().toLowerCase() === right.trim().toLowerCase()
 
+/**
+ * K1：喂给模型的候选必须是现网真捕获。slot.options 只装 Yes/No pill，菜单行的候选在 menuOptions 里；
+ * 拿 options 当菜单候选会让每个菜单行都变成「无（自由填写）」，模型自创的值再被闭合白名单全拒。
+ */
+export function ebaySpecificsLlmOptions(slot: EbayItemSpecificSlot): string[] {
+  const seen = new Set<string>()
+  const options: string[] = []
+  for (const raw of [...(slot.menuOptions || []), ...slot.options.map(option => option.text)]) {
+    const value = raw.trim()
+    const key = value.toLowerCase()
+    if (!value || seen.has(key)) continue
+    seen.add(key)
+    options.push(value)
+  }
+  return options
+}
+
+/**
+ * K1：原下载图文页抓来的规格表是中文键（颜色/材质/产地），eBay 槽位是英文名。
+ * 只映射语义唯一的那几个键，且只在清单真有该槽位时生效；值仍过同一套白名单，绝不换个相近候选冒充。
+ */
+const LOCAL_NAME_ALIASES: Record<string, string> = {
+  '颜色': 'Color',
+  '色彩': 'Color',
+  '材质': 'Material',
+  '材料': 'Material',
+  '产地': 'Country of Origin',
+  '原产地': 'Country of Origin',
+  '品牌': 'Brand',
+  '型号': 'Model'
+}
+
+const factForSlot = (local: EbaySpecificsFillFact[], slotName: string): EbaySpecificsFillFact | undefined => {
+  const direct = local.find(item => sameName(item.name, slotName))
+  if (direct) return direct
+  return local.find(item => {
+    const mapped = LOCAL_NAME_ALIASES[item.name.trim()]
+    return mapped !== undefined && sameName(mapped, slotName)
+  })
+}
+
 const YES_WORDS = ['yes', 'y', '是', '真', 'true']
 const NO_WORDS = ['no', 'n', '否', '假', 'false']
 
@@ -94,7 +135,7 @@ export function planEbaySpecificsFill(slots: EbayItemSpecificSlot[], input: Ebay
       skipped.push({ name: slot.name, reason: '已有人工值，不覆盖' })
       continue
     }
-    const fact = input.local.find(item => sameName(item.name, slot.name))
+    const fact = factForSlot(input.local, slot.name)
     if (!fact || !fact.value.trim()) {
       skipped.push({ name: slot.name, reason: fact ? '值为空' : '本地没有该属性的记录' })
       continue
@@ -121,4 +162,22 @@ export function applyLlmSpecificAnswers(slots: EbayItemSpecificSlot[], answers: 
     kept.push({ name: slot.name, value: normalizeSpecificValue(slot, answer.value), source: 'AI' })
   }
   return kept
+}
+
+/**
+ * K1：最终未填清单。规则档的 skipped 只说明「本地匹配没填上」，AI 复核可能随后填上了同一行；
+ * 拿规则档 skipped 当最终未填上屏，会把已填的行点名成「本地没有该属性的记录」。这里按最终 fills 反推。
+ */
+export function ebaySpecificsUnfilledRows(
+  slots: EbayItemSpecificSlot[],
+  fills: EbaySpecificsFillRow[],
+  ruleSkipped: Array<{ name: string; reason: string }>
+): Array<{ name: string; reason: string }> {
+  const filled = new Set(fills.map(row => row.name.trim().toLowerCase()))
+  return slots
+    .filter(slot => !filled.has(slot.name.trim().toLowerCase()))
+    .map(slot => {
+      const rule = ruleSkipped.find(item => sameName(item.name, slot.name))
+      return { name: slot.name, reason: rule ? rule.reason : 'AI 复核未给出可收的值' }
+    })
 }

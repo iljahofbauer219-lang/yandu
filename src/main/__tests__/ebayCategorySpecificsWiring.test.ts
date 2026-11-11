@@ -56,3 +56,17 @@ describe('H4 · 进发布种子序与段头两键接线', () => {
     expect(appSource).toContain('specificsFilledAtByProduct')
   })
 })
+
+describe('K1 · 填写键喂给模型的候选与证据源接线', () => {
+  it('LLM 入参的候选走 shared 真捕获口径，不再拿 pill 专用的 slot.options 冒充菜单候选', () => {
+    const fill = slice(appSource, 'const fillSpecificsFor=', 'const localCategoryBackfillAttempted')
+    expect(fill).toContain('ebaySpecificsLlmOptions(slot)')
+    expect(fill).not.toContain('options:slot.options.map(option=>option.text)')
+  })
+
+  it('通知的未填清单按最终 fills 反推，不再把规则档跳过当成最终未填上屏', () => {
+    const fill = slice(appSource, 'const fillSpecificsFor=', 'const localCategoryBackfillAttempted')
+    expect(fill).toContain('ebaySpecificsUnfilledRows(')
+    expect(fill).not.toContain('rulePlan.skipped.slice(0,6)')
+  })
+})

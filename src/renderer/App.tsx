@@ -28,7 +28,7 @@ import { ebayMarketResearchChannelLabel, ebayMarketResearchChannelShortLabel } f
 import { EBAY_SITE_ALLOWED_MESSAGE, isEbaySiteUrl } from '../shared/ebaySites'
 import { ebayHardRequiredFieldsForRoute, formatFormGaps, formValuesFromInput, isEbayPolicyId, requiredFormGaps } from '../shared/ebayListingForm'
 import { resolveEbayListingTarget, resolveEbayListingTargetForProduct } from '../shared/ebayListingTarget'
-import { applyLlmSpecificAnswers, planEbaySpecificsFill } from '../shared/ebaySpecificsFillPlan'
+import { applyLlmSpecificAnswers, ebaySpecificsLlmOptions, ebaySpecificsUnfilledRows, planEbaySpecificsFill } from '../shared/ebaySpecificsFillPlan'
 import type { EbayProfitAutoFill } from '../shared/ebayPricingAutoFill'
 import { riskBadge } from '../shared/riskBadge'
 import { copiedWarehouseIds } from '../shared/copiedPallet'
@@ -4341,14 +4341,17 @@ function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lo
       let llmRows:ReturnType<typeof applyLlmSpecificAnswers>=[]
       if(pending.length){
         try {
-          const answers=await window.desktop.ebay.specificsLlmSuggestions({title:draft.title,descriptionText:draft.descriptionText,slots:pending.map(slot=>({name:slot.name,control:slot.control,options:slot.options.map(option=>option.text),maxLength:slot.maxLength}))})
+          const answers=await window.desktop.ebay.specificsLlmSuggestions({title:draft.title,descriptionText:draft.descriptionText,slots:pending.map(slot=>({name:slot.name,control:slot.control,options:ebaySpecificsLlmOptions(slot),maxLength:slot.maxLength}))})
           llmRows=applyLlmSpecificAnswers(pending,answers||[])
         } catch (reason) {
           setNotice(`AI 复核通道不可用（${readableError(reason,'调用失败')}），本次只按本地已记内容填写。`)
         }
       }
       const fills=[...rulePlan.fills,...llmRows]
-      if(!fills.length){setEbayError(`本次没有可自动填写的槽位：${rulePlan.skipped.slice(0,6).map(item=>`${item.name}（${item.reason}）`).join('；')||'现网清单为空'}`);return}
+      // K1：未填清单按最终 fills 反推——规则档跳过但 AI 填上的行不能再被点名成「本地没有该属性的记录」。
+      const unfilled=ebaySpecificsUnfilledRows(section.slots,fills,rulePlan.skipped)
+      const unfilledText=unfilled.map(item=>`${item.name}（${item.reason}）`).join('；')
+      if(!fills.length){setEbayError(`本次没有可自动填写的槽位：${unfilledText||'现网清单为空'}`);return}
       const at=new Date().toLocaleString('zh-CN',{hour12:false})
       apply(current=>{
         if(!current)return current
@@ -4361,7 +4364,7 @@ function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lo
         return {...current,itemSpecifics:list}
       })
       setSpecificsFilledAtByProduct(current=>({...current,[product.id]:at}))
-      setNotice(`类目属性已自动填写 ${fills.length} 项（本地匹配 ${rulePlan.fills.length}、AI 复核 ${llmRows.length}），跳过 ${rulePlan.skipped.length} 项：${rulePlan.skipped.slice(0,6).map(item=>`${item.name}（${item.reason}）`).join('；')||'无'}。值仍可手改，保存新版本后随「保存并准备」写入 eBay 页。`)
+      setNotice(`类目属性已自动填写 ${fills.length} 项（本地匹配 ${rulePlan.fills.length}、AI 复核 ${llmRows.length}），未填 ${unfilled.length} 项：${unfilledText||'无'}。值仍可手改，保存新版本后随「保存并准备」写入 eBay 页。`)
     } finally {
       setBusy('')
     }

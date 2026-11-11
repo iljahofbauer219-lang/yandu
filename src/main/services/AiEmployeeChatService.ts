@@ -717,7 +717,7 @@ export class AiEmployeeChatService {
     const endpoint = profile.provider === 'bailian' ? `${bailianBaseUrl()}/chat/completions` : `${deepseekBaseUrl()}/chat/completions`
     if (!apiKey) return []
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 25000)
+    const timer = setTimeout(() => controller.abort(), 60000)
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -725,12 +725,17 @@ export class AiEmployeeChatService {
         body: JSON.stringify({
           model: profile.id,
           messages: [{ role: 'user', content: [
-            '你是 eBay 刊登属性填写助手。只依据下面给出的商品标题与描述，为每个槽位给出一个值；没有把握就留空。',
-            'Yes/No 槽位只能回答 Yes 或 No；带候选值的槽位只能从候选值里选一个；自由文本槽位用英文、不超过长度上限。',
+            '你是 eBay 刊登属性填写助手。只依据下面给出的商品标题与描述（含原下载图文页的规格表）填写槽位。',
+            '列了候选值的槽位：必须从候选里选出最贴合的值，多选槽位可选多个并用英文逗号分隔；候选没列全也不要自创值，不要整行留空。',
+            'Yes/No 槽位只能回答 Yes 或 No。自由文本槽位用英文、不超过长度上限；确实没有线索才留空。',
             '每行输出 name=value；留空的槽位不要输出。不要解释。',
             `商品标题：${input.title}`,
-            `商品描述：${input.descriptionText.slice(0, 2000)}`,
-            ...input.slots.map(slot => `槽位：${slot.name}｜类型：${slot.control}｜候选值：${slot.options.join(' / ') || '无（自由填写）'}｜长度上限：${slot.maxLength || '无'}`)
+            `商品描述：${input.descriptionText.slice(0, 6000)}`,
+            ...input.slots.map(slot => {
+              const candidates = slot.options.join(' / ')
+              const pick = slot.control === 'MENU_MULTI' ? '（多选：可选多个候选，用英文逗号分隔）' : '（只能选其中一个）'
+              return `槽位：${slot.name}｜类型：${slot.control}｜候选值：${candidates ? candidates + pick : '无（自由填写）'}｜长度上限：${slot.maxLength || '无'}`
+            })
           ].join('\n') }]
         }),
         signal: controller.signal

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  applyLlmSpecificAnswers, planEbaySpecificsFill, specificValueIssue,
+  applyLlmSpecificAnswers, ebaySpecificsLlmOptions, ebaySpecificsUnfilledRows, planEbaySpecificsFill, specificValueIssue,
   type EbaySpecificsFillFact
 } from '../ebaySpecificsFillPlan'
 import type { EbayItemSpecificSlot } from '../ebayItemSpecificsModel'
@@ -130,5 +130,118 @@ describe('ebaySpecificsFillPlan · 菜单捕获选项的白名单口径（I2/I4�
     })
     expect(plan.fills.map(item => item.name)).toEqual(['Manufacturer Part Number', 'Color'])
     expect(plan.skipped).toEqual([])
+  })
+})
+
+/**
+ * K1：真机取证（2026-11-11 赛车座椅 3555cec2）——点「类目属性填写」后黄框菜单行仍空。
+ * 两处根因：① 喂给 LLM 的候选取 slot.options（只有 Yes/No pill），菜单行一律 0 个候选，
+ * 模型被告知「自由填写」于是自创 "Driver,Passenger"/"Racing,Bucket"/"PVC"，闭合白名单全拒；
+ * ② 规则档只按英文同名匹配本地事实，而图文页抓来的规格是中文键（颜色/材质/产地），19 行全判「本地没有该属性的记录」。
+ */
+describe('ebaySpecificsLlmOptions · 喂给模型的候选必须是现网真捕获', () => {
+  const menu = (patch: Partial<EbayItemSpecificSlot>): EbayItemSpecificSlot => slot({ name: 'Color', ...patch })
+
+  it('菜单行取 menuOptions，不再因为 options 是 pill 专用而回空数组', () => {
+    const captured = menu({ menuOptions: ['Beige', 'Black', 'Blue'], menuOptionsTotal: 16, menuOptionsComplete: false })
+    expect(ebaySpecificsLlmOptions(captured)).toEqual(['Beige', 'Black', 'Blue'])
+  })
+
+  it('多选菜单行同样取捕获候选', () => {
+    const multi = menu({ name: 'Placement on Vehicle', control: 'MENU_MULTI', menuMulti: true, menuOptions: ['Driver Side', 'Front', 'Passenger Side'], menuOptionsTotal: 8, menuOptionsComplete: true })
+    expect(ebaySpecificsLlmOptions(multi)).toEqual(['Driver Side', 'Front', 'Passenger Side'])
+  })
+
+  it('Yes/No 行取 pill 原文；没捕获的菜单行回空数组，不编造候选', () => {
+    expect(ebaySpecificsLlmOptions(SLOTS[2])).toEqual(['Yes', 'No'])
+    expect(ebaySpecificsLlmOptions(menu({ menuCaptureIssue: 'NO_LIST', menuFreeText: true }))).toEqual([])
+  })
+
+  it('捕获候选与 pill 原文合并去重，大小写不敏感且保留首次拼写', () => {
+    const mixed = menu({ menuOptions: ['Black', 'black', 'Red'], options: [{ text: 'RED', pressed: false }, { text: 'Blue', pressed: false }] })
+    expect(ebaySpecificsLlmOptions(mixed)).toEqual(['Black', 'Red', 'Blue'])
+  })
+})
+
+describe('planEbaySpecificsFill · 图文页中文键规格事实按别名进槽位（K1）', () => {
+  const seats: EbayItemSpecificSlot[] = [
+    slot({ name: 'Brand', required: true, menuOptions: ['Unbranded'], menuOptionsTotal: 10184 }),
+    slot({ name: 'Color', group: 'OPTIONAL', menuOptions: ['Beige', 'Black', 'Blue'], menuOptionsTotal: 16, menuOptionsComplete: true }),
+    slot({ name: 'Material', group: 'OPTIONAL', control: 'MENU_MULTI', menuMulti: true, menuOptions: ['Cloth', 'Faux Leather', 'Leather', 'Vinyl'], menuOptionsTotal: 11, menuOptionsComplete: true }),
+    slot({ name: 'Country of Origin', group: 'OPTIONAL', menuOptions: ['Afghanistan', 'Albania'], menuOptionsTotal: 244 })
+  ]
+
+  it('颜色/产地/品牌照别名进对应槽位，值仍过同一套白名单与归一', () => {
+    const plan = planEbaySpecificsFill(seats, {
+      title: '2PC Universal Bucket Racing Seats', descriptionText: '',
+      local: local(['颜色', 'black'], ['产地', 'China'], ['品牌', 'Unbranded'])
+    })
+    expect(plan.fills).toEqual([
+      { name: 'Brand', value: 'Unbranded', source: 'ENUM_MATCH' },
+      { name: 'Color', value: 'Black', source: 'ENUM_MATCH' },
+      { name: 'Country of Origin', value: 'China', source: 'ENUM_MATCH' }
+    ])
+  })
+
+  it('别名值不在闭合候选内照拒并点名，绝不换个相近候选冒充', () => {
+    const plan = planEbaySpecificsFill(seats, { title: '', descriptionText: '', local: local(['材质', 'PVC']) })
+    expect(plan.fills).toEqual([])
+    expect(plan.skipped.find(item => item.name === 'Material')?.reason).toContain('白名单')
+  })
+
+  it('别名不覆盖人工值，也不凭空造出清单里没有的槽位', () => {
+    const plan = planEbaySpecificsFill(seats, {
+      title: '', descriptionText: '', local: local(['颜色', 'Black'], ['型号', 'W1739S00002'])
+    }, local(['Color', 'Red', 'MANUAL']))
+    expect(plan.fills).toEqual([])
+    expect(plan.skipped.find(item => item.name === 'Color')?.reason).toContain('人工')
+    expect(plan.fills.map(item => item.name)).not.toContain('Model')
+  })
+
+  it('英文同名直填不受别名影响（回归）', () => {
+    const plan = planEbaySpecificsFill(seats, { title: '', descriptionText: '', local: local(['Color', 'Blue']) })
+    expect(plan.fills).toEqual([{ name: 'Color', value: 'Blue', source: 'ENUM_MATCH' }])
+  })
+})
+
+/**
+ * K1：真机通知曾把「规则档跳过」当成「最终未填」上屏——Brand/Seat Type 明明被 AI 填上了，
+ * 通知仍点名它们「本地没有该属性的记录」。未填清单必须按最终 fills 反推，逐行给真实原因。
+ */
+describe('ebaySpecificsUnfilledRows · 未填清单按最终结果反推（K1）', () => {
+  const slots = [
+    slot({ name: 'Brand', required: true }),
+    slot({ name: 'Color', group: 'OPTIONAL' }),
+    slot({ name: 'Seat Type', group: 'OPTIONAL' }),
+    slot({ name: 'UPC', group: 'OPTIONAL', control: 'TEXT' })
+  ]
+  const ruleSkipped = [
+    { name: 'Brand', reason: '本地没有该属性的记录' },
+    { name: 'Color', reason: '本地没有该属性的记录' },
+    { name: 'Seat Type', reason: '本地没有该属性的记录' },
+    { name: 'UPC', reason: '本地没有该属性的记录' }
+  ]
+
+  it('被 AI 填上的行不再出现在未填清单里，哪怕规则档跳过过它', () => {
+    const fills = [
+      { name: 'Brand', value: 'Unbranded', source: 'AI' as const },
+      { name: 'Color', value: 'Black', source: 'ENUM_MATCH' as const },
+      { name: 'Seat Type', value: 'Bucket Seat With Headrest', source: 'AI' as const }
+    ]
+    expect(ebaySpecificsUnfilledRows(slots, fills, ruleSkipped)).toEqual([
+      { name: 'UPC', reason: '本地没有该属性的记录' }
+    ])
+  })
+
+  it('模型没作答或答案被拒的行给真实原因，不冒充规则档原因', () => {
+    const fills = [{ name: 'Color', value: 'Black', source: 'ENUM_MATCH' as const }]
+    const rows = ebaySpecificsUnfilledRows(slots, fills, [{ name: 'Color', reason: '本地没有该属性的记录' }])
+    expect(rows.map(r => r.name)).toEqual(['Brand', 'Seat Type', 'UPC'])
+    expect(rows.every(r => r.reason === 'AI 复核未给出可收的值')).toBe(true)
+  })
+
+  it('全部填上时未填清单为空；大小写不敏感认同名', () => {
+    const fills = slots.map(s => ({ name: s.name.toLowerCase(), value: 'x', source: 'AI' as const }))
+    expect(ebaySpecificsUnfilledRows(slots, fills, ruleSkipped)).toEqual([])
   })
 })
