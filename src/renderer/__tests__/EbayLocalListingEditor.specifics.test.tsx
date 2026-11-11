@@ -482,3 +482,18 @@ describe('EbayLocalListingEditor · 05 段头两个功能键（H4）', () => {
     expect(filled).toContain('上次自动填写 2026/11/11 16:20:00')
   })
 })
+
+describe('EbayLocalListingEditor · 菜单槽候选下拉（I4）', () => {
+  it('捕获的候选进 datalist 可下拉选；虚拟化未列全与多选口径如实标注', () => {
+    const slots = [
+      slot({ name: 'Brand', required: true, menuOptions: ['Unbranded', '1', '16:1'], menuOptionsTotal: 3, menuOptionsComplete: true }),
+      slot({ name: 'Placement on Vehicle', control: 'MENU_MULTI', menuMulti: true, menuOptions: ['Driver Side', 'Front'], menuOptionsTotal: 8, menuOptionsComplete: false })
+    ]
+    const band = specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSection: sectionOf(slots) })} />))
+    expect(band).toContain('<datalist')
+    expect(band).toContain('value="Unbranded"')
+    expect(band).toContain('候选 3/3')
+    expect(band).toContain('多选（逗号分隔）')
+    expect(band).toContain('候选 2/8（虚拟化未列全，准备时按名检索复核）')
+  })
+})

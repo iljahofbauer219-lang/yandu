@@ -96,6 +96,8 @@ button[data-ebay-slot="section-action"]:disabled{background:#ececec;border-color
 .ebay-specifics-actions button:hover:not(:disabled){background:#e8f5f4}
 .ebay-specifics-actions button:disabled{border-color:#dcdcdc;background:#f5f5f5;color:#767676;cursor:progress}
 .ebay-specifics-actions .ebay-band-stamp{margin:0}
+/* I4：菜单槽候选来源说明（捕获数/总数、多选口径、虚拟化未列全）——12px 灰，与计数同族 */
+.ebay-specific-menu-note{display:block;margin:2px 0 0;font-size:12px;line-height:16px;color:#707070}
 
 /* 02 标题 / 03 类目 = 现网 AddItem TITLE 与 ITEM CATEGORY 段逐值复刻（2026-11-11 量测，
    ~/.yandu-acceptance/2026-11-11-G1/G1-title-category.json、G1-title-body.json）：两段 H2 同 16px/700 + uppercase；

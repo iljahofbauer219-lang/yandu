@@ -45,10 +45,19 @@ function normalizeYesNo(rawValue: string): string {
   return rawValue.trim()
 }
 
+/** 菜单捕获候选：大小写不敏感命中后取现网拼写；多选值逐段归一再用逗号拼回。 */
+function normalizeMenuValue(slot: EbayItemSpecificSlot, value: string): string {
+  const captured = [...(slot.menuOptions || []), ...slot.options.map(option => option.text)]
+  const pick = (part: string) => captured.find(option => sameName(option, part)) || part
+  if (slot.control === 'MENU_MULTI') return value.split(',').map(part => pick(part.trim())).filter(Boolean).join(', ')
+  return pick(value)
+}
+
 /** 把值归一到现网原文：Yes/No 归一；候选值按大小写不敏感命中后取现网拼写。 */
 export function normalizeSpecificValue(slot: EbayItemSpecificSlot, rawValue: string): string {
   const value = rawValue.trim()
   if (slot.control === 'YESNO') return normalizeYesNo(value)
+  if (slot.control === 'MENU' || slot.control === 'MENU_MULTI') return normalizeMenuValue(slot, value)
   const hit = slot.options.find(option => sameName(option.text, value))
   return hit ? hit.text : value
 }
@@ -60,6 +69,16 @@ export function specificValueIssue(slot: EbayItemSpecificSlot, rawValue: string)
   // Yes/No 与候选值白名单都要拿归一后的值比：本地记的「是/否」、大小写差异都算同一个值
   const normalized = normalizeSpecificValue(slot, value)
   if (slot.control === 'YESNO' && !['Yes', 'No'].includes(normalized)) return 'Yes/No 槽位只收 Yes 或 No'
+  if (slot.control === 'MENU' || slot.control === 'MENU_MULTI') {
+    // 白名单只在「捕获数==总数」时闭合；虚拟化大列表只读到一页，预拒会把真值挡在门外，交给写页按名检索复核
+    const captured = slot.menuOptions || []
+    if (captured.length && slot.menuOptionsComplete) {
+      const parts = slot.control === 'MENU_MULTI' ? value.split(',').map(part => part.trim()).filter(Boolean) : [value]
+      const bad = parts.find(part => !captured.some(option => sameName(option, part)))
+      if (bad) return '不在现网候选值白名单内'
+    }
+    // 捕获不完整或没捕获时不预拒：继续走下面的 pill 白名单/长度判据，真值交给写页按名检索复核
+  }
   if (slot.maxLength > 0 && value.length > slot.maxLength) return `超过长度上限 ${slot.maxLength}`
   if (slot.options.length && !slot.options.some(option => sameName(option.text, normalized))) return '不在现网候选值白名单内'
   return ''

@@ -36,6 +36,12 @@ export interface EbayItemSpecificsRawRow {
   pills?: Array<{ text: string; pressed: boolean }>
   /** 该行在读取当下是否可见；折叠态被现网摘掉的行不会进 rows，此位只作如实记录 */
   hidden?: boolean
+  /** I1：菜单面板打开态捕获的候选原文（虚拟化列表只回已渲染那一页）；非菜单行或没开成面板为空 */
+  menuOptions?: string[]
+  /** 面板头部「Rendered X out of Y options」的 Y；读不到记 0 */
+  menuOptionsTotal?: number
+  /** 面板是复选多选形（.filter-menu__items）还是单选形（.menu__items）；现网没有原生 checkbox，靠类名判 */
+  menuMulti?: boolean
 }
 
 export interface EbayItemSpecificsRaw {
@@ -58,7 +64,7 @@ export interface EbayItemSpecificSlot {
   group: 'ESSENTIAL' | 'OPTIONAL'
   /** 现网组标题原文（Required / Additional (optional) / Essential / Optional）；读不到则空串 */
   groupLabel: string
-  control: 'MENU' | 'TEXT' | 'TEXTAREA' | 'YESNO'
+  control: 'MENU' | 'MENU_MULTI' | 'TEXT' | 'TEXTAREA' | 'YESNO'
   required: boolean
   placeholder: string
   /**
@@ -77,6 +83,14 @@ export interface EbayItemSpecificSlot {
   metaKind: 'TRENDING' | 'SEARCH_COUNT' | ''
   /** Yes/No 双 pill 的原文与选中态；非 pill 控件为空数组 */
   options: Array<{ text: string; pressed: boolean }>
+  /** 菜单面板捕获的候选原文；非菜单行或没开成面板为空数组 */
+  menuOptions?: string[]
+  /** 面板选项总数（「Rendered X out of Y」的 Y）；读不到记 0 */
+  menuOptionsTotal?: number
+  /** 捕获数等于总数：白名单才闭合；虚拟化大列表只捕获一页时为假，写页按名检索复核 */
+  menuOptionsComplete?: boolean
+  /** 复选多选形菜单；值按逗号分隔的子集校验 */
+  menuMulti?: boolean
   y: number
 }
 
@@ -158,7 +172,7 @@ export function parseEbayItemSpecificsSection(raw?: EbayItemSpecificsSectionRaw)
             : heading ? 'OPTIONAL'
               : optionalY === undefined || row.y >= optionalY ? 'OPTIONAL' : 'ESSENTIAL',
       groupLabel,
-      control,
+      control: control === 'MENU' && row.menuMulti ? 'MENU_MULTI' : control,
       required: /\*/.test(clean(row.labelText)) || /required-field/i.test(clean(row.labelClass)) || /required/i.test(groupLabel),
       placeholder,
       placeholderShown: control === 'MENU' ? value : placeholder,
@@ -169,6 +183,10 @@ export function parseEbayItemSpecificsSection(raw?: EbayItemSpecificsSectionRaw)
       meta,
       metaKind: TRENDING.test(meta) ? 'TRENDING' : meta ? 'SEARCH_COUNT' : '',
       options: pills.map(pill => ({ text: clean(pill?.text), pressed: Boolean(pill?.pressed) })),
+      menuOptions: (row.menuOptions || []).map(item => clean(item)).filter(Boolean),
+      menuOptionsTotal: Number.isFinite(row.menuOptionsTotal) && (row.menuOptionsTotal as number) > 0 ? row.menuOptionsTotal as number : 0,
+      menuOptionsComplete: Boolean(row.menuOptions?.length) && (row.menuOptionsTotal || 0) <= (row.menuOptions || []).length,
+      menuMulti: Boolean(row.menuMulti),
       y: row.y
     }
   }

@@ -375,3 +375,46 @@ describe('parseEbayItemSpecificsSection · AddItem 现网原文（图1-4 形状�
     expect(section.collapsedSlotNames).toEqual([])
   })
 })
+
+/**
+ * I2：菜单槽位的下拉选项原文（2026-11-11 现网导出 ~/.yandu-acceptance/2026-11-11-I1/I1-menu-panels.json）。
+ * 现网两形：Brand 面板是 .menu__items 单选列表且虚拟化（头部原文「Rendered 50 out of 10184 options in …」），
+ * Placement on Vehicle 面板是 .filter-menu__items 复选列表（无原生 checkbox，多选靠类名判）。
+ * 判据留在这里：捕获数==总数才算白名单闭合；复选形判 MENU_MULTI；非菜单行一律空。
+ */
+describe('ebayItemSpecificsModel · 菜单面板选项捕获', () => {
+  const menuRow = (patch: Record<string, unknown> = {}) => ({
+    name: 'attributes.Brand', id: '', tag: 'BUTTON', controlClass: 'se-expand-button__button fake-menu-button__button btn',
+    labelText: 'Brand *', labelClass: 'summary__attributes--label required-field', text: '', value: '', placeholder: '',
+    panelPlaceholder: 'Search or enter your own', maxLength: '', valueText: '', y: 1545, ...patch
+  })
+  const sectionOfRows = (rows: unknown[]) => parseEbayItemSpecificsSection({
+    rows, groups: [], toggles: [], customAction: '', collapsed: undefined
+  } as never)
+
+  it('单选形面板：选项与总数照抄，捕获数等于总数即白名单闭合', () => {
+    const slot = sectionOfRows([menuRow({ menuOptions: ['Unbranded', '1', '16:1'], menuOptionsTotal: 3, menuMulti: false })]).slots[0]
+    expect(slot.control).toBe('MENU')
+    expect(slot.menuOptions).toEqual(['Unbranded', '1', '16:1'])
+    expect(slot.menuOptionsTotal).toBe(3)
+    expect(slot.menuOptionsComplete).toBe(true)
+    expect(slot.menuMulti).toBe(false)
+  })
+
+  it('虚拟化大列表只捕获一页：完整标记为假，白名单不闭合交给写页按名复核', () => {
+    const slot = sectionOfRows([menuRow({ menuOptions: Array.from({ length: 50 }, (_, index) => `opt${index}`), menuOptionsTotal: 10184, menuMulti: false })]).slots[0]
+    expect(slot.menuOptionsComplete).toBe(false)
+    expect(slot.menuOptionsTotal).toBe(10184)
+  })
+
+  it('复选形面板判 MENU_MULTI；非菜单行四个新字段一律空值', () => {
+    const multi = sectionOfRows([menuRow({ name: 'attributes.Placement on Vehicle', labelText: 'Placement on Vehicle', labelClass: 'summary__attributes--label', menuOptions: ['Driver Side', 'Front'], menuOptionsTotal: 8, menuMulti: true })]).slots[0]
+    expect(multi.control).toBe('MENU_MULTI')
+    expect(multi.menuMulti).toBe(true)
+    const input = sectionOfRows([{ ...menuRow(), name: 'attributes.UPC', tag: 'INPUT', controlClass: 'textbox__control', labelText: 'UPC', labelClass: 'summary__attributes--label', placeholder: 'Enter number' }]).slots[0]
+    expect(input.menuOptions).toEqual([])
+    expect(input.menuOptionsTotal).toBe(0)
+    expect(input.menuOptionsComplete).toBe(false)
+    expect(input.menuMulti).toBe(false)
+  })
+})

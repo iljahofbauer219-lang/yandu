@@ -646,6 +646,9 @@ describe('H5 · 类目属性写页与回读落定', () => {
     expect(script).toContain('se-expand-button__button')
     expect(script).toContain('aria-pressed')
     expect(script).toContain('textbox__control')
+    // I5：菜单写页先点面板已渲染候选、点不到再检索；多选值按逗号逐段点
+    expect(script).toContain('.filter-menu__items')
+    expect(script).toContain("row.value.split(',')")
   })
 
   it('本地没记属性值时不写不记，prepare 调用次数与 H5 之前一致', async () => {

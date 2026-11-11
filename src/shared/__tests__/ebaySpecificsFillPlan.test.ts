@@ -92,3 +92,28 @@ describe('ebaySpecificsFillPlan · LLM 复核答案只收白名单内', () => {
     ])
   })
 })
+
+describe('ebaySpecificsFillPlan · 菜单捕获选项的白名单口径（I2/I4）', () => {
+  const menu = (patch: Partial<EbayItemSpecificSlot>): EbayItemSpecificSlot => ({
+    name: 'Brand', group: 'ESSENTIAL', groupLabel: 'Required', control: 'MENU', required: true, placeholder: '',
+    placeholderShown: '', maxLength: 0, value: '', suggested: '', counter: '', meta: '', metaKind: '', options: [],
+    menuOptions: [], menuOptionsTotal: 0, menuOptionsComplete: false, menuMulti: false, y: 0, ...patch
+  })
+
+  it('白名单闭合的菜单槽：候选内收、候选外拒', () => {
+    const slot = menu({ menuOptions: ['Unbranded', '16:1'], menuOptionsTotal: 2, menuOptionsComplete: true })
+    expect(specificValueIssue(slot, 'Unbranded')).toBe('')
+    expect(specificValueIssue(slot, 'MadeUp Brand')).not.toBe('')
+  })
+
+  it('虚拟化未闭合的菜单槽不拦真值：写页会按名检索复核，这里不预拒', () => {
+    const slot = menu({ menuOptions: ['Unbranded'], menuOptionsTotal: 10184, menuOptionsComplete: false })
+    expect(specificValueIssue(slot, 'Some Rare Brand')).toBe('')
+  })
+
+  it('多选槽收逗号子集，任一成员不在闭合候选内即拒', () => {
+    const slot = menu({ name: 'Placement on Vehicle', control: 'MENU_MULTI', menuOptions: ['Driver Side', 'Front', 'Rear'], menuOptionsTotal: 3, menuOptionsComplete: true, menuMulti: true })
+    expect(specificValueIssue(slot, 'Driver Side, Rear')).toBe('')
+    expect(specificValueIssue(slot, 'Driver Side, Middle')).not.toBe('')
+  })
+})

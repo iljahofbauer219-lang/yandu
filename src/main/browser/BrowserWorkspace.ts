@@ -2078,6 +2078,35 @@ export class BrowserWorkspace {
       const attributeCustomAction=collected.customAction;
       const attributeCollapsedRows=attributeCollapsed?attributeCollapsed.rows:[];
       const attributeCollapsedToggles=attributeCollapsed?attributeCollapsed.toggles:[];
+      // I1：菜单槽位的候选原文静态 DOM 里没有，必须开面板才拿得到（现网两形：.menu__items 单选列表、
+      // .filter-menu__items 复选列表；Brand 这类大列表虚拟化，头部原文「Rendered 50 out of 10184 options」）。
+      // 逐行 开→读→关；单行开面板失败只留空选项，绝不让整次读取跟着失败（门禁不得 brick 操作）。
+      const captureMenuOptions=async(rows)=>{
+        const pause=ms=>new Promise(r=>setTimeout(r,ms));
+        for(const row of rows){
+          if(row.tag!=='BUTTON'||!/se-expand-button/.test(row.controlClass||''))continue;
+          try{
+            const label=clean(row.labelText).replace(/\s*\*$/,'');
+            const field=[...document.querySelectorAll('.summary__attributes--field')].find(f=>{const l=f.querySelector('.summary__attributes--label');return l&&clean((l.innerText||l.textContent||'').split('\n')[0]).replace(/\s*\*$/,'')===label});
+            const btn=field?field.querySelector('button.se-expand-button__button'):null;
+            if(!btn)continue;
+            btn.click();await pause(650);
+            const panel=[...document.querySelectorAll('.se-filter-menu-button__menu-container')].find(m=>m.getClientRects().length);
+            if(panel){
+              const multiList=panel.querySelector('.filter-menu__items');
+              const list=multiList||panel.querySelector('.menu__items');
+              const head=clean(((panel.querySelector('.se-filter-menu-button__list-menu')||panel).textContent)||'');
+              const total=Number(String((head.match(/out of\s+([\d,]+)\s+options/i)||[])[1]||'').replace(/,/g,''))||0;
+              const opts=list?[...list.children].map(el=>clean(el.textContent)).filter(t=>t&&t.length<80):[];
+              row.menuOptions=opts;
+              row.menuOptionsTotal=total||opts.length;
+              row.menuMulti=Boolean(multiList);
+            }
+            btn.click();await pause(250);
+          }catch(error){row.menuOptions=[];row.menuOptionsTotal=0;row.menuMulti=false}
+        }
+      };
+      await captureMenuOptions(attributeRows);
       return {url:location.href,login,verification,ready:Boolean(titleField),categorySpecifics,policyOptions,policyModels,attributeGroups,attributeRows,attributeToggles,attributeCustomAction,attributeCollapsedRows,attributeCollapsedToggles,attributeCard};
     })()`
     let result:{url:string;login:boolean;verification:boolean;ready:boolean;categorySpecifics:EbayCategorySpecificRequirement[];policyOptions:Array<{kind:string;raw:string;selected:boolean}>;policyModels:Record<string,string>;attributeGroups:EbayItemSpecificsRaw['groups'];attributeRows:EbayItemSpecificsRaw['rows'];attributeToggles:Array<{text:string}>;attributeCustomAction:string;attributeCollapsedRows:EbayItemSpecificsRaw['rows'];attributeCollapsedToggles:Array<{text:string}>;attributeCard:EbayItemSpecificsCardRaw}={url:reviseUrl,login:false,verification:false,ready:false,categorySpecifics:[],policyOptions:[],policyModels:{paymentPolicy:'',shippingPolicy:'',returnPolicy:''},attributeGroups:[],attributeRows:[],attributeToggles:[],attributeCustomAction:'',attributeCollapsedRows:[],attributeCollapsedToggles:[],attributeCard:{text:'',options:[],buttons:[]}}
@@ -2346,19 +2375,34 @@ export class BrowserWorkspace {
               const same=clean(input.value)===clean(row.value);
               out.push({name:row.name,settled:same,reason:same?'':'回读不一致'})
             } else {
+              // I5：先在面板已渲染的候选里按原文点（读取时捕获的那一页），点不到再走面板检索框按名搜；
+              // 多选形（MENU_MULTI）把值按逗号拆成多段逐段点选；写完关面板并回读落定。
               const menu=field.querySelector('button.se-expand-button__button');
               if(!menu){out.push({name:row.name,settled:false,reason:'页面没有菜单控件'});continue}
               menu.click();await wait(700);
-              const panelInput=[...document.querySelectorAll('input')].find(i=>/Search or enter your own/i.test(i.placeholder||'')&&i.getClientRects().length);
-              if(!panelInput){out.push({name:row.name,settled:false,reason:'菜单面板没打开'});continue}
-              setNative(panelInput,row.value);await wait(1200);
-              const option=[...document.querySelectorAll('li[role=option],[role=menuitem],button')].filter(el=>el.getClientRects().length&&clean(el.textContent).toLowerCase()===row.value.toLowerCase())[0];
-              if(!option){menu.click();await wait(300);out.push({name:row.name,settled:false,reason:'候选里没有该值'});continue}
-              option.click();await wait(600);
+              const panel=[...document.querySelectorAll('.se-filter-menu-button__menu-container')].find(m=>m.getClientRects().length);
+              if(!panel){out.push({name:row.name,settled:false,reason:'菜单面板没打开'});continue}
+              const list=panel.querySelector('.filter-menu__items')||panel.querySelector('.menu__items');
+              const parts=row.control==='MENU_MULTI'?row.value.split(',').map(part=>clean(part)).filter(Boolean):[row.value];
+              const pick=async part=>{
+                let target=list?[...list.children].find(el=>clean(el.textContent).toLowerCase()===part.toLowerCase()):null;
+                if(!target){
+                  const panelInput=panel.querySelector('input');
+                  if(!panelInput)return null;
+                  setNative(panelInput,part);await wait(1100);
+                  target=list?[...list.children].find(el=>clean(el.textContent).toLowerCase()===part.toLowerCase()):null;
+                }
+                if(target){target.click();await wait(350)}
+                return target;
+              };
+              let done=0;
+              for(const part of parts){const picked=await pick(part);if(picked)done+=1;else break}
+              const stillOpen=[...document.querySelectorAll('.se-filter-menu-button__menu-container')].find(m=>m.getClientRects().length);
+              if(stillOpen){menu.click();await wait(300)}
               const after=rowOf(row.name);
               const valueText=after?clean(after.textContent):'';
-              const hit=valueText.toLowerCase().includes(row.value.toLowerCase());
-              out.push({name:row.name,settled:hit,reason:hit?'':'回读不含该值'})
+              const settled=done===parts.length&&parts.every(part=>valueText.toLowerCase().includes(part.toLowerCase()));
+              out.push({name:row.name,settled,reason:settled?'':(done<parts.length?'候选里没有该值':'回读不含该值')})
             }
           }catch(error){out.push({name:row.name,settled:false,reason:'写入异常：'+(error&&error.message?error.message:'unknown')})}
         }

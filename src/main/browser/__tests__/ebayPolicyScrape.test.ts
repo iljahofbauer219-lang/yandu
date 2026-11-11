@@ -242,8 +242,10 @@ describe('ReviseItem 政策抓取 · 页内脚本边界', () => {
     // 零新 API 底线：只读 DOM，绝不提交；唯一例外是视觉折叠开关 Show more 的一次点击，
     // 它只改页面折叠态、折叠遍与展开遍都如实回传由 TS 侧解（AddItem 取证 2026-11-09 22:1x）
     expect(script).not.toMatch(/form\.submit\(|\.submit\(|type="submit"/)
-    expect(script.match(/\.click\(/g) || []).toHaveLength(1)
+    // I3 之后点击例外多了一类：菜单面板的 开/关 两次 btn.click()（只读候选原文、不改任何值），加 Show more 共三次
+    expect(script.match(/\.click\(/g) || []).toHaveLength(3)
     expect(script).toContain('showMore.click()')
+    expect((script.match(/btn\.click\(\)/g) || []).length).toBe(2)
   })
 
   it('页内一个下拉只认一个类别：已认领的节点会被后续类别跳过（双认领会让 DAO 互抹政策）', async () => {
@@ -337,8 +339,10 @@ describe('ReviseItem 政策抓取 · 内嵌模型优先（R2 现网控件是 com
     expect(script).toContain('policyModels')
     expect(script).not.toContain('d{6,}')
     expect(script).not.toMatch(/form\.submit\(|\.submit\(|type="submit"/)
-    expect(script.match(/\.click\(/g) || []).toHaveLength(1)
+    // I3 之后点击例外多了一类：菜单面板的 开/关 两次 btn.click()（只读候选原文、不改任何值），加 Show more 共三次
+    expect(script.match(/\.click\(/g) || []).toHaveLength(3)
     expect(script).toContain('showMore.click()')
+    expect((script.match(/btn\.click\(\)/g) || []).length).toBe(2)
   })
 })
 
@@ -384,8 +388,10 @@ describe('ReviseItem 类目属性段抓取 · 槽位清单（R5 现网 ITEM SPEC
     // 判据用的类名与组名一个都不许出现在页内：页面只把 className/标签文本当原文抄走
     expect(section).not.toMatch(/parseEbayItemSpecifics|required-field|fake-menu-button|ESSENTIAL|OPTIONAL|YESNO|TRENDING|SEARCH_COUNT/)
     expect(script).not.toMatch(/form\.submit\(|\.submit\(|type="submit"/)
-    expect(script.match(/\.click\(/g) || []).toHaveLength(1)
+    // I3 之后点击例外多了一类：菜单面板的 开/关 两次 btn.click()（只读候选原文、不改任何值），加 Show more 共三次
+    expect(script.match(/\.click\(/g) || []).toHaveLength(3)
     expect(script).toContain('showMore.click()')
+    expect((script.match(/btn\.click\(\)/g) || []).length).toBe(2)
   })
 
   it('一段槽位都没读到 → 点名「页面未读取到类目属性」且返回空数组，不抛错（门禁不能 brick 读取动作）', async () => {
@@ -552,5 +558,21 @@ describe('读取刊登规则 · 开页路由（C5：载体优先 revise，缺载
     await expect(inspectMethod.call(made.host, 'ebay:s1', 'PALLET-X', 'Bracket', 'not-a-category'))
       .rejects.toThrow(/List an item|新建刊登/)
     expect((made.host.newEbayTab as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0)
+  })
+})
+
+describe('ReviseItem 政策抓取 · I3 菜单面板选项捕获', () => {
+  it('inspect 脚本逐行开菜单面板收候选原文：单选/复选两形、虚拟化总数、开完即关、单行失败留空', async () => {
+    const { host, scripts } = makeHost({})
+    await inspectMethod.call(host, 'ebay:s1', '189035181453', 'Bracket')
+    const script = scripts[0]
+    expect(script).toContain('captureMenuOptions')
+    expect(script).toContain('.se-filter-menu-button__menu-container')
+    expect(script).toContain('.filter-menu__items')
+    expect(script).toContain('out of\\s+([\\d,]+)\\s+options')
+    expect(script).toContain('row.menuOptions=opts')
+    // 开与关各点一次：面板不留在页面上，也不多点别的
+    expect((script.match(/btn\.click\(\)/g) || []).length).toBe(2)
+    expect(script).toContain('catch(error){row.menuOptions=[]')
   })
 })

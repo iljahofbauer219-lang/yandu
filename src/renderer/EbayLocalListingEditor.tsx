@@ -267,9 +267,11 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
             <div className="ebay-specific-pills" role="group" aria-label={slot.name}>
               {slot.options.map(option=>(<button type="button" className={`ebay-specific-pill${value===option.text?' ebay-specific-pill--on':''}`} key={option.text} aria-pressed={value===option.text} onClick={()=>writeSlotValue(value===option.text?'':option.text)}>{option.text}</button>))}
             </div>
-          ):slot.control==='MENU'?(
+          ):slot.control==='MENU'||slot.control==='MENU_MULTI'?(
             <div className="ebay-specific-menu">
-              <input name={slot.name} value={value} placeholder={slot.placeholderShown} className={slot.placeholderShown?'ebay-specific-menu-input--live':undefined} onChange={event=>writeSlotValue(event.target.value)}/>
+              {/* I4：候选原文来自读取时开面板捕获（类目缓存复用）；datalist 既可下拉选也保留手打，五硬要求「可手改」 */}
+              <input name={slot.name} value={value} list={`ebay-specific-options-${slot.name.replace(/\W+/g,'-')}`} placeholder={slot.placeholderShown} className={slot.placeholderShown?'ebay-specific-menu-input--live':undefined} onChange={event=>writeSlotValue(event.target.value)}/>
+              <datalist id={`ebay-specific-options-${slot.name.replace(/\W+/g,'-')}`}>{(slot.menuOptions||[]).map(option=><option value={option} key={option}/>)}</datalist>
               <svg className="ebay-specific-menu-caret" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M3 5.75 8 10.75l5-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             </div>
           ):slot.control==='TEXTAREA'?(
@@ -278,6 +280,7 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
             <input name={slot.name} value={value} placeholder={slot.placeholderShown} onChange={event=>writeSlotValue(event.target.value)}/>
           )}
           {slot.control==='TEXTAREA'&&slot.maxLength>0&&<span className="ebay-specific-counter">{`${value.length}/${slot.maxLength}`}</span>}
+          {(slot.control==='MENU'||slot.control==='MENU_MULTI')&&(slot.menuOptions||[]).length>0&&<em className="ebay-specific-menu-note">{`${slot.control==='MENU_MULTI'?'多选（逗号分隔）· ':''}候选 ${(slot.menuOptions||[]).length}/${slot.menuOptionsTotal||slot.menuOptions?.length||0}${slot.menuOptionsComplete?'':'（虚拟化未列全，准备时按名检索复核）'}`}</em>}
           {slot.suggested&&<button type="button" className="ebay-specific-suggested" onClick={()=>writeSlotValue(slot.suggested)}>{`Suggested: ${slot.suggested}`}</button>}
           {Boolean(slot.value)&&slot.value!==value&&<em className="ebay-specific-live">{`eBay 线上原值：${slot.value}`}</em>}
           {local?.source&&<em className="ebay-specific-source">{`${SOURCE_LABELS[local.source]}${local.needsConfirmation?' · 待确认':''}`}</em>}
