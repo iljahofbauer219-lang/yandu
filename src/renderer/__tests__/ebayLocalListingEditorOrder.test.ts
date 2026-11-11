@@ -41,8 +41,8 @@ describe('本地产品编辑器 · 逐段复刻 eBay 现网修改页布局', () 
   it('段序与 eBay 一致且不带数字编号（真页段名是 PHOTOS & VIDEO 这类，没有 01/02）', () => {
     expect(h2Sequence()).toEqual([
       'Photos & Video',
-      '标题',
-      '类目',
+      'Title',
+      'Item category',
       '变体',
       '类目属性',
       '状况',

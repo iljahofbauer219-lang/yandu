@@ -387,8 +387,17 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
           </section>
 
           <section id="ebay-revise-title" className="ebay-revise-band">
-            <header className="ebay-revise-band-head"><div><h2>标题</h2><p>只保存买家在商品页看到的主标题。</p></div><span className="ebay-band-counter" data-ebay-slot="section-action" data-ebay-counter="title">{draft.title.length}/80</span></header>
-            <label className="ebay-revise-field"><span>物品标题</span><div><input maxLength={80} value={draft.title} onChange={event=>set('title',event.target.value)}/></div></label>
+            <header className="ebay-revise-band-head">
+              <div>
+                <h2><Bi en="Title" zh="标题"/></h2>
+                <p className="ebay-band-local-note">只保存买家在商品页看到的主标题。</p>
+              </div>
+              {/* 现网这一处是菜单（标题建议/关键词）；APP 的标题优化在 AI优化 页做，这里只如实显示，不做假按钮。 */}
+              <span className="ebay-band-action-pill" data-ebay-slot="section-action" title="现网这一处是菜单：标题建议与关键词。APP 的标题优化在「AI优化」页做，这里只如实显示。"><Bi en="See title options" zh="查看标题选项"/></span>
+            </header>
+            <label className="ebay-revise-field"><span><Bi en="Item title" zh="物品标题"/></span><div><input className="ebay-title-input" maxLength={80} value={draft.title} onChange={event=>set('title',event.target.value)}/></div></label>
+            {/* 现网计数 72/80 贴在输入框下方右对齐（12px 灰），不在段头；读屏文「72 of 80 characters」由中文对照行承担。 */}
+            <div className="ebay-title-counter" data-ebay-counter="title"><Bi en={`${draft.title.length}/80`} zh={`80 个字符中的 ${draft.title.length} 个`}/></div>
             <div className="ebay-revise-field ebay-sku-row">
               <span>自定义编号（SKU）</span>
               <div className="ebay-sku-control">
@@ -400,10 +409,22 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
           </section>
 
           <section id="ebay-revise-category" className="ebay-revise-band ebay-revise-category-section">
-            <header className="ebay-revise-band-head"><div><h2>类目</h2><p>与 eBay 修改页同序：左栏平台类目（eBay Item category），右栏店铺类目（Store category）。</p></div><span data-ebay-slot="section-action">{platformCategory?.savedName||product.categoryName||'未分类'}</span></header>
+            <header className="ebay-revise-band-head">
+              <div>
+                <h2><Bi en="Item category" zh="类目"/></h2>
+                <p className="ebay-band-local-note">左栏平台类目（eBay Item category），右栏店铺类目（Store category）；下拉与按钮是 APP 本地控件，现网用 Edit 在 eBay 页改。</p>
+              </div>
+              {/* 现网这一处是 Edit 图标按钮（点开 eBay 类目选择）；APP 用左栏下拉 + 确定完成同一件事，不画假按钮。 */}
+              <span className="ebay-band-action-pill" data-ebay-slot="section-action" title="现网这一处是 Edit 图标按钮，点开 eBay 的类目选择；APP 用左栏下拉 + 确定完成同一件事。"><Bi en="Edit" zh="编辑"/></span>
+            </header>
             <div className="ebay-revise-cols">
               <div className="ebay-revise-category-row" data-ebay-col="left">
-                <h3>平台类目</h3>
+                {/* 现网左栏没有小标题：类目值是一条下划线值链，下面一行 in 开头的面包屑（14px 灰）。值与路径是数据，照本地存的原样画。 */}
+                {platformCategory?.savedName?(<>
+                  <span className="ebay-value-link">{platformCategory.savedName.split(' > ').pop()}</span>
+                  <span className="ebay-value-secondary">in {platformCategory.savedName}</span>
+                </>):null}
+                <p className="ebay-band-local-note">平台类目选择（本地）</p>
                 {platformCategory?(<>
                   <CustomCategoryDropdown
                     options={platformCategory.options}
@@ -420,7 +441,9 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
                 {platformCategory?.error&&<p className="ebay-revise-category-error" role="alert">{platformCategory.error}</p>}
               </div>
               <div className="ebay-revise-category-row" data-ebay-col="right">
-                <h3>店铺类目</h3>
+                <h3><Bi en="Store category" zh="店铺类目"/></h3>
+                {product.categoryName?<span className="ebay-value-link">{product.categoryName}</span>:null}
+                <p className="ebay-band-local-note">店铺类目选择（本地）</p>
                 <select aria-label="本地产品类目" value={product.categoryId} onChange={event=>{const found=categories.find(item=>item.categoryId===event.target.value);if(found)onSetCategory(found.categoryId,found.name)}}>
                   <option value="">未分类</option>
                   {categories.map(item=><option key={item.categoryId} value={item.categoryId}>{'　'.repeat(Math.max(0,item.level-1))}{item.name}</option>)}

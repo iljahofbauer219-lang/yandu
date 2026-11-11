@@ -89,6 +89,19 @@ button[data-ebay-slot="section-action"]:disabled{background:#ececec;border-color
 .ebay-photo-add:hover:not(:disabled){background:#ececec}
 .ebay-photo-add:disabled{opacity:.6;cursor:progress}
 
+/* 02 标题 / 03 类目 = 现网 AddItem TITLE 与 ITEM CATEGORY 段逐值复刻（2026-11-11 量测，
+   ~/.yandu-acceptance/2026-11-11-G1/G1-title-category.json、G1-title-body.json）：两段 H2 同 16px/700 + uppercase；
+   标题输入框外层 .textbox--large 是 bg rgb(247,247,247)、border 0.6px solid rgb(143,143,143)、radius 8、高 46、宽 975；
+   计数「72/80」12px/400 rgb(112,112,112) 右对齐贴在框下；类目值链与店铺类目值都是 14px/400 下划线 fake-link，
+   面包屑 .value-secondary 是 14px/400 rgb(112,112,112)。右侧 See title options / Edit 照 F 批口径画文字胶囊。 */
+#ebay-revise-title .ebay-revise-band-head h2,#ebay-revise-category .ebay-revise-band-head h2{text-transform:uppercase}
+#ebay-revise-title .ebay-title-input{width:100%;max-width:none;min-height:46px;height:auto;padding:0 16px;background:#f7f7f7;border:.6px solid #8f8f8f;border-radius:8px;font:inherit;font-size:14px;color:#191919;box-sizing:border-box}
+.ebay-title-counter{display:flex;justify-content:flex-end;margin:4px 0 0;font-size:12px;line-height:14px;color:#707070;font-variant-numeric:tabular-nums}
+.ebay-value-link{display:inline-block;font-size:14px;line-height:17px;color:#191919;text-decoration:underline}
+.ebay-value-secondary{display:block;margin:4px 0 0;font-size:14px;line-height:20px;color:#707070}
+/* 类目栏是 flex-wrap：本地说明行不占满一行就会和下拉/值链挤在同一行 */
+.ebay-revise-category-row .ebay-band-local-note{flex:0 0 100%;margin:2px 0 0}
+
 /* 字段行：现网 Title/Pricing/Shipping/Condition 一律「标签在上、控件在下」（EBAY-02/06/08/09 取证），
    只有 Item specifics 是标签在左（见 .ebay-specific-row）。宽度全部取真页实测（P1-ebay-layout.json）：
    政策类 combobox 406×40 是默认档；标题 975×46；SKU 405×38；价格 190×38；数量与文本小输入 185×38。 */
