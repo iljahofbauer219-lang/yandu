@@ -2078,35 +2078,37 @@ export class BrowserWorkspace {
       const attributeCustomAction=collected.customAction;
       const attributeCollapsedRows=attributeCollapsed?attributeCollapsed.rows:[];
       const attributeCollapsedToggles=attributeCollapsed?attributeCollapsed.toggles:[];
-      // I1：菜单槽位的候选原文静态 DOM 里没有，必须开面板才拿得到（现网两形：.menu__items 单选列表、
-      // .filter-menu__items 复选列表；Brand 这类大列表虚拟化，头部原文「Rendered 50 out of 10184 options」）。
-      // 逐行 开→读→关；单行开面板失败只留空选项，绝不让整次读取跟着失败（门禁不得 brick 操作）。
-      const captureMenuOptions=async(rows)=>{
-        const pause=ms=>new Promise(r=>setTimeout(r,ms));
+      // J1：候选列表在未点开时就已完整挂在 DOM 里（.menu__items 单选 / .filter-menu__items 复选，
+      // 大列表虚拟化，头部原文「Rendered 50 out of 10184 options」），所以整段捕获零点击、不改页面状态。
+      // 按控件 name 绑行、只读该行 field 里自己的面板：labelText 被 clean 压平后会粘上 meta 行（Color ~ 37.5K searches），
+      // 拿它比对首行标签必然认不出行——这正是上一版只有两行捕获成功的根因。
+      // 失败只回「按钮找到没/面板在不在」两样原文事实，归类与自行输入判据留在 shared；单行失败绝不拖垮整次读取。
+      const captureMenuOptions=rows=>{
+        const attrValue=value=>String(value||'').replace(/\\/g,'\\\\').replace(/"/g,'\\"');
+        const optionText=el=>{const node=el.querySelector('.filter-menu__text')||el.querySelector('span')||el;const own=[...node.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('');return clean(own)||clean(node.textContent)};
         for(const row of rows){
           if(row.tag!=='BUTTON'||!/se-expand-button/.test(row.controlClass||''))continue;
+          row.menuOptions=[];row.menuOptionsTotal=0;row.menuMulti=false;row.menuButtonFound=false;row.menuPanelFound=false;
           try{
-            const label=clean(row.labelText).replace(/\s*\*$/,'');
-            const field=[...document.querySelectorAll('.summary__attributes--field')].find(f=>{const l=f.querySelector('.summary__attributes--label');return l&&clean((l.innerText||l.textContent||'').split('\n')[0]).replace(/\s*\*$/,'')===label});
-            const btn=field?field.querySelector('button.se-expand-button__button'):null;
+            const btn=row.name?document.querySelector('button.se-expand-button__button[name="'+attrValue(row.name)+'"]'):null;
             if(!btn)continue;
-            btn.click();await pause(650);
-            const panel=[...document.querySelectorAll('.se-filter-menu-button__menu-container')].find(m=>m.getClientRects().length);
-            if(panel){
-              const multiList=panel.querySelector('.filter-menu__items');
-              const list=multiList||panel.querySelector('.menu__items');
-              const head=clean(((panel.querySelector('.se-filter-menu-button__list-menu')||panel).textContent)||'');
-              const total=Number(String((head.match(/out of\s+([\d,]+)\s+options/i)||[])[1]||'').replace(/,/g,''))||0;
-              const opts=list?[...list.children].map(el=>clean(el.textContent)).filter(t=>t&&t.length<80):[];
-              row.menuOptions=opts;
-              row.menuOptionsTotal=total||opts.length;
-              row.menuMulti=Boolean(multiList);
-            }
-            btn.click();await pause(250);
+            row.menuButtonFound=true;
+            const field=btn.closest('.summary__attributes--field');
+            const panel=field?field.querySelector('.se-filter-menu-button__menu-container'):null;
+            if(!panel)continue;
+            row.menuPanelFound=true;
+            const multiList=panel.querySelector('.filter-menu__items');
+            const list=multiList||panel.querySelector('.menu__items');
+            const head=clean(((panel.querySelector('.se-filter-menu-button__list-menu')||panel).textContent)||'');
+            const total=Number(String((head.match(/out of\s+([\d,]+)\s+options/i)||[])[1]||'').replace(/,/g,''))||0;
+            const opts=list?[...list.children].map(optionText).filter(t=>t&&t.length<80):[];
+            row.menuOptions=opts;
+            row.menuOptionsTotal=total||opts.length;
+            row.menuMulti=Boolean(multiList);
           }catch(error){row.menuOptions=[];row.menuOptionsTotal=0;row.menuMulti=false}
         }
       };
-      await captureMenuOptions(attributeRows);
+      captureMenuOptions(attributeRows);
       return {url:location.href,login,verification,ready:Boolean(titleField),categorySpecifics,policyOptions,policyModels,attributeGroups,attributeRows,attributeToggles,attributeCustomAction,attributeCollapsedRows,attributeCollapsedToggles,attributeCard};
     })()`
     let result:{url:string;login:boolean;verification:boolean;ready:boolean;categorySpecifics:EbayCategorySpecificRequirement[];policyOptions:Array<{kind:string;raw:string;selected:boolean}>;policyModels:Record<string,string>;attributeGroups:EbayItemSpecificsRaw['groups'];attributeRows:EbayItemSpecificsRaw['rows'];attributeToggles:Array<{text:string}>;attributeCustomAction:string;attributeCollapsedRows:EbayItemSpecificsRaw['rows'];attributeCollapsedToggles:Array<{text:string}>;attributeCard:EbayItemSpecificsCardRaw}={url:reviseUrl,login:false,verification:false,ready:false,categorySpecifics:[],policyOptions:[],policyModels:{paymentPolicy:'',shippingPolicy:'',returnPolicy:''},attributeGroups:[],attributeRows:[],attributeToggles:[],attributeCustomAction:'',attributeCollapsedRows:[],attributeCollapsedToggles:[],attributeCard:{text:'',options:[],buttons:[]}}
@@ -2354,7 +2356,8 @@ export class BrowserWorkspace {
         const wait=ms=>new Promise(r=>setTimeout(r,ms));
         const scope=document.querySelector('.summary__attributes')||document;
         const fields=[...scope.querySelectorAll('.summary__attributes--field')];
-        const rowOf=name=>fields.find(f=>{const label=f.querySelector('.summary__attributes--label');return label&&clean(label.textContent).replace(/\\s*\\*$/,'').toLowerCase()===String(name).toLowerCase()});
+        const rowOf=name=>{const want=String(name).toLowerCase();return fields.find(f=>{const control=f.querySelector('[name]');const raw=control?clean(control.getAttribute('name')):'';const own=raw.replace(/^(?:search-box-)?attributes[._-]?/i,'').toLowerCase();if(own&&(own===want||raw.toLowerCase()===want))return true;const label=f.querySelector('.summary__attributes--label');return Boolean(label)&&clean((label.innerText||label.textContent||'').split('\\n')[0]).replace(/\\s*\\*$/,'').toLowerCase()===want})};
+        const optionText=el=>{const node=el.querySelector('.filter-menu__text')||el.querySelector('span')||el;const own=[...node.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('');return clean(own)||clean(node.textContent)};
         const setNative=(el,value)=>{const proto=el.tagName==='TEXTAREA'?window.HTMLTextAreaElement.prototype:window.HTMLInputElement.prototype;const setter=Object.getOwnPropertyDescriptor(proto,'value').set;setter.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}))};
         const out=[];
         for(const row of __yanduSpecificsWrite){
@@ -2377,28 +2380,30 @@ export class BrowserWorkspace {
             } else {
               // I5：先在面板已渲染的候选里按原文点（读取时捕获的那一页），点不到再走面板检索框按名搜；
               // 多选形（MENU_MULTI）把值按逗号拆成多段逐段点选；写完关面板并回读落定。
+              // J3：面板与候选都认本行 field 里的那一个；列表未点开就已挂好，所以自行输入项（没有列表）
+              // 连面板都不开，直接点名跳过——绝不在 eBay 页里派发回车，避免误触整页提交。
               const menu=field.querySelector('button.se-expand-button__button');
               if(!menu){out.push({name:row.name,settled:false,reason:'页面没有菜单控件'});continue}
-              menu.click();await wait(700);
-              const panel=[...document.querySelectorAll('.se-filter-menu-button__menu-container')].find(m=>m.getClientRects().length);
-              if(!panel){out.push({name:row.name,settled:false,reason:'菜单面板没打开'});continue}
+              const panel=field.querySelector('.se-filter-menu-button__menu-container');
+              if(!panel){out.push({name:row.name,settled:false,reason:'菜单面板没读到'});continue}
               const list=panel.querySelector('.filter-menu__items')||panel.querySelector('.menu__items');
+              if(!list){out.push({name:row.name,settled:false,reason:'此项无预设候选（eBay 自行输入），请在页面人工填写'});continue}
+              menu.click();await wait(700);
               const parts=row.control==='MENU_MULTI'?row.value.split(',').map(part=>clean(part)).filter(Boolean):[row.value];
               const pick=async part=>{
-                let target=list?[...list.children].find(el=>clean(el.textContent).toLowerCase()===part.toLowerCase()):null;
+                let target=[...list.children].find(el=>optionText(el).toLowerCase()===part.toLowerCase())||null;
                 if(!target){
                   const panelInput=panel.querySelector('input');
                   if(!panelInput)return null;
                   setNative(panelInput,part);await wait(1100);
-                  target=list?[...list.children].find(el=>clean(el.textContent).toLowerCase()===part.toLowerCase()):null;
+                  target=[...list.children].find(el=>optionText(el).toLowerCase()===part.toLowerCase())||null;
                 }
                 if(target){target.click();await wait(350)}
                 return target;
               };
               let done=0;
               for(const part of parts){const picked=await pick(part);if(picked)done+=1;else break}
-              const stillOpen=[...document.querySelectorAll('.se-filter-menu-button__menu-container')].find(m=>m.getClientRects().length);
-              if(stillOpen){menu.click();await wait(300)}
+              if(panel.getClientRects().length){menu.click();await wait(300)}
               const after=rowOf(row.name);
               const valueText=after?clean(after.textContent):'';
               const settled=done===parts.length&&parts.every(part=>valueText.toLowerCase().includes(part.toLowerCase()));

@@ -78,6 +78,8 @@ const ROUTE_COPY:Record<EbayListingRouteKind,RouteCopy>={
 
 // eBay 真页 Item specifics 一次只铺开前若干行，其余收在 Show more 之后；本地按同一读数节流。
 const SPECIFICS_VISIBLE_LIMIT=6
+/** J4：没读到候选时照 shared 的归类说清原因，不画一个空下拉冒充「读到了」。 */
+const MENU_CAPTURE_ISSUE_TEXT:Record<string,string>={NO_BUTTON:'页面没有这一行的菜单控件',NO_PANEL:'菜单面板没读到',NO_LIST:'面板里没有候选列表'}
 
 type ValidationIssue={level:'ERROR'|'WARNING';section:string;message:string}
 
@@ -259,6 +261,12 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
     const local=localIndex>=0?specifics[localIndex]:undefined
     const value=local?.value??''
     const writeSlotValue=(next:string)=>set('itemSpecifics',writeSlotInto([...specifics],slot.name,next))
+    const menuOptions=slot.menuOptions||[]
+    const isMenu=slot.control==='MENU'||slot.control==='MENU_MULTI'
+    const menuNote=!isMenu?''
+      :menuOptions.length?`${slot.control==='MENU_MULTI'?'多选（逗号分隔）· ':''}候选 ${menuOptions.length}/${slot.menuOptionsTotal||menuOptions.length}${slot.menuOptionsComplete?'':'（虚拟化未列全，准备时按名检索复核）'}`
+        :slot.menuFreeText?'eBay 此项为自行输入，无预设候选'
+          :slot.menuCaptureIssue?`未读到候选：${MENU_CAPTURE_ISSUE_TEXT[slot.menuCaptureIssue]||''}`:''
     return (
       <div className="ebay-specific-row ebay-specific-row--slot" key={slot.name}>
         <span className={`ebay-specific-label${slot.required?' required':''}`} title={slot.name}>{slot.name}{slot.required&&<i className="ebay-specific-star" aria-label="eBay 必填属性">*</i>}{slot.meta&&<span className={slot.metaKind==='TRENDING'?'ebay-specific-meta ebay-specific-meta--trending':'ebay-specific-meta'}>{slot.meta}</span>}</span>
@@ -270,8 +278,8 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
           ):slot.control==='MENU'||slot.control==='MENU_MULTI'?(
             <div className="ebay-specific-menu">
               {/* I4：候选原文来自读取时开面板捕获（类目缓存复用）；datalist 既可下拉选也保留手打，五硬要求「可手改」 */}
-              <input name={slot.name} value={value} list={`ebay-specific-options-${slot.name.replace(/\W+/g,'-')}`} placeholder={slot.placeholderShown} className={slot.placeholderShown?'ebay-specific-menu-input--live':undefined} onChange={event=>writeSlotValue(event.target.value)}/>
-              <datalist id={`ebay-specific-options-${slot.name.replace(/\W+/g,'-')}`}>{(slot.menuOptions||[]).map(option=><option value={option} key={option}/>)}</datalist>
+              <input name={slot.name} value={value} list={menuOptions.length?`ebay-specific-options-${slot.name.replace(/\W+/g,'-')}`:undefined} placeholder={slot.placeholderShown} className={slot.placeholderShown?'ebay-specific-menu-input--live':undefined} onChange={event=>writeSlotValue(event.target.value)}/>
+              {menuOptions.length>0&&<datalist id={`ebay-specific-options-${slot.name.replace(/\W+/g,'-')}`}>{menuOptions.map(option=><option value={option} key={option}/>)}</datalist>}
               <svg className="ebay-specific-menu-caret" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M3 5.75 8 10.75l5-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             </div>
           ):slot.control==='TEXTAREA'?(
@@ -280,7 +288,7 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
             <input name={slot.name} value={value} placeholder={slot.placeholderShown} onChange={event=>writeSlotValue(event.target.value)}/>
           )}
           {slot.control==='TEXTAREA'&&slot.maxLength>0&&<span className="ebay-specific-counter">{`${value.length}/${slot.maxLength}`}</span>}
-          {(slot.control==='MENU'||slot.control==='MENU_MULTI')&&(slot.menuOptions||[]).length>0&&<em className="ebay-specific-menu-note">{`${slot.control==='MENU_MULTI'?'多选（逗号分隔）· ':''}候选 ${(slot.menuOptions||[]).length}/${slot.menuOptionsTotal||slot.menuOptions?.length||0}${slot.menuOptionsComplete?'':'（虚拟化未列全，准备时按名检索复核）'}`}</em>}
+          {menuNote&&<em className="ebay-specific-menu-note">{menuNote}</em>}
           {slot.suggested&&<button type="button" className="ebay-specific-suggested" onClick={()=>writeSlotValue(slot.suggested)}>{`Suggested: ${slot.suggested}`}</button>}
           {Boolean(slot.value)&&slot.value!==value&&<em className="ebay-specific-live">{`eBay 线上原值：${slot.value}`}</em>}
           {local?.source&&<em className="ebay-specific-source">{`${SOURCE_LABELS[local.source]}${local.needsConfirmation?' · 待确认':''}`}</em>}

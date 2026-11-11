@@ -659,3 +659,46 @@ describe('H5 · 类目属性写页与回读落定', () => {
     expect(executeJavaScript).toHaveBeenCalledTimes(4)
   })
 })
+
+describe('J3 · 类目属性写页按控件 name 绑行（与捕获同一根因）', () => {
+  const section: EbayItemSpecificsSection = {
+    slots: [
+      { name: 'Placement on Vehicle', group: 'OPTIONAL', groupLabel: 'Additional (optional)', control: 'MENU_MULTI', required: false, placeholder: '', placeholderShown: '', maxLength: 0, value: '', suggested: '', counter: '', meta: '', metaKind: '', options: [], y: 1700 },
+      { name: 'Vintage Part', group: 'OPTIONAL', groupLabel: 'Additional (optional)', control: 'YESNO', required: false, placeholder: '', placeholderShown: '', maxLength: 0, value: '', suggested: '', counter: '', meta: '', metaKind: '', options: [{ text: 'Yes', pressed: false }, { text: 'No', pressed: false }], y: 2177 }
+    ],
+    groups: [], toggleExpandedText: '', toggleCollapsedText: '', customActionText: '', collapsedSlotNames: []
+  }
+  const product: EbayLocalProduct = {
+    ...PRODUCT,
+    snapshot: { ...PRODUCT.snapshot, details: { ...details, itemSpecifics: [{ name: 'Placement on Vehicle', value: 'Driver Side,Front' }, { name: 'Vintage Part', value: 'No' }] } }
+  }
+  const writeScript = async () => {
+    const { host, executeJavaScript } = makeHost({ specificsSettle: [{ name: 'Placement on Vehicle', settled: true, reason: '' }] })
+    await prepareMethod.call(host, 'ebay:s1', product, section)
+    return executeJavaScript.mock.calls.map(call => String(call[0])).find(text => text.includes('__yanduSpecificsWrite')) || ''
+  }
+
+  it('行定位认控件 name 原文，标签回落只取首行：带 meta 的行不再被判「页面没有该槽位」', async () => {
+    const script = await writeScript()
+    expect(script).toContain("getAttribute('name')")
+    expect(script).toContain(".split('\\n')[0]")
+    expect(script).not.toContain('clean(label.textContent)')
+  })
+
+  it('面板取本行 field 里的那一个，不再抢文档里第一个可见面板', async () => {
+    const script = await writeScript()
+    expect(script).toContain("field.querySelector('.se-filter-menu-button__menu-container')")
+  })
+
+  it('候选按标签自己的文本节点比对：别名 span 不粘进候选，点选才命中', async () => {
+    const script = await writeScript()
+    expect(script).toContain('.filter-menu__text')
+    expect(script).toContain('nodeType===3')
+  })
+
+  it('绝不在 eBay 页里派发 Enter 键：自行输入项不靠回车提交，避免误触整页提交', async () => {
+    const script = await writeScript()
+    expect(script).not.toContain('KeyboardEvent')
+    expect(script).not.toContain("'Enter'")
+  })
+})

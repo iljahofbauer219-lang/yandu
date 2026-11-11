@@ -42,6 +42,10 @@ export interface EbayItemSpecificsRawRow {
   menuOptionsTotal?: number
   /** 面板是复选多选形（.filter-menu__items）还是单选形（.menu__items）；现网没有原生 checkbox，靠类名判 */
   menuMulti?: boolean
+  /** J1：按控件 name 找该行菜单按钮，找到没有（原文事实，不含判断） */
+  menuButtonFound?: boolean
+  /** J1：该行 field 里有没有自己的菜单面板容器（原文事实） */
+  menuPanelFound?: boolean
 }
 
 export interface EbayItemSpecificsRaw {
@@ -91,7 +95,30 @@ export interface EbayItemSpecificSlot {
   menuOptionsComplete?: boolean
   /** 复选多选形菜单；值按逗号分隔的子集校验 */
   menuMulti?: boolean
+  /** J1：没读到候选时归哪一类失败；读到候选、非菜单行、旧缓存（没有捕获事实）一律空串 */
+  menuCaptureIssue?: EbayMenuCaptureIssue
+  /** J1：现网此项本就是自行输入（面板里没有候选列表且占位是 Enter your own），不是捕获坏了 */
+  menuFreeText?: boolean
   y: number
+}
+
+export type EbayMenuCaptureIssue = '' | 'NO_BUTTON' | 'NO_PANEL' | 'NO_LIST'
+
+/**
+ * J1：菜单候选捕获的失败归类。页内只回「按钮找到没 / 面板在不在 / 候选原文 / 面板占位原文」四样事实，
+ * 是不是自行输入、失败归哪一类全在这里判。两个事实都缺时不谎报失败——旧类目缓存与非菜单行没有这两样原文。
+ */
+export function ebayMenuCaptureState(facts: {
+  menuButtonFound?: boolean
+  menuPanelFound?: boolean
+  menuOptions?: string[]
+  panelPlaceholder?: string
+}): { issue: EbayMenuCaptureIssue; freeText: boolean } {
+  if ((facts.menuOptions || []).length) return { issue: '', freeText: false }
+  if (facts.menuButtonFound === undefined && facts.menuPanelFound === undefined) return { issue: '', freeText: false }
+  const issue: EbayMenuCaptureIssue = facts.menuButtonFound === false ? 'NO_BUTTON'
+    : facts.menuPanelFound !== true ? 'NO_PANEL' : 'NO_LIST'
+  return { issue, freeText: issue === 'NO_LIST' && /^enter your own$/i.test(clean(facts.panelPlaceholder)) }
 }
 
 /** 整段级原文：组标题带说明句、折叠开关两态文字、加属性按钮文字、折叠态行名清单。 */
@@ -164,6 +191,9 @@ export function parseEbayItemSpecificsSection(raw?: EbayItemSpecificsSectionRaw)
     const heading = headings.filter(item => item.y <= row.y).pop()
     const groupLabel = heading?.name || ''
     const meta = clean(row.metaText)
+    const menuState = control === 'MENU'
+      ? ebayMenuCaptureState({ menuButtonFound: row.menuButtonFound, menuPanelFound: row.menuPanelFound, menuOptions: row.menuOptions, panelPlaceholder: placeholder })
+      : { issue: '' as EbayMenuCaptureIssue, freeText: false }
     return {
       name,
       group: /\[ESSENTIAL\]/i.test(id) ? 'ESSENTIAL'
@@ -187,6 +217,8 @@ export function parseEbayItemSpecificsSection(raw?: EbayItemSpecificsSectionRaw)
       menuOptionsTotal: Number.isFinite(row.menuOptionsTotal) && (row.menuOptionsTotal as number) > 0 ? row.menuOptionsTotal as number : 0,
       menuOptionsComplete: Boolean(row.menuOptions?.length) && (row.menuOptionsTotal || 0) <= (row.menuOptions || []).length,
       menuMulti: Boolean(row.menuMulti),
+      menuCaptureIssue: menuState.issue,
+      menuFreeText: menuState.freeText,
       y: row.y
     }
   }

@@ -116,4 +116,19 @@ describe('ebaySpecificsFillPlan · 菜单捕获选项的白名单口径（I2/I4�
     expect(specificValueIssue(slot, 'Driver Side, Rear')).toBe('')
     expect(specificValueIssue(slot, 'Driver Side, Middle')).not.toBe('')
   })
+
+  it('自行输入菜单与捕获失败的菜单一律不拦真值：没候选不是拒收的理由', () => {
+    const freeText = menu({ name: 'Manufacturer Part Number', menuFreeText: true, menuCaptureIssue: 'NO_LIST' })
+    expect(specificValueIssue(freeText, 'ABC-12345')).toBe('')
+    const noButton = menu({ name: 'Color', menuCaptureIssue: 'NO_BUTTON' })
+    expect(specificValueIssue(noButton, 'Black')).toBe('')
+    const noPanel = menu({ name: 'Seat Type', menuCaptureIssue: 'NO_PANEL' })
+    expect(specificValueIssue(noPanel, 'Bucket')).toBe('')
+    const plan = planEbaySpecificsFill([freeText, noButton], {
+      title: '', descriptionText: '',
+      local: local(['Manufacturer Part Number', 'ABC-12345'], ['Color', 'Black'])
+    })
+    expect(plan.fills.map(item => item.name)).toEqual(['Manufacturer Part Number', 'Color'])
+    expect(plan.skipped).toEqual([])
+  })
 })

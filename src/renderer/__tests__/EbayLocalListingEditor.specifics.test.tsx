@@ -497,3 +497,38 @@ describe('EbayLocalListingEditor · 菜单槽候选下拉（I4）', () => {
     expect(band).toContain('候选 2/8（虚拟化未列全，准备时按名检索复核）')
   })
 })
+
+describe('EbayLocalListingEditor · 没读到候选时如实说原因（J4）', () => {
+  const bandOf = (patch: Partial<EbayItemSpecificSlot>) =>
+    specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), { attributeSection: sectionOf([slot({ name: 'Manufacturer Part Number', ...patch })]) })} />))
+
+  it('现网此项是自行输入（面板里没有候选列表）：说清没有预设候选，仍可手打', () => {
+    const band = bandOf({ menuFreeText: true, menuCaptureIssue: 'NO_LIST' })
+    expect(band).toContain('eBay 此项为自行输入，无预设候选')
+    expect(band).toContain('<input')
+    expect(band).not.toContain('<datalist')
+  })
+
+  it('三种捕获失败各说各的原因，都不拦手打也不禁用输入框', () => {
+    const cases: Array<[EbayItemSpecificSlot['menuCaptureIssue'], string]> = [
+      ['NO_BUTTON', '页面没有这一行的菜单控件'],
+      ['NO_PANEL', '菜单面板没读到'],
+      ['NO_LIST', '面板里没有候选列表']
+    ]
+    for (const [issue, text] of cases) {
+      const band = bandOf({ menuCaptureIssue: issue })
+      expect(band).toContain(text)
+      expect(band).toContain('未读到候选')
+      expect(band).not.toContain('disabled')
+    }
+  })
+
+  it('读到候选时不再画失败提示；旧缓存（没有捕获事实）也不谎报失败', () => {
+    const captured = bandOf({ menuOptions: ['Unbranded', '16:1'], menuOptionsTotal: 2, menuOptionsComplete: true })
+    expect(captured).toContain('候选 2/2')
+    expect(captured).not.toContain('未读到候选')
+    const legacy = bandOf({})
+    expect(legacy).not.toContain('未读到候选')
+    expect(legacy).not.toContain('自行输入')
+  })
+})

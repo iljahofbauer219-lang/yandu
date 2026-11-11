@@ -66,6 +66,23 @@ describe('AppDatabase · 类目级槽位缓存（store + category 主键）', ()
     expect(database.getEbayCategorySpecificsSection('s2', 'cat-seats')?.section.slots).toHaveLength(2)
   })
 
+  it('J4：菜单候选与捕获事实整段随缓存回读，换产品进发布不必再开页收一遍下拉', () => {
+    const withMenu: EbayItemSpecificsSection = {
+      ...SECTION,
+      slots: [
+        { ...SECTION.slots[0], menuOptions: ['Unbranded', '1-800-Radiator', '1st-racing'], menuOptionsTotal: 10184, menuOptionsComplete: false, menuMulti: false, menuCaptureIssue: '', menuFreeText: false },
+        { ...SECTION.slots[1], name: 'Manufacturer Part Number', control: 'MENU', options: [], menuOptions: [], menuOptionsTotal: 0, menuOptionsComplete: false, menuCaptureIssue: 'NO_LIST', menuFreeText: true }
+      ]
+    }
+    database.saveEbayCategorySpecificsSection({ storeId: 's1', categoryKey: 'cat-menu', section: withMenu, sourceUrl: '', readAt: '2026-11-11T13:00:00.000Z' })
+    const row = database.getEbayCategorySpecificsSection('s1', 'cat-menu')
+    expect(row?.section.slots[0].menuOptions).toEqual(['Unbranded', '1-800-Radiator', '1st-racing'])
+    expect(row?.section.slots[0].menuOptionsTotal).toBe(10184)
+    expect(row?.section.slots[0].menuOptionsComplete).toBe(false)
+    expect(row?.section.slots[1].menuFreeText).toBe(true)
+    expect(row?.section.slots[1].menuCaptureIssue).toBe('NO_LIST')
+  })
+
   it('section_json 损坏按没读过处理并告警，不把坏 JSON 抛给渲染器', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     database.saveEbayCategorySpecificsSection({ storeId: 's1', categoryKey: 'cat-broken', section: SECTION, sourceUrl: '', readAt: '' })
