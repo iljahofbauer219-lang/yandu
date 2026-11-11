@@ -3428,6 +3428,7 @@ ipcMain.handle('ebay:local-products:inspect-visual', async (_event, localProduct
 })
 ipcMain.handle('ebay:images:inspect-final', (_event, imageUrls:string[]):Promise<EbayImageInspectionReport> => inspectEbayImages(imageUrls))
 ipcMain.handle('ebay:local-products:specifics-section', (_event, productId:string) => database?.getEbaySpecificsSection(productId) ?? null)
+ipcMain.handle('ebay:category-specifics:get', (_event, storeId:string, categoryKey:string) => database?.getEbayCategorySpecificsSection(storeId,categoryKey) ?? null)
 ipcMain.handle('ebay:local-products:visual-report', (_event, localProductId:string):EbayImageVisualInspectionReport|null => database?.getEbayImageVisualInspection(localProductId) ?? null)
 ipcMain.handle('ebay:local-products:visual-review', (_event, input:EbayImageVisualReviewInput):EbayImageVisualInspectionReport => {
   if(!database)throw new Error('eBay 本地产品库尚未初始化')
@@ -3446,6 +3447,17 @@ ipcMain.handle('ebay:local-products:requirements', async (_event, storeId:string
       return {...requirements,warnings:[...requirements.warnings,'类目属性清单已读取但未能写入本地库；下次进入发布编辑器仍会回退到兜底态，请重新读取一次']}
     }
   }
+  // H1：槽位清单是「类目」的资产不是「产品」的资产——同 (店铺, 平台类目) 读回的清单完全一样，
+  // 故双写一张类目缓存表；同类目第二个产品进发布先命中缓存、不再开页。
+  // 没有平台类目 id（走载体在架编号的修改页）只写产品行，不往类目表里塞键不明的行。
+  if(categoryId&&requirements.attributeSection.slots.length){
+    try {
+      database.saveEbayCategorySpecificsSection({storeId,categoryKey:categoryId,section:requirements.attributeSection,sourceUrl:requirements.sourceUrl,readAt:requirements.inspectedAt})
+    } catch (error) {
+      console.warn('[ebay-category-specifics] 类目缓存落库失败：', error instanceof Error?error.message:error)
+      return {...requirements,warnings:[...requirements.warnings,'类目属性清单已读取但类目缓存未能写入；同类目下一个产品进发布仍会开页重读，请重新读取一次']}
+    }
+  }
   // saveEbayBusinessPolicies 自开 BEGIN IMMEDIATE：这里绝不能包任何外层事务（node:sqlite 嵌套 BEGIN 会让内层 ROLLBACK 毁掉外层）。
   // 落库失败只点名缺口、保留页面本次读到的结果，绝不把「读取刊登规则」这个既有动作变成硬阻断。
   try {
@@ -3462,8 +3474,13 @@ ipcMain.handle('ebay:local-products:prepare-revision', async (_event, localProdu
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
   const product=database.getEbayLocalProducts().find(item=>item.id===localProductId)
   if(!product)throw new Error('本地产品不存在或已删除')
-  return workspace.prepareEbayLocalProductRevision(`ebay:${product.storeId}`,product)
+  // H5：写页要认控件形状（菜单/输入/Yes-No），形状只在读回的清单里——产品行优先，回落同类目缓存。
+  const section=database.getEbaySpecificsSection(product.id)?.section
+    ??(product.platformCategoryId?database.getEbayCategorySpecificsSection(product.storeId,product.platformCategoryId)?.section:null)
+    ??null
+  return workspace.prepareEbayLocalProductRevision(`ebay:${product.storeId}`,product,section)
 })
+ipcMain.handle('ebay:specifics-llm', (_event, input:{title:string;descriptionText:string;slots:Array<{name:string;control:string;options:string[];maxLength:number}>}) => aiEmployeeChatService.deriveEbaySpecifics(input))
 ipcMain.handle('ebay:local-products:remove', (_event, localProductId:string) => removeEbayLocalProduct(localProductId))
 ipcMain.handle('ebay:listings:remove-local', (_event, storeId:string, listingId:string) => {
   if(!database)throw new Error('eBay 产品库尚未初始化')

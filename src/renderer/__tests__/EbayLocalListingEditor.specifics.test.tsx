@@ -458,3 +458,27 @@ describe('05 段清单持久化与静默自读（D 批接线守卫）', () => {
     expect(app).toContain('{section:persisted.section,card:null,at:persisted.readAt}')
   })
 })
+
+describe('EbayLocalListingEditor · 05 段头两个功能键（H4）', () => {
+  const renderWith = (over: Partial<ComponentProps<typeof EbayLocalListingEditor>>) =>
+    specificsBand(renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(), over)} />))
+  const fillButton = (band: string) => (band.match(/<button[^>]*>类目属性填写/) ?? [''])[0]
+  const readButton = (band: string) => (band.match(/<button[^>]*>读取类目属性/) ?? [''])[0]
+
+  it('读到现网清单后两键都画且填写键可点；没清单时填写键禁用（没槽位可填就不给点）', () => {
+    const withSection = renderWith({ attributeSection: sectionOf(SLOTS), onReadSpecifics: noop, onFillSpecifics: noop })
+    expect(readButton(withSection)).not.toContain('disabled')
+    expect(fillButton(withSection)).not.toContain('disabled')
+    const without = renderWith({ onReadSpecifics: noop, onFillSpecifics: noop })
+    expect(fillButton(without)).toContain('disabled')
+    expect(readButton(without)).not.toContain('disabled')
+  })
+
+  it('在飞状态换文案并禁用，自动填写时间照实标出（五硬要求：标来源与时间）', () => {
+    const reading = renderWith({ attributeSection: sectionOf(SLOTS), readingSpecifics: true })
+    expect(reading).toContain('正在读取…')
+    expect(reading).toMatch(/<button[^>]*disabled[^>]*>正在读取…/)
+    const filled = renderWith({ attributeSection: sectionOf(SLOTS), specificsFilledAt: '2026/11/11 16:20:00' })
+    expect(filled).toContain('上次自动填写 2026/11/11 16:20:00')
+  })
+})

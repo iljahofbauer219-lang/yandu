@@ -28,6 +28,7 @@ import { ebayMarketResearchChannelLabel, ebayMarketResearchChannelShortLabel } f
 import { EBAY_SITE_ALLOWED_MESSAGE, isEbaySiteUrl } from '../shared/ebaySites'
 import { ebayHardRequiredFieldsForRoute, formatFormGaps, formValuesFromInput, isEbayPolicyId, requiredFormGaps } from '../shared/ebayListingForm'
 import { resolveEbayListingTarget, resolveEbayListingTargetForProduct } from '../shared/ebayListingTarget'
+import { applyLlmSpecificAnswers, planEbaySpecificsFill } from '../shared/ebaySpecificsFillPlan'
 import type { EbayProfitAutoFill } from '../shared/ebayPricingAutoFill'
 import { riskBadge } from '../shared/riskBadge'
 import { copiedWarehouseIds } from '../shared/copiedPallet'
@@ -3468,9 +3469,21 @@ function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lo
   const seedSpecificsFromStore=async(product:EbayLocalProduct)=>{
     if(attributeSlotsByProduct[product.id])return true
     const persisted=await window.desktop.ebay.localProductSpecificsSection(product.id)
-    if(!persisted)return false
-    setAttributeSlots(current=>current[product.id]?current:{...current,[product.id]:{section:persisted.section,card:null,at:persisted.readAt}})
-    return true
+    if(persisted){
+      setAttributeSlots(current=>current[product.id]?current:{...current,[product.id]:{section:persisted.section,card:null,at:persisted.readAt}})
+      return true
+    }
+    // H1：槽位清单是「类目」的资产——同类目第二个产品进发布直接命中类目缓存，不再开页重读；
+    // 没有平台类目 id 的产品（走载体在架编号读修改页）没有类目键，照旧落到下面的静默自读。
+    const categoryKey=product.platformCategoryId||''
+    if(categoryKey&&activeStore){
+      const cached=await window.desktop.ebay.categorySpecificsSection(activeStore.id,categoryKey)
+      if(cached){
+        setAttributeSlots(current=>current[product.id]?current:{...current,[product.id]:{section:cached.section,card:null,at:cached.readAt}})
+        return true
+      }
+    }
+    return false
   }
   // R1：政策抓取的「载体商品编号」。本地产品 listingId 是 PALLET-<货盘编号>，不是 eBay itemId，拿它开 ReviseItem
   // 会被 eBay 拒成 createOrGetDraft 错误页；政策按店铺入库复用，所以载体交给操作员手填一个真实在架编号，并按店铺记住。
@@ -4310,6 +4323,49 @@ function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lo
       setBusy('')
     }
   }
+  // H4 功能键一「读取类目属性」：与政策同一次开页读回（C5 路由按产品已设类目直入首次刊登页），非静默、失败全量点名。
+  const readSpecificsFor=(product:EbayLocalProduct|null,prefix:'publish'|'local')=>{void readBusinessPoliciesFor(product,`${prefix}-read-specifics:${product?.id||''}`)}
+  const [specificsFilledAtByProduct,setSpecificsFilledAtByProduct]=useState<Record<string,string>>({})
+  // H4 功能键二「类目属性填写」：规则档＝本地同名值过 shared 白名单/Yes-No/长度判据；LLM 档＝现有百炼/DeepSeek
+  // 通道只对待填槽位复核，答案再过同一套判据。结果写进草稿 itemSpecifics 并标来源与时间；人工值不覆盖（shared 判据）。
+  const fillSpecificsFor=async(product:EbayLocalProduct|null,draft:EbayLocalProductUpdateInput|null,apply:(updater:(current:EbayLocalProductUpdateInput|null)=>EbayLocalProductUpdateInput|null)=>void,busyKey:string)=>{
+    if(!product||!draft)return
+    const section=attributeSlotsByProduct[product.id]?.section
+    if(!section||!section.slots.length){setEbayError('还没有读到现网类目属性清单；请先点「读取类目属性」。');return}
+    setBusy(busyKey);setEbayError('')
+    try {
+      const existing=draft.itemSpecifics||[]
+      const rulePlan=planEbaySpecificsFill(section.slots,{title:draft.title,descriptionText:draft.descriptionText,local:existing},existing)
+      const filledNames=new Set(rulePlan.fills.map(row=>row.name))
+      const pending=section.slots.filter(slot=>!filledNames.has(slot.name))
+      let llmRows:ReturnType<typeof applyLlmSpecificAnswers>=[]
+      if(pending.length){
+        try {
+          const answers=await window.desktop.ebay.specificsLlmSuggestions({title:draft.title,descriptionText:draft.descriptionText,slots:pending.map(slot=>({name:slot.name,control:slot.control,options:slot.options.map(option=>option.text),maxLength:slot.maxLength}))})
+          llmRows=applyLlmSpecificAnswers(pending,answers||[])
+        } catch (reason) {
+          setNotice(`AI 复核通道不可用（${readableError(reason,'调用失败')}），本次只按本地已记内容填写。`)
+        }
+      }
+      const fills=[...rulePlan.fills,...llmRows]
+      if(!fills.length){setEbayError(`本次没有可自动填写的槽位：${rulePlan.skipped.slice(0,6).map(item=>`${item.name}（${item.reason}）`).join('；')||'现网清单为空'}`);return}
+      const at=new Date().toLocaleString('zh-CN',{hour12:false})
+      apply(current=>{
+        if(!current)return current
+        const list=[...(current.itemSpecifics||[])]
+        for(const fill of fills){
+          const index=list.findIndex(item=>item.name===fill.name)
+          if(index>=0)list[index]={...list[index],value:fill.value,source:fill.source,needsConfirmation:fill.source==='AI'}
+          else list.push({name:fill.name,value:fill.value,source:fill.source,needsConfirmation:fill.source==='AI'})
+        }
+        return {...current,itemSpecifics:list}
+      })
+      setSpecificsFilledAtByProduct(current=>({...current,[product.id]:at}))
+      setNotice(`类目属性已自动填写 ${fills.length} 项（本地匹配 ${rulePlan.fills.length}、AI 复核 ${llmRows.length}），跳过 ${rulePlan.skipped.length} 项：${rulePlan.skipped.slice(0,6).map(item=>`${item.name}（${item.reason}）`).join('；')||'无'}。值仍可手改，保存新版本后随「保存并准备」写入 eBay 页。`)
+    } finally {
+      setBusy('')
+    }
+  }
   const localCategoryBackfillAttempted=useRef<Set<string>>(new Set())
   const storePathText=(categoryId:string)=>{const chain:string[]=[];let current=categoryWorkspace.categories.find(item=>item.categoryId===categoryId);while(current){chain.unshift(current.name);current=categoryWorkspace.categories.find(item=>item.categoryId===current!.parentCategoryId)}return chain.join(' / ')}
   const assignLocalCategoryFromTree=(categoryId:string)=>{
@@ -5025,7 +5081,7 @@ function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lo
         </section>
       </div>}
       {activeTab==='publish'&&<div className="ebay-stage-panel ebay-publish-stage">
-        {publishEditorDraftId&&publishEditorProduct&&publishEditorDraft?<EbayLocalListingEditor inline product={publishEditorProduct} draft={publishEditorDraft} saving={false} uploading={busy===`publish-media:${publishEditorProduct?.id}`} preparing={busy===`publish-prepare:${publishEditorProduct?.id}`} categories={categoryWorkspace.categories} platformCategory={inlinePlatformCategory} onChange={setPublishEditorDraft} onSave={async()=>{if(!publishEditorProduct)return;try{const updated=await window.desktop.ebay.updateLocalProduct(publishEditorProduct.id,publishEditorDraft);setLocalProducts(current=>[updated,...current.filter(item=>item.id!==updated.id)]);setNotice('本地版本已保存');publishEditorSession.current='';setPublishEditorDraftId('');setPublishEditorProduct(null);setPublishEditorDraft(null)}catch(reason){setEbayError(readableError(reason,'保存本地版本失败'))}}} onClose={()=>{publishEditorSession.current='';setPublishEditorDraftId('');setPublishEditorProduct(null);setPublishEditorDraft(null)}} onUpload={files=>void uploadPublishEditorMedia(files)} onPrepare={()=>{void preparePublishEditorInSellerHub()}} onSetCategory={()=>{}} onAutoClassify={()=>{}} gaps={publishEditorDraft?requiredFormGaps([],formValuesFromInput(publishEditorDraft),ebayHardRequiredFieldsForRoute(publishEditorRouteKind)):[]} routeKind={publishEditorRouteKind} businessPolicies={publishEditorPolicies} attributeSection={attributeSlotsByProduct[publishEditorProduct.id]?.section} attributeSlotsAt={attributeSlotsByProduct[publishEditorProduct.id]?.at||''} suggestedCard={attributeSlotsByProduct[publishEditorProduct.id]?.card??null} readingPolicies={busy==='publish-read-policies'} onReadPolicies={()=>{void readBusinessPoliciesFor(publishEditorProduct,'publish-read-policies')}} policyCarrierItemId={policyCarrierItemId} onPolicyCarrierItemIdChange={setPolicyCarrierForActiveStore}/>:<><section className="ebay-final-handoff-heading"><div><small>FINAL STEP · PUBLISH REVIEW & HANDOFF</small><b>最终发布确认与统一交付</b><p>标题、类目属性、图片、英文详情和合规结论只在这里汇总。确认资料完整后，才会打开 Seller Hub 统一预填可安全识别的字段；最终提交仍由人工点击。</p></div><span>唯一 Seller Hub 交付入口</span></section>
+        {publishEditorDraftId&&publishEditorProduct&&publishEditorDraft?<EbayLocalListingEditor inline product={publishEditorProduct} draft={publishEditorDraft} saving={false} uploading={busy===`publish-media:${publishEditorProduct?.id}`} preparing={busy===`publish-prepare:${publishEditorProduct?.id}`} categories={categoryWorkspace.categories} platformCategory={inlinePlatformCategory} onChange={setPublishEditorDraft} onSave={async()=>{if(!publishEditorProduct)return;try{const updated=await window.desktop.ebay.updateLocalProduct(publishEditorProduct.id,publishEditorDraft);setLocalProducts(current=>[updated,...current.filter(item=>item.id!==updated.id)]);setNotice('本地版本已保存');publishEditorSession.current='';setPublishEditorDraftId('');setPublishEditorProduct(null);setPublishEditorDraft(null)}catch(reason){setEbayError(readableError(reason,'保存本地版本失败'))}}} onClose={()=>{publishEditorSession.current='';setPublishEditorDraftId('');setPublishEditorProduct(null);setPublishEditorDraft(null)}} onUpload={files=>void uploadPublishEditorMedia(files)} onPrepare={()=>{void preparePublishEditorInSellerHub()}} onSetCategory={()=>{}} onAutoClassify={()=>{}} gaps={publishEditorDraft?requiredFormGaps([],formValuesFromInput(publishEditorDraft),ebayHardRequiredFieldsForRoute(publishEditorRouteKind)):[]} routeKind={publishEditorRouteKind} businessPolicies={publishEditorPolicies} attributeSection={attributeSlotsByProduct[publishEditorProduct.id]?.section} attributeSlotsAt={attributeSlotsByProduct[publishEditorProduct.id]?.at||''} suggestedCard={attributeSlotsByProduct[publishEditorProduct.id]?.card??null} readingPolicies={busy==='publish-read-policies'} onReadPolicies={()=>{void readBusinessPoliciesFor(publishEditorProduct,'publish-read-policies')}} readingSpecifics={busy.startsWith('publish-read-specifics')} fillingSpecifics={busy.startsWith('publish-fill-specifics')} onReadSpecifics={()=>readSpecificsFor(publishEditorProduct,'publish')} onFillSpecifics={()=>void fillSpecificsFor(publishEditorProduct,publishEditorDraft,setPublishEditorDraft,`publish-fill-specifics:${publishEditorProduct?.id||''}`)} specificsFilledAt={publishEditorProduct?specificsFilledAtByProduct[publishEditorProduct.id]||'':''} policyCarrierItemId={policyCarrierItemId} onPolicyCarrierItemIdChange={setPolicyCarrierForActiveStore}/>:<><section className="ebay-final-handoff-heading"><div><small>FINAL STEP · PUBLISH REVIEW & HANDOFF</small><b>最终发布确认与统一交付</b><p>标题、类目属性、图片、英文详情和合规结论只在这里汇总。确认资料完整后，才会打开 Seller Hub 统一预填可安全识别的字段；最终提交仍由人工点击。</p></div><span>唯一 Seller Hub 交付入口</span></section>
         <section className="ebay-acceptance-center">
           <header><div><small>PHASE 03 · ACCEPTANCE</small><b>正式发布验收</b><p>连接真实 Seller Hub 验证单品；批量检查最多10件，并执行四类失败保护自检。</p></div><div><button disabled={Boolean(busy)||!optimizationDrafts.length} onClick={()=>void runAcceptance('SINGLE')}>{busy==='acceptance:SINGLE'?'真实页面验收中…':'运行真实单品验收'}</button><button className="primary" disabled={Boolean(busy)||!listings.length} onClick={()=>void runAcceptance('BATCH_10')}>{busy==='acceptance:BATCH_10'?'批量验收中…':'运行10商品批量验收'}</button></div></header>
           {latestAcceptance?<><div className={`ebay-acceptance-summary ${latestAcceptance.status.toLowerCase()}`}><span><small>验收模式</small><b>{latestAcceptance.mode==='SINGLE'?'真实单品':'批量10商品'}</b></span><span><small>本次检查</small><b>{latestAcceptance.checked}/{latestAcceptance.requested}</b></span><span><small>通过</small><b>{latestAcceptance.passed}</b></span><span><small>需关注</small><b>{latestAcceptance.attention}</b></span><span><small>阻断</small><b>{latestAcceptance.blocked}</b></span><span><small>结论</small><b>{latestAcceptance.status==='PASSED'?'通过':latestAcceptance.status==='ATTENTION'?'需关注':'有阻断'}</b></span></div>
@@ -5080,7 +5136,7 @@ function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lo
       </div>}
     </div>
     {localEditorProduct&&localEditorProduct.snapshot.details.semanticFallback&&<div className="ebay-config-notice"><b>来源标记：{localEditorProduct.snapshot.details.semanticFallback.label}</b><span>{localEditorProduct.snapshot.details.semanticFallback.note}（读取时间 {new Date(localEditorProduct.snapshot.details.semanticFallback.at).toLocaleString('zh-CN')}）</span></div>}
-    {localEditorProduct&&localEditorDraft&&<EbayLocalListingEditor product={localEditorProduct} draft={localEditorDraft} saving={busy===`local-save:${localEditorProduct.id}`} uploading={busy===`local-media:${localEditorProduct.id}`} preparing={busy===`local-prepare:${localEditorProduct.id}`} categories={categoryWorkspace.categories} onSetCategory={(categoryId,categoryName)=>void setLocalCategory(categoryId,categoryName)} onAutoClassify={()=>void autoClassifyLocal()} platformCategory={overlayPlatformCategory} onChange={setLocalEditorDraft} onSave={()=>void saveLocalEditor()} onPrepare={()=>void prepareLocalEditorInSellerHub()} onUpload={files=>void uploadLocalEditorMedia(files)} gaps={localEditorDraft?requiredFormGaps([],formValuesFromInput(localEditorDraft),ebayHardRequiredFieldsForRoute(localEditorRouteKind)):[]} routeKind={localEditorRouteKind} businessPolicies={publishEditorPolicies} attributeSection={attributeSlotsByProduct[localEditorProduct.id]?.section} attributeSlotsAt={attributeSlotsByProduct[localEditorProduct.id]?.at||''} suggestedCard={attributeSlotsByProduct[localEditorProduct.id]?.card??null} readingPolicies={busy==='local-read-policies'} onReadPolicies={()=>{void readBusinessPoliciesFor(localEditorProduct??null,'local-read-policies')}} policyCarrierItemId={policyCarrierItemId} onPolicyCarrierItemIdChange={setPolicyCarrierForActiveStore} onClose={()=>{if(!busy.startsWith('local-')){setLocalEditorProductId('');setLocalEditorDraft(null)}}}/>} 
+    {localEditorProduct&&localEditorDraft&&<EbayLocalListingEditor product={localEditorProduct} draft={localEditorDraft} saving={busy===`local-save:${localEditorProduct.id}`} uploading={busy===`local-media:${localEditorProduct.id}`} preparing={busy===`local-prepare:${localEditorProduct.id}`} categories={categoryWorkspace.categories} onSetCategory={(categoryId,categoryName)=>void setLocalCategory(categoryId,categoryName)} onAutoClassify={()=>void autoClassifyLocal()} platformCategory={overlayPlatformCategory} onChange={setLocalEditorDraft} onSave={()=>void saveLocalEditor()} onPrepare={()=>void prepareLocalEditorInSellerHub()} onUpload={files=>void uploadLocalEditorMedia(files)} gaps={localEditorDraft?requiredFormGaps([],formValuesFromInput(localEditorDraft),ebayHardRequiredFieldsForRoute(localEditorRouteKind)):[]} routeKind={localEditorRouteKind} businessPolicies={publishEditorPolicies} attributeSection={attributeSlotsByProduct[localEditorProduct.id]?.section} attributeSlotsAt={attributeSlotsByProduct[localEditorProduct.id]?.at||''} suggestedCard={attributeSlotsByProduct[localEditorProduct.id]?.card??null} readingPolicies={busy==='local-read-policies'} onReadPolicies={()=>{void readBusinessPoliciesFor(localEditorProduct??null,'local-read-policies')}} readingSpecifics={busy.startsWith('local-read-specifics')} fillingSpecifics={busy.startsWith('local-fill-specifics')} onReadSpecifics={()=>readSpecificsFor(localEditorProduct,'local')} onFillSpecifics={()=>void fillSpecificsFor(localEditorProduct,localEditorDraft,setLocalEditorDraft,`local-fill-specifics:${localEditorProduct?.id||''}`)} specificsFilledAt={localEditorProduct?specificsFilledAtByProduct[localEditorProduct.id]||'':''} policyCarrierItemId={policyCarrierItemId} onPolicyCarrierItemIdChange={setPolicyCarrierForActiveStore} onClose={()=>{if(!busy.startsWith('local-')){setLocalEditorProductId('');setLocalEditorDraft(null)}}}/>} 
     {directoryProductSyncOpen&&<div className="ebay-store-dialog-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)void closeDirectoryProductSync()}}>
       <div className="ebay-store-dialog ebay-directory-product-dialog" role="dialog" aria-modal="true" aria-labelledby="ebay-directory-product-dialog-title">
         <header><div><small>EBAY DIRECTORY SYNC V2</small><h3 id="ebay-directory-product-dialog-title">按目录增量同步</h3><p>只写入新增或变化商品；仅完整读取的目录会执行安全下架判断。</p></div><button type="button" aria-label="关闭" disabled={directoryProductSyncing} onClick={()=>void closeDirectoryProductSync()}>×</button></header>

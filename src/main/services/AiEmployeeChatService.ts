@@ -706,6 +706,49 @@ export class AiEmployeeChatService {
     return blocks
   }
 
+  // ─── eBay 类目属性复核：只对待填槽位出题，模型每行回 name=value；调用方仍会过 shared 白名单/Yes-No/长度校验，坏值一律丢弃。 ───
+  async deriveEbaySpecifics(input: { title: string; descriptionText: string; slots: Array<{ name: string; control: string; options: string[]; maxLength: number }> }): Promise<Array<{ name: string; value: string }>> {
+    if (!input?.slots?.length) return []
+    const models = this.listModels()
+    const profile = models.find(item => item.id === 'qwen3.6-flash' && item.available)
+      || models.find(item => (item.provider === 'bailian' || item.provider === 'deepseek') && item.available)
+    if (!profile) return []
+    const apiKey = profile.provider === 'bailian' ? process.env.BAILIAN_API_KEY || '' : process.env.DEEPSEEK_API_KEY || ''
+    const endpoint = profile.provider === 'bailian' ? `${bailianBaseUrl()}/chat/completions` : `${deepseekBaseUrl()}/chat/completions`
+    if (!apiKey) return []
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 25000)
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: profile.id,
+          messages: [{ role: 'user', content: [
+            '你是 eBay 刊登属性填写助手。只依据下面给出的商品标题与描述，为每个槽位给出一个值；没有把握就留空。',
+            'Yes/No 槽位只能回答 Yes 或 No；带候选值的槽位只能从候选值里选一个；自由文本槽位用英文、不超过长度上限。',
+            '每行输出 name=value；留空的槽位不要输出。不要解释。',
+            `商品标题：${input.title}`,
+            `商品描述：${input.descriptionText.slice(0, 2000)}`,
+            ...input.slots.map(slot => `槽位：${slot.name}｜类型：${slot.control}｜候选值：${slot.options.join(' / ') || '无（自由填写）'}｜长度上限：${slot.maxLength || '无'}`)
+          ].join('\n') }]
+        }),
+        signal: controller.signal
+      })
+      const body = await response.json().catch(() => ({}))
+      return String(body?.choices?.[0]?.message?.content || '')
+        .split(/\n+/)
+        .map(line => line.trim().replace(/^[-*·]\s*/, ''))
+        .filter(line => line.includes('='))
+        .map(line => { const index = line.indexOf('='); return { name: line.slice(0, index).trim(), value: line.slice(index + 1).trim() } })
+        .filter(row => row.name && row.value)
+    } catch {
+      return []
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   // ─── Amazon 检索词推导：只读取已锁定的本品身份，输出三组买家意图词；调用方仍会执行禁用词清洗和确定性回退。 ───
   async deriveAmazonKeywords(intent: AmazonSearchIntent): Promise<string[]> {
     const productName = String(intent?.productName || '').replace(/\s+/g, ' ').trim()

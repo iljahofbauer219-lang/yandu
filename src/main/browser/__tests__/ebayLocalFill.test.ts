@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import type { EbayItemSpecificsSection } from '../../../shared/ebayItemSpecificsModel'
 
 /**
  * Task 8：Seller Hub ReviseItem「本地版本待确认」灌字段引擎从 3 项扩到 11 项（P1 收尾）。
@@ -39,7 +40,7 @@ const details: EbayProductDetails = {
 }
 
 const prepareMethod = BrowserWorkspace.prototype.prepareEbayLocalProductRevision as unknown as (
-  this: Record<string, unknown>, accountId: string, product: EbayLocalProduct
+  this: Record<string, unknown>, accountId: string, product: EbayLocalProduct, section?: EbayItemSpecificsSection | null
 ) => Promise<{ reviseUrl: string; routeKind?: string; filledFields: string[]; skippedFields: string[]; warnings: string[]; submitButtonDetected: boolean; preparedAt: string }>
 
 /** 现网内嵌模型的形状（与 ebayPolicyScrape.test.ts 同款构造器）：文案在 textSpans，编号在 option.value。 */
@@ -74,6 +75,7 @@ function makeHost(page: {
   models?: Record<ModelField, string> | null
   pending?: string[]
   passes?: Array<{ filledFields?: string[]; skippedFields?: string[]; policyPending?: string[] }>
+  specificsSettle?: Array<{ name: string; settled: boolean; reason: string }>
 } = {}) {
   const scripts: string[] = []
   const modelScripts: string[] = []
@@ -82,6 +84,8 @@ function makeHost(page: {
   const executeJavaScript = vi.fn(async (script: string) => {
     // E 批两段回读/横幅脚本：RTE 写入回读如实返 true（假页接受写入），横幅更新无返回值。
     if (script.includes('se-rte-frame')) return true
+    // H5 类目属性写页脚本：按假页给的落定结果回传（缺省全落定），形状与页内脚本一致。
+    if (script.includes('__yanduSpecificsWrite')) return page.specificsSettle ?? [{ name: 'Brand', settled: true, reason: '' }]
     if (script.includes('if(banner)banner.textContent=')) return undefined
     // 灌字段脚本带 const targets=，模型读取脚本只切三段内嵌模型原文；两类返回值形状不同，靠这个标记分流。
     if (!script.includes('const targets=')) {
@@ -147,7 +151,7 @@ function literalOf<T = Record<string, unknown>>(script: string, name: string): T
   return JSON.parse(body.endsWith(';') ? body.slice(0, -1) : body) as T
 }
 
-const runPrepare = async (page: { ready?: boolean; submitButtonDetected?: boolean; models?: Record<ModelField, string> | null } = {}) => {
+const runPrepare = async (page: { ready?: boolean; submitButtonDetected?: boolean; models?: Record<ModelField, string> | null; specificsSettle?: Array<{ name: string; settled: boolean; reason: string }> } = {}) => {
   const { host, scripts, modelScripts, executeJavaScript } = makeHost(page)
   const result = await prepareMethod.call(host, 'ebay:s1', PRODUCT)
   // 现在四段：先读一次内嵌模型（现网模型跟页面 HTML 一起来，一次就有），再跑灌字段脚本，
@@ -615,5 +619,40 @@ describe('AddItem 页图片与描述写入（E 批静态守卫）', () => {
     expect(pageScriptStart).toBeGreaterThan(-1)
     expect(pageScript).not.toContain('planEbayUploadMedia(')
     expect(pageScript).not.toContain('EBAY_IMAGE_LIMIT')
+  })
+})
+
+describe('H5 · 类目属性写页与回读落定', () => {
+  const section: EbayItemSpecificsSection = {
+    slots: [
+      { name: 'Brand', group: 'ESSENTIAL', groupLabel: 'Required', control: 'MENU', required: true, placeholder: '', placeholderShown: '', maxLength: 0, value: '', suggested: '', counter: '', meta: '', metaKind: '', options: [], y: 1477 },
+      { name: 'Vintage Part', group: 'OPTIONAL', groupLabel: 'Additional (optional)', control: 'YESNO', required: false, placeholder: '', placeholderShown: '', maxLength: 0, value: '', suggested: '', counter: '', meta: '', metaKind: '', options: [{ text: 'Yes', pressed: false }, { text: 'No', pressed: false }], y: 2177 }
+    ],
+    groups: [], toggleExpandedText: '', toggleCollapsedText: '', customActionText: '', collapsedSlotNames: []
+  }
+  const productWithSpecifics: EbayLocalProduct = {
+    ...PRODUCT,
+    snapshot: { ...PRODUCT.snapshot, details: { ...details, itemSpecifics: [{ name: 'Brand', value: 'Unbranded' }, { name: 'Vintage Part', value: 'No' }] } }
+  }
+
+  it('落定的记「类目属性 n/m」，落不定的进 skipped 并在 warnings 里点名带原因', async () => {
+    const { host, executeJavaScript } = makeHost({ specificsSettle: [{ name: 'Brand', settled: true, reason: '' }, { name: 'Vintage Part', settled: false, reason: '候选里没有该值' }] })
+    const result = await prepareMethod.call(host, 'ebay:s1', productWithSpecifics, section)
+    expect(result.filledFields).toContain('类目属性 1/2')
+    expect(result.skippedFields).toContain('类目属性')
+    expect(result.warnings.some(text => text.includes('Vintage Part') && text.includes('候选里没有该值'))).toBe(true)
+    const script = executeJavaScript.mock.calls.map(call => String(call[0])).find(text => text.includes('__yanduSpecificsWrite')) || ''
+    // 三种控件各走各的写法：菜单开面板检索点选、Yes/No 点 pill 回读 aria-pressed、输入框原生 setter 直写回读
+    expect(script).toContain('se-expand-button__button')
+    expect(script).toContain('aria-pressed')
+    expect(script).toContain('textbox__control')
+  })
+
+  it('本地没记属性值时不写不记，prepare 调用次数与 H5 之前一致', async () => {
+    const { host, executeJavaScript } = makeHost({})
+    const result = await prepareMethod.call(host, 'ebay:s1', PRODUCT, section)
+    expect(executeJavaScript.mock.calls.some(call => String(call[0]).includes('__yanduSpecificsWrite'))).toBe(false)
+    expect(result.filledFields.some(label => label.startsWith('类目属性'))).toBe(false)
+    expect(executeJavaScript).toHaveBeenCalledTimes(4)
   })
 })

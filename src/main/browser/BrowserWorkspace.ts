@@ -18,7 +18,7 @@ import { extractPolicyIdFromLabel } from '../../shared/ebayListingForm'
 import { resolveEbayListingTarget, resolveEbayListingTargetForProduct } from '../../shared/ebayListingTarget'
 import { planEbayUploadMedia, type EbayUploadMediaPlanRow } from '../../shared/ebayUploadMediaPlan'
 import { EBAY_POLICY_MODEL_FIELDS, parseEbayPolicyModel, parseEbayPolicyModelChoices, type EbayPolicyModelChoices, type EbayPolicyModelField } from '../../shared/ebayPolicyModel'
-import { parseEbayItemSpecificsSection, parseEbayItemSpecificsCard, type EbayItemSpecificsCardRaw, type EbayItemSpecificsRaw } from '../../shared/ebayItemSpecificsModel'
+import { parseEbayItemSpecificsSection, parseEbayItemSpecificsCard, type EbayItemSpecificsCardRaw, type EbayItemSpecificsRaw, type EbayItemSpecificsSection, type EbayItemSpecificSlot } from '../../shared/ebayItemSpecificsModel'
 import { EBAY_LOCAL_FILL_TARGETS, ebayLocalFillPayload, ebayPolicyFillPlan } from './ebayLocalFill'
 import { pickGigaMainImage } from '../../shared/gigaImageResolve'
 import type { BrowserBounds, BrowserState, BrowserTab, BuiltInCollectorState, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, EbayBrowserPluginState, EbayCategorySpecificRequirement, EbayCollectedProduct, EbayDeliveryLocationResult, EbayDirectoryProductScanCategory, EbayLoginResult, EbayMarketResearchFilter, EbayMarketResearchMetric, EbayMarketResearchSample, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayPlatformCategoryOption, EbayProductDetails, EbaySellerHubAcceptanceSnapshot, EbayStoreCategory, MarketplacePlatformCode, NetworkStrategy, Platform, SelectionTask, SupplyActivationResult } from '../../shared/contracts'
@@ -2120,7 +2120,7 @@ export class BrowserWorkspace {
     ]}
   }
 
-  async prepareEbayLocalProductRevision(accountId:string,product:EbayLocalProduct):Promise<EbayLocalRevisionPreparationResult> {
+  async prepareEbayLocalProductRevision(accountId:string,product:EbayLocalProduct,specificsSection?:EbayItemSpecificsSection|null):Promise<EbayLocalRevisionPreparationResult> {
     const snapshot=product.snapshot
     const listing=snapshot.sourceListing
     const details=snapshot.details
@@ -2307,6 +2307,73 @@ export class BrowserWorkspace {
       result.skippedFields=result.skippedFields.filter(label=>label!=='描述')
       if(descriptionSettled)result.filledFields.push('描述')
       else result.skippedFields.push('描述')
+    }
+    // H5：类目属性写页。值来自本地草稿（保存后的 details.itemSpecifics），槽位形状来自类目/产品级缓存清单；
+    // 三种控件各走各的写法（输入直写、Yes/No 点 pill、菜单开面板检索点选），一律回读落定才记已填，
+    // 落不定的逐条点名进 warnings——写一个没落定的值比不写更糟。
+    const specificsRows=(details.itemSpecifics||[])
+      .filter(row=>row&&row.name&&String(row.value||'').trim())
+      .map(row=>{
+        const slot=(specificsSection?.slots||[]).find(item=>item.name.trim().toLowerCase()===row.name.trim().toLowerCase())
+        return slot?{name:slot.name,value:String(row.value).trim(),control:slot.control}:null
+      })
+      .filter((row):row is {name:string;value:string;control:EbayItemSpecificSlot['control']}=>Boolean(row))
+    if(specificsRows.length){
+      const specificsScript=`(async()=>{
+        const __yanduSpecificsWrite=${JSON.stringify(specificsRows)};
+        const clean=t=>(t||'').replace(/\\s+/g,' ').trim();
+        const wait=ms=>new Promise(r=>setTimeout(r,ms));
+        const scope=document.querySelector('.summary__attributes')||document;
+        const fields=[...scope.querySelectorAll('.summary__attributes--field')];
+        const rowOf=name=>fields.find(f=>{const label=f.querySelector('.summary__attributes--label');return label&&clean(label.textContent).replace(/\\s*\\*$/,'').toLowerCase()===String(name).toLowerCase()});
+        const setNative=(el,value)=>{const proto=el.tagName==='TEXTAREA'?window.HTMLTextAreaElement.prototype:window.HTMLInputElement.prototype;const setter=Object.getOwnPropertyDescriptor(proto,'value').set;setter.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}))};
+        const out=[];
+        for(const row of __yanduSpecificsWrite){
+          const field=rowOf(row.name);
+          if(!field){out.push({name:row.name,settled:false,reason:'页面没有该槽位'});continue}
+          try{
+            if(row.control==='YESNO'){
+              const pill=[...field.querySelectorAll('button')].find(b=>clean(b.textContent).toLowerCase()===row.value.toLowerCase());
+              if(!pill){out.push({name:row.name,settled:false,reason:'页面没有该 Yes/No 选项'});continue}
+              pill.click();await wait(400);
+              const now=[...field.querySelectorAll('button')].find(b=>clean(b.textContent).toLowerCase()===row.value.toLowerCase());
+              const pressed=Boolean(now&&now.getAttribute('aria-pressed')==='true');
+              out.push({name:row.name,settled:pressed,reason:pressed?'':'点击后未落定'})
+            } else if(row.control==='TEXT'||row.control==='TEXTAREA'){
+              const input=field.querySelector('input.textbox__control,textarea.textbox__control');
+              if(!input){out.push({name:row.name,settled:false,reason:'页面没有输入框'});continue}
+              setNative(input,row.value);await wait(300);
+              const same=clean(input.value)===clean(row.value);
+              out.push({name:row.name,settled:same,reason:same?'':'回读不一致'})
+            } else {
+              const menu=field.querySelector('button.se-expand-button__button');
+              if(!menu){out.push({name:row.name,settled:false,reason:'页面没有菜单控件'});continue}
+              menu.click();await wait(700);
+              const panelInput=[...document.querySelectorAll('input')].find(i=>/Search or enter your own/i.test(i.placeholder||'')&&i.getClientRects().length);
+              if(!panelInput){out.push({name:row.name,settled:false,reason:'菜单面板没打开'});continue}
+              setNative(panelInput,row.value);await wait(1200);
+              const option=[...document.querySelectorAll('li[role=option],[role=menuitem],button')].filter(el=>el.getClientRects().length&&clean(el.textContent).toLowerCase()===row.value.toLowerCase())[0];
+              if(!option){menu.click();await wait(300);out.push({name:row.name,settled:false,reason:'候选里没有该值'});continue}
+              option.click();await wait(600);
+              const after=rowOf(row.name);
+              const valueText=after?clean(after.textContent):'';
+              const hit=valueText.toLowerCase().includes(row.value.toLowerCase());
+              out.push({name:row.name,settled:hit,reason:hit?'':'回读不含该值'})
+            }
+          }catch(error){out.push({name:row.name,settled:false,reason:'写入异常：'+(error&&error.message?error.message:'unknown')})}
+        }
+        return out;
+      })()`
+      const settle=await tab.view.webContents.executeJavaScript(specificsScript,true).catch(()=>null) as Array<{name:string;settled:boolean;reason:string}>|null
+      const okCount=Array.isArray(settle)?settle.filter(row=>row.settled).length:0
+      result.filledFields=result.filledFields.filter(label=>!label.startsWith('类目属性'))
+      result.skippedFields=result.skippedFields.filter(label=>label!=='类目属性')
+      if(okCount>0)result.filledFields.push(`类目属性 ${okCount}/${specificsRows.length}`)
+      if(okCount<specificsRows.length){
+        const bad=Array.isArray(settle)?settle.filter(row=>!row.settled):specificsRows.map(row=>({name:row.name,reason:'写入结果缺失'}))
+        result.skippedFields.push('类目属性')
+        result.warnings.push(`类目属性 ${bad.length} 项未能写入 eBay 页面：${bad.slice(0,6).map(row=>`${row.name}（${row.reason}）`).join('；')}${bad.length>6?' 等':''}；请在页面人工补齐。`)
+      }
     }
     const bannerText=`已从本地版本填写 ${[...new Set(result.filledFields)].length} 项，跳过 ${[...new Set(result.skippedFields)].length} 项；尚未提交。请逐项核对图片、类目、业务政策和费用，再由您点击 eBay 最终提交按钮。`
     await tab.view.webContents.executeJavaScript(`(()=>{const banner=document.getElementById('__cross_border_local_revision_guard');if(banner)banner.textContent=${JSON.stringify(bannerText)}})()`,true).catch(()=>undefined)

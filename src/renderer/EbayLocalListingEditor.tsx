@@ -40,6 +40,13 @@ type Props={
   attributeSlotsAt?:string
   /** 现网 ITEM SPECIFICS 段顶部的 eBay.ai 建议卡；现网按条件渲染，读不到即为 null，段内不画卡片 */
   suggestedCard?:EbaySuggestedSpecificsCard|null
+  /** H4：段头两个功能键——按产品已设 eBay 类目现读槽位清单；按产品真实内容自动填槽位。接线在 App */
+  onReadSpecifics?:()=>void
+  onFillSpecifics?:()=>void
+  readingSpecifics?:boolean
+  fillingSpecifics?:boolean
+  /** 上次「类目属性填写」落进草稿的时刻；自动填的值必须标来源与时间（五硬要求） */
+  specificsFilledAt?:string
   inline?:boolean
 }
 
@@ -184,7 +191,7 @@ function CustomCategoryDropdown({options,value,onChange,disabled,placeholder,sav
   )
 }
 
-export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,gaps,businessPolicies,readingPolicies,onReadPolicies,policyCarrierItemId,onPolicyCarrierItemIdChange,routeKind='revise',attributeSection,attributeSlotsAt='',suggestedCard=null,inline}:Props) {
+export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,gaps,businessPolicies,readingPolicies,onReadPolicies,policyCarrierItemId,onPolicyCarrierItemIdChange,routeKind='revise',attributeSection,attributeSlotsAt='',suggestedCard=null,onReadSpecifics,onFillSpecifics,readingSpecifics=false,fillingSpecifics=false,specificsFilledAt='',inline}:Props) {
   const fileInput=useRef<HTMLInputElement>(null)
   const [draggedId,setDraggedId]=useState('')
   // 视频瓦片左上的时长徽章照现网画（现网原文「00:41」）：只画媒体元素真读到的秒数，读不到就不画，不编 00:00
@@ -460,6 +467,12 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
 
           <section id="ebay-revise-specifics" className="ebay-revise-band">
             <header className="ebay-revise-band-head"><div><h2>类目属性</h2><p>{attributeSlots.length?'照 eBay 现网 ITEM SPECIFICS 段逐行铺开：分组、必填、控件形状与长度上限都取现网读回的原文，值仍可手改。':'对应 eBay Item specifics 段；来源与待确认状态逐行标出。'}</p>{attributeSlotsAtText&&<p className="ebay-band-stamp">{`现网清单读取于 ${attributeSlotsAtText}`}</p>}</div><span className="ebay-band-counter" data-ebay-slot="section-action">{attributeSlots.length?`${attributeSlots.length} 个现网槽位`:`${specifics.length} 项`}</span></header>
+            {/* H4 两个功能键：读取按产品已设 eBay 类目现读（同类目已缓存就不开页）；填写按产品真实内容过 shared 白名单判据后落草稿。 */}
+            <div className="ebay-specifics-actions">
+              <button type="button" disabled={readingSpecifics} onClick={onReadSpecifics}>{readingSpecifics?'正在读取…':'读取类目属性'}</button>
+              <button type="button" disabled={fillingSpecifics||!attributeSlots.length} onClick={onFillSpecifics} title="按本地标题/描述/已记属性自动填槽位；人工改过的值不覆盖，AI 推断的标待确认。">{fillingSpecifics?'正在填写…':'类目属性填写'}</button>
+              {specificsFilledAt&&<em className="ebay-band-stamp">{`上次自动填写 ${specificsFilledAt}`}</em>}
+            </div>
             {pendingSpecifics.length>0&&(
               <div className="ebay-specific-suggestions">
                 <div><b>待确认属性 {pendingSpecifics.length} 项</b><span>来源是源页抓取、枚举匹配或 AI 推断的属性，确认后即记为人工确认；采用后照样能在下方逐行改。</span></div>

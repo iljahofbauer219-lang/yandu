@@ -368,6 +368,18 @@ export class AppDatabase {
       );
       /* 不挂 ebay_local_products 外键：产品删除后的孤儿行无害（读取只按现有产品 id 查），
          挂外键反而会让「先落清单、产品行后到」的并发顺序整行写失败。 */
+      /* H1：类目属性槽位是类目的资产不是产品的资产——同类目换产品清单完全一样（2026-11-11 用户两问）。
+         按 (store_id, category_key) 主键缓存整段清单：读取成功双写这里与产品行，进发布先命中这里就不开页。
+         category_key 取开页路由用的平台类目 id；没有类目 id 的读取只写产品行、不写这张表。 */
+      CREATE TABLE IF NOT EXISTS ebay_category_specifics (
+        store_id TEXT NOT NULL,
+        category_key TEXT NOT NULL,
+        section_json TEXT NOT NULL,
+        source_url TEXT NOT NULL DEFAULT '',
+        read_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (store_id, category_key)
+      );
       CREATE TABLE IF NOT EXISTS ebay_market_research (
         id TEXT PRIMARY KEY,
         store_id TEXT NOT NULL,
@@ -1804,6 +1816,24 @@ export class AppDatabase {
       return {section,sourceUrl:row.source_url||'',readAt:row.read_at||''}
     } catch {
       console.warn('[ebay-specifics-section] 持久化行内容损坏，按没读过处理：',productId)
+      return null
+    }
+  }
+
+  saveEbayCategorySpecificsSection(input:{storeId:string;categoryKey:string;section:EbayItemSpecificsSection;sourceUrl:string;readAt:string}):void {
+    const now=new Date().toISOString()
+    this.database.prepare(`INSERT INTO ebay_category_specifics (store_id,category_key,section_json,source_url,read_at,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(store_id,category_key) DO UPDATE SET section_json=excluded.section_json,source_url=excluded.source_url,read_at=excluded.read_at,updated_at=excluded.updated_at`).run(input.storeId,input.categoryKey,JSON.stringify(input.section),input.sourceUrl||'',input.readAt||now,now)
+  }
+
+  getEbayCategorySpecificsSection(storeId:string,categoryKey:string):{section:EbayItemSpecificsSection;sourceUrl:string;readAt:string}|null {
+    const row=this.database.prepare('SELECT section_json,source_url,read_at FROM ebay_category_specifics WHERE store_id=? AND category_key=?').get(storeId,categoryKey) as {section_json:string;source_url:string;read_at:string}|undefined
+    if(!row)return null
+    try {
+      const section=JSON.parse(row.section_json) as EbayItemSpecificsSection
+      if(!section||!Array.isArray(section.slots)||!Array.isArray(section.groups))return null
+      return {section,sourceUrl:row.source_url||'',readAt:row.read_at||''}
+    } catch {
+      console.warn('[ebay-category-specifics] 类目缓存行内容损坏，按没读过处理：',storeId,categoryKey)
       return null
     }
   }

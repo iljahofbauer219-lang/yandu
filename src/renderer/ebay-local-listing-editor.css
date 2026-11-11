@@ -89,6 +89,14 @@ button[data-ebay-slot="section-action"]:disabled{background:#ececec;border-color
 .ebay-photo-add:hover:not(:disabled){background:#ececec}
 .ebay-photo-add:disabled{opacity:.6;cursor:progress}
 
+/* 05 类目属性段头两个功能键（H4）：读取按产品已设类目现读/命中类目缓存，填写按产品真实内容过 shared 判据。
+   本地控件不伪装成现网元素，故用普通按钮形，与段头灰胶囊区分。 */
+.ebay-specifics-actions{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin:0 0 12px}
+.ebay-specifics-actions button{border:1px solid #08766d;border-radius:10px;padding:7px 14px;background:#fff;color:#08766d;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.ebay-specifics-actions button:hover:not(:disabled){background:#e8f5f4}
+.ebay-specifics-actions button:disabled{border-color:#dcdcdc;background:#f5f5f5;color:#767676;cursor:progress}
+.ebay-specifics-actions .ebay-band-stamp{margin:0}
+
 /* 02 标题 / 03 类目 = 现网 AddItem TITLE 与 ITEM CATEGORY 段逐值复刻（2026-11-11 量测，
    ~/.yandu-acceptance/2026-11-11-G1/G1-title-category.json、G1-title-body.json）：两段 H2 同 16px/700 + uppercase；
    标题输入框外层 .textbox--large 是 bg rgb(247,247,247)、border 0.6px solid rgb(143,143,143)、radius 8、高 46、宽 975；
