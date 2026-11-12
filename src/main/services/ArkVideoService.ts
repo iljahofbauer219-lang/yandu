@@ -77,6 +77,14 @@ function safeSegment(value:string) {
   return value.replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,80)||'item'
 }
 
+/** 方舟 content 组装：单图 role 可省略（默认 first_frame）；多图必须显式 role，多参考用 reference_image */
+export function buildArkVideoContent(prompt:string,imageDataUrls:string[]):Array<Record<string,unknown>> {
+  const images=imageDataUrls.map(url=>imageDataUrls.length>1
+    ? {type:'image_url',image_url:{url},role:'reference_image'}
+    : {type:'image_url',image_url:{url}})
+  return [{type:'text',text:prompt},...images]
+}
+
 function mimeForExtension(extension:string) {
   if(extension==='.png')return 'image/png'
   if(extension==='.webp')return 'image/webp'
@@ -763,15 +771,14 @@ export class ArkVideoService {
   }
 
   private async createTask(prompt:string,imagePaths:string[],videoModelId:string) {
-    const imageContent=imagePaths.map(imagePath=>{
+    const imageDataUrls=imagePaths.map(imagePath=>{
       const extension=path.extname(imagePath).toLowerCase()
-      const imageData=`data:${mimeForExtension(extension)};base64,${fs.readFileSync(imagePath).toString('base64')}`
-      return {type:'image_url',image_url:{url:imageData}}
+      return `data:${mimeForExtension(extension)};base64,${fs.readFileSync(imagePath).toString('base64')}`
     })
     const response=await fetch(`${this.baseUrl}/contents/generations/tasks`,{
       method:'POST',signal:AbortSignal.timeout(60_000),
       headers:{Authorization:`Bearer ${this.apiKey}`,'Content-Type':'application/json'},
-      body:JSON.stringify({model:videoModelId,content:[{type:'text',text:prompt},...imageContent]})
+      body:JSON.stringify({model:videoModelId,content:buildArkVideoContent(prompt,imageDataUrls)})
     })
     const payload=await response.json().catch(()=>({}))
     if(!response.ok)throw new Error(`方舟任务提交失败（HTTP ${response.status}）：${taskError(payload)}`)
