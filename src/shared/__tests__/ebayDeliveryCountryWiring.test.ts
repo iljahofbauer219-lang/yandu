@@ -65,12 +65,12 @@ describe('收货地二选一 · 主进程只走 eBay 官方偏好接口', () => 
     expect(body).toContain('readEbayDeliveryPostal')
     expect(body.indexOf('readEbayDeliveryPostal')).toBeLessThan(body.indexOf('/gh/setuserpreference'))
     expect(body).toContain("cookies.get({name:'nonsession'})")
-    expect(body).toContain('view.webContents.session.cookies.set(')
+    expect(body).toContain('session.cookies.set(')
     expect(body).toContain('postalBefore')
   })
 
   it('只在邮编被清空时回写快照，读回是别的非空邮编不覆盖', () => {
-    expect(method()).toContain("readEbayDeliveryPostal(shipToLocation)===''")
+    expect(method()).toContain("readEbayDeliveryPostal(header.shipToLocation)===''")
   })
 
   it('邮编记忆按店铺会话跨调用保存，回程不重新捕获已清空的邮编', () => {
@@ -127,6 +127,23 @@ describe('收货地二选一 · 渲染端两项菜单沿用工具栏样式', () 
     expect(handler).toContain('result.manualUrl')
     expect(handler).toContain('result.refreshRequired')
     expect(handler).toContain('setEbayErrorAction')
+  })
+
+  it('主进程走原生语言序列：构造 dp1、带 lang 参数导航、调 UpdateUserInfo', () => {
+    const body = slice(workspaceSource, 'async setEbayDeliveryCountry', '\n  private ')
+    expect(body).toContain('buildNativeLanguageDp1')
+    expect(body).toContain("searchParams.set('lang'")
+    expect(body).toContain('UpdateUserInfo')
+    expect(body).toContain('session.fetch(')
+    expect(body).toContain('ebayNativeLanguage')
+  })
+
+  it('渲染端不再联动 Qwen-MT 翻译，翻译按钮保留为独立手动功能', () => {
+    const handler = slice(appSource, 'const switchEbayDeliveryCountry', 'const translateEbayPage')
+    expect(handler).not.toContain('translateEbayPage')
+    expect(handler).not.toContain('restoreEbayTranslation')
+    expect(appSource).not.toContain('resolveDeliveryTranslationLink')
+    expect(appSource).toContain('translation-trigger')
   })
 
   it('不再宣称「仅保存在当前店铺会话」这类不实文案', () => {

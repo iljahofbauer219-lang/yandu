@@ -8,6 +8,8 @@ import {
   parseEbayPreferencePost,
   readEbayDeliveryCountry,
   readEbayDeliveryPostal,
+  buildNativeLanguageDp1,
+  ebayNativeLanguage,
   resolveEbayDeliveryCountry,
   resolvePostalRetention
 } from '../ebayDeliveryCountry'
@@ -111,10 +113,10 @@ describe('收货地二选一 · 结果判定', () => {
     expect(result.reason).toContain('页面已刷新')
   })
 
-  it('中国态如实说明不改写顶栏语言与邮编', () => {
+  it('中国态未读回语言时不声称语言生效', () => {
     const result = resolveEbayDeliveryCountry({ ...base, shipToLocation: '%2CCHN' })
-    expect(result.reason).toContain('语言')
-    expect(result.reason).toContain('邮编')
+    expect(result.ok).toBe(true)
+    expect(result.reason).not.toContain('已生效')
   })
 
   it('美国态成功文案不承诺中文界面', () => {
@@ -242,11 +244,10 @@ describe('收货地二选一 · 往返保留邮编', () => {
     expect(result.reason).not.toContain('10001')
   })
 
-  it('中国态文案不因保留邮编而改变', () => {
-    const result = resolveEbayDeliveryCountry({ ...base, requested: 'CN', shipToLocation: '%2CCHN', postalBefore: '91789' })
+  it('中国态不声称保留邮编', () => {
+    const result = resolveEbayDeliveryCountry({ ...base, requested: 'CN', shipToLocation: '%2CCHN', postalBefore: '91789', language: 'zh-CN', languageTarget: 'zh-CN' })
     expect(result.ok).toBe(true)
-    expect(result.reason).toContain('语言')
-    expect(result.reason).toContain('邮编')
+    expect(result.reason).toContain('简体中文')
     expect(result.reason).not.toContain('已保留')
   })
 })
@@ -267,5 +268,80 @@ describe('收货地二选一 · 跨调用记住邮编', () => {
 
   it('当前邮编变化时刷新记忆，不拿旧邮编顶替', () => {
     expect(resolvePostalRetention({ currentPostal: '10001', rememberedPostal: '91789' })).toEqual({ postalBefore: '10001', shouldSnapshot: true })
+  })
+})
+
+describe('收货地二选一 · 原生语言映射与 dp1 构造', () => {
+  it('中国对应 zh-CN，美国对应 en-US', () => {
+    expect(ebayNativeLanguage('CN')).toBe('zh-CN')
+    expect(ebayNativeLanguage('US')).toBe('en-US')
+  })
+
+  const now = Date.UTC(2026, 10, 12, 0, 0, 0)
+  const suffix = Math.floor((now + 730 * 86400000) / 1000).toString(16)
+  const raw = 'bu1p/Y255YW5kdQ**6eb7b26a^pbf/%232000000c400e000000080000000046cd67eea^u1f/Jianrong6eb7b26a^bl/USen-US6eb7b26a^'
+
+  it('bl 写成目标国家码加语言并带 730 天后缀', () => {
+    const out = buildNativeLanguageDp1(raw, 'CN', now) || ''
+    expect(out).toContain(`bl/CNzh-CN${suffix}^`)
+    expect(out).toContain('bu1p/Y255YW5kdQ**6eb7b26a^')
+    expect(out).toContain('u1f/Jianrong6eb7b26a^')
+  })
+
+  it('pbf 第 95 位置 1 且保留其余位与后缀', () => {
+    const out = buildNativeLanguageDp1(raw, 'CN', now) || ''
+    const seg = out.split('^').find(x => x.startsWith('pbf/')) || ''
+    const decoded = decodeURIComponent(seg.slice(4))
+    const body = decoded.slice(0, -8)
+    const idx = body.length - (Math.floor(95 / 4) + 1)
+    expect(parseInt(body[idx], 16) & 8).toBe(8)
+    expect(decoded.endsWith(suffix)).toBe(true)
+    expect(body.length).toBe(decodeURIComponent('%232000000c400e000000080000000046cd67eea').length - 8)
+  })
+
+  it('缺 pbf 时补零到能容纳第 95 位再置位', () => {
+    const out = buildNativeLanguageDp1('bl/USen-US6eb7b26a^', 'US', now) || ''
+    const seg = out.split('^').find(x => x.startsWith('pbf/')) || ''
+    const body = decodeURIComponent(seg.slice(4)).slice(0, -8)
+    expect(body.length).toBe(25)
+    expect(parseInt(body[body.length - 24], 16) & 8).toBe(8)
+  })
+
+  it('空 dp1 不构造，返回 null', () => {
+    expect(buildNativeLanguageDp1('', 'CN', now)).toBeNull()
+  })
+})
+
+describe('收货地二选一 · 原生语言结果判定', () => {
+  const base = { requested: 'CN' as const, hasEbayView: true, postAccepted: true, postStatus: 200, shipToLocation: '%2CCHN', languageTarget: 'zh-CN' }
+
+  it('国家与原生语言都落地时如实说简体中文已生效', () => {
+    const result = resolveEbayDeliveryCountry({ ...base, language: 'zh-CN' })
+    expect(result.ok).toBe(true)
+    expect(result.reason).toContain('简体中文')
+    expect(result.reason).toContain('已生效')
+  })
+
+  it('美国态原生英文生效且邮编保留时两条都写进提示', () => {
+    const result = resolveEbayDeliveryCountry({ ...base, requested: 'US', shipToLocation: '91789%2CUSA', postalBefore: '91789', languageTarget: 'en-US', language: 'en-US' })
+    expect(result.ok).toBe(true)
+    expect(result.reason).toContain('英文')
+    expect(result.reason).toContain('91789')
+  })
+
+  it('国家落地但原生语言没切时报失败并点名读回值与手动出口', () => {
+    const result = resolveEbayDeliveryCountry({ ...base, language: 'en-US' })
+    expect(result.ok).toBe(false)
+    expect(result.country).toBe('CN')
+    expect(result.reason).toContain('原生语言')
+    expect(result.reason).toContain('en-US')
+    expect(result.reason.endsWith('。')).toBe(true)
+    expect(result.manualUrl).toContain('accountsettings.ebay.com')
+  })
+
+  it('国家没切成时不声称语言生效', () => {
+    const result = resolveEbayDeliveryCountry({ ...base, shipToLocation: '%2CUSA', language: 'zh-CN' })
+    expect(result.ok).toBe(false)
+    expect(result.reason).not.toContain('已生效')
   })
 })

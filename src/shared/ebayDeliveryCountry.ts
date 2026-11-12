@@ -79,6 +79,48 @@ export function isEbayListingFormUrl(rawUrl: string): boolean {
   }
 }
 
+export const EBAY_LANGUAGE_MANUAL_URL = 'https://accountsettings.ebay.com/'
+
+/** eBay 原生界面语言：中国=简体中文，美国=英文；与 Qwen-MT 网页翻译无关 */
+export function ebayNativeLanguage(country: EbayDeliveryCountry): string {
+  return country === 'CN' ? 'zh-CN' : 'en-US'
+}
+
+function setPbfBit(body: string, bit: number, value: 0 | 1): string {
+  const nibble = bit % 4
+  const offset = Math.floor(bit / 4) + 1
+  let e = body
+  if (e.length <= offset) {
+    if (value !== 1) return e
+    e = '#' + '0'.repeat(offset - e.length + 1) + e.substring(1)
+  }
+  const index = e.length - offset
+  const current = parseInt(e[index], 16)
+  const mask = 1 << nibble
+  const next = value === 1 ? current | mask : current & ~mask
+  return e.substring(0, index) + next.toString(16) + e.substring(index + 1)
+}
+
+/** 复现 eBay 顶栏语言开关的 dp1 写法：bl=国家码+语言+730天后缀，pbf 第95位置1 */
+export function buildNativeLanguageDp1(raw: string, country: EbayDeliveryCountry, nowMs: number): string | null {
+  if (!raw) return null
+  const parts = raw.split('^').filter(Boolean).map(seg => {
+    const i = seg.indexOf('/')
+    return [seg.slice(0, i), seg.slice(i + 1)] as [string, string]
+  })
+  const get = (name: string) => (parts.find(part => part[0] === name) || ['', ''])[1]
+  const suffix = Math.floor((nowMs + 730 * 86400000) / 1000).toString(16)
+  const pbfRaw = get('pbf')
+  const body = pbfRaw ? decodeURIComponent(pbfRaw).slice(0, -8) : '#'
+  const newPbf = encodeURIComponent(setPbfBit(body, 95, 1) + suffix)
+  const newBl = `${country}${ebayNativeLanguage(country)}${suffix}`
+  const names = new Set(parts.map(part => part[0]))
+  const out = parts.map(([name, value]) => name === 'bl' ? `bl/${newBl}` : name === 'pbf' ? `pbf/${newPbf}` : `${name}/${value}`)
+  if (!names.has('bl')) out.push(`bl/${newBl}`)
+  if (!names.has('pbf')) out.push(`pbf/${newPbf}`)
+  return out.join('^') + '^'
+}
+
 /** 去程切换会把邮编清掉，回程当前值已空；邮编记忆必须跨调用保留 */
 export function resolvePostalRetention(input: { currentPostal: string; rememberedPostal?: string | null }): { postalBefore: string; shouldSnapshot: boolean } {
   const current = (input.currentPostal || '').trim()
@@ -94,6 +136,8 @@ export interface EbayDeliveryCountryFacts {
   listingForm?: boolean
   shipToLocation?: string | null
   postalBefore?: string | null
+  language?: string | null
+  languageTarget?: string
 }
 
 export function resolveEbayDeliveryCountry(facts: EbayDeliveryCountryFacts): EbayDeliveryCountryResult {
@@ -115,7 +159,7 @@ export function resolveEbayDeliveryCountry(facts: EbayDeliveryCountryFacts): Eba
       ok: true,
       country: facts.requested,
       label: wanted,
-      reason: `收货地已设为${wanted}。当前是刊登编辑页，为避免丢失未保存内容没有自动刷新，点「刷新页面」后生效。`,
+      reason: `收货地已设为${wanted}，原生语言偏好已提交。当前是刊登编辑页，为避免丢失未保存内容没有自动刷新，点「刷新页面」后生效。`,
       manualUrl,
       refreshRequired: true
     }
@@ -129,16 +173,22 @@ export function resolveEbayDeliveryCountry(facts: EbayDeliveryCountryFacts): Eba
   if (actual === 'US' && postalBefore && !postalAfter) {
     return failed(actual, `收货地已切到美国，但原邮编 ${postalBefore} 未能恢复。请点「去 eBay 收货地址设置」手动补填邮编。`)
   }
+  const langTarget = facts.languageTarget || ebayNativeLanguage(facts.requested)
+  if (facts.language != null && facts.language !== langTarget) {
+    return { ok: false, country: actual, label: wanted, reason: `收货地已切到${wanted}，但 eBay 原生语言未切到${langTarget}（读回 ${facts.language || '空'}）。请点「去 eBay 账号设置」手动切换语言。`, manualUrl: EBAY_LANGUAGE_MANUAL_URL, refreshRequired: false }
+  }
+  const langOk = facts.language === langTarget
   const keptPostal = actual === 'US' && postalBefore && postalAfter === postalBefore
+  const langClause = langOk ? (actual === 'CN' ? 'eBay 原生简体中文已生效，' : 'eBay 原生英文已生效，') : ''
   return {
     ok: true,
     country: actual,
     label: wanted,
     reason: actual === 'CN'
-      ? '收货地已切到中国大陆，页面已刷新。顶栏语言与邮编由 eBay 账号设置决定，本开关不改写。'
+      ? `收货地已切到中国大陆，${langClause}页面已刷新。`
       : keptPostal
-        ? `收货地已切到美国，页面已刷新，原邮编 ${postalBefore} 已保留。`
-        : '收货地已切到美国，页面已刷新。',
+        ? `收货地已切到美国，${langClause}页面已刷新，原邮编 ${postalBefore} 已保留。`
+        : `收货地已切到美国，${langClause}页面已刷新。`,
     manualUrl,
     refreshRequired: false
   }

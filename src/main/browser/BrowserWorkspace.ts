@@ -14,7 +14,7 @@ import { decideEbayReadOutcome, ebayReadFailureMessage } from '../../shared/ebay
 import { buildSemanticDigest, mergeSemanticFallback, shouldAttemptSemanticFallback } from '../../shared/semanticFallback'
 import type { SemanticExtractionResult, SemanticField } from '../../shared/semanticFallback'
 import { EBAY_SITE_ROOT_DOMAINS, isEbayDotComHost } from '../../shared/ebaySites'
-import { ebayDeliveryAlpha3, isEbayListingFormUrl, parseEbayPreferencePost, readEbayDeliveryPostal, resolveEbayDeliveryCountry, resolvePostalRetention } from '../../shared/ebayDeliveryCountry'
+import { buildNativeLanguageDp1, ebayDeliveryAlpha3, ebayNativeLanguage, isEbayListingFormUrl, parseEbayPreferencePost, readEbayDeliveryPostal, resolveEbayDeliveryCountry, resolvePostalRetention } from '../../shared/ebayDeliveryCountry'
 import { extractPolicyIdFromLabel } from '../../shared/ebayListingForm'
 import { resolveEbayListingTarget, resolveEbayListingTargetForProduct } from '../../shared/ebayListingTarget'
 import { planEbayUploadMedia, type EbayUploadMediaPlanRow } from '../../shared/ebayUploadMediaPlan'
@@ -2774,10 +2774,21 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     })()`,true) as string
     const post=parseEbayPreferencePost(postRaw)
     if(!post.accepted)return resolveEbayDeliveryCountry({requested:country,hasEbayView:true,postAccepted:false,postStatus:post.status||undefined})
-    if(listingForm)return resolveEbayDeliveryCountry({requested:country,hasEbayView:true,postAccepted:true,postStatus:post.status,listingForm:true})
-    let shipToLocation=await this.reloadAndReadShipToLocation(view)
-    if(country==='US'&&postalBefore&&postalSnapshot&&readEbayDeliveryPostal(shipToLocation)===''){
-      await view.webContents.session.cookies.set({
+    const lang=ebayNativeLanguage(country)
+    const dp1=(await session.cookies.get({name:'dp1'})).find(item=>item.domain==='.ebay.com')
+    const nativeDp1=dp1?buildNativeLanguageDp1(dp1.value,country,Date.now()):null
+    if(nativeDp1&&dp1){
+      await session.cookies.set({url:'https://www.ebay.com/',name:'dp1',value:nativeDp1,domain:dp1.domain,path:dp1.path,secure:dp1.secure,httpOnly:dp1.httpOnly,sameSite:dp1.sameSite==='unspecified'?undefined:dp1.sameSite,expirationDate:dp1.expirationDate})
+    }
+    if(listingForm){
+      await session.fetch('https://my.ebay.com/ws/eBayISAPI.dll?UpdateUserInfo',{credentials:'include'}).catch(()=>undefined)
+      return resolveEbayDeliveryCountry({requested:country,hasEbayView:true,postAccepted:true,postStatus:post.status,listingForm:true,postalBefore,languageTarget:lang})
+    }
+    const langUrl=new URL(current)
+    langUrl.searchParams.set('lang',lang)
+    let header=await this.reloadAndReadShipToLocation(view,langUrl.toString())
+    if(country==='US'&&postalBefore&&postalSnapshot&&readEbayDeliveryPostal(header.shipToLocation)===''){
+      await session.cookies.set({
         url:'https://www.ebay.com/',
         name:postalSnapshot.name,
         value:postalSnapshot.value,
@@ -2788,23 +2799,27 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
         sameSite:postalSnapshot.sameSite==='unspecified'?undefined:postalSnapshot.sameSite,
         expirationDate:postalSnapshot.expirationDate
       })
-      shipToLocation=await this.reloadAndReadShipToLocation(view)
+      header=await this.reloadAndReadShipToLocation(view)
     }
-    return resolveEbayDeliveryCountry({requested:country,hasEbayView:true,postAccepted:true,postStatus:post.status,shipToLocation,postalBefore})
+    await session.fetch('https://my.ebay.com/ws/eBayISAPI.dll?UpdateUserInfo',{credentials:'include'}).catch(()=>undefined)
+    header=await this.reloadAndReadShipToLocation(view)
+    return resolveEbayDeliveryCountry({requested:country,hasEbayView:true,postAccepted:true,postStatus:post.status,shipToLocation:header.shipToLocation,postalBefore,language:header.lng,languageTarget:lang})
   }
 
-  private async reloadAndReadShipToLocation(view:WebContentsView):Promise<string|null> {
+  private async reloadAndReadShipToLocation(view:WebContentsView,url?:string):Promise<{shipToLocation:string|null;lng:string|null}> {
     await view.webContents.executeJavaScript(`window.__crossBorderDeliveryProbe=1`,true)
-    view.webContents.reload()
-    let shipToLocation:string|null=null
+    if(url)await view.webContents.loadURL(url)
+    else view.webContents.reload()
+    let header:{shipToLocation:string|null;lng:string|null}={shipToLocation:null,lng:null}
     await pollUntil(async()=>{
       if(view.webContents.isDestroyed())return false
-      const value=await view.webContents.executeJavaScript(`window.__crossBorderDeliveryProbe?'':((window.GHpre&&window.GHpre.shipToLocation)||'')`,true) as string
+      const value=await view.webContents.executeJavaScript(`window.__crossBorderDeliveryProbe?'':JSON.stringify({ship:((window.GHpre&&window.GHpre.shipToLocation)||''),lng:(((window.GH||{}).C||{}).lng||'')})`,true) as string
       if(!value)return false
-      shipToLocation=value
+      const parsed=JSON.parse(value) as {ship:string;lng:string}
+      header={shipToLocation:parsed.ship||null,lng:parsed.lng||null}
       return true
     },{intervalMs: 600, timeoutMs: 15000})
-    return shipToLocation
+    return header
   }
 
   private async injectEbayScrollbars(view:WebContentsView) {

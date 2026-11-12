@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { EbayItemSpecific, EbayLocalProduct, EbayLocalProductUpdateInput, EbayStoreBusinessPolicy, EbayStoreCategory } from '../shared/contracts'
 import { formatFormGaps, type EbayFormGap } from '../shared/ebayListingForm'
 import { ebayImageRuleRows } from '../shared/ebayLocalMedia'
@@ -49,6 +49,8 @@ type Props={
   /** 上次「类目属性填写」落进草稿的时刻；自动填的值必须标来源与时间（五硬要求） */
   specificsFilledAt?:string
   inline?:boolean
+  /** 中国态：eBay 后台为原生中文，页头与媒体段照现网中文逐字单语渲染 */
+  nativeChinese?:boolean
 }
 
 type RouteCopy={prepare:string;preparing:string;gapNote:string;fieldNote:string;routeNote:string}
@@ -121,7 +123,11 @@ function mediaUrl(localPath:string,remoteUrl:string) {
  * 现网原文在上、中文对照在下：图片段按用户口径（2026-11-10）逐字复刻 eBay PHOTOS & VIDEO，
  * 英文取 DOM 原文（~/.yandu-acceptance/2026-11-10-F1/F1-photos-section.json），中文只做对照不改判据。
  */
-function Bi({en,zh}:{en:string;zh:string}) {
+const NativeChineseContext=createContext(false)
+
+function Bi({en,zh,zhNative}:{en:string;zh:string;zhNative?:string}) {
+  const nativeChinese=useContext(NativeChineseContext)
+  if(nativeChinese)return <span className="ebay-bilingual"><span className="ebay-zh">{zhNative??zh}</span></span>
   return <span className="ebay-bilingual"><span className="ebay-en">{en}</span><span className="ebay-zh">{zh}</span></span>
 }
 
@@ -194,7 +200,7 @@ function CustomCategoryDropdown({options,value,onChange,disabled,placeholder,sav
   )
 }
 
-export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,gaps,businessPolicies,readingPolicies,onReadPolicies,policyCarrierItemId,onPolicyCarrierItemIdChange,routeKind='revise',attributeSection,attributeSlotsAt='',suggestedCard=null,onReadSpecifics,onFillSpecifics,readingSpecifics=false,fillingSpecifics=false,specificsFilledAt='',inline}:Props) {
+export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,gaps,businessPolicies,readingPolicies,onReadPolicies,policyCarrierItemId,onPolicyCarrierItemIdChange,routeKind='revise',attributeSection,attributeSlotsAt='',suggestedCard=null,onReadSpecifics,onFillSpecifics,readingSpecifics=false,fillingSpecifics=false,specificsFilledAt='',nativeChinese=false,inline}:Props) {
   const fileInput=useRef<HTMLInputElement>(null)
   const [draggedId,setDraggedId]=useState('')
   // 视频瓦片左上的时长徽章照现网画（现网原文「00:41」）：只画媒体元素真读到的秒数，读不到就不画，不编 00:00
@@ -342,7 +348,7 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
   }
   const removeMedia=(id:string)=>set('media',draft.media.filter(item=>item.id!==id).map((entry,sortOrder)=>({...entry,sortOrder})))
 
-  return <div className={inline?'ebay-revise-inline':'ebay-revise-overlay'} role={inline?undefined:'dialog'} aria-modal={inline?undefined:true} aria-label="本地 eBay 商品编辑器">
+  return <NativeChineseContext.Provider value={nativeChinese}><div className={inline?'ebay-revise-inline':'ebay-revise-overlay'} role={inline?undefined:'dialog'} aria-modal={inline?undefined:true} aria-label="本地 eBay 商品编辑器">
     <div className="ebay-revise-shell">
       <header className="ebay-revise-topbar">
         <div className="ebay-wordmark" aria-label="eBay"><i>e</i><i>b</i><i>a</i><i>y</i></div>
@@ -364,24 +370,24 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
             真页有段而本地没有字段支撑的（变体、定价选项、您的设置、其他刊登选项）一律如实说明「APP 未记录、请在页面补齐」，不臆造控件。 */}
         <div className="ebay-revise-column">
           {/* 现网这一列最上方是页面级标题 Complete your listing（24px/600），就压在 PHOTOS & VIDEO 段头上。 */}
-          <div className="ebay-revise-pagehead"><h1><Bi en="Complete your listing" zh="完成您的刊登"/></h1></div>
+          <div className="ebay-revise-pagehead"><h1><Bi en="Complete your listing" zh="完成您的刊登" zhNative="完成物品刊登"/></h1></div>
           <section id="ebay-revise-media" className="ebay-revise-band ebay-revise-media-section">
             <header className="ebay-revise-band-head">
               <div>
-                <h2><Bi en="Photos & Video" zh="图片与视频"/></h2>
-                <p><Bi en="You can add up to 40 photos and a 1-minute video. Buyers want to see all details and angles." zh="最多可上传 40 张照片和 1 段 1 分钟视频；买家想看到全部细节与角度。"/></p>
+                <h2><Bi en="Photos & Video" zh="图片与视频" zhNative="图片和视频"/></h2>
+                <p><Bi en="You can add up to 40 photos and a 1-minute video. Buyers want to see all details and angles." zh="最多可上传 40 张照片和 1 段 1 分钟视频；买家想看到全部细节与角度。" zhNative="您最多可添加 40 张图片和一段 1 分钟的视频。买家想要看到所有细节和角度。"/></p>
                 <p className="ebay-band-local-note">本地保存商品媒体；拖动可排序，第一张图片为主图。</p>
               </div>
               {/* 现网这一处是菜单（Upload photos from mobile / from web）；APP 没有这两条通道，只画文字并如实说明，不做假按钮。 */}
-              <span className="ebay-band-action-pill" data-ebay-slot="section-action" title="现网这一处是菜单：从手机上传 / 从网页上传。APP 没有这两条通道，请用下方 Select 或 Add 从本机选文件。"><Bi en="See photo options" zh="查看照片选项"/></span>
+              <span className="ebay-band-action-pill" data-ebay-slot="section-action" title="现网这一处是菜单：从手机上传 / 从网页上传。APP 没有这两条通道，请用下方 Select 或 Add 从本机选文件。"><Bi en="See photo options" zh="查看照片选项" zhNative="查看图片选项"/></span>
             </header>
             <details className="ebay-media-tips">
-              <summary><Bi en="Tips for taking pro photos" zh="专业拍照技巧"/></summary>
+              <summary><Bi en="Tips for taking pro photos" zh="专业拍照技巧" zhNative="拍摄专业图片提示"/></summary>
               <div className="ebay-media-tips-pop"><strong><Bi en="Photo tips" zh="拍照技巧"/></strong><p><Bi en="Learn how to take photos that attract buyers and help avoid returns." zh="了解如何拍出能吸引买家、并有助于减少退货的照片。"/></p></div>
             </details>
             <div className="ebay-media-counter">
-              <span className="ebay-media-count" data-ebay-counter="photos"><Bi en={`${draft.media.length}/${EBAY_IMAGE_LIMIT}`} zh={`已上传 ${EBAY_IMAGE_LIMIT} 张照片或视频中的 ${draft.media.length} 张`}/></span>
-              <button type="button" className="ebay-media-select" disabled={uploading} onClick={()=>fileInput.current?.click()}><Bi en="Select" zh="选择文件"/></button>
+              <span className="ebay-media-count" data-ebay-counter="photos"><Bi en={`${draft.media.length}/${EBAY_IMAGE_LIMIT}`} zh={`已上传 ${EBAY_IMAGE_LIMIT} 张照片或视频中的 ${draft.media.length} 张`} zhNative={`${draft.media.length}/${EBAY_IMAGE_LIMIT}`}/></span>
+              <button type="button" className="ebay-media-select" disabled={uploading} onClick={()=>fileInput.current?.click()}><Bi en="Select" zh="选择文件" zhNative="选择文件"/></button>
             </div>
             <div className="ebay-photo-strip">
               {draft.media.map((media,index)=><figure key={media.id} draggable onDragStart={()=>setDraggedId(media.id)} onDragEnd={()=>setDraggedId('')} onDragOver={event=>event.preventDefault()} onDrop={()=>moveMedia(draggedId,media.id)} data-dragging={draggedId===media.id?'true':undefined} className={index===0?'ebay-photo-tile main':'ebay-photo-tile'} aria-label={media.mediaType==='VIDEO'?`Video ${index+1} 视频 ${index+1}`:`Photo ${index+1} 照片 ${index+1}`}>
@@ -627,5 +633,5 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
 
       <footer className="ebay-revise-footer"><span>{errors.length?`还有 ${errors.length} 项必须修改后才能保存`:'保存标题、描述、价格、状况、数量、SKU、类目属性与政策所在地；库存与业务政策仍只在 eBay 页面生效'}</span><button type="button" disabled={saving||preparing} onClick={onClose}>取消</button><button type="button" disabled={saving||preparing||uploading||errors.length>0} onClick={onSave}>{saving?'正在保存…':'保存本地新版本'}</button><button className="primary" type="button" disabled={saving||preparing||uploading||errors.length>0} onClick={onPrepare}>{preparing?route.preparing:route.prepare}</button></footer>
     </div>
-  </div>
+  </div></NativeChineseContext.Provider>
 }
