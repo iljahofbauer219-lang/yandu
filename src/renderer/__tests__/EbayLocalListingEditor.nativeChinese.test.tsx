@@ -109,3 +109,66 @@ describe('内联编辑器 · 语言态接线', () => {
     expect(editorSource).toContain('nativeChinese')
   })
 })
+describe('内联编辑器 · 中国态红框区排版照现网（F1 量测）', () => {
+  const html = renderToStaticMarkup(<EbayLocalListingEditor {...props({ nativeChinese: true })} />)
+  const head = scope(html, 'ebay-revise-pagehead', 'class="ebay-media-counter"')
+  const media = scope(html, 'id="ebay-revise-media"', 'id="ebay-revise-title"')
+
+  it('根节点带中国态样式钩子', () => {
+    expect(html).toContain('ebay-revise-native-cn')
+  })
+
+  it('页头与段标题为裸文本，继承 h1/h2 字号字重，不再套小灰字对照层', () => {
+    expect(html).toContain('<h1>完成物品刊登</h1>')
+    expect(media).toContain('<h2>图片和视频</h2>')
+    expect(head).not.toContain('ebay-zh')
+  })
+
+  it('说明与拍摄专业图片提示同行在段头内，附加说明移出段头', () => {
+    const bandHead = scope(html, 'class="ebay-revise-band-head"', 'class="ebay-media-counter"')
+    expect(bandHead).toContain('您最多可添加 40 张图片和一段 1 分钟的视频。买家想要看到所有细节和角度。')
+    expect(bandHead).toContain('拍摄专业图片提示')
+    expect(bandHead).not.toContain('本地保存商品媒体')
+    expect(media.indexOf('本地保存商品媒体')).toBeGreaterThan(media.indexOf('ebay-media-counter'))
+  })
+
+  it('美国态结构不变：对照层与段头内附加说明保留', () => {
+    const us = renderToStaticMarkup(<EbayLocalListingEditor {...props()} />)
+    expect(us).not.toContain('ebay-revise-native-cn')
+    expect(us).toContain('ebay-zh')
+    const usHead = scope(us, 'class="ebay-revise-band-head"', 'class="ebay-media-counter"')
+    expect(usHead).toContain('本地保存商品媒体')
+  })
+})
+
+describe('内联编辑器 · 中国态样式守卫（现网 F1 量测值）', () => {
+  const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'ebay-local-listing-editor.css'), 'utf8') as string
+  const block = (selector: string) => {
+    const start = css.indexOf(selector)
+    expect(start, `${selector} 必须存在`).toBeGreaterThan(-1)
+    return css.slice(start, css.indexOf('}', start))
+  }
+
+  it('媒体段去卡片化：透明底、无边框圆角、padding 32px 24px 0', () => {
+    const b = block('.ebay-revise-native-cn #ebay-revise-media')
+    expect(b).toContain('background:transparent')
+    expect(b).toContain('border:0')
+    expect(b).toContain('border-radius:0')
+    expect(b).toContain('padding:32px 24px 0')
+  })
+
+  it('段头去分隔线与非正 padding，说明与 tips 同行内联', () => {
+    const head = block('.ebay-revise-native-cn .ebay-revise-band-head')
+    expect(head).toContain('border-bottom:0')
+    expect(head).toContain('padding:0')
+    expect(block('.ebay-revise-native-cn #ebay-revise-media .ebay-revise-band-head h2')).toContain('text-transform:none')
+    expect(block('.ebay-revise-native-cn .ebay-revise-band-head p')).toContain('display:inline')
+    expect(block('.ebay-revise-native-cn .ebay-media-tips')).toContain('display:inline')
+  })
+
+  it('计数行与现网一致：h48、上距 24、左灰右_underline', () => {
+    const counter = block('.ebay-revise-native-cn .ebay-media-counter')
+    expect(counter).toContain('min-height:48px')
+    expect(counter).toContain('margin:24px 0 0')
+  })
+})

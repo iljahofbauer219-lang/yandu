@@ -306,3 +306,18 @@ button[data-ebay-slot="section-action"]:disabled{background:#ececec;border-color
 #ebay-revise-specifics .ebay-specific-toggle{justify-self:start;min-height:0;padding:0;border:0;background:none;font:inherit;font-size:14px;color:#191919;text-decoration:underline;cursor:pointer}
 #ebay-revise-specifics .ebay-specific-toggle:disabled{cursor:default}
 #ebay-revise-specifics .ebay-specific-custom{justify-self:start;height:40px;margin:8px 0 0;padding:0 20px;border:0;border-radius:20px;background:#f7f7f7;font:inherit;font-size:14px;line-height:20px;color:#191919}
+
+/* 中国态红框区 100% 照现网原生中文刊登页（F1 量测：sectionBox padding 32px 24px 0、无边框圆角；
+   h1 24px/600 lh32；段头 h2 16px/700；说明 14px/400 lh20 #191919 且 tips 链接同行；
+   计数行 h48、上距 24；胶囊 12px/700 bg#f7f7f7 pad8/16 radius50）。裸文本继承父级字号字重。 */
+.ebay-revise-native-cn .ebay-revise-pagehead{padding:0 24px;margin:0}
+.ebay-revise-native-cn #ebay-revise-media{background:transparent;border:0;border-radius:0;box-shadow:none;padding:32px 24px 0;gap:0}
+.ebay-revise-native-cn .ebay-revise-band-head{padding:0;margin:0;border-bottom:0;gap:24px}
+.ebay-revise-native-cn .ebay-revise-band-head>div{display:block}
+.ebay-revise-native-cn #ebay-revise-media .ebay-revise-band-head h2{text-transform:none;margin:0 0 12px}
+.ebay-revise-native-cn .ebay-revise-band-head p{display:inline;font-size:14px;line-height:20px;color:#191919;max-width:784px}
+.ebay-revise-native-cn .ebay-media-tips{display:inline;margin:0}
+.ebay-revise-native-cn .ebay-media-tips summary{font-size:14px;line-height:20px}
+.ebay-revise-native-cn .ebay-media-counter{min-height:48px;margin:24px 0 0}
+.ebay-revise-native-cn .ebay-media-local-note{display:block;margin:8px 0 0;font-size:13px;line-height:18px;color:#707070}
+.ebay-revise-native-cn .ebay-band-action-pill{gap:8px}

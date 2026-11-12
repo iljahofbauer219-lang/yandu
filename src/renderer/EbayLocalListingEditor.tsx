@@ -127,7 +127,7 @@ const NativeChineseContext=createContext(false)
 
 function Bi({en,zh,zhNative}:{en:string;zh:string;zhNative?:string}) {
   const nativeChinese=useContext(NativeChineseContext)
-  if(nativeChinese)return <span className="ebay-bilingual"><span className="ebay-zh">{zhNative??zh}</span></span>
+  if(nativeChinese)return <>{zhNative??zh}</>
   return <span className="ebay-bilingual"><span className="ebay-en">{en}</span><span className="ebay-zh">{zh}</span></span>
 }
 
@@ -348,7 +348,11 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
   }
   const removeMedia=(id:string)=>set('media',draft.media.filter(item=>item.id!==id).map((entry,sortOrder)=>({...entry,sortOrder})))
 
-  return <NativeChineseContext.Provider value={nativeChinese}><div className={inline?'ebay-revise-inline':'ebay-revise-overlay'} role={inline?undefined:'dialog'} aria-modal={inline?undefined:true} aria-label="本地 eBay 商品编辑器">
+  const mediaTips=(<details className="ebay-media-tips">
+              <summary><Bi en="Tips for taking pro photos" zh="专业拍照技巧" zhNative="拍摄专业图片提示"/></summary>
+              <div className="ebay-media-tips-pop"><strong><Bi en="Photo tips" zh="拍照技巧"/></strong><p><Bi en="Learn how to take photos that attract buyers and help avoid returns." zh="了解如何拍出能吸引买家、并有助于减少退货的照片。"/></p></div>
+            </details>)
+  return <NativeChineseContext.Provider value={nativeChinese}><div className={`${inline?'ebay-revise-inline':'ebay-revise-overlay'}${nativeChinese?' ebay-revise-native-cn':''}`} role={inline?undefined:'dialog'} aria-modal={inline?undefined:true} aria-label="本地 eBay 商品编辑器">
     <div className="ebay-revise-shell">
       <header className="ebay-revise-topbar">
         <div className="ebay-wordmark" aria-label="eBay"><i>e</i><i>b</i><i>a</i><i>y</i></div>
@@ -376,19 +380,18 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
               <div>
                 <h2><Bi en="Photos & Video" zh="图片与视频" zhNative="图片和视频"/></h2>
                 <p><Bi en="You can add up to 40 photos and a 1-minute video. Buyers want to see all details and angles." zh="最多可上传 40 张照片和 1 段 1 分钟视频；买家想看到全部细节与角度。" zhNative="您最多可添加 40 张图片和一段 1 分钟的视频。买家想要看到所有细节和角度。"/></p>
-                <p className="ebay-band-local-note">本地保存商品媒体；拖动可排序，第一张图片为主图。</p>
+                {nativeChinese&&mediaTips}
+                {!nativeChinese&&<p className="ebay-band-local-note">本地保存商品媒体；拖动可排序，第一张图片为主图。</p>}
               </div>
               {/* 现网这一处是菜单（Upload photos from mobile / from web）；APP 没有这两条通道，只画文字并如实说明，不做假按钮。 */}
-              <span className="ebay-band-action-pill" data-ebay-slot="section-action" title="现网这一处是菜单：从手机上传 / 从网页上传。APP 没有这两条通道，请用下方 Select 或 Add 从本机选文件。"><Bi en="See photo options" zh="查看照片选项" zhNative="查看图片选项"/></span>
+              <span className="ebay-band-action-pill" data-ebay-slot="section-action" title="现网这一处是菜单：从手机上传 / 从网页上传。APP 没有这两条通道，请用下方 Select 或 Add 从本机选文件。">{nativeChinese&&<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 4h7M13 4h1M2 8h1M7 8h7M2 12h7M13 12h1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none"/><circle cx="11" cy="4" r="1.7" fill="currentColor"/><circle cx="5" cy="8" r="1.7" fill="currentColor"/><circle cx="11" cy="12" r="1.7" fill="currentColor"/></svg>}<Bi en="See photo options" zh="查看照片选项" zhNative="查看图片选项"/></span>
             </header>
-            <details className="ebay-media-tips">
-              <summary><Bi en="Tips for taking pro photos" zh="专业拍照技巧" zhNative="拍摄专业图片提示"/></summary>
-              <div className="ebay-media-tips-pop"><strong><Bi en="Photo tips" zh="拍照技巧"/></strong><p><Bi en="Learn how to take photos that attract buyers and help avoid returns." zh="了解如何拍出能吸引买家、并有助于减少退货的照片。"/></p></div>
-            </details>
+            {!nativeChinese&&mediaTips}
             <div className="ebay-media-counter">
               <span className="ebay-media-count" data-ebay-counter="photos"><Bi en={`${draft.media.length}/${EBAY_IMAGE_LIMIT}`} zh={`已上传 ${EBAY_IMAGE_LIMIT} 张照片或视频中的 ${draft.media.length} 张`} zhNative={`${draft.media.length}/${EBAY_IMAGE_LIMIT}`}/></span>
               <button type="button" className="ebay-media-select" disabled={uploading} onClick={()=>fileInput.current?.click()}><Bi en="Select" zh="选择文件" zhNative="选择文件"/></button>
             </div>
+            {nativeChinese&&<p className="ebay-band-local-note ebay-media-local-note">本地保存商品媒体；拖动可排序，第一张图片为主图。</p>}
             <div className="ebay-photo-strip">
               {draft.media.map((media,index)=><figure key={media.id} draggable onDragStart={()=>setDraggedId(media.id)} onDragEnd={()=>setDraggedId('')} onDragOver={event=>event.preventDefault()} onDrop={()=>moveMedia(draggedId,media.id)} data-dragging={draggedId===media.id?'true':undefined} className={index===0?'ebay-photo-tile main':'ebay-photo-tile'} aria-label={media.mediaType==='VIDEO'?`Video ${index+1} 视频 ${index+1}`:`Photo ${index+1} 照片 ${index+1}`}>
                 {media.mediaType==='VIDEO'?(
