@@ -59,14 +59,16 @@ const enLines = (scope: string) => [...scope.matchAll(/class="ebay-en"[^>]*>([^<
 const zhLines = (scope: string) => [...scope.matchAll(/class="ebay-zh"[^>]*>([^<]*)</g)].map(match => decode(match[1]))
 
 const titleBand = band('title', 'category')
-const categoryBand = band('category', 'condition').replace(/&amp;/g,'&').replace(/&gt;/g,'>').replace(/&lt;/g,'<')
+const categoryBand = band('category', 'variations').replace(/&amp;/g,'&').replace(/&gt;/g,'>').replace(/&lt;/g,'<')
 const css = readFileSync(path.join(__dirname, '..', 'ebay-local-listing-editor.css'), 'utf8')
 const source = readFileSync(path.join(__dirname, '..', 'EbayLocalListingEditor.tsx'), 'utf8')
 
 describe('EbayLocalListingEditor · 标题段照现网 TITLE 复刻（英上中下）', () => {
-  it('现网原文逐字且按现网顺序：段题 → 标题选项 → 字段标签 → 计数', () => {
-    expect(enLines(titleBand)).toEqual(['Title', 'See title options', 'Item title', `${TITLE.length}/80`])
-    expect(zhLines(titleBand)).toEqual(['标题', '查看标题选项', '物品标题', `80 个字符中的 ${TITLE.length} 个`])
+  it('现网原文逐字且按现网顺序：段题 → 标题选项 → 字段标签 → 计数（计数可见行就是 n/80，长句只作读屏文）', () => {
+    expect(enLines(titleBand)).toEqual(['Title', 'See title options', 'Item title', `${TITLE.length} of 80 characters`])
+    expect(zhLines(titleBand)).toEqual(['标题', '查看标题选项', '物品标题', `${TITLE.length}/80 个字符`])
+    expect(titleBand).toContain(`>${TITLE.length}/80<`)
+    expect(titleBand).not.toContain('只保存买家在商品页看到的主标题。')
   })
 
   it('计数从段头胶囊移到输入框下方同位（现网 72/80 就在框下右对齐），SKU 开关照旧是本地语义', () => {
@@ -86,17 +88,20 @@ describe('EbayLocalListingEditor · 标题段照现网 TITLE 复刻（英上中�
 })
 
 describe('EbayLocalListingEditor · 类目段照现网 ITEM CATEGORY 复刻（英上中下）', () => {
-  it('段题、Edit、Store category 逐字，中文对照紧随其下', () => {
-    expect(enLines(categoryBand)).toEqual(['Item category', 'Edit', 'Store category'])
-    expect(zhLines(categoryBand)).toEqual(['类目', '编辑', '店铺类目'])
+  it('段题、Edit、Store category 逐字，中文对照用现网中国态措辞（物品类别/店铺类别）', () => {
+    expect(enLines(categoryBand)).toEqual(['Item category', 'Edit', `in ${CATEGORY_PATH}`, 'Store category'])
+    expect(zhLines(categoryBand)).toEqual(['物品类别', '编辑', `在“${CATEGORY_PATH}”中`, '店铺类别'])
+    expect(categoryBand).not.toContain('左栏平台类目')
   })
 
-  it('左栏照现网画「值链 + in 开头面包屑」两行，右栏画店铺类目值链；数据照本地存的路径不编短标签', () => {
+  it('左栏照现网画「值链 + 面包屑」两行（中国态在“…”中），右栏店铺类别值同样是下划线 fake-link', () => {
     const leaf = CATEGORY_PATH.split(' > ').pop() as string
     expect(categoryBand).toContain('class="ebay-value-link"')
     expect(categoryBand).toContain(leaf)
     expect(categoryBand).toContain(`in ${CATEGORY_PATH}`)
+    expect(categoryBand).toContain(`在“${CATEGORY_PATH}”中`)
     expect(categoryBand).toContain('class="ebay-value-secondary"')
+    expect((categoryBand.match(/class="ebay-value-link"/g) || []).length).toBe(2)
     expect(categoryBand).toContain('家居')
     expect(categoryBand).not.toContain('>Seats<')
   })

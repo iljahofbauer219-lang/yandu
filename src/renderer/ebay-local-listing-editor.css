@@ -109,6 +109,11 @@ button[data-ebay-slot="section-action"]:disabled{background:#ececec;border-color
 .ebay-title-counter{display:flex;justify-content:flex-end;margin:4px 0 0;font-size:12px;line-height:14px;color:#707070;font-variant-numeric:tabular-nums}
 .ebay-value-link{display:inline-block;font-size:14px;line-height:17px;color:#191919;text-decoration:underline}
 .ebay-value-secondary{display:block;margin:4px 0 0;font-size:14px;line-height:20px;color:#707070}
+.ebay-sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+/* 款式段信息带照现网 .section-notice--information（L1 量测：bg #f7f7f7、pad 16、radius 8、ⓘ 图标 #0968f6）。 */
+.ebay-variations-notice{display:grid;grid-template-columns:16px minmax(0,1fr);gap:8px;align-items:start;padding:16px;background:#f7f7f7;border-radius:8px}
+.ebay-variations-notice p{margin:0;font-size:14px;line-height:20px;color:#191919}
+.ebay-variations-notice-icon{width:16px;height:16px;color:#0968f6}
 /* 类目栏是 flex-wrap：本地说明行不占满一行就会和下拉/值链挤在同一行 */
 .ebay-revise-category-row .ebay-band-local-note{flex:0 0 100%;margin:2px 0 0}
 
@@ -321,3 +326,8 @@ button[data-ebay-slot="section-action"]:disabled{background:#ececec;border-color
 .ebay-revise-native-cn .ebay-media-counter{min-height:48px;margin:24px 0 0}
 .ebay-revise-native-cn .ebay-media-local-note{display:block;margin:8px 0 0;font-size:13px;line-height:18px;color:#707070}
 .ebay-revise-native-cn .ebay-band-action-pill{gap:8px}
+/* L1：标题/物品类别/款式三段照现网中国态（量测 padding 32px 24px 0、无边框圆角、段题不 uppercase）。 */
+.ebay-revise-native-cn #ebay-revise-title,.ebay-revise-native-cn #ebay-revise-category,.ebay-revise-native-cn #ebay-revise-variations{background:transparent;border:0;border-radius:0;box-shadow:none;padding:32px 24px 0;gap:0}
+.ebay-revise-native-cn #ebay-revise-title .ebay-revise-band-head h2,.ebay-revise-native-cn #ebay-revise-category .ebay-revise-band-head h2,.ebay-revise-native-cn #ebay-revise-variations .ebay-revise-band-head h2{text-transform:none;margin:0 0 12px}
+.ebay-revise-native-cn #ebay-revise-title .ebay-revise-field,.ebay-revise-native-cn #ebay-revise-category .ebay-revise-cols{margin:0}
+.ebay-revise-native-cn #ebay-revise-variations .ebay-variations-notice{margin:0}

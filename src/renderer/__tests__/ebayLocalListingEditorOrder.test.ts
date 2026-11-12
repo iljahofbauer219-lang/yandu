@@ -43,7 +43,7 @@ describe('本地产品编辑器 · 逐段复刻 eBay 现网修改页布局', () 
       'Photos & Video',
       'Title',
       'Item category',
-      '变体',
+      'Variations',
       '类目属性',
       '状况',
       '描述',
@@ -57,7 +57,9 @@ describe('本地产品编辑器 · 逐段复刻 eBay 现网修改页布局', () 
 
   it('每一段都是「段名左 + 动作或读数右」的行式段头（eBay 段头几何，不是卡片右上角胶囊）', () => {
     expect((body.match(/className="ebay-revise-band-head"/g) || []).length).toBe(10)
-    expect((body.match(/data-ebay-slot="section-action"/g) || []).length).toBe(10)
+    // 现网款式段段头没有右侧动作（L1 量测：.summary__variations 只有 header-label），其余九段都有。
+    expect((body.match(/data-ebay-slot="section-action"/g) || []).length).toBe(9)
+    expect(band('variations')).not.toContain('data-ebay-slot="section-action"')
   })
 
   it('图片段复刻计数行与瓦片条（10/25 同位读数 + 小瓦片条 + 空位上传瓦片）', () => {

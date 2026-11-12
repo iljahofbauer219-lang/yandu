@@ -418,14 +418,13 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
             <header className="ebay-revise-band-head">
               <div>
                 <h2><Bi en="Title" zh="标题"/></h2>
-                <p className="ebay-band-local-note">只保存买家在商品页看到的主标题。</p>
               </div>
               {/* 现网这一处是菜单（标题建议/关键词）；APP 的标题优化在 AI优化 页做，这里只如实显示，不做假按钮。 */}
               <span className="ebay-band-action-pill" data-ebay-slot="section-action" title="现网这一处是菜单：标题建议与关键词。APP 的标题优化在「AI优化」页做，这里只如实显示。"><Bi en="See title options" zh="查看标题选项"/></span>
             </header>
             <label className="ebay-revise-field"><span><Bi en="Item title" zh="物品标题"/></span><div><input className="ebay-title-input" maxLength={80} value={draft.title} onChange={event=>set('title',event.target.value)}/></div></label>
-            {/* 现网计数 72/80 贴在输入框下方右对齐（12px 灰），不在段头；读屏文「72 of 80 characters」由中文对照行承担。 */}
-            <div className="ebay-title-counter" data-ebay-counter="title"><Bi en={`${draft.title.length}/80`} zh={`80 个字符中的 ${draft.title.length} 个`}/></div>
+            {/* 现网计数可见行就是 72/80（12px 灰贴框下右对齐），长句只作读屏文；中国态读屏文照现网「72/80 个字符」。 */}
+            <div className="ebay-title-counter" data-ebay-counter="title"><span>{draft.title.length}/80</span><span className="ebay-sr-only"><Bi en={`${draft.title.length} of 80 characters`} zh={`${draft.title.length}/80 个字符`}/></span></div>
             <div className="ebay-revise-field ebay-sku-row">
               <span>自定义编号（SKU）</span>
               <div className="ebay-sku-control">
@@ -439,18 +438,17 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
           <section id="ebay-revise-category" className="ebay-revise-band ebay-revise-category-section">
             <header className="ebay-revise-band-head">
               <div>
-                <h2><Bi en="Item category" zh="类目"/></h2>
-                <p className="ebay-band-local-note">左栏平台类目（eBay Item category），右栏店铺类目（Store category）；下拉与按钮是 APP 本地控件，现网用 Edit 在 eBay 页改。</p>
+                <h2><Bi en="Item category" zh="物品类别"/></h2>
               </div>
               {/* 现网这一处是 Edit 图标按钮（点开 eBay 类目选择）；APP 用左栏下拉 + 确定完成同一件事，不画假按钮。 */}
               <span className="ebay-band-action-pill" data-ebay-slot="section-action" title="现网这一处是 Edit 图标按钮，点开 eBay 的类目选择；APP 用左栏下拉 + 确定完成同一件事。"><Bi en="Edit" zh="编辑"/></span>
             </header>
             <div className="ebay-revise-cols">
               <div className="ebay-revise-category-row" data-ebay-col="left">
-                {/* 现网左栏没有小标题：类目值是一条下划线值链，下面一行 in 开头的面包屑（14px 灰）。值与路径是数据，照本地存的原样画。 */}
+                {/* 现网左栏没有小标题：类目值是一条下划线值链，下面一行面包屑（14px 灰）；中国态照现网「在“…”中」。值与路径是数据，照本地存的原样画。 */}
                 {platformCategory?.savedName?(<>
                   <span className="ebay-value-link">{platformCategory.savedName.split(' > ').pop()}</span>
-                  <span className="ebay-value-secondary">in {platformCategory.savedName}</span>
+                  <span className="ebay-value-secondary"><Bi en={`in ${platformCategory.savedName}`} zh={`在“${platformCategory.savedName}”中`}/></span>
                 </>):null}
                 <p className="ebay-band-local-note">平台类目选择（本地）</p>
                 {platformCategory?(<>
@@ -469,7 +467,7 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
                 {platformCategory?.error&&<p className="ebay-revise-category-error" role="alert">{platformCategory.error}</p>}
               </div>
               <div className="ebay-revise-category-row" data-ebay-col="right">
-                <h3><Bi en="Store category" zh="店铺类目"/></h3>
+                <h3><Bi en="Store category" zh="店铺类别"/></h3>
                 {product.categoryName?<span className="ebay-value-link">{product.categoryName}</span>:null}
                 <p className="ebay-band-local-note">店铺类目选择（本地）</p>
                 <select aria-label="本地产品类目" value={product.categoryId} onChange={event=>{const found=categories.find(item=>item.categoryId===event.target.value);if(found)onSetCategory(found.categoryId,found.name)}}>
@@ -482,8 +480,15 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
           </section>
 
           <section id="ebay-revise-variations" className="ebay-revise-band">
-            <header className="ebay-revise-band-head"><div><h2>变体</h2><p>eBay 真页有这一段；本地商品按单一规格刊登，没有变体字段。</p></div><span data-ebay-slot="section-action">未启用</span></header>
-            <div className="ebay-note-band">本地没有可写的变体行、变体价与变体图片。若该商品在 eBay 是多变体刊登，Variations 段整段由 Seller Hub 页面人工处理，系统不代您增删变体。</div>
+            <header className="ebay-revise-band-head"><div><h2><Bi en="Variations" zh="款式"/></h2></div></header>
+            {nativeChinese?(
+              <div className="ebay-variations-notice" role="region" aria-label="通知">
+                <svg className="ebay-variations-notice-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="7" fill="currentColor"/><circle cx="8" cy="4.6" r=".95" fill="#fff"/><rect x="7.2" y="6.7" width="1.6" height="5" rx=".8" fill="#fff"/></svg>
+                <p>款式适用于出售具有多种不同尺寸、颜色的物品。不适用于此类别。</p>
+              </div>
+            ):(
+              <div className="ebay-note-band">本地没有可写的变体行、变体价与变体图片。若该商品在 eBay 是多变体刊登，Variations 段整段由 Seller Hub 页面人工处理，系统不代您增删变体。</div>
+            )}
           </section>
 
           <section id="ebay-revise-specifics" className="ebay-revise-band">

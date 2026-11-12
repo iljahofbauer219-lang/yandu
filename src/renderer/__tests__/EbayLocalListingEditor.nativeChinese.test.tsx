@@ -172,3 +172,98 @@ describe('内联编辑器 · 中国态样式守卫（现网 F1 量测值）', ()
     expect(counter).toContain('margin:24px 0 0')
   })
 })
+
+/**
+ * L1：中国态「标题 / 物品类别 / 款式」三段照现网原生中文刊登页逐字复刻
+ * （2026-11-12 量测，~/.yandu-acceptance/2026-11-12-L1/，draftId=5318093449621&mode=AddItem）：
+ *   · 标题段无自撰说明；计数可见行就是 n/80（12px #707070 贴框下右），长句只作读屏文；
+ *   · 物品类别段：左栏值链＋在“…”中面包屑（14px #707070），右栏「店铺类别」16px/700＋裸文本值；
+ *   · 款式段：无段头动作，段体是 ⓘ 信息带（bg #f7f7f7、pad 16、radius 8、图标 #0968f6），
+ *     文案逐字「款式适用于出售具有多种不同尺寸、颜色的物品。不适用于此类别。」
+ */
+describe('内联编辑器 · 中国态标题/物品类别/款式三段照现网（L1 量测）', () => {
+  const CATEGORY_PATH = 'eBay Motors > Parts & Accessories > Car & Truck Parts & Accessories > Interior Parts & Accessories > Seats, Parts & Accessories'
+  const platformCategory = {
+    options: [{ categoryId: 'c1', name: CATEGORY_PATH, soldCount: 0 }],
+    busy: false, error: '', pick: 'c1', savedId: 'c1', savedName: CATEGORY_PATH,
+    setPick: noop, refresh: noop, confirm: noop
+  }
+  const html = renderToStaticMarkup(<EbayLocalListingEditor {...props({ nativeChinese: true, platformCategory })} />)
+  const title = scope(html, 'id="ebay-revise-title"', 'id="ebay-revise-category"')
+  const category = scope(html, 'id="ebay-revise-category"', 'id="ebay-revise-variations"')
+  const variations = scope(html, 'id="ebay-revise-variations"', 'id="ebay-revise-specifics"')
+
+  it('标题段：裸中文段题、无自撰说明、计数可见行 n/80', () => {
+    expect(title).toContain('<h2>标题</h2>')
+    expect(title).toContain('查看标题选项')
+    expect(title).toContain('物品标题')
+    expect(title).toContain('>9/80<')
+    expect(title).not.toContain('只保存买家在商品页看到的主标题。')
+    expect(title).not.toContain('80 个字符中的')
+    expect(title).not.toContain('ebay-en')
+  })
+
+  it('物品类别段：段题物品类别、面包屑在“…”中、右栏店铺类别＋裸文本值', () => {
+    const escapedPath = CATEGORY_PATH.replace(/&/g, '&amp;').replace(/>/g, '&gt;')
+    expect(category).toContain('<h2>物品类别</h2>')
+    expect(category).toContain('编辑')
+    expect(category).toContain(`在“${escapedPath}”中`)
+    expect(category).toContain('店铺类别')
+    expect((category.match(/class="ebay-value-link"/g) || []).length).toBe(2)
+    expect(category).not.toContain('左栏平台类目')
+    expect(category).not.toContain('ebay-en')
+    expect(category).toContain('重新获取')
+    expect(category).toContain('自动分类')
+  })
+
+  it('款式段：段题款式、无段头动作、ⓘ 信息带逐字现网文案', () => {
+    expect(variations).toContain('<h2>款式</h2>')
+    expect(variations).toContain('款式适用于出售具有多种不同尺寸、颜色的物品。不适用于此类别。')
+    expect(variations).toContain('ebay-variations-notice')
+    expect(variations).not.toContain('未启用')
+    expect(variations).not.toContain('ebay-note-band')
+    expect(variations).not.toContain('ebay-en')
+  })
+
+  it('美国态三段仍英上中下，款式段保留本地说明带', () => {
+    const us = renderToStaticMarkup(<EbayLocalListingEditor {...props({ platformCategory })} />)
+    const usTitle = scope(us, 'id="ebay-revise-title"', 'id="ebay-revise-category"')
+    const usVariations = scope(us, 'id="ebay-revise-variations"', 'id="ebay-revise-specifics"')
+    expect(usTitle).toContain('ebay-en')
+    expect(usTitle).toContain('Title')
+    expect(usVariations).toContain('Variations')
+    expect(usVariations).toContain('ebay-note-band')
+  })
+})
+
+describe('内联编辑器 · 中国态三段样式守卫（L1 量测值）', () => {
+  const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'ebay-local-listing-editor.css'), 'utf8') as string
+  const block = (selector: string) => {
+    const start = css.indexOf(selector)
+    expect(start, `${selector} 必须存在`).toBeGreaterThan(-1)
+    return css.slice(start, css.indexOf('}', start))
+  }
+
+  it('三段去卡片化：透明底、无边框圆角、padding 32px 24px 0', () => {
+    const b = block('.ebay-revise-native-cn #ebay-revise-title,.ebay-revise-native-cn #ebay-revise-category,.ebay-revise-native-cn #ebay-revise-variations')
+    expect(b).toContain('background:transparent')
+    expect(b).toContain('border:0')
+    expect(b).toContain('border-radius:0')
+    expect(b).toContain('padding:32px 24px 0')
+  })
+
+  it('款式信息带照现网：bg #f7f7f7、pad 16、radius 8、图标 #0968f6', () => {
+    const notice = block('.ebay-variations-notice')
+    expect(notice).toContain('background:#f7f7f7')
+    expect(notice).toContain('padding:16px')
+    expect(notice).toContain('border-radius:8px')
+    expect(block('.ebay-variations-notice-icon')).toContain('color:#0968f6')
+  })
+
+  it('店铺类别值照现网 fake-link：下划线 14px，不另造裸文本样式', () => {
+    const link = block('.ebay-value-link')
+    expect(link).toContain('font-size:14px')
+    expect(link).toContain('text-decoration:underline')
+    expect(css).not.toContain('.ebay-value-plain')
+  })
+})
