@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs'
-import { app, BaseWindow, BrowserWindow, WebContents, WebContentsView, clipboard } from 'electron'
+import { app, BaseWindow, BrowserWindow, WebContents, WebContentsView, clipboard, type Cookie, type Session } from 'electron'
 import { AMAZON_LISTING_EVIDENCE_SCRIPT, AMAZON_REVIEW_EVIDENCE_SCRIPT, AMAZON_SAMPLES_SCRIPT, type AmazonListingEvidence, type AmazonMarketSample, type AmazonReviewEvidence } from '../../shared/amazonScraper'
 import { matchSellableInventoryText } from '../../shared/sellableInventory'
 import { pickSupplyDescriptionText } from '../../shared/supplyDescription'
@@ -13,7 +13,8 @@ import { pollUntil } from '../../shared/pageReadyPoll'
 import { decideEbayReadOutcome, ebayReadFailureMessage } from '../../shared/ebayReadOutcome'
 import { buildSemanticDigest, mergeSemanticFallback, shouldAttemptSemanticFallback } from '../../shared/semanticFallback'
 import type { SemanticExtractionResult, SemanticField } from '../../shared/semanticFallback'
-import { EBAY_SITE_ROOT_DOMAINS } from '../../shared/ebaySites'
+import { EBAY_SITE_ROOT_DOMAINS, isEbayDotComHost } from '../../shared/ebaySites'
+import { ebayDeliveryAlpha3, isEbayListingFormUrl, parseEbayPreferencePost, readEbayDeliveryPostal, resolveEbayDeliveryCountry, resolvePostalRetention } from '../../shared/ebayDeliveryCountry'
 import { extractPolicyIdFromLabel } from '../../shared/ebayListingForm'
 import { resolveEbayListingTarget, resolveEbayListingTargetForProduct } from '../../shared/ebayListingTarget'
 import { planEbayUploadMedia, type EbayUploadMediaPlanRow } from '../../shared/ebayUploadMediaPlan'
@@ -21,7 +22,7 @@ import { EBAY_POLICY_MODEL_FIELDS, parseEbayPolicyModel, parseEbayPolicyModelCho
 import { parseEbayItemSpecificsSection, parseEbayItemSpecificsCard, type EbayItemSpecificsCardRaw, type EbayItemSpecificsRaw, type EbayItemSpecificsSection, type EbayItemSpecificSlot } from '../../shared/ebayItemSpecificsModel'
 import { EBAY_LOCAL_FILL_TARGETS, ebayLocalFillPayload, ebayPolicyFillPlan } from './ebayLocalFill'
 import { pickGigaMainImage } from '../../shared/gigaImageResolve'
-import type { BrowserBounds, BrowserState, BrowserTab, BuiltInCollectorState, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, EbayBrowserPluginState, EbayCategorySpecificRequirement, EbayCollectedProduct, EbayDeliveryLocationResult, EbayDirectoryProductScanCategory, EbayLoginResult, EbayMarketResearchFilter, EbayMarketResearchMetric, EbayMarketResearchSample, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayPlatformCategoryOption, EbayProductDetails, EbaySellerHubAcceptanceSnapshot, EbayStoreCategory, MarketplacePlatformCode, NetworkStrategy, Platform, SelectionTask, SupplyActivationResult } from '../../shared/contracts'
+import type { BrowserBounds, BrowserState, BrowserTab, BuiltInCollectorState, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, EbayBrowserPluginState, EbayCategorySpecificRequirement, EbayCollectedProduct, EbayDeliveryCountry, EbayDeliveryCountryResult, EbayDirectoryProductScanCategory, EbayLoginResult, EbayMarketResearchFilter, EbayMarketResearchMetric, EbayMarketResearchSample, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayPlatformCategoryOption, EbayProductDetails, EbaySellerHubAcceptanceSnapshot, EbayStoreCategory, MarketplacePlatformCode, NetworkStrategy, Platform, SelectionTask, SupplyActivationResult } from '../../shared/contracts'
 import gigaCatalog from '../../renderer/gigaCatalog.json'
 import type { EbayBusinessPolicyKind, EbayLocalListingRequirements, EbayLocalProduct, EbayLocalRevisionPreparationResult, EbayScrapedPolicyOption } from '../../shared/contracts'
 
@@ -150,6 +151,7 @@ export class BrowserWorkspace {
   private active: Platform = '1688'
   private activeTabId = 'home-1688'
   private attached: WebContentsView | null = null
+  private ebayDeliveryPostalSnapshots=new Map<Session,{postal:string;cookie:Cookie}>()
   private browserVisible = false
   private activationVersion = 0
   // 大健云仓会话是否在线：未在线时 openTab 的深链一律改落首页，避免站点弹「Page expired」原生框
@@ -2745,39 +2747,64 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     }
   }
 
-  async openEbayDeliveryLocation():Promise<EbayDeliveryLocationResult> {
+  async setEbayDeliveryCountry(country:EbayDeliveryCountry):Promise<EbayDeliveryCountryResult> {
     const view=this.attached
-    if(!view||view.webContents.isDestroyed())throw new Error('当前没有可用的 eBay 浏览器')
-    const current=view.webContents.getURL()
-    let hostname=''
-    try{hostname=new URL(current).hostname}catch{/* 由下方统一处理 */}
-    if(!(hostname==='ebay.com'||hostname.endsWith('.ebay.com')))throw new Error('请先打开 eBay 页面')
-    const result=await view.webContents.executeJavaScript(`new Promise(resolve=>{
-      const visible=node=>{const rect=node.getBoundingClientRect();const style=getComputedStyle(node);return rect.width>8&&rect.height>8&&style.display!=='none'&&style.visibility!=='hidden'};
-      const text=node=>(node.getAttribute?.('aria-label')||node.textContent||'').replace(/\\s+/g,' ').trim();
-      const pattern=/(ship\\s*to|shipping\\s*(?:to|location)|deliver\\s*to|delivery\\s*location|收货地点|送货地点|配送至|送至|寄送至)/i;
-      const nodes=[...document.querySelectorAll('button,a,[role="button"],[tabindex="0"]')]
-        .filter(node=>visible(node)&&pattern.test(text(node))&&text(node).length<120)
-        .sort((a,b)=>{const ar=a.getBoundingClientRect(),br=b.getBoundingClientRect();return br.top-ar.top});
-      const target=nodes[0];
-      if(!target){resolve({found:false,opened:false,label:'收货地设置',fallback:false});return}
-      const label=text(target)||'收货地设置';
-      target.style.setProperty('scroll-margin-bottom','120px','important');
-      target.scrollIntoView({block:'center',inline:'nearest'});
-      let fixed=target;
-      while(fixed&&fixed!==document.body){const position=getComputedStyle(fixed).position;if(position==='fixed'||position==='sticky')break;fixed=fixed.parentElement}
-      if(fixed&&fixed!==document.body&&fixed.getBoundingClientRect().bottom>innerHeight-16)fixed.style.setProperty('bottom','72px','important');
-      target.click();
-      setTimeout(()=>{
-        const dialogs=[...document.querySelectorAll('[role="dialog"],[aria-modal="true"]')].filter(visible);
-        const dialog=dialogs.at(-1);
-        if(dialog){const rect=dialog.getBoundingClientRect();if(rect.bottom>innerHeight-12||rect.top<12){dialog.style.setProperty('position','fixed','important');dialog.style.setProperty('top','16px','important');dialog.style.setProperty('bottom','auto','important');dialog.style.setProperty('max-height','calc(100vh - 32px)','important');dialog.style.setProperty('overflow','auto','important');dialog.style.setProperty('z-index','2147483647','important')}}
-        resolve({found:true,opened:true,label,fallback:false});
-      },350);
-    })`,true) as EbayDeliveryLocationResult
-    if(result.found)return result
-    await view.webContents.loadURL('https://accountsettings.ebay.com/uas/addresses')
-    return {found:false,opened:true,label:'eBay 收货地址',fallback:true}
+    const current=view&&!view.webContents.isDestroyed()?view.webContents.getURL():''
+    let hasEbayView=false
+    try{hasEbayView=Boolean(view)&&isEbayDotComHost(new URL(current).hostname)}catch{hasEbayView=false}
+    if(!view||!hasEbayView)return resolveEbayDeliveryCountry({requested:country,hasEbayView:false})
+    const listingForm=isEbayListingFormUrl(current)
+    const currentPostal=readEbayDeliveryPostal(await view.webContents.executeJavaScript(`((window.GHpre&&window.GHpre.shipToLocation)||'')`,true) as string)
+    const session=view.webContents.session
+    const retention=resolvePostalRetention({currentPostal,rememberedPostal:this.ebayDeliveryPostalSnapshots.get(session)?.postal})
+    if(retention.shouldSnapshot){
+      const cookie=(await view.webContents.session.cookies.get({name:'nonsession'})).find(item=>item.domain==='.ebay.com')
+      if(cookie)this.ebayDeliveryPostalSnapshots.set(session,{postal:currentPostal,cookie})
+    }
+    const postalBefore=retention.postalBefore
+    const postalSnapshot=this.ebayDeliveryPostalSnapshots.get(session)?.cookie
+    const postRaw=await view.webContents.executeJavaScript(`(async()=>{
+      try{
+        const res=await fetch('/gh/setuserpreference',{method:'POST',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({userPreferedCountry:${JSON.stringify(ebayDeliveryAlpha3(country))}})});
+        const text=await res.text();
+        let accepted=false;
+        try{accepted=JSON.parse(text).status==='success'}catch{}
+        return JSON.stringify({status:res.status,accepted});
+      }catch{return JSON.stringify({status:0,accepted:false})}
+    })()`,true) as string
+    const post=parseEbayPreferencePost(postRaw)
+    if(!post.accepted)return resolveEbayDeliveryCountry({requested:country,hasEbayView:true,postAccepted:false,postStatus:post.status||undefined})
+    if(listingForm)return resolveEbayDeliveryCountry({requested:country,hasEbayView:true,postAccepted:true,postStatus:post.status,listingForm:true})
+    let shipToLocation=await this.reloadAndReadShipToLocation(view)
+    if(country==='US'&&postalBefore&&postalSnapshot&&readEbayDeliveryPostal(shipToLocation)===''){
+      await view.webContents.session.cookies.set({
+        url:'https://www.ebay.com/',
+        name:postalSnapshot.name,
+        value:postalSnapshot.value,
+        domain:postalSnapshot.domain,
+        path:postalSnapshot.path,
+        secure:postalSnapshot.secure,
+        httpOnly:postalSnapshot.httpOnly,
+        sameSite:postalSnapshot.sameSite==='unspecified'?undefined:postalSnapshot.sameSite,
+        expirationDate:postalSnapshot.expirationDate
+      })
+      shipToLocation=await this.reloadAndReadShipToLocation(view)
+    }
+    return resolveEbayDeliveryCountry({requested:country,hasEbayView:true,postAccepted:true,postStatus:post.status,shipToLocation,postalBefore})
+  }
+
+  private async reloadAndReadShipToLocation(view:WebContentsView):Promise<string|null> {
+    await view.webContents.executeJavaScript(`window.__crossBorderDeliveryProbe=1`,true)
+    view.webContents.reload()
+    let shipToLocation:string|null=null
+    await pollUntil(async()=>{
+      if(view.webContents.isDestroyed())return false
+      const value=await view.webContents.executeJavaScript(`window.__crossBorderDeliveryProbe?'':((window.GHpre&&window.GHpre.shipToLocation)||'')`,true) as string
+      if(!value)return false
+      shipToLocation=value
+      return true
+    },{intervalMs: 600, timeoutMs: 15000})
+    return shipToLocation
   }
 
   private async injectEbayScrollbars(view:WebContentsView) {

@@ -68,8 +68,12 @@ describe('BrowserWorkspace 轮询接线（上界=被替换掉的盲等时长，�
     expect(workspaceSource).toContain('timeoutMs: 1500, stableHits: 2')
   })
 
-  it('主进程只有这两处轮询调用，新增必须连同上界一起在此登记', () => {
-    expect(workspaceSource.split('pollUntil(').length - 1).toBe(2)
+  it('收货地切换后读回的上界是 15000ms', () => {
+    expect(workspaceSource).toContain('timeoutMs: 15000')
+  })
+
+  it('主进程只有这三处轮询调用，新增必须连同上界一起在此登记', () => {
+    expect(workspaceSource.split('pollUntil(').length - 1).toBe(3)
   })
 
   it('被替换掉的两处固定盲等不得复活', () => {

@@ -140,7 +140,7 @@ import { cleanPageDescriptionText, parseProductPageFacts } from '../shared/produ
 import { resolveContentPlanSource } from '../shared/contentPlanSource'
 import type { BrowserBounds, BrowserTranslationMode, CandidateUpdateRequest, CollectedOzonProduct, CollectedSupplyProduct, CollectionPreviewConfirmRequest, CollectionPreviewResult, CollectorPluginImportResult, CollectorPluginProduct, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonUpdateRequest, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceDocumentDraft, ComplianceEnforcementStatus, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReviewStatus, ComplianceRuleDraft, ComplianceSourceChangeDecision, ComplianceTaskStatus, EbayAcceptanceBatch, EbayAcceptanceCheck, EbayAcceptanceItemResult, EbayAcceptanceRunRequest, EbayAcceptanceScenarioResult, EbayBusinessPolicyKind, EbayContentOptimizationRecordInput, EbayContentOptimizationRequest, EbayContentTranslationRequest, EbayContentTranslationResult, EbayDirectoryProductSyncRequest, EbayDirectoryProductSyncResult, EbayImageCandidateReviewRequest, EbayImageGroundingRequest, EbayImageInspection, EbayImageInspectionReport, EbayImageRoleSuggestionRequest, EbayImageStage, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductMedia, EbayLocalProductMediaUploadInput, EbayLocalProductSnapshotInput, EbayLocalProductUpdateInput, EbayMarketKeywordStat, EbayMarketResearchDecisionRequest, EbayMarketResearchFinding, EbayMarketResearchRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayOptimizationExportInput, EbayProductDetails, EbayPublishAuditEvent, EbayPublishComparisonItem, EbayPublishTask, EbaySellerHubAcceptanceSnapshot, EbayStageGroundingRequest, EbayStageStoryboardRequest, EbayTitleDecisionInput, EbayTitleOptimizationRequest, EbayVideoStudioRequest, EliminateRequest, ImageGenerationRequest, ImageGenerationResult, ImageModelProfile, ImportedProductImage, ImportedProductSource, InboundErpIntakeInput, InboundSnapshot, MarketplaceCredentialInput, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePublishDraftUpdate, NetworkStrategy, Platform, RealShiftRequest, SelectionDecision, SelectionImportRequest, SelectionTask, SelectionTaskDraft, SupplyPlatformCode, TaskProgress } from '../shared/contracts'
 
-import type { EbayStore, EbayStoreCategory, EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
+import type { EbayDeliveryCountry, EbayStore, EbayStoreCategory, EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
 import type { AiEmployeeAskRequest } from '../shared/aiEmployee'
 import { buildListingCsv } from '../shared/listingArchive'
 import { escapeHtml, renderMarkdownForWord, wordDocumentCss } from '../shared/wordExport'
@@ -3114,7 +3114,7 @@ ipcMain.handle('browser:ebay-plugin:state', () => workspace?.getEbayPluginState(
 ipcMain.handle('browser:ebay-plugin:remove', (_event, url:string) => workspace?.removeEbayPluginProduct(url))
 ipcMain.handle('browser:ebay-plugin:clear', () => workspace?.clearEbayPluginProducts())
 ipcMain.handle('browser:ebay-plugin:stop', () => workspace?.stopEbayPlugin())
-ipcMain.handle('browser:ebay-delivery-location:open', () => workspace?.openEbayDeliveryLocation())
+ipcMain.handle('browser:ebay-delivery-country:set', (_event, country:EbayDeliveryCountry) => workspace?.setEbayDeliveryCountry(country))
 ipcMain.handle('task:create', (_event, draft: SelectionTaskDraft) => {
   const task: SelectionTask = {
     ...draft,

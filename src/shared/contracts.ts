@@ -1104,11 +1104,15 @@ export interface BrowserTranslationStatus {
   mode: BrowserTranslationMode
 }
 
-export interface EbayDeliveryLocationResult {
-  found: boolean
-  opened: boolean
+export type EbayDeliveryCountry = 'US' | 'CN'
+
+export interface EbayDeliveryCountryResult {
+  ok: boolean
+  country: EbayDeliveryCountry | null
   label: string
-  fallback: boolean
+  reason: string
+  manualUrl: string
+  refreshRequired: boolean
 }
 
 export interface EbayBrowserPluginState {
