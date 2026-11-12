@@ -50,6 +50,7 @@
     "concurrently": "latest",
     "electron": "43.1.0",
     "electron-builder": "^26.7.0",
+    "lefthook": "^2.2.2",
     "typescript": "~5.7.2",
     "vite": "8.1.4",
     "vitest": "^4.1.11",

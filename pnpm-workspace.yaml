@@ -8,6 +8,7 @@ allowBuilds:
   electron: set this to true or false
   electron-winstaller: set this to true or false
   esbuild: set this to true or false
+  lefthook: true
   prisma: set this to true or false
   protobufjs: true
   tesseract.js: set this to true or false

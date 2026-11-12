@@ -1,0 +1,6 @@
+# 提交门禁：双 tsconfig 类型检查（2026-11-12 用户选定方案①）。
+# 全量 vitest 约 16s+，不挂进钩子；需要时手动跑 vitest run。
+pre-commit:
+  jobs:
+    - name: typecheck
+      run: ./node_modules/.bin/tsc -p tsconfig.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.main.json --noEmit
