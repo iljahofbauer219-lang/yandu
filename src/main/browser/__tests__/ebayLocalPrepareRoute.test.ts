@@ -70,7 +70,9 @@ function makeHost(page: PageResult | PageResult[] = {}) {
   const host: Host = {
     newEbayTab: vi.fn(async (_accountId: string, title: string, url: string) => { opened.push({ url, title }); return 'tab-1' }),
     detailTabs: new Map([['tab-1', { view: { webContents: { executeJavaScript } } }]]),
-    sleep: async () => undefined
+    sleep: async () => undefined,
+    buildRevisionFillScript: (BrowserWorkspace.prototype as unknown as Record<string, unknown>).buildRevisionFillScript,
+    buildInspectRequirementsScript: (BrowserWorkspace.prototype as unknown as Record<string, unknown>).buildInspectRequirementsScript
   }
   return { host, opened, scripts, executeJavaScript }
 }

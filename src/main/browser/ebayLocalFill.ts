@@ -1,5 +1,6 @@
 import type { EbayProductDetails } from '../../shared/contracts'
 import type { EbayPolicyModelChoices, EbayPolicyModelField } from '../../shared/ebayPolicyModel'
+import type { EbayFixedFillPlan } from '../../shared/ebayAutoFillPlan'
 
 /**
  * Seller Hub「ReviseItem 本地版本待确认」灌字段引擎的目标表（Task 8，P1 收尾）。
@@ -99,4 +100,53 @@ export function ebayPolicyFillPlan(
     plan.push({key,label:target.label,anchor:choices.controlName,policyId,optionText:matches[0].text})
   }
   return plan
+}
+
+/**
+ * R3：固定填写计划 → 页内目标描述符。页内脚本只按描述符操作现网控件（pills/switch/combobox/偏好弹窗），
+ * 政策编号→显示文本仍走 ebayPolicyFillPlan 的三条判据（宁可不填也不按名称猜）。
+ * 控件形来自 2026-11-13 现网取证（~/.yandu-acceptance/2026-11-13-R1/）：
+ * 状况是 button.condition-recommendation-value；议价/批量是 name=bestOfferEnabled/vpSelection 的 switch；
+ * 商品文件是「物品披露信息」段内唯一 unnamed switch；推广是 aria-label=切换为常规/切换为优先 的 switch。
+ */
+export interface EbayFixedFillPageTarget {
+  key:string
+  label:string
+  fee:boolean
+  control:'condition-pill'|'switch-name'|'switch-aria'|'switch-section'|'combobox'|'preferences'
+  matcher:string
+  desired:string|boolean
+  optionText?:string
+}
+
+export function ebayFixedFillPageTargets(
+  plan:EbayFixedFillPlan,
+  models?:Partial<Record<EbayPolicyModelField,EbayPolicyModelChoices>>
+):{targets:EbayFixedFillPageTarget[];skipped:Array<{key:string;label:string;reason:string}>} {
+  const targets:EbayFixedFillPageTarget[]=[]
+  const skipped=[...plan.skipped]
+  const policyDetails:Record<string,string>={}
+  for(const row of plan.rows){
+    if(row.kind==='combobox')policyDetails[row.key.replace(/Id$/,'')]=String(row.value)
+  }
+  const policyPlan=ebayPolicyFillPlan(policyDetails as Pick<EbayProductDetails,'paymentPolicy'|'shippingPolicy'|'returnPolicy'>,models)
+  for(const row of plan.rows){
+    const base={key:row.key,label:row.label,fee:row.fee}
+    if(row.kind==='condition'){targets.push({...base,control:'condition-pill',matcher:String(row.value),desired:row.value});continue}
+    if(row.kind==='switch'){
+      if(row.key==='productDocumentsEnabled')targets.push({...base,control:'switch-section',matcher:'物品披露信息',desired:row.value})
+      else if(row.key==='promotedRegularEnabled')targets.push({...base,control:'switch-aria',matcher:'切换为常规',desired:row.value})
+      else if(row.key==='promotedPriorityEnabled')targets.push({...base,control:'switch-aria',matcher:'切换为优先',desired:row.value})
+      else targets.push({...base,control:'switch-name',matcher:row.key,desired:row.value})
+      continue
+    }
+    if(row.kind==='combobox'){
+      const entry=policyPlan.find(item=>item.key===row.key.replace(/Id$/,''))
+      if(!entry){skipped.push({key:row.key,label:row.label,reason:'本页政策模型没读到该编号对应的唯一选项，保留线上原值，请人工核对'});continue}
+      targets.push({...base,control:'combobox',matcher:entry.anchor,desired:entry.policyId,optionText:entry.optionText})
+      continue
+    }
+    targets.push({...base,control:'preferences',matcher:row.key,desired:row.value})
+  }
+  return {targets,skipped}
 }

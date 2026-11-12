@@ -465,6 +465,7 @@ contextBridge.exposeInMainWorld('desktop', {
     categorySpecificsSection: (storeId:string,categoryKey:string):Promise<{section:EbayItemSpecificsSection;sourceUrl:string;readAt:string}|null> => ipcRenderer.invoke('ebay:category-specifics:get',storeId,categoryKey),
     businessPolicies: (storeId:string,kind?:EbayBusinessPolicyKind):Promise<EbayStoreBusinessPolicy[]> => ipcRenderer.invoke('ebay:business-policies:list',storeId,kind),
     prepareLocalProductRevision: (localProductId:string):Promise<EbayLocalRevisionPreparationResult> => ipcRenderer.invoke('ebay:local-products:prepare-revision',localProductId),
+    fillCurrentTab: (localProductId:string, mode:'auto'|'fixed', preset?:unknown):Promise<{url:string;mode:string;filledFields:string[];skippedFields:string[];warnings:string[];filledAt:string}> => ipcRenderer.invoke('ebay:fill-current-tab',localProductId,mode,preset),
     specificsLlmSuggestions: (input:{title:string;descriptionText:string;slots:Array<{name:string;control:string;options:string[];maxLength:number}>}):Promise<Array<{name:string;value:string}>> => ipcRenderer.invoke('ebay:specifics-llm',input),
     removeLocalProduct: (localProductId:string):Promise<boolean> => ipcRenderer.invoke('ebay:local-products:remove',localProductId),
     removeLocalListing: (storeId:string,listingId:string):Promise<boolean> => ipcRenderer.invoke('ebay:listings:remove-local',storeId,listingId),

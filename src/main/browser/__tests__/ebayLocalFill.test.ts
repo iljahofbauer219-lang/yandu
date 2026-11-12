@@ -113,7 +113,9 @@ function makeHost(page: {
   const host: Record<string, unknown> = {
     newEbayTab: vi.fn(async () => 'tab-1'),
     detailTabs: new Map([['tab-1', { view: { webContents: { executeJavaScript } } }]]),
-    sleep: async () => undefined
+    sleep: async () => undefined,
+    buildRevisionFillScript: (BrowserWorkspace.prototype as unknown as Record<string, unknown>).buildRevisionFillScript,
+    buildInspectRequirementsScript: (BrowserWorkspace.prototype as unknown as Record<string, unknown>).buildInspectRequirementsScript
   }
   return { host, executeJavaScript, scripts, modelScripts }
 }

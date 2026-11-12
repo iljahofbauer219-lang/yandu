@@ -20,7 +20,8 @@ import { resolveEbayListingTarget, resolveEbayListingTargetForProduct } from '..
 import { planEbayUploadMedia, type EbayUploadMediaPlanRow } from '../../shared/ebayUploadMediaPlan'
 import { EBAY_POLICY_MODEL_FIELDS, parseEbayPolicyModel, parseEbayPolicyModelChoices, type EbayPolicyModelChoices, type EbayPolicyModelField } from '../../shared/ebayPolicyModel'
 import { parseEbayItemSpecificsSection, parseEbayItemSpecificsCard, type EbayItemSpecificsCardRaw, type EbayItemSpecificsRaw, type EbayItemSpecificsSection, type EbayItemSpecificSlot } from '../../shared/ebayItemSpecificsModel'
-import { EBAY_LOCAL_FILL_TARGETS, ebayLocalFillPayload, ebayPolicyFillPlan } from './ebayLocalFill'
+import { EBAY_LOCAL_FILL_TARGETS, ebayLocalFillPayload, ebayPolicyFillPlan, ebayFixedFillPageTargets } from './ebayLocalFill'
+import { ebayFixedFillPlan, normalizeEbayFixedFillPreset, type EbayFixedFillPreset } from '../../shared/ebayAutoFillPlan'
 import { pickGigaMainImage } from '../../shared/gigaImageResolve'
 import type { BrowserBounds, BrowserState, BrowserTab, BuiltInCollectorState, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, EbayBrowserPluginState, EbayCategorySpecificRequirement, EbayCollectedProduct, EbayDeliveryCountry, EbayDeliveryCountryResult, EbayDirectoryProductScanCategory, EbayLoginResult, EbayMarketResearchFilter, EbayMarketResearchMetric, EbayMarketResearchSample, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayPlatformCategoryOption, EbayProductDetails, EbaySellerHubAcceptanceSnapshot, EbayStoreCategory, MarketplacePlatformCode, NetworkStrategy, Platform, SelectionTask, SupplyActivationResult } from '../../shared/contracts'
 import gigaCatalog from '../../renderer/gigaCatalog.json'
@@ -1941,7 +1942,50 @@ export class BrowserWorkspace {
     const tabId=await this.newEbayTab(accountId,`${title.slice(0,42)} · 读取刊登规则`,reviseUrl)
     const tab=this.detailTabs.get(tabId)
     if(!tab)throw new Error('未能创建 Seller Hub 修改页面')
-    const script=String.raw`(async () => {
+    const script=this.buildInspectRequirementsScript()
+
+    let result:{url:string;login:boolean;verification:boolean;ready:boolean;categorySpecifics:EbayCategorySpecificRequirement[];policyOptions:Array<{kind:string;raw:string;selected:boolean}>;policyModels:Record<string,string>;attributeGroups:EbayItemSpecificsRaw['groups'];attributeRows:EbayItemSpecificsRaw['rows'];attributeToggles:Array<{text:string}>;attributeCustomAction:string;attributeCollapsedRows:EbayItemSpecificsRaw['rows'];attributeCollapsedToggles:Array<{text:string}>;attributeCard:EbayItemSpecificsCardRaw}={url:reviseUrl,login:false,verification:false,ready:false,categorySpecifics:[],policyOptions:[],policyModels:{paymentPolicy:'',shippingPolicy:'',returnPolicy:''},attributeGroups:[],attributeRows:[],attributeToggles:[],attributeCustomAction:'',attributeCollapsedRows:[],attributeCollapsedToggles:[],attributeCard:{text:'',options:[],buttons:[]}}
+    for(let attempt=0;attempt<20;attempt+=1){result=await tab.view.webContents.executeJavaScript(script,true) as typeof result;if(result.login)throw new Error('eBay 登录会话已失效，请先完成登录');if(result.verification)throw new Error('eBay 要求安全验证，请人工完成后重试');if(result.ready)break;await this.sleep(750)}
+    if(!result.ready)throw new Error('Seller Hub 修改页尚未加载完成，请确认商品仍在线后重试')
+    // 解析全留在 TS：页内脚本只回下拉的原始文本与选中态、三段模型对象原文，编号与在架数一律在这里解出，
+    // 这样这一段映射可以离线跑现网 fixtures（src/shared/__tests__/ebayPolicyModel.test.ts）。
+    const selectPolicies:EbayScrapedPolicyOption[]=result.policyOptions.flatMap(item=>{
+      const kind=item.kind as EbayBusinessPolicyKind
+      if(!EBAY_POLICY_SCRAPE_KINDS.includes(kind))return []
+      const parsed=extractPolicyIdFromLabel(item.raw)
+      // label 兜底：eBay 偶发把选项写成只有编号（"(257217501013)"），此时解析出的 label 是空串，
+      // 过 ID 门禁后会以空名字入库（label 列 NOT NULL 允许空串），Task 7 会显示成空白选项；改带走原始文本。
+      return [{kind,label:parsed.label||item.raw,...(parsed.policyId?{policyId:parsed.policyId}:{}),...(parsed.listingCount?{listingCount:parsed.listingCount}:{}),selected:item.selected} satisfies EbayScrapedPolicyOption]
+    })
+    // combobox 改版后编号只在模型里，模型行整类独占：同一政策再从旧 <select> 进来会带出两套编号，
+    // DAO 按类 DELETE 后互相抹掉；模型没覆盖到的类别（发货类，以及模型结构再变的类）才回落下拉行。
+    const modelPolicies=EBAY_POLICY_MODEL_FIELDS.flatMap(field=>parseEbayPolicyModel(field,result.policyModels[field]||''))
+    const modelKinds=new Set(modelPolicies.map(item=>item.kind))
+    const policies:EbayScrapedPolicyOption[]=[...modelPolicies,...selectPolicies.filter(item=>!modelKinds.has(item.kind))]
+    // 陈旧风险逐类点名（Task 4 裁定的落点）：DAO 的 DELETE 只跟着「至少有一条带编号存活行」的类别走，
+    // 所以某一类读到选项却全类解析不出编号时，该类的旧行清不掉、又不会有任何提示（其余有编号的类别保持沉默）。
+    // 只点名，不硬阻断任何按钮；类别名用中文，Task 7 据此知道该核对哪一块政策。
+    const policyKindsWithOptions=[...new Set(policies.map(item=>item.kind))]
+    const policyKindsWithId=new Set(policies.filter(item=>item.policyId).map(item=>item.kind))
+    const stalePolicyWarnings=policyKindsWithOptions.filter(kind=>!policyKindsWithId.has(kind)).map(kind=>{
+      const label=EBAY_POLICY_SCRAPE_KIND_LABELS[kind]
+      return `${label}政策读到了选项但都解析不出政策编号，本地${label}政策保持上一次抓取的结果；请重新读取一次，或在 Seller Hub 修改页人工核对${label}政策编号`
+    })
+    // 整段原文（槽位+组标题说明+折叠两态+加属性按钮）与旧 categorySpecifics 各算各的：后者按标签文本正则
+    // 剔掉了 Unit Quantity 这类行，前者只认控件 name 的 attributes 前缀 / UPC 全名 / pill 行 aria-label。
+    // 读不到只点名缺口，绝不抛错。
+    const attributeSection=parseEbayItemSpecificsSection({groups:result.attributeGroups,rows:result.attributeRows,toggles:result.attributeToggles,customAction:result.attributeCustomAction,collapsed:result.attributeCollapsedRows.length?{rows:result.attributeCollapsedRows,toggles:result.attributeCollapsedToggles}:undefined})
+    // 建议卡按条件渲染，读不到就是 null：编辑器宁可不画，也不凭标题文字拼一张假卡片出来。
+    const suggestedCard=parseEbayItemSpecificsCard(result.attributeCard)
+    return {sourceUrl:result.url,categorySpecifics:result.categorySpecifics,attributeSection,suggestedCard,policies,inspectedAt:new Date().toISOString(),warnings:[
+      ...(result.categorySpecifics.length||attributeSection.slots.length?[]:['页面未读取到类目属性；可能是页面结构变化或该类目没有可见属性']),
+      ...(policies.length?[]:['页面未读取到付款/运输/退货政策；本地政策保持上一次抓取的结果，请在 Seller Hub 修改页确认政策区块已加载后重试']),
+      ...stalePolicyWarnings
+    ]}
+  }
+
+  private buildInspectRequirementsScript():string{
+    return String.raw`(async () => {
       const clean=value=>(value||'').replace(/\s+/g,' ').trim();
       const visible=node=>Boolean(node&&node.getClientRects().length&&!node.disabled);
       const bodyText=clean(document.body?.innerText).slice(0,30000);
@@ -2114,44 +2158,199 @@ export class BrowserWorkspace {
       captureMenuOptions(attributeRows);
       return {url:location.href,login,verification,ready:Boolean(titleField),categorySpecifics,policyOptions,policyModels,attributeGroups,attributeRows,attributeToggles,attributeCustomAction,attributeCollapsedRows,attributeCollapsedToggles,attributeCard};
     })()`
-    let result:{url:string;login:boolean;verification:boolean;ready:boolean;categorySpecifics:EbayCategorySpecificRequirement[];policyOptions:Array<{kind:string;raw:string;selected:boolean}>;policyModels:Record<string,string>;attributeGroups:EbayItemSpecificsRaw['groups'];attributeRows:EbayItemSpecificsRaw['rows'];attributeToggles:Array<{text:string}>;attributeCustomAction:string;attributeCollapsedRows:EbayItemSpecificsRaw['rows'];attributeCollapsedToggles:Array<{text:string}>;attributeCard:EbayItemSpecificsCardRaw}={url:reviseUrl,login:false,verification:false,ready:false,categorySpecifics:[],policyOptions:[],policyModels:{paymentPolicy:'',shippingPolicy:'',returnPolicy:''},attributeGroups:[],attributeRows:[],attributeToggles:[],attributeCustomAction:'',attributeCollapsedRows:[],attributeCollapsedToggles:[],attributeCard:{text:'',options:[],buttons:[]}}
-    for(let attempt=0;attempt<20;attempt+=1){result=await tab.view.webContents.executeJavaScript(script,true) as typeof result;if(result.login)throw new Error('eBay 登录会话已失效，请先完成登录');if(result.verification)throw new Error('eBay 要求安全验证，请人工完成后重试');if(result.ready)break;await this.sleep(750)}
-    if(!result.ready)throw new Error('Seller Hub 修改页尚未加载完成，请确认商品仍在线后重试')
-    // 解析全留在 TS：页内脚本只回下拉的原始文本与选中态、三段模型对象原文，编号与在架数一律在这里解出，
-    // 这样这一段映射可以离线跑现网 fixtures（src/shared/__tests__/ebayPolicyModel.test.ts）。
-    const selectPolicies:EbayScrapedPolicyOption[]=result.policyOptions.flatMap(item=>{
-      const kind=item.kind as EbayBusinessPolicyKind
-      if(!EBAY_POLICY_SCRAPE_KINDS.includes(kind))return []
-      const parsed=extractPolicyIdFromLabel(item.raw)
-      // label 兜底：eBay 偶发把选项写成只有编号（"(257217501013)"），此时解析出的 label 是空串，
-      // 过 ID 门禁后会以空名字入库（label 列 NOT NULL 允许空串），Task 7 会显示成空白选项；改带走原始文本。
-      return [{kind,label:parsed.label||item.raw,...(parsed.policyId?{policyId:parsed.policyId}:{}),...(parsed.listingCount?{listingCount:parsed.listingCount}:{}),selected:item.selected} satisfies EbayScrapedPolicyOption]
-    })
-    // combobox 改版后编号只在模型里，模型行整类独占：同一政策再从旧 <select> 进来会带出两套编号，
-    // DAO 按类 DELETE 后互相抹掉；模型没覆盖到的类别（发货类，以及模型结构再变的类）才回落下拉行。
-    const modelPolicies=EBAY_POLICY_MODEL_FIELDS.flatMap(field=>parseEbayPolicyModel(field,result.policyModels[field]||''))
-    const modelKinds=new Set(modelPolicies.map(item=>item.kind))
-    const policies:EbayScrapedPolicyOption[]=[...modelPolicies,...selectPolicies.filter(item=>!modelKinds.has(item.kind))]
-    // 陈旧风险逐类点名（Task 4 裁定的落点）：DAO 的 DELETE 只跟着「至少有一条带编号存活行」的类别走，
-    // 所以某一类读到选项却全类解析不出编号时，该类的旧行清不掉、又不会有任何提示（其余有编号的类别保持沉默）。
-    // 只点名，不硬阻断任何按钮；类别名用中文，Task 7 据此知道该核对哪一块政策。
-    const policyKindsWithOptions=[...new Set(policies.map(item=>item.kind))]
-    const policyKindsWithId=new Set(policies.filter(item=>item.policyId).map(item=>item.kind))
-    const stalePolicyWarnings=policyKindsWithOptions.filter(kind=>!policyKindsWithId.has(kind)).map(kind=>{
-      const label=EBAY_POLICY_SCRAPE_KIND_LABELS[kind]
-      return `${label}政策读到了选项但都解析不出政策编号，本地${label}政策保持上一次抓取的结果；请重新读取一次，或在 Seller Hub 修改页人工核对${label}政策编号`
-    })
-    // 整段原文（槽位+组标题说明+折叠两态+加属性按钮）与旧 categorySpecifics 各算各的：后者按标签文本正则
-    // 剔掉了 Unit Quantity 这类行，前者只认控件 name 的 attributes 前缀 / UPC 全名 / pill 行 aria-label。
-    // 读不到只点名缺口，绝不抛错。
-    const attributeSection=parseEbayItemSpecificsSection({groups:result.attributeGroups,rows:result.attributeRows,toggles:result.attributeToggles,customAction:result.attributeCustomAction,collapsed:result.attributeCollapsedRows.length?{rows:result.attributeCollapsedRows,toggles:result.attributeCollapsedToggles}:undefined})
-    // 建议卡按条件渲染，读不到就是 null：编辑器宁可不画，也不凭标题文字拼一张假卡片出来。
-    const suggestedCard=parseEbayItemSpecificsCard(result.attributeCard)
-    return {sourceUrl:result.url,categorySpecifics:result.categorySpecifics,attributeSection,suggestedCard,policies,inspectedAt:new Date().toISOString(),warnings:[
-      ...(result.categorySpecifics.length||attributeSection.slots.length?[]:['页面未读取到类目属性；可能是页面结构变化或该类目没有可见属性']),
-      ...(policies.length?[]:['页面未读取到付款/运输/退货政策；本地政策保持上一次抓取的结果，请在 Seller Hub 修改页确认政策区块已加载后重试']),
-      ...stalePolicyWarnings
-    ]}
+  }
+
+  /**
+   * R3：作用于「当前已打开的 eBay 刊登页签」的填写（auto=真值档 / fixed=预设档），不新开草稿。
+   * URL 只认读回的 ebay.com/lstng 刊登页；其余页签一律点名拒绝，绝不写错页。
+   * 固定档只写预设授权的控件；费用项是否写入由 shared 计划裁决（默认关），页内不再自行决定。
+   */
+  async fillCurrentEbayTab(accountId:string,product:EbayLocalProduct,mode:'auto'|'fixed',preset?:EbayFixedFillPreset):Promise<{url:string;mode:string;filledFields:string[];skippedFields:string[];warnings:string[];filledAt:string}> {
+    const tab=this.detailTabs.get(this.activeTabId)
+    if(!tab)throw new Error('当前没有打开的页签，请先在 eBay 浏览器打开刊登页')
+    const url=tab.view.webContents.getURL()
+    if(!/^https:\/\/([a-z0-9-]+\.)*ebay\.com\/lstng\?/.test(url))throw new Error(`当前页签不是 eBay 刊登页（${url.slice(0,80)}），填写只作用于刊登页`)
+    const modelRead=await tab.view.webContents.executeJavaScript(READ_EBAY_POLICY_MODELS_SCRIPT,true) as {policyModels?:Record<string,string>}
+    const modelRaw=modelRead?.policyModels||{}
+    const policyModels:Partial<Record<EbayPolicyModelField,EbayPolicyModelChoices>>={}
+    for(const field of EBAY_POLICY_MODEL_FIELDS){
+      const parsed=parseEbayPolicyModelChoices(modelRaw[field]||'')
+      if(parsed.controlName||parsed.options.length)policyModels[field]=parsed
+    }
+    const filledFields:string[]=[]
+    const skippedFields:string[]=[]
+    const warnings:string[]=[]
+    if(mode==='auto'){
+      const details=product.snapshot.details
+      const listing=product.snapshot.sourceListing
+      const payload={...ebayLocalFillPayload(details,{title:listing.title,price:listing.price}),localImageCount:product.snapshot.media.filter(item=>item.downloadStatus==='DOWNLOADED'&&item.localPath).length}
+      const targets=EBAY_LOCAL_FILL_TARGETS.map(target=>({...target,patterns:target.patterns.map(pattern=>pattern.source)}))
+      const policyPlan=ebayPolicyFillPlan(details,policyModels)
+      const script=this.buildRevisionFillScript(payload,targets,policyPlan)
+      const result=await tab.view.webContents.executeJavaScript(script,true) as {login:boolean;verification:boolean;errorPage:{detected:boolean;reason:string};ready:boolean;filledFields:string[];skippedFields:string[];policyPending:string[];warnings:string[]}
+      if(result.login)throw new Error('eBay 登录会话已失效，请先完成登录')
+      if(result.verification)throw new Error('eBay 要求安全验证，请人工完成后重试')
+      if(result.errorPage.detected)throw new Error(`eBay 把当前页拒成了错误页（${result.errorPage.reason||'原因未给出'}），未写入任何字段`)
+      filledFields.push(...result.filledFields)
+      skippedFields.push(...result.skippedFields)
+      warnings.push(...result.warnings)
+      if(result.policyPending.length)warnings.push(`${result.policyPending.join('、')}：已点选但回读未落定，按未填处理，请在页面人工核对`)
+      warnings.push('图片与视频：当前页已有媒体，自动填写不重复上传；如需替换请在页面人工操作')
+    }else{
+      const plan=ebayFixedFillPlan(normalizeEbayFixedFillPreset(preset))
+      const mapped=ebayFixedFillPageTargets(plan,policyModels)
+      for(const item of mapped.skipped)skippedFields.push(`${item.label}（${item.reason}）`)
+      const script=this.buildFixedFillScript(mapped.targets)
+      const result=await tab.view.webContents.executeJavaScript(script,true) as {login:boolean;verification:boolean;filledFields:string[];skippedFields:string[];warnings:string[]}
+      if(result.login)throw new Error('eBay 登录会话已失效，请先完成登录')
+      if(result.verification)throw new Error('eBay 要求安全验证，请人工完成后重试')
+      filledFields.push(...result.filledFields)
+      skippedFields.push(...result.skippedFields)
+      warnings.push(...result.warnings)
+    }
+    return {url,mode,filledFields:[...new Set(filledFields)],skippedFields:[...new Set(skippedFields)],warnings,filledAt:new Date().toISOString()}
+  }
+
+  /** R3 固定档页内脚本：只按描述符操作现网控件并逐段回读；不点任何最终提交按钮。 */
+  private buildFixedFillScript(targets:unknown[]):string{
+    return String.raw`(async () => {
+      const targets=${JSON.stringify(targets)};
+      const clean=v=>(v||'').replace(/\s+/g,' ').trim();
+      const wait=ms=>new Promise(r=>setTimeout(r,ms));
+      const visible=n=>Boolean(n&&n.getClientRects().length);
+      const filledFields=[],skippedFields=[],warnings=[];
+      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'));
+      const verification=/captcha|security check|verify it's you/i.test(clean(document.body?.innerText).slice(0,20000));
+      const readSwitch=el=>el?(el.checked===true||el.getAttribute('aria-checked')==='true'):null;
+      for(const t of targets){
+        if(t.control==='condition-pill'){
+          const summaryOk=()=>{const head=[...document.querySelectorAll('h2,h3,h4')].find(h=>clean(h.textContent)==='物品状况'||/^Condition$/i.test(clean(h.textContent)));if(!head)return false;let n=head;for(let i=0;i<6&&n;i++){n=n.parentElement;if(n&&[...n.querySelectorAll('.smry--value,[class*=fake-link]')].map(x=>clean(x.textContent)).includes(t.matcher))return true}return false};
+          const pill=[...document.querySelectorAll('button.condition-recommendation-value')].find(b=>clean(b.textContent)===t.matcher&&visible(b));
+          if(!pill){if(summaryOk())filledFields.push(t.label);else skippedFields.push(t.label+'（页面没有该状况选项）');continue}
+          const on=pill.getAttribute('aria-pressed')==='true'||/selected|active/.test(pill.className);
+          if(!on)pill.click();
+          await wait(300);
+          const now=[...document.querySelectorAll('button.condition-recommendation-value')].find(b=>clean(b.textContent)===t.matcher);
+          const onNow=now&&(now.getAttribute('aria-pressed')==='true'||/selected|active/.test(now.className));
+          if(onNow||summaryOk())filledFields.push(t.label);else skippedFields.push(t.label+'（点选后回读未确认）');
+          continue;
+        }
+        if(t.control==='switch-name'||t.control==='switch-aria'||t.control==='switch-section'){
+          let el=null;
+          if(t.control==='switch-name')el=document.querySelector('input[name="'+CSS.escape(t.matcher)+'"][role="switch"],input[name="'+CSS.escape(t.matcher)+'"][type="checkbox"]');
+          else if(t.control==='switch-aria')el=document.querySelector('input[role="switch"][aria-label="'+CSS.escape(t.matcher)+'"]');
+          else{const head=[...document.querySelectorAll('h2,h3,h4')].find(h=>clean(h.textContent)===t.matcher&&visible(h));if(head){let n=head;for(let i=0;i<6&&n&&!el;i++){n=n.parentElement;if(n)el=[...n.querySelectorAll('input[role="switch"]')].find(visible)}}}
+          if(!el||!visible(el)){skippedFields.push(t.label+'（当前页没有该开关，保留原值）');continue}
+          const want=Boolean(t.desired);
+          if(readSwitch(el)!==want)el.click();
+          await wait(300);
+          if(readSwitch(el)===want)filledFields.push(t.label);else skippedFields.push(t.label+'（开关回读未落定）');
+          continue;
+        }
+        if(t.control==='combobox'){
+          const combo=document.querySelector('input[role="combobox"][name="'+CSS.escape(t.matcher)+'"]');
+          if(!combo||!visible(combo)){skippedFields.push(t.label+'（当前页没有该政策控件）');continue}
+          const want=clean(t.optionText||'');
+          const listId=clean(combo.getAttribute('aria-controls')||'');
+          combo.click();await wait(300);
+          const list=listId?document.getElementById(listId):null;
+          const hit=list?[...list.querySelectorAll('[role="option"]')].filter(n=>clean(n.textContent)===want):[];
+          if(hit.length!==1){skippedFields.push(t.label+'（选项未唯一命中，保留原值）');continue}
+          hit[0].click();await wait(450);
+          const listNow=listId?document.getElementById(listId):null;
+          const sel=listNow?[...listNow.querySelectorAll('[role="option"]')].filter(n=>n.getAttribute('aria-selected')==='true').map(n=>clean(n.textContent)):[];
+          if(clean(combo.value)===want&&sel.includes(want))filledFields.push(t.label);else skippedFields.push(t.label+'（点选后回读未落定）');
+          continue;
+        }
+        if(t.control==='preferences'){
+          const nodes=[...document.querySelectorAll('h2,h3,h4,button')];
+          const hi=nodes.findIndex(n=>/^H[234]$/.test(n.tagName)&&clean(n.textContent)==='偏好设置');
+          let edit=null;
+          if(hi>=0){for(let i=hi+1;i<nodes.length;i++){const n=nodes[i];if(/^H[234]$/.test(n.tagName)&&clean(n.textContent)!=='您的设置')break;if(n.tagName==='BUTTON'&&/编辑/.test(clean(n.textContent))){edit=n;break}}}
+          if(!edit){skippedFields.push(t.label+'（偏好设置编辑入口不在当前页，保留原值）');continue}
+          edit.click();await wait(800);
+          const dlg=[...document.querySelectorAll('[role="dialog"],[class*=lightbox],[class*=modal]')].find(d=>visible(d)&&/物品所在地|退货政策|您的设置/.test(clean(d.textContent)));
+          if(!dlg){skippedFields.push(t.label+'（偏好弹窗未打开，保留原值）');continue}
+          let ok=false;
+          if(t.matcher==='returnPolicyId'){
+            const combo=dlg.querySelector('input[role="combobox"][name="returnPolicyId"]')||[...dlg.querySelectorAll('input[role="combobox"]')].find(visible);
+            if(combo){combo.click();await wait(300);const lid=clean(combo.getAttribute('aria-controls')||'');const list=lid?document.getElementById(lid):null;const hit=list?[...list.querySelectorAll('[role="option"]')].filter(n=>clean(n.textContent).includes('('+t.desired+')')):[];if(hit.length===1){hit[0].click();ok=true}}
+          }else{
+            const input=[...dlg.querySelectorAll('input')].find(el=>visible(el)&&new RegExp(t.matcher==='postalCode'?'邮编|postal':'所在地|location','i').test(clean(el.getAttribute('aria-label')||'')+clean(el.closest('label,[class*=field]')?.textContent)+el.name));
+            if(input){Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set?.call(input,String(t.desired));input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));ok=clean(input.value)===clean(String(t.desired))}
+          }
+          const save=[...dlg.querySelectorAll('button')].find(b=>/保存|Save|应用|Apply/.test(clean(b.textContent)));
+          if(save)save.click();
+          await wait(600);
+          if(ok)filledFields.push(t.label);else skippedFields.push(t.label+'（偏好弹窗内未写入成功，保留原值）');
+          continue;
+        }
+        skippedFields.push(t.label+'（未知控件形）');
+      }
+      let banner=document.getElementById('__cross_border_local_revision_guard');
+      if(!banner){banner=document.createElement('div');banner.id='__cross_border_local_revision_guard';banner.style.cssText='position:fixed;z-index:2147483647;left:20px;right:20px;bottom:20px;padding:14px 18px;border:2px solid #12a9a3;border-radius:12px;background:#e8faf8;color:#075b57;font:700 14px/20px system-ui;box-shadow:0 8px 30px rgba(0,0,0,.18)';document.body.appendChild(banner)}
+      banner.textContent='固定填写：已写 '+filledFields.length+' 项，跳过 '+skippedFields.length+' 项；尚未提交。请逐项核对后再由您点击 eBay 最终提交按钮。';
+      return {url:location.href,login,verification,filledFields:[...new Set(filledFields)],skippedFields:[...new Set(skippedFields)],warnings};
+    })()`
+  }
+
+  private buildRevisionFillScript(payload:Record<string,unknown>,targets:unknown[],policyPlan:unknown[]):string{
+    return String.raw`(async () => {
+      const desired=${JSON.stringify(payload)};
+      const targets=${JSON.stringify(targets)};
+      const policyPlan=${JSON.stringify(policyPlan)};
+      const clean=value=>(value||'').replace(/\s+/g,' ').trim();
+      const wait=ms=>new Promise(resolve=>setTimeout(()=>resolve(),ms));
+      const namesOf=list=>{const unique=[...new Set(list)];return unique.length?unique.join('、'):'无'};
+      const visible=node=>Boolean(node&&node.getClientRects().length&&!node.disabled);
+      const bodyText=clean(document.body?.innerText).slice(0,40000);
+      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||${loginRegexSource('EBAY_PATH')}.test(location.pathname);
+      const verification=${challengeRegexSource('VERIFY')}.test(bodyText+' '+location.href);
+      const allFields=[...document.querySelectorAll('input,textarea,select,[contenteditable="true"]')];
+      const fields=allFields.filter(visible);
+      const labelFor=field=>{const explicit=field.id?document.querySelector('label[for="'+CSS.escape(field.id)+'"]'):null;return clean(explicit?.textContent||field.closest('label')?.textContent||field.getAttribute('aria-label')||field.getAttribute('placeholder')||field.name||field.id)};
+      const find=(patterns,selectors='')=>{if(selectors){const direct=document.querySelector(selectors);if(visible(direct))return direct}return fields.find(field=>patterns.some(pattern=>pattern.test(labelFor(field)+' '+(field.name||'')+' '+(field.id||''))))};
+      const setValue=(field,value)=>{if(!field||value===undefined||value===null||value==='')return false;if(field.type==='checkbox'){const checked=Boolean(value);if(field.checked!==checked){field.click()}return true}if(field.tagName==='SELECT'){const normalized=clean(String(value)).toLowerCase();const option=[...field.options].find(item=>clean(item.value).toLowerCase()===normalized||clean(item.textContent).toLowerCase()===normalized);if(!option)return false;field.value=option.value}else if(field.isContentEditable){field.textContent=String(value);field.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:String(value)}))}else{const proto=field.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value')?.set?.call(field,String(value))}field.dispatchEvent(new Event('input',{bubbles:true}));field.dispatchEvent(new Event('change',{bubbles:true}));field.dispatchEvent(new Event('blur',{bubbles:true}));return true};
+      const filledFields=[],skippedFields=[],policyPending=[],warnings=[];
+      const fill=(label,field,value)=>{if(setValue(field,value))filledFields.push(label);else if(value!==undefined&&value!==null&&String(value).trim())skippedFields.push(label)};
+      const titleField=find([/^(item |listing )?title\b/i,/物品标题|商品标题|刊登标题/], 'input[name="title"],input[id="title"]');
+      const selectByPolicyId=(field,policyId)=>{if(!field||field.tagName!=='SELECT')return false;const want=clean(String(policyId||''));if(!/^\d+$/.test(want))return false;const option=[...field.options].find(item=>clean(item.value)===want||clean(item.textContent).includes('('+want+')'));if(!option)return false;field.value=option.value;field.dispatchEvent(new Event('change',{bubbles:true}));field.dispatchEvent(new Event('blur',{bubbles:true}));return true};
+      for(const target of targets){
+        if(desired[target.key]===undefined)continue;
+        if(target.key==='description'){
+          const field=allFields.find(node=>node.tagName==='TEXTAREA'&&/description|详情|描述/i.test(labelFor(node)))||fields.find(node=>node.isContentEditable&&/description|详情|描述/i.test(labelFor(node)));
+          fill('描述',field,desired.description);
+          continue;
+        }
+        // 政策三项只走主进程算好的计划：编号→本页选项显示文本已在 TS 侧比对，页内不再拿编号去猜下拉。
+        // 现网控件是 input[role=combobox]（框里显示「名称 + 在架数」，编号既写不进去也不算选中），所以按模型的控件名定位 combobox，
+        // 在它 aria-controls 的列表里找整串文本唯一命中的 [role=option] 并点它；命中 0 条或多条一律终局跳过（歧义时点中哪条是赌）。
+        // A4 真机取证（2026-11-08，草稿 5304902945021）：点完当场读 value 一定为真，但页面加载期的重渲染会在几百毫秒后
+        // 把控件按草稿原值刷回去，当场回读就是把没改的政策报成已填。现网时序是 value 同步变、aria-selected 300–400ms 后落定，
+        // 所以这里等一次再从 DOM 重查「当前选中项」，两项都对得上才算填上；对不上记 skipped 并记 policyPending，交给主进程重跑。
+        // 若这页仍是老式 <select> 就按编号走既有路径（该路径点不上就是终局跳过，绝不进 pending 让主进程空转）。最终提交按钮一律不碰。
+        if(target.byPolicyId){
+          const plan=policyPlan.find(item=>item.key===target.key);
+          if(!plan)continue;
+          const combo=document.querySelector('input[role="combobox"][name="'+CSS.escape(plan.anchor)+'"]');
+          if(combo){const want=clean(plan.optionText);const listId=clean(combo.getAttribute('aria-controls')||'');const list=listId?document.getElementById(listId):null;const hit=list?[...list.querySelectorAll('[role="option"]')].filter(node=>clean(node.textContent)===want):[];if(hit.length===1){hit[0].click();await wait(450);const listNow=listId?document.getElementById(listId):null;const selectedNow=listNow?[...listNow.querySelectorAll('[role="option"]')].filter(node=>node.getAttribute('aria-selected')==='true').map(node=>clean(node.textContent)):[];if(clean(combo.value)===want&&selectedNow.includes(want))filledFields.push(target.label);else{skippedFields.push(target.label);policyPending.push(target.label)}}else skippedFields.push(target.label)}
+          else if(!selectByPolicyId(document.querySelector('select[name="'+CSS.escape(plan.anchor)+'"]'),plan.policyId))skippedFields.push(target.label);
+          else filledFields.push(target.label);
+          continue;
+        }
+        const field=find(target.patterns.map(source=>new RegExp(source,'i')),target.selectors);
+        // 命中的是勾选框一律算「跳过」绝不点击：eBay 的「按现状出售 / 同意条款」类复选框标签可能正撞中 数量/所在地/自定义编号 的模式，而计划只授权写文本与下拉值，改动页面勾选态属未经授权的变更（重试 20 次还会把勾上去的框永远留在页面上）。
+        if(field&&field.type==='checkbox'){skippedFields.push(target.label);continue}
+        fill(target.label,field,desired[target.key]);
+      }
+      const submitButtonDetected=[...document.querySelectorAll('button,input[type="submit"],a[role="button"]')].filter(visible).some(node=>/^(submit|publish|list it|revise it|update listing|save changes|modify|提交|发布|修改|确认修改|更新刊登)/i.test(clean(node.textContent||node.value||node.getAttribute('aria-label'))));
+      if(desired.localImageCount)warnings.push('本地已保存 '+desired.localImageCount+' 张图片；为防止误覆盖线上媒体，图片仍需在本页人工核对。');
+      warnings.push('本次填写：'+namesOf(filledFields)+'；未写入：'+namesOf(skippedFields)+'。图片、类目与业务政策内容仍需在页面人工核对，且本次尚未提交，最终修改仍由您在 eBay 页面点击确认。');
+      let banner=document.getElementById('__cross_border_local_revision_guard');if(!banner){banner=document.createElement('div');banner.id='__cross_border_local_revision_guard';banner.style.cssText='position:fixed;z-index:2147483647;left:20px;right:20px;bottom:20px;padding:14px 18px;border:2px solid #12a9a3;border-radius:12px;background:#e8faf8;color:#075b57;font:700 14px/20px system-ui;box-shadow:0 8px 30px rgba(0,0,0,.18)';document.body.appendChild(banner)}banner.textContent='已从本地版本填写 '+[...new Set(filledFields)].length+' 项，跳过 '+[...new Set(skippedFields)].length+' 项；尚未提交。请逐项核对图片、类目、业务政策和费用，再由您点击 eBay 最终提交按钮。';
+      const reason=/(?:lstng|sl)\/error\?reason=([^&]*)/.exec(location.href)?.[1]||'';
+      const errorPage={detected:Boolean(reason)||/well, this is embarrassing/i.test(bodyText),reason:(()=>{try{return decodeURIComponent(reason.replace(/%25/g,'%'))}catch{return reason}})()};
+      return {url:location.href,login,verification,errorPage,ready:Boolean(titleField),filledFields:[...new Set(filledFields)],skippedFields:[...new Set(skippedFields)],policyPending:[...new Set(policyPending)],warnings,submitButtonDetected};
+    })()`
   }
 
   async prepareEbayLocalProductRevision(accountId:string,product:EbayLocalProduct,specificsSection?:EbayItemSpecificsSection|null):Promise<EbayLocalRevisionPreparationResult> {
@@ -2217,62 +2416,8 @@ export class BrowserWorkspace {
     }
     // 目标表序列化：RegExp 过不去 executeJavaScript，只带 .source 源串，页内再用 new RegExp(source,'i') 重建（标志位丢了就是真页面静默不命中）
     const targets=EBAY_LOCAL_FILL_TARGETS.map(target=>({...target,patterns:target.patterns.map(pattern=>pattern.source)}))
-    const script=String.raw`(async () => {
-      const desired=${JSON.stringify(payload)};
-      const targets=${JSON.stringify(targets)};
-      const policyPlan=${JSON.stringify(policyPlan)};
-      const clean=value=>(value||'').replace(/\s+/g,' ').trim();
-      const wait=ms=>new Promise(resolve=>setTimeout(()=>resolve(),ms));
-      const namesOf=list=>{const unique=[...new Set(list)];return unique.length?unique.join('、'):'无'};
-      const visible=node=>Boolean(node&&node.getClientRects().length&&!node.disabled);
-      const bodyText=clean(document.body?.innerText).slice(0,40000);
-      const login=Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||${loginRegexSource('EBAY_PATH')}.test(location.pathname);
-      const verification=${challengeRegexSource('VERIFY')}.test(bodyText+' '+location.href);
-      const allFields=[...document.querySelectorAll('input,textarea,select,[contenteditable="true"]')];
-      const fields=allFields.filter(visible);
-      const labelFor=field=>{const explicit=field.id?document.querySelector('label[for="'+CSS.escape(field.id)+'"]'):null;return clean(explicit?.textContent||field.closest('label')?.textContent||field.getAttribute('aria-label')||field.getAttribute('placeholder')||field.name||field.id)};
-      const find=(patterns,selectors='')=>{if(selectors){const direct=document.querySelector(selectors);if(visible(direct))return direct}return fields.find(field=>patterns.some(pattern=>pattern.test(labelFor(field)+' '+(field.name||'')+' '+(field.id||''))))};
-      const setValue=(field,value)=>{if(!field||value===undefined||value===null||value==='')return false;if(field.type==='checkbox'){const checked=Boolean(value);if(field.checked!==checked){field.click()}return true}if(field.tagName==='SELECT'){const normalized=clean(String(value)).toLowerCase();const option=[...field.options].find(item=>clean(item.value).toLowerCase()===normalized||clean(item.textContent).toLowerCase()===normalized);if(!option)return false;field.value=option.value}else if(field.isContentEditable){field.textContent=String(value);field.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:String(value)}))}else{const proto=field.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value')?.set?.call(field,String(value))}field.dispatchEvent(new Event('input',{bubbles:true}));field.dispatchEvent(new Event('change',{bubbles:true}));field.dispatchEvent(new Event('blur',{bubbles:true}));return true};
-      const filledFields=[],skippedFields=[],policyPending=[],warnings=[];
-      const fill=(label,field,value)=>{if(setValue(field,value))filledFields.push(label);else if(value!==undefined&&value!==null&&String(value).trim())skippedFields.push(label)};
-      const titleField=find([/^(item |listing )?title\b/i,/物品标题|商品标题|刊登标题/], 'input[name="title"],input[id="title"]');
-      const selectByPolicyId=(field,policyId)=>{if(!field||field.tagName!=='SELECT')return false;const want=clean(String(policyId||''));if(!/^\d+$/.test(want))return false;const option=[...field.options].find(item=>clean(item.value)===want||clean(item.textContent).includes('('+want+')'));if(!option)return false;field.value=option.value;field.dispatchEvent(new Event('change',{bubbles:true}));field.dispatchEvent(new Event('blur',{bubbles:true}));return true};
-      for(const target of targets){
-        if(desired[target.key]===undefined)continue;
-        if(target.key==='description'){
-          const field=allFields.find(node=>node.tagName==='TEXTAREA'&&/description|详情|描述/i.test(labelFor(node)))||fields.find(node=>node.isContentEditable&&/description|详情|描述/i.test(labelFor(node)));
-          fill('描述',field,desired.description);
-          continue;
-        }
-        // 政策三项只走主进程算好的计划：编号→本页选项显示文本已在 TS 侧比对，页内不再拿编号去猜下拉。
-        // 现网控件是 input[role=combobox]（框里显示「名称 + 在架数」，编号既写不进去也不算选中），所以按模型的控件名定位 combobox，
-        // 在它 aria-controls 的列表里找整串文本唯一命中的 [role=option] 并点它；命中 0 条或多条一律终局跳过（歧义时点中哪条是赌）。
-        // A4 真机取证（2026-11-08，草稿 5304902945021）：点完当场读 value 一定为真，但页面加载期的重渲染会在几百毫秒后
-        // 把控件按草稿原值刷回去，当场回读就是把没改的政策报成已填。现网时序是 value 同步变、aria-selected 300–400ms 后落定，
-        // 所以这里等一次再从 DOM 重查「当前选中项」，两项都对得上才算填上；对不上记 skipped 并记 policyPending，交给主进程重跑。
-        // 若这页仍是老式 <select> 就按编号走既有路径（该路径点不上就是终局跳过，绝不进 pending 让主进程空转）。最终提交按钮一律不碰。
-        if(target.byPolicyId){
-          const plan=policyPlan.find(item=>item.key===target.key);
-          if(!plan)continue;
-          const combo=document.querySelector('input[role="combobox"][name="'+CSS.escape(plan.anchor)+'"]');
-          if(combo){const want=clean(plan.optionText);const listId=clean(combo.getAttribute('aria-controls')||'');const list=listId?document.getElementById(listId):null;const hit=list?[...list.querySelectorAll('[role="option"]')].filter(node=>clean(node.textContent)===want):[];if(hit.length===1){hit[0].click();await wait(450);const listNow=listId?document.getElementById(listId):null;const selectedNow=listNow?[...listNow.querySelectorAll('[role="option"]')].filter(node=>node.getAttribute('aria-selected')==='true').map(node=>clean(node.textContent)):[];if(clean(combo.value)===want&&selectedNow.includes(want))filledFields.push(target.label);else{skippedFields.push(target.label);policyPending.push(target.label)}}else skippedFields.push(target.label)}
-          else if(!selectByPolicyId(document.querySelector('select[name="'+CSS.escape(plan.anchor)+'"]'),plan.policyId))skippedFields.push(target.label);
-          else filledFields.push(target.label);
-          continue;
-        }
-        const field=find(target.patterns.map(source=>new RegExp(source,'i')),target.selectors);
-        // 命中的是勾选框一律算「跳过」绝不点击：eBay 的「按现状出售 / 同意条款」类复选框标签可能正撞中 数量/所在地/自定义编号 的模式，而计划只授权写文本与下拉值，改动页面勾选态属未经授权的变更（重试 20 次还会把勾上去的框永远留在页面上）。
-        if(field&&field.type==='checkbox'){skippedFields.push(target.label);continue}
-        fill(target.label,field,desired[target.key]);
-      }
-      const submitButtonDetected=[...document.querySelectorAll('button,input[type="submit"],a[role="button"]')].filter(visible).some(node=>/^(submit|publish|list it|revise it|update listing|save changes|modify|提交|发布|修改|确认修改|更新刊登)/i.test(clean(node.textContent||node.value||node.getAttribute('aria-label'))));
-      if(desired.localImageCount)warnings.push('本地已保存 '+desired.localImageCount+' 张图片；为防止误覆盖线上媒体，图片仍需在本页人工核对。');
-      warnings.push('本次填写：'+namesOf(filledFields)+'；未写入：'+namesOf(skippedFields)+'。图片、类目与业务政策内容仍需在页面人工核对，且本次尚未提交，最终修改仍由您在 eBay 页面点击确认。');
-      let banner=document.getElementById('__cross_border_local_revision_guard');if(!banner){banner=document.createElement('div');banner.id='__cross_border_local_revision_guard';banner.style.cssText='position:fixed;z-index:2147483647;left:20px;right:20px;bottom:20px;padding:14px 18px;border:2px solid #12a9a3;border-radius:12px;background:#e8faf8;color:#075b57;font:700 14px/20px system-ui;box-shadow:0 8px 30px rgba(0,0,0,.18)';document.body.appendChild(banner)}banner.textContent='已从本地版本填写 '+[...new Set(filledFields)].length+' 项，跳过 '+[...new Set(skippedFields)].length+' 项；尚未提交。请逐项核对图片、类目、业务政策和费用，再由您点击 eBay 最终提交按钮。';
-      const reason=/(?:lstng|sl)\/error\?reason=([^&]*)/.exec(location.href)?.[1]||'';
-      const errorPage={detected:Boolean(reason)||/well, this is embarrassing/i.test(bodyText),reason:(()=>{try{return decodeURIComponent(reason.replace(/%25/g,'%'))}catch{return reason}})()};
-      return {url:location.href,login,verification,errorPage,ready:Boolean(titleField),filledFields:[...new Set(filledFields)],skippedFields:[...new Set(skippedFields)],policyPending:[...new Set(policyPending)],warnings,submitButtonDetected};
-    })()`
+    const script=this.buildRevisionFillScript(payload,targets,policyPlan)
+
     let result:{url:string;login:boolean;verification:boolean;errorPage:{detected:boolean;reason:string};ready:boolean;filledFields:string[];skippedFields:string[];policyPending:string[];warnings:string[];submitButtonDetected:boolean}={url:target.url,login:false,verification:false,errorPage:{detected:false,reason:''},ready:false,filledFields:[],skippedFields:[],policyPending:[],warnings:[],submitButtonDetected:false}
     // 政策点了没落定（policyPending 非空）时把同一段脚本再跑一遍：越晚的页面越不会再被重渲染刷回去，这是 A2 真机取证到的失效窗口。
     // 上限 6 轮（约 4 秒）后按「未填」收单并如实点名，绝不为等一个控件把「准备发布」拖成无限轮询，也绝不因为点过就当已填。

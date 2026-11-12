@@ -3483,6 +3483,13 @@ ipcMain.handle('ebay:local-products:prepare-revision', async (_event, localProdu
     ??null
   return workspace.prepareEbayLocalProductRevision(`ebay:${product.storeId}`,product,section)
 })
+ipcMain.handle('ebay:fill-current-tab', async (_event, localProductId:string, mode:'auto'|'fixed', preset?:unknown) => {
+  if(!database)throw new Error('数据库尚未初始化')
+  if(!workspace)throw new Error('应用内浏览器尚未初始化')
+  const product=database.getEbayLocalProducts().find(item=>item.id===localProductId)
+  if(!product)throw new Error('本地产品不存在或已删除')
+  return workspace.fillCurrentEbayTab(`ebay:${product.storeId}`,product,mode,preset as Parameters<typeof workspace.fillCurrentEbayTab>[3])
+})
 ipcMain.handle('ebay:specifics-llm', (_event, input:{title:string;descriptionText:string;slots:Array<{name:string;control:string;options:string[];maxLength:number}>}) => aiEmployeeChatService.deriveEbaySpecifics(input))
 ipcMain.handle('ebay:local-products:remove', (_event, localProductId:string) => removeEbayLocalProduct(localProductId))
 ipcMain.handle('ebay:listings:remove-local', (_event, storeId:string, listingId:string) => {
