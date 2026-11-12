@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EbayItemSpecific, EbayLocalProduct, EbayLocalProductUpdateInput, EbayStoreBusinessPolicy, EbayStoreCategory } from '../shared/contracts'
 import { formatFormGaps, type EbayFormGap } from '../shared/ebayListingForm'
+import { ebayImageRuleRows } from '../shared/ebayLocalMedia'
 import { checkEbayPolicyCarrierItemId } from '../shared/ebayPolicyCarrier'
 import { EBAY_IMAGE_LIMIT } from '../shared/ebayUploadMediaPlan'
 import type { EbayListingRouteKind } from '../shared/ebayListingTarget'
@@ -92,11 +93,11 @@ function validateDraft(draft:EbayLocalProductUpdateInput):ValidationIssue[] {
   if(title.length>80)error('title','物品标题不能超过 80 个字符')
   if(/[©®™]/.test(title))warning('title','标题含特殊符号，发布前请确认商标与知识产权风险')
   // 与主进程 updateEbayLocalProduct 同一判据：只有真落盘（localPath 非空）才算已下载，否则编辑器绿灯、保存必被拒。
-  const downloaded=draft.media.filter(item=>item.downloadStatus==='DOWNLOADED'&&item.localPath)
-  if(!downloaded.length)error('media','至少需要 1 张已保存到本地的商品图片')
-  downloaded.filter(item=>item.width&&item.height&&Math.max(item.width,item.height)<500).forEach((_,index)=>error('media',`第 ${index+1} 张图片最长边不足 500px`))
-  if(downloaded.length>0&&downloaded.length<3)warning('media','建议保留多个角度的高清商品图片')
+  const downloadedImages=ebayImageRuleRows(draft.media.filter(item=>item.downloadStatus==='DOWNLOADED'&&item.localPath))
+  if(!downloadedImages.length)error('media','至少需要 1 张已保存到本地的商品图片')
   if(draft.media.length>EBAY_IMAGE_LIMIT)error('media',`商品图片与视频不能超过 ${EBAY_IMAGE_LIMIT} 项`)
+  downloadedImages.filter(item=>item.width&&item.height&&Math.max(item.width,item.height)<500).forEach((_,index)=>error('media',`第 ${index+1} 张图片最长边不足 500px`))
+  if(downloadedImages.length>0&&downloadedImages.length<3)warning('media','建议保留多个角度的高清商品图片')
   if(!draft.descriptionText.trim()&&!draft.descriptionHtml.trim())error('description','商品描述不能为空')
   if(!Number.isFinite(Number(draft.price))||Number(draft.price)<=0)error('pricing','价格必须是大于 0 的数字')
   if(!/^[A-Z]{3}$/.test(draft.currency.trim()))error('pricing','币种必须使用 3 位大写代码，例如 USD')

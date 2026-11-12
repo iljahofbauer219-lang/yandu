@@ -276,6 +276,28 @@ describe('EbayLocalListingEditor · 图片必须真在本地（D1）', () => {
   })
 })
 
+// 主进程图片判据已按 mediaType 豁免视频行，编辑器必须同一口径：
+// 否则「只有视频没图片」在这里绿灯、保存被拒，或视频被当成一张图凑出「角度够了」的假建议。
+describe('EbayLocalListingEditor · 视频行不参与图片判据', () => {
+  const image=(id:string):EbayLocalProductUpdateInput['media'][number]=>({id,mediaType:'IMAGE',sortOrder:0,remoteUrl:`https://img/${id}.jpg`,localPath:`/tmp/${id}.jpg`,mimeType:'image/jpeg',width:1200,height:1200,fileSize:1,sha256:'',downloadStatus:'DOWNLOADED'})
+  const videoRow=(id:string):EbayLocalProductUpdateInput['media'][number]=>({id,mediaType:'VIDEO',sortOrder:1,remoteUrl:'http://114.55.149.192/product-pages/P/assets/v-01.mp4',localPath:'/tmp/v-01.mp4',mimeType:'video/mp4',width:0,height:0,fileSize:978833,sha256:'',downloadStatus:'DOWNLOADED'})
+
+  it('只有视频没有图片时报「至少需要 1 张已保存到本地的商品图片」', () => {
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({media:[videoRow('v1')]}))}/>)
+    expect(html).toContain('至少需要 1 张已保存到本地的商品图片')
+  })
+
+  it('两张图加一个视频仍算图片不足三张，视频不凑角度建议', () => {
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({media:[image('a'),videoRow('v1'),image('b')]}))}/>)
+    expect(html).toContain('建议保留多个角度的高清商品图片')
+  })
+
+  it('三张图加一个视频不再弹角度建议', () => {
+    const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({media:[image('a'),image('b'),videoRow('v1'),image('c')]}))}/>)
+    expect(html).not.toContain('建议保留多个角度的高清商品图片')
+  })
+})
+
 // R1 断点：本地产品 listingId 是 PALLET-<货盘编号>，直接拼进 ReviseItem 会被 eBay 拒成 createOrGetDraft 错误页，
 // 政策永远抓不到（真机取证见 5.4）。政策是店铺级资产，故开页载体改由操作员手填真实在架商品编号、按店铺记住，
 // 且「不合法就不发 IPC」——开一个必然报错的页签比当场点名缺什么更糟。

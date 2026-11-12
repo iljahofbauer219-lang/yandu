@@ -11,6 +11,7 @@ import { LinduoPreferenceModal } from './LinduoPreferenceModal'
 import { MENU_PERMISSION_TREE, hasMenuAccess } from '../shared/menuPermissionTree'
 import type { BrowserState, BrowserTab, BrowserTranslationMode, CandidateCollectionRecord, CandidateCollectionRun, CandidateArea, CollectionMethod, CollectionProtectionMode, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, ComparisonCostSettings, ComparisonDecision, ComparisonRecordView, ComplianceAlertStatus, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementStatus, ComplianceKnowledgeWorkspace, ComplianceProductProfileDraft, ComplianceReviewStatus, ComplianceRiskLevel, ComplianceRule, ComplianceRuleDraft, ComplianceTaskStatus, EbayAcceptanceBatch, EbayCategoryWorkspace, EbayConfigurationStatus, EbayContentOptimizationResult, EbayContentTranslationResult, EbayDirectoryProductSyncCheckpoint, EbayDirectoryProductSyncProgress, EbayDirectoryProductSyncResult, EbayImageCandidateReview, EbayImageGenerationPurpose, EbayImageInspectionReport, EbayImageVisualInspectionReport, EbayListing, EbayLocalProduct, EbayLocalProductUpdateInput, EbayLocalRevisionPreparationResult, EbayLoginResult, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayProductSyncRun, EbayPublishTask, EbayStoreBusinessPolicy, EbayStore, EbayTitleOptimizationResult, GigaReturnRateFilter, GigaSellerIndexFilter, ImageModelProfile, ImageReferenceRole, ImportedProductImage, ImportedProductSource, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishStatus, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, Platform, RealShiftProfile, RealShiftResult, SelectionCatalogItem, SelectionDecision, SelectionTask, SelectionTaskDraft, SupplyActivationResult, SupplyPlatformCode, SupplyProductDownload, SupplyWarehouseProduct, TaskProgress, WorkflowCounts } from '../shared/contracts'
 import { evaluateEbayCompliance } from '../shared/ebayComplianceKnowledge'
+import { mergeEbayPublishMedia } from '../shared/ebayLocalMedia'
 import type { EbayItemSpecificsSection, EbaySuggestedSpecificsCard } from '../shared/ebayItemSpecificsModel'
 import { complianceCheckFingerprint } from '../shared/complianceFingerprint'
 import { buildEbayMarketDecisionReport, confirmedEbayMarketTerms } from '../shared/ebayMarketDecision'
@@ -4222,7 +4223,7 @@ function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lo
       setEbayError('')
       try{
         const result=await window.desktop.ebay.downloadLocalProductMedia(lp.id,urls)
-        media=result.media.slice(0,24)
+        media=mergeEbayPublishMedia(result.media,lp.snapshot.media)
         if(result.failures.length)setNotice(`${result.failures.length} 张图片未能保存到本地（${result.failures.slice(0,3).join('；')}），编辑器已按现状打开，可在 01 图片与视频手工上传后保存。`)
       }catch(reason){
         // 只有「本地产品不存在」这类前置错误才抛到这里；照样开编辑器，种子回落到本地快照里真存在的图。

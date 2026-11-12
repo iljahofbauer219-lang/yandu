@@ -50,6 +50,7 @@ import type { AmazonDataSourceSearchResult } from '../shared/amazonScraper'
 import { describeOmkarCloudError } from '../shared/omkarCloud'
 import { palletItemToEbayLocalInput } from '../shared/palletToEbayLocal'
 import { applyServerAssetBatch, isStaleProductPageAsset } from '../shared/ebayProductPageAssets'
+import { ebayImageRuleRows } from '../shared/ebayLocalMedia'
 import { matchPalletCategory } from '../shared/palletCategoryMatch'
 import { ebayMarketResearchChannelLabel, isEbayResearchCategoryUsable } from '../shared/ebayMarketResearchParse'
 import { parseResearchQueryReply } from '../shared/ebayResearchQueryLlm'
@@ -996,12 +997,13 @@ function updateEbayLocalProduct(localProductId:string,changes:EbayLocalProductUp
   if(!changes.descriptionText.trim()&&!changes.descriptionHtml.trim())validationErrors.push('商品描述不能为空')
   if(!Number.isFinite(Number(changes.price))||Number(changes.price)<=0)validationErrors.push('价格必须是大于 0 的数字')
   if(!/^[A-Z]{3}$/.test(changes.currency.trim()))validationErrors.push('币种必须使用 3 位大写代码')
-  const downloadedMedia=changes.media.filter(item=>item.downloadStatus==='DOWNLOADED'&&item.localPath)
-  if(!downloadedMedia.length)validationErrors.push('至少需要 1 张已保存到本地的商品图片')
-  if(downloadedMedia.some(item=>item.width>0&&item.height>0&&Math.max(item.width,item.height)<500))validationErrors.push('存在最长边不足 500px 的商品图片')
-  if(downloadedMedia.some(item=>(item.fileSize||0)>12*1024*1024))validationErrors.push('存在单张超过 12MB 的商品图片')
-  if(downloadedMedia.some(item=>!ebayImageFormat(item.mimeType)))validationErrors.push('存在 eBay 不支持的商品图片格式')
+  // 视频行没有宽高、mimeType 是 video/*，套图片判据会把「更新快照」刚拉进来的视频判成不合规，故四条图片规则只看图片行
+  const downloadedImages=ebayImageRuleRows(changes.media.filter(item=>item.downloadStatus==='DOWNLOADED'&&item.localPath))
+  if(!downloadedImages.length)validationErrors.push('至少需要 1 张已保存到本地的商品图片')
   if(changes.media.length>EBAY_IMAGE_LIMIT)validationErrors.push(`商品图片与视频不能超过 ${EBAY_IMAGE_LIMIT} 项`)
+  if(downloadedImages.some(item=>item.width>0&&item.height>0&&Math.max(item.width,item.height)<500))validationErrors.push('存在最长边不足 500px 的商品图片')
+  if(downloadedImages.some(item=>(item.fileSize||0)>12*1024*1024))validationErrors.push('存在单张超过 12MB 的商品图片')
+  if(downloadedImages.some(item=>!ebayImageFormat(item.mimeType)))validationErrors.push('存在 eBay 不支持的商品图片格式')
   if(validationErrors.length)throw new Error(`本地刊登资料未通过校验：${validationErrors.join('；')}`)
   const capturedAt=new Date().toISOString()
   const listing={
