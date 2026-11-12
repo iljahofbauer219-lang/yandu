@@ -146,6 +146,30 @@ describe('收货地二选一 · 渲染端两项菜单沿用工具栏样式', () 
     expect(appSource).toContain('translation-trigger')
   })
 
+  it('语言态以页签读回为准：onState 与进页签时同步，重启先读兜底', () => {
+    expect(appSource).toContain('getEbayDeliveryLanguage')
+    expect(appSource).toContain('ebayDeliveryCountryFromLanguage')
+    expect(appSource).toContain('parseStoredEbayDeliveryCountry(localStorage.getItem(')
+    expect(appSource).toContain('localStorage.setItem(ebayDeliveryCountryStorageKey(')
+    const onState = slice(appSource, 'window.desktop.browser.onState(', '),[])')
+    expect(onState).toContain('syncEbayDeliveryLanguage')
+  })
+
+  it('兜底初始化不依赖浏览器页签：直进线上发布也能恢复语言态', () => {
+    const effect = slice(appSource, 'useEffect(()=>{if(!activeStore)return;const stored=', '},[activeStore?.id])')
+    expect(effect).toContain('parseStoredEbayDeliveryCountry')
+    expect(effect).not.toContain('activeTab')
+  })
+
+  it('主进程只读读回 lng，不刷新不清探针', () => {
+    const getter = slice(workspaceSource, 'async getEbayDeliveryLanguage', '\n  private ')
+    expect(getter).toContain('window.GH')
+    expect(getter).toContain('.lng')
+    expect(getter).not.toMatch(/reload\(\)|__crossBorderDeliveryProbe/)
+    expect(mainSource).toContain("ipcMain.handle('browser:ebay-delivery-language:get'")
+    expect(preloadSource).toContain('getEbayDeliveryLanguage')
+  })
+
   it('不再宣称「仅保存在当前店铺会话」这类不实文案', () => {
     expect(appSource).not.toContain('设置会仅保存在当前店铺会话中')
   })

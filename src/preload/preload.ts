@@ -293,6 +293,7 @@ contextBridge.exposeInMainWorld('desktop', {
     clearEbayPluginProducts: (): Promise<EbayBrowserPluginState> => ipcRenderer.invoke('browser:ebay-plugin:clear'),
     stopEbayPlugin: (): Promise<void> => ipcRenderer.invoke('browser:ebay-plugin:stop'),
     setEbayDeliveryCountry: (country: EbayDeliveryCountry): Promise<EbayDeliveryCountryResult> => ipcRenderer.invoke('browser:ebay-delivery-country:set', country),
+    getEbayDeliveryLanguage: (): Promise<string|null> => ipcRenderer.invoke('browser:ebay-delivery-language:get'),
     onTabs: (callback: (tabs: BrowserTab[]) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, tabs: BrowserTab[]) => callback(tabs)
       ipcRenderer.on('browser:tabs', listener)

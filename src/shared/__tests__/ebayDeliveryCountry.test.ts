@@ -9,7 +9,10 @@ import {
   readEbayDeliveryCountry,
   readEbayDeliveryPostal,
   buildNativeLanguageDp1,
+  ebayDeliveryCountryFromLanguage,
+  ebayDeliveryCountryStorageKey,
   ebayNativeLanguage,
+  parseStoredEbayDeliveryCountry,
   resolveEbayDeliveryCountry,
   resolvePostalRetention
 } from '../ebayDeliveryCountry'
@@ -343,5 +346,32 @@ describe('收货地二选一 · 原生语言结果判定', () => {
     const result = resolveEbayDeliveryCountry({ ...base, shipToLocation: '%2CUSA', language: 'zh-CN' })
     expect(result.ok).toBe(false)
     expect(result.reason).not.toContain('已生效')
+  })
+})
+
+describe('收货地二选一 · 语言态来源与重启兜底', () => {
+  it('读回语言映射国家：zh-CN→CN、en-US→US', () => {
+    expect(ebayDeliveryCountryFromLanguage('zh-CN')).toBe('CN')
+    expect(ebayDeliveryCountryFromLanguage('en-US')).toBe('US')
+  })
+
+  it('其它语言与空值不冒充两国', () => {
+    expect(ebayDeliveryCountryFromLanguage('de-DE')).toBeNull()
+    expect(ebayDeliveryCountryFromLanguage('')).toBeNull()
+    expect(ebayDeliveryCountryFromLanguage(null)).toBeNull()
+    expect(ebayDeliveryCountryFromLanguage(undefined)).toBeNull()
+  })
+
+  it('兜底键按店铺隔离', () => {
+    expect(ebayDeliveryCountryStorageKey('s1')).not.toBe(ebayDeliveryCountryStorageKey('s2'))
+    expect(ebayDeliveryCountryStorageKey('s1')).toContain('s1')
+  })
+
+  it('兜底值只认 US/CN，脏值回落 null', () => {
+    expect(parseStoredEbayDeliveryCountry('CN')).toBe('CN')
+    expect(parseStoredEbayDeliveryCountry('US')).toBe('US')
+    expect(parseStoredEbayDeliveryCountry('XX')).toBeNull()
+    expect(parseStoredEbayDeliveryCountry('')).toBeNull()
+    expect(parseStoredEbayDeliveryCountry(null)).toBeNull()
   })
 })

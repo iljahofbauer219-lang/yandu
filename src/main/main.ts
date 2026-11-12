@@ -3115,6 +3115,7 @@ ipcMain.handle('browser:ebay-plugin:remove', (_event, url:string) => workspace?.
 ipcMain.handle('browser:ebay-plugin:clear', () => workspace?.clearEbayPluginProducts())
 ipcMain.handle('browser:ebay-plugin:stop', () => workspace?.stopEbayPlugin())
 ipcMain.handle('browser:ebay-delivery-country:set', (_event, country:EbayDeliveryCountry) => workspace?.setEbayDeliveryCountry(country))
+ipcMain.handle('browser:ebay-delivery-language:get', () => workspace?.getEbayDeliveryLanguage())
 ipcMain.handle('task:create', (_event, draft: SelectionTaskDraft) => {
   const task: SelectionTask = {
     ...draft,

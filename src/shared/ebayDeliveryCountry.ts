@@ -79,6 +79,21 @@ export function isEbayListingFormUrl(rawUrl: string): boolean {
   }
 }
 
+/** 语言态以 eBay 会话读回为准，按钮状态只是它的投影 */
+export function ebayDeliveryCountryFromLanguage(lng: string | null | undefined): EbayDeliveryCountry | null {
+  if (lng === 'zh-CN') return 'CN'
+  if (lng === 'en-US') return 'US'
+  return null
+}
+
+export function ebayDeliveryCountryStorageKey(storeId: string): string {
+  return `ebay-delivery-country:${storeId}`
+}
+
+export function parseStoredEbayDeliveryCountry(raw: string | null): EbayDeliveryCountry | null {
+  return raw === 'CN' || raw === 'US' ? raw : null
+}
+
 export const EBAY_LANGUAGE_MANUAL_URL = 'https://accountsettings.ebay.com/'
 
 /** eBay 原生界面语言：中国=简体中文，美国=英文；与 Qwen-MT 网页翻译无关 */

@@ -2806,6 +2806,16 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     return resolveEbayDeliveryCountry({requested:country,hasEbayView:true,postAccepted:true,postStatus:post.status,shipToLocation:header.shipToLocation,postalBefore,language:header.lng,languageTarget:lang})
   }
 
+  async getEbayDeliveryLanguage():Promise<string|null> {
+    const view=this.attached
+    if(!view||view.webContents.isDestroyed())return null
+    let hostname=''
+    try{hostname=new URL(view.webContents.getURL()).hostname}catch{return null}
+    if(!isEbayDotComHost(hostname))return null
+    const lng=await view.webContents.executeJavaScript(`(((window.GH||{}).C||{}).lng||'')`,true) as string
+    return lng||null
+  }
+
   private async reloadAndReadShipToLocation(view:WebContentsView,url?:string):Promise<{shipToLocation:string|null;lng:string|null}> {
     await view.webContents.executeJavaScript(`window.__crossBorderDeliveryProbe=1`,true)
     if(url)await view.webContents.loadURL(url)

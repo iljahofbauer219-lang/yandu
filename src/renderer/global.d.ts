@@ -246,6 +246,7 @@ declare global {
         clearEbayPluginProducts(): Promise<EbayBrowserPluginState>
         stopEbayPlugin(): Promise<void>
         setEbayDeliveryCountry(country: EbayDeliveryCountry): Promise<EbayDeliveryCountryResult>
+        getEbayDeliveryLanguage(): Promise<string|null>
         onTabs(callback: (tabs: BrowserTab[]) => void): () => void
         onState(callback: (state: BrowserState) => void): () => void
       }
