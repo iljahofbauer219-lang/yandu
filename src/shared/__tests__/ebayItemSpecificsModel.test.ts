@@ -189,6 +189,36 @@ const CARD: EbayItemSpecificsCardRaw = {
   buttons: ['Apply all']
 }
 
+/**
+ * 2026-11-12 中文原生状态现网 AddItem 草稿页（draftId=5318093449621）的建议卡原文形态：
+ * 标题「建议物品详情」、说明句、全角冒号标签、按钮「全部应用」。只认英文标题/Apply all 会整卡漏读。
+ */
+const CARD_ZH: EbayItemSpecificsCardRaw = {
+  text: '建议物品详情\n使用 eBay.ai 根据图片和标题中的信息快速添加物品详情，帮助买家更快地找到您的物品。\nColor： Red\nMaterial： Leather\n全部应用',
+  options: [
+    { label: 'Color： Red', checked: false },
+    { label: 'Material： Leather', checked: false }
+  ],
+  buttons: ['全部应用']
+}
+
+describe('parseEbayItemSpecificsCard · 中文原生状态建议物品详情卡', () => {
+  it('标题/说明/逐项建议/全部应用都按中文原文解出，全角冒号照切名与值', () => {
+    const card = parseEbayItemSpecificsCard(CARD_ZH)
+    expect(card?.title).toBe('建议物品详情')
+    expect(card?.blurb).toBe('使用 eBay.ai 根据图片和标题中的信息快速添加物品详情，帮助买家更快地找到您的物品。')
+    expect(card?.items).toEqual([
+      { name: 'Color', value: 'Red', checked: false },
+      { name: 'Material', value: 'Leather', checked: false }
+    ])
+    expect(card?.applyAll).toBe('全部应用')
+  })
+
+  it('中文卡没有勾选项时同样回 null，不凭标题拼假卡片', () => {
+    expect(parseEbayItemSpecificsCard({ text: CARD_ZH.text, options: [], buttons: ['全部应用'] })).toBeNull()
+  })
+})
+
 describe('parseEbayItemSpecificsCard · 现网 Suggested item specifics 卡片原文', () => {
   it('标题取第一行、说明取其余行，逐项建议按第一个冒号切名与值', () => {
     const card = parseEbayItemSpecificsCard(CARD)

@@ -510,7 +510,7 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
               :<div className="ebay-note-band">尚未读取现网类目属性：点下方「运输与所在地」段的「从 Seller Hub 读取政策与类目属性」开一次修改页，eBay 该类目的分组、必填与控件形状会一并读回这里。下面先按本地已记录的属性展示。</div>)}
             {attributeSlots.length>0?(
               <div className="ebay-specific-list">
-                {suggestedCard&&(
+                {suggestedCard?(
                   <div className="ebay-specifics-ai-card">
                     <h4 className="ebay-specifics-ai-title">{suggestedCard.title}</h4>
                     {suggestedCard.blurb&&<p className="ebay-specifics-ai-blurb">{suggestedCard.blurb}</p>}
@@ -524,7 +524,7 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
                     </div>
                     {suggestedCard.applyAll&&<button type="button" className="ebay-specifics-ai-apply" onClick={applyAllSuggestions}>{suggestedCard.applyAll}</button>}
                   </div>
-                )}
+                ):<div className="ebay-note-band">本次读取未出现 eBay.ai「建议物品详情」卡：现网按条件渲染，同一张草稿页重载后可能整块不出现；需要建议值时再点上方「读取类目属性」重读一次。</div>}
                 {sectionNodes}
                 {localOnlySpecifics.length>0&&(
                   <div className="ebay-specific-local-only">

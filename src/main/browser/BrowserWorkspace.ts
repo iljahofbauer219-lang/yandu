@@ -1969,6 +1969,7 @@ export class BrowserWorkspace {
       const attributeBox=document.querySelector('.summary__attributes');
       const docY=node=>Math.round((node?node.getBoundingClientRect().top:0)+window.scrollY);
       // 现网 ITEM SPECIFICS 段顶部还有一张 eBay.ai 建议卡，按条件渲染：同一张草稿页重载后整块就不出现了（2026-11-09 R6 取证）。
+      // 中文原生状态下卡片标题是「建议物品详情」，只认英文标题会整卡漏读（2026-11-12 用户报漏读根因）。
       // 这里同样只抄原文——整块可见文字、每个勾选项的标签原文与选中态、按钮原文；
       // 标题与说明的分界、「属性名: 建议值」的切分、按钮的认法全留给 TS 侧解，可离线跑现网 fixtures。
       // clean 会把整块压成一行，卡片标题与说明的分界就没了；按行抄回，分行判据留给 TS 侧。
@@ -1978,7 +1979,7 @@ export class BrowserWorkspace {
       const cardTitles=[...document.querySelectorAll('h3,h4,strong,b,p,div,span')].filter(node=>{
         if(!node.getClientRects().length)return false;
         // 只认直接文本节点：抓到把整段包起来的外层容器就没有意义了
-        return [...node.childNodes].some(child=>child.nodeType===3&&/suggested item specifics/i.test(child.textContent||''));
+        return [...node.childNodes].some(child=>child.nodeType===3&&/suggested item specifics|建议物品详情/i.test(child.textContent||''));
       });
       for(const cardTitle of cardTitles){
         let cardNode=cardTitle;

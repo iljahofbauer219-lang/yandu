@@ -276,9 +276,9 @@ export interface EbaySuggestedSpecificsCard {
   applyAll: string
 }
 
-const APPLY_ALL = /apply\s+all/i
-/** 现网写成「Year Manufactured: 2020」；值里再出现的冒号不切第二次（Model: Suzuki: J20A 整段都算值）。 */
-const SUGGESTION_LABEL = /^([^:]+):(.*)$/
+const APPLY_ALL = /apply\s+all|全部应用/i
+/** 现网写成「Year Manufactured: 2020」，中文原生状态用全角冒号；值里再出现的冒号不切第二次（Model: Suzuki: J20A 整段都算值）。 */
+const SUGGESTION_LABEL = /^([^:：]+)[:：](.*)$/
 
 export function parseEbayItemSpecificsCard(raw?: EbayItemSpecificsCardRaw): EbaySuggestedSpecificsCard | null {
   const options = Array.isArray(raw?.options) ? raw!.options : []

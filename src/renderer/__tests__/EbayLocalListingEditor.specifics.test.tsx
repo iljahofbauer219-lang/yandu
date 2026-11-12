@@ -214,6 +214,22 @@ describe('EbayLocalListingEditor · 05 段顶部 Suggested item specifics 卡片
     expect(band).not.toContain('ebay-specifics-ai-card')
   })
 
+  it('中文原生状态卡片照画：标题「建议物品详情」、逐项建议与「全部应用」按钮上屏', () => {
+    const zh = { title: '建议物品详情', blurb: '使用 eBay.ai 根据图片和标题中的信息快速添加物品详情，帮助买家更快地找到您的物品。', items: [{ name: 'Color', value: 'Red', checked: false }], applyAll: '全部应用' }
+    const band = bandWith({ attributeSection: sectionOf(SLOTS), suggestedCard: zh })
+    expect(band).toContain('建议物品详情')
+    expect(band).toContain('Color: Red')
+    expect(band).toContain('全部应用')
+  })
+
+  it('读到槽位但建议卡没渲染：中文点名缺失并指回「读取类目属性」，不静默留空', () => {
+    const band = bandWith({ attributeSection: sectionOf(SLOTS) })
+    expect(band).toContain('未出现')
+    expect(band).toContain('建议物品详情')
+    expect(band).toContain('读取类目属性')
+    expect(band).not.toContain('ebay-specifics-ai-card')
+  })
+
   it('Apply all 只在现网有这句原文时出现，其余卡片内容照旧', () => {
     const band = bandWith({ attributeSection: sectionOf(SLOTS), suggestedCard: { ...CARD, applyAll: '' } })
     expect(band).not.toContain('Apply all')

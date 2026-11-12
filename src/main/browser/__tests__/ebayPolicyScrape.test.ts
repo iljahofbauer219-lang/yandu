@@ -454,6 +454,28 @@ describe('ReviseItem 类目属性段抓取 · Suggested item specifics 卡片', 
     expect(section).toMatch(/suggested item specifics/i)
     expect(section).not.toMatch(/parseEbayItemSpecifics|required-field|fake-menu-button|ESSENTIAL|OPTIONAL|applyAll/)
   })
+
+  it('中文原生状态：页内锚点同时认「建议物品详情」，不再只认英文标题（2026-11-12 漏读根因）', async () => {
+    const { host, scripts } = makeHost({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS, attributeCard: ATTRIBUTE_CARD })
+    await inspectMethod.call(host, 'ebay:s1', '189035181453', 'Bracket')
+    const script = scripts[0]
+    const section = script.slice(script.indexOf('const cleanLines='), script.indexOf('return {url:'))
+    expect(section).toContain('建议物品详情')
+  })
+
+  it('中文卡片原文在 TS 侧解出标题/逐项建议/全部应用', async () => {
+    const zhCard = {
+      text: '建议物品详情\n使用 eBay.ai 根据图片和标题中的信息快速添加物品详情，帮助买家更快地找到您的物品。\nColor： Red\n全部应用',
+      options: [{ label: 'Color： Red', checked: false }],
+      buttons: ['全部应用']
+    }
+    const { suggestedCard } = await inspect({ attributeRows: ATTRIBUTE_ROWS, attributeGroups: ATTRIBUTE_GROUPS, attributeCard: zhCard })
+    expect(suggestedCard).toMatchObject({
+      title: '建议物品详情',
+      items: [{ name: 'Color', value: 'Red', checked: false }],
+      applyAll: '全部应用'
+    })
+  })
 })
 
 describe('ReviseItem 政策抓取 · 落库与读取接线', () => {
