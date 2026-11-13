@@ -372,8 +372,8 @@ declare global {
       }
       ebay: {
         status():Promise<EbayConfigurationStatus>
-        stores():Promise<EbayStore[]>
-        createStore(name:string,username:string,password:string,marketplaceId?:string):Promise<EbayStore>
+        stores(workspace?:string):Promise<EbayStore[]>
+        createStore(name:string,username:string,password:string,marketplaceId?:string,workspace?:string):Promise<EbayStore>
         authorize(storeId:string):Promise<EbayStore>
         openSellerHub(storeId:string):Promise<string>
         newBrowserTab(storeId:string):Promise<string>

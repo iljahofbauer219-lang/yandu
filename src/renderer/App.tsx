@@ -2396,7 +2396,7 @@ export function App() {
       <MigrationBanner />
       {/* 导航功能统一直接渲染工作区，不使用占用顶部空间的全局页面头部。 */}
       {page==='ebay'&&pageAllowed('ebay')&&<EbayPlatformWorkspace browserFullscreen={browserFullscreen} onBrowserSurface={setBrowserSurface} initialTab={ebayEntryTab} onOpenMyPallet={()=>setPage('ai-hub-my-pallet')} onOpenAmazonDataSource={()=>setPage('amazon-data-source')} onOpenLlmKeys={()=>setPage('llm-keys')}/>}
-      {page==='ebay-search-collect'&&pageAllowed('ebay-search-collect')&&<EbayPlatformWorkspace browserOnly browserFullscreen={browserFullscreen} onBrowserSurface={setBrowserSurface} initialTab="browser"/>}
+      {page==='ebay-search-collect'&&pageAllowed('ebay-search-collect')&&<EbayPlatformWorkspace browserOnly workspace="search-collect" browserFullscreen={browserFullscreen} onBrowserSurface={setBrowserSurface} initialTab="browser"/>}
       {page==='ai-crossborder'&&canMenu('menu.crossborder')&&<section className="ai-crossborder-page">
         <div className="ai-crossborder-header"><h2>AI跨境</h2><p>7大跨境电商平台智能运营中心</p></div>
         <div className="ai-crossborder-grid">
@@ -3418,13 +3418,13 @@ function hasCurrentEbayTitleVariants(variants:Array<{id:string}>|undefined) {
   return (variants?.length||0)>=currentEbayTitleStrategyIds.length&&currentEbayTitleStrategyIds.every(id=>ids.has(id))
 }
 
-function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lockTitleMode,browserOnly,onOpenMyPallet,onOpenAmazonDataSource,onOpenLlmKeys}:{browserFullscreen:boolean;onBrowserSurface:(next:BrowserSurface|null)=>void;initialTab?:EbayWorkspaceTab;lockTitleMode?:boolean;browserOnly?:boolean;onOpenMyPallet?:()=>void;onOpenAmazonDataSource?:()=>void;onOpenLlmKeys?:()=>void}) {
+function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lockTitleMode,browserOnly,workspace='ebay',onOpenMyPallet,onOpenAmazonDataSource,onOpenLlmKeys}:{browserFullscreen:boolean;onBrowserSurface:(next:BrowserSurface|null)=>void;initialTab?:EbayWorkspaceTab;lockTitleMode?:boolean;browserOnly?:boolean;workspace?:string;onOpenMyPallet?:()=>void;onOpenAmazonDataSource?:()=>void;onOpenLlmKeys?:()=>void}) {
   const [activeTabState,setActiveTab]=useState<EbayWorkspaceTab>(initialTab||'browser')
   // browserOnly：搜索采集入口复用本工作台但只保留「店铺采集」，锁定 browser 页签并隐藏页签栏
   const activeTab=browserOnly?'browser':activeTabState
   useEffect(()=>{if(initialTab)setActiveTab(initialTab)},[initialTab])
-  const ebayWorkbenchPanel=usePanelCollapse('ebay-login-workbench',{active:activeTab==='browser'})
-  const ebayCatalogPanel=usePanelCollapse('ebay-product-catalog',{active:activeTab==='library'||activeTab==='local'||activeTab==='premium'})
+  const ebayWorkbenchPanel=usePanelCollapse(workspace==='ebay'?'ebay-login-workbench':`ebay-login-workbench:${workspace}`,{active:activeTab==='browser'})
+  const ebayCatalogPanel=usePanelCollapse(workspace==='ebay'?'ebay-product-catalog':`ebay-product-catalog:${workspace}`,{active:activeTab==='library'||activeTab==='local'||activeTab==='premium'})
   const [storeScope,setStoreScope]=useState('')
   const [titleUrlInput,setTitleUrlInput]=useState('')
   const [titleUrlError,setTitleUrlError]=useState('')
@@ -3599,7 +3599,7 @@ function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lo
   const activeStore=stores.find(store=>store.id===storeScope)
   const scopeName=activeStore?.name||'尚未选择店铺'
   const ensureEbayLogin=async(store=activeStore,silent=false)=>{if(!store)return null;if(!silent)setEbayLogin({status:'AUTO_LOGIN_RUNNING',message:'正在检查会话并安全登录eBay…',url:ebayAddress,autoLoginAttempted:false});try{const result=await window.desktop.ebay.ensureLogin(store.id);setEbayLogin(result);return result}catch(reason){const result:EbayLoginResult={status:'ERROR',message:friendlyEbayError(readableError(reason,'eBay自动登录失败')).text,url:ebayAddress,autoLoginAttempted:false};setEbayLogin(result);return result}}
-  const refreshStores=async()=>{const next=await window.desktop.ebay.stores();setStores(next);setStoreScope(current=>next.some(store=>store.id===current)?current:(next[0]?.id||''));return next}
+  const refreshStores=async()=>{const next=await window.desktop.ebay.stores(workspace);setStores(next);setStoreScope(current=>next.some(store=>store.id===current)?current:(next[0]?.id||''));return next}
   useEffect(()=>{void Promise.all([window.desktop.ebay.status().then(setConfiguration),refreshStores()]).catch(reason=>setEbayError(readableError(reason,'eBay工作区加载失败')))},[])
   useEffect(()=>{
     if(downloadToast?.kind!=='success')return
@@ -3708,7 +3708,7 @@ function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lo
     const username=storeDraft.username.trim()
     if(!name||!username||!storeDraft.password){setEbayError('请完整填写店名、eBay 登录账号和密码');return}
     setBusy('create');setEbayError('')
-    try{const store=await window.desktop.ebay.createStore(name,username,storeDraft.password,'EBAY_US');await refreshStores();setStoreScope(store.id);setActiveTab('browser');setStoreFormOpen(false);setStoreDraft({name:'',username:'',password:''});setNotice(`${name} 已添加，账号和密码已使用系统安全存储加密保存。`)}
+    try{const store=await window.desktop.ebay.createStore(name,username,storeDraft.password,'EBAY_US',workspace);await refreshStores();setStoreScope(store.id);setActiveTab('browser');setStoreFormOpen(false);setStoreDraft({name:'',username:'',password:''});setNotice(`${name} 已添加，账号和密码已使用系统安全存储加密保存。`)}
     catch(reason){setEbayError(readableError(reason,'添加 eBay 店铺失败'))}finally{setBusy('')}
   }
   const authorizeStore=async(store:EbayStore)=>{setBusy(`authorize:${store.id}`);setEbayError('');try{await window.desktop.ebay.authorize(store.id);await refreshStores();setNotice(`${store.name} 已完成正式环境只读授权，可以同步商品。`)}catch(reason){setEbayError(readableError(reason,'eBay店铺授权失败'))}finally{setBusy('')}}
