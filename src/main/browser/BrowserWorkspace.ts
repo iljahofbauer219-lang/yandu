@@ -2230,12 +2230,17 @@ export class BrowserWorkspace {
         const wait=ms=>new Promise(r=>setTimeout(r,ms));
         const scope=document.querySelector('.summary__attributes')||document;
         const fields=[...scope.querySelectorAll('.summary__attributes--field')];
-        const rowOf=name=>{const want=String(name).toLowerCase();return fields.find(f=>{const control=f.querySelector('[name]');const raw=control?clean(control.getAttribute('name')):'';const own=raw.replace(/^(?:search-box-)?attributes[._-]?/i,'').toLowerCase();if(own&&(own===want||raw.toLowerCase()===want))return true;const label=f.querySelector('.summary__attributes--label');return Boolean(label)&&clean((label.innerText||label.textContent||'').split('\\n')[0]).replace(/\\s*\\*$/,'').toLowerCase()===want})};
+        const rowOf=name=>{const want=String(name).toLowerCase();const scopeNow=document.querySelector('.summary__attributes')||document;const fieldsNow=[...scopeNow.querySelectorAll('.summary__attributes--field')];return fieldsNow.find(f=>{const control=f.querySelector('[name]');const raw=control?clean(control.getAttribute('name')):'';const own=raw.replace(/^(?:search-box-)?attributes[._-]?/i,'').toLowerCase();if(own&&(own===want||raw.toLowerCase()===want))return true;const label=f.querySelector('.summary__attributes--label');return Boolean(label)&&clean((label.innerText||label.textContent||'').split('\\n')[0]).replace(/\\s*\\*$/,'').toLowerCase()===want})};
         const optionText=el=>{const node=el.querySelector('.filter-menu__text')||el;const own=[...node.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('');return clean(own)||clean(node.textContent)};
         const setNative=(el,value)=>{const proto=el.tagName==='TEXTAREA'?window.HTMLTextAreaElement.prototype:window.HTMLInputElement.prototype;const setter=Object.getOwnPropertyDescriptor(proto,'value').set;setter.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}))};
+        // 现网 specifics 默认折叠（「显示更多内容」/Show more），写前面行后还可能再折叠；
+        // 不展开则靠后行不在 DOM，rowOf 查不到会被误报「页面没有该槽位」。
+        const expandAll=async()=>{for(let i=0;i<4;i+=1){const scopeNow=document.querySelector('.summary__attributes')||document;const more=[...scopeNow.querySelectorAll('button,a')].find(el=>/显示更多内容|Show more/i.test(clean(el.textContent)));if(!more)return;more.click();await wait(600)}};
+        await expandAll();
         const out=[];
         for(const row of __yanduSpecificsWrite){
-          const field=rowOf(row.name);
+          let field=rowOf(row.name);
+          if(!field){await expandAll();field=rowOf(row.name)}
           if(!field){out.push({name:row.name,settled:false,reason:'页面没有该槽位'});continue}
           try{
             if(row.control==='YESNO'){
@@ -2258,36 +2263,39 @@ export class BrowserWorkspace {
               // 连面板都不开，直接点名跳过——绝不在 eBay 页里派发回车，避免误触整页提交。
               const menu=field.querySelector('button.se-expand-button__button');
               if(!menu){out.push({name:row.name,settled:false,reason:'页面没有菜单控件'});continue}
-              const panel=field.querySelector('.se-filter-menu-button__menu-container');
+              // 面板按实际开合状态判断：已开就不要再 click（否则会把它关掉，点到隐藏选项无效）。
+              const ensureOpen=async()=>{let p=field.querySelector('.se-filter-menu-button__menu-container');if(!p||!p.getClientRects().length){menu.click();await wait(700);p=field.querySelector('.se-filter-menu-button__menu-container')}return p};
+              const panel=await ensureOpen();
               if(!panel){out.push({name:row.name,settled:false,reason:'菜单面板没读到'});continue}
               const list=panel.querySelector('.filter-menu__items')||panel.querySelector('.menu__items');
               if(!list){out.push({name:row.name,settled:false,reason:'此项无预设候选（eBay 自行输入），请在页面人工填写'});continue}
-              menu.click();await wait(700);
               const parts=row.control==='MENU_MULTI'?row.value.split(',').map(part=>clean(part)).filter(Boolean):[row.value];
+              const findIn=(l,part)=>l?[...l.children].find(el=>optionText(el).toLowerCase()===part.toLowerCase())||null:null;
               const pick=async part=>{
-                // 每次点选后现网会重渲染列表，必须重查 panel/list，复用一次性捕获的 list 会让后续段找不到候选。
-                const panelNow=field.querySelector('.se-filter-menu-button__menu-container');
-                const listNow=panelNow?(panelNow.querySelector('.filter-menu__items')||panelNow.querySelector('.menu__items')):null;
-                let target=listNow?[...listNow.children].find(el=>optionText(el).toLowerCase()===part.toLowerCase())||null:null;
-                if(!target){
-                  const panelInput=panelNow?panelNow.querySelector('input'):null;
-                  if(!panelInput)return null;
-                  setNative(panelInput,part);await wait(1100);
-                  const list2=panelNow.querySelector('.filter-menu__items')||panelNow.querySelector('.menu__items');
-                  target=list2?[...list2.children].find(el=>optionText(el).toLowerCase()===part.toLowerCase())||null:null;
+                for(let attempt=0;attempt<2;attempt+=1){
+                  const p=await ensureOpen();
+                  const l=p?(p.querySelector('.filter-menu__items')||p.querySelector('.menu__items')):null;
+                  let target=findIn(l,part);
+                  if(!target&&p){
+                    // 列表截断/搜索残留时靠检索框驱动：先清空再搜，等足远程检索再重查。
+                    const inp=p.querySelector('input[type="text"],input[role="combobox"],input');
+                    if(inp){setNative(inp,'');await wait(300);setNative(inp,part);await wait(1300);target=findIn(p.querySelector('.filter-menu__items')||p.querySelector('.menu__items'),part)}
+                  }
+                  if(target){
+                    // 现网选项是 div[role=menuitemradio/menuitemcheckbox]，直接点选项节点；点完验 aria-checked，未选中重试。
+                    target.click();await wait(400);
+                    if(target.getAttribute('aria-checked')==='true')return target;
+                  }
                 }
-                if(target){const clickEl=target.querySelector('button,[role="option"]')||target;clickEl.click();await wait(350)}
-                return target;
+                return null;
               };
               let done=0;
               for(const part of parts){const picked=await pick(part);if(picked)done+=1;else break}
-              // 落定读开面板时选项的 aria-checked（现网真选中态：menuitemradio/menuitemcheckbox），
-              // 绝不用整 field 文本（含候选清单）做 includes，避免把没选中报成已填。
-              if(!panel.getClientRects().length){menu.click();await wait(500)}
-              const panelNow=field.querySelector('.se-filter-menu-button__menu-container');
-              const listNow=panelNow?(panelNow.querySelector('.filter-menu__items')||panelNow.querySelector('.menu__items')):null;
-              const selected=listNow?[...listNow.children].filter(el=>el.getAttribute('aria-checked')==='true').map(optionText):[];
-              if(panelNow&&panelNow.getClientRects().length){menu.click();await wait(300)}
+              // 落定读开面板时选项的 aria-checked（现网真选中态），绝不用整 field 文本 includes。
+              const pNow=await ensureOpen();
+              const lNow=pNow?(pNow.querySelector('.filter-menu__items')||pNow.querySelector('.menu__items')):null;
+              const selected=lNow?[...lNow.children].filter(el=>el.getAttribute('aria-checked')==='true').map(optionText):[];
+              if(pNow&&pNow.getClientRects().length){menu.click();await wait(300)}
               const settled=done===parts.length&&parts.every(part=>selected.some(s=>s.toLowerCase()===part.toLowerCase()));
               out.push({name:row.name,settled,reason:settled?'':(done<parts.length?'候选里没有该值':'回读未选中该值')})
             }

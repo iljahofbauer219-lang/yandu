@@ -83,12 +83,13 @@ describe('S 批接线守卫 · 单一写页来源与 shared 计划复用', () =>
     expect(handler).toContain('getEbayCategorySpecificsSection(')
   })
 
-  it('T2：落定读开面板选项 aria-checked，点选每次重查列表，不用整 field 文本 includes', () => {
+  it('T2/U2：落定读开面板选项 aria-checked，面板按实际开合判断，检索框驱动重试，不用整 field 文本 includes', () => {
     const si = workspaceSource.indexOf('private buildSpecificsWriteScript(')
     expect(si).toBeGreaterThan(-1)
     const method = workspaceSource.slice(si, workspaceSource.indexOf('\n  private buildFixedFillScript(', si))
     expect(method).toContain("getAttribute('aria-checked')==='true'")
-    expect(method).toContain('const panelNow=field.querySelector')
+    expect(method).toContain('const ensureOpen=async()')
+    expect(method).toContain('setNative(inp,part)')
     expect(method).not.toContain('valueText.toLowerCase().includes')
   })
 })
