@@ -2281,14 +2281,14 @@ export class BrowserWorkspace {
               };
               let done=0;
               for(const part of parts){const picked=await pick(part);if(picked)done+=1;else break}
-              // 落定只读「已选值列表」chips（现网真选中态在那里，且仅面板打开时挂载），
+              // 落定读开面板时选项的 aria-checked（现网真选中态：menuitemradio/menuitemcheckbox），
               // 绝不用整 field 文本（含候选清单）做 includes，避免把没选中报成已填。
               if(!panel.getClientRects().length){menu.click();await wait(500)}
-              const chipList=field.querySelector('[aria-label="已选值列表"],[aria-label="Selected values"]');
-              let selected=chipList?[...chipList.querySelectorAll('li,[role="option"]')].map(el=>clean(el.textContent)).filter(Boolean):[];
-              if(!selected.length){const vr=field.querySelector('.summary__attributes--value');const head=vr?clean(vr.textContent).split('清除')[0]:'';if(head&&!/^显示/.test(head))selected=[head]}
-              if(panel.getClientRects().length){menu.click();await wait(300)}
-              const settled=done===parts.length&&parts.every(part=>selected.some(s=>s.toLowerCase().includes(part.toLowerCase())||part.toLowerCase().includes(s.toLowerCase())));
+              const panelNow=field.querySelector('.se-filter-menu-button__menu-container');
+              const listNow=panelNow?(panelNow.querySelector('.filter-menu__items')||panelNow.querySelector('.menu__items')):null;
+              const selected=listNow?[...listNow.children].filter(el=>el.getAttribute('aria-checked')==='true').map(optionText):[];
+              if(panelNow&&panelNow.getClientRects().length){menu.click();await wait(300)}
+              const settled=done===parts.length&&parts.every(part=>selected.some(s=>s.toLowerCase()===part.toLowerCase()));
               out.push({name:row.name,settled,reason:settled?'':(done<parts.length?'候选里没有该值':'回读未选中该值')})
             }
           }catch(error){out.push({name:row.name,settled:false,reason:'写入异常：'+(error&&error.message?error.message:'unknown')})}
