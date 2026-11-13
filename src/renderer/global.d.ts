@@ -404,7 +404,7 @@ declare global {
         categorySpecificsSection(storeId:string,categoryKey:string):Promise<{section:EbayItemSpecificsSection;sourceUrl:string;readAt:string}|null>
         businessPolicies(storeId:string,kind?:EbayBusinessPolicyKind):Promise<EbayStoreBusinessPolicy[]>
         prepareLocalProductRevision(localProductId:string):Promise<EbayLocalRevisionPreparationResult>
-        fillCurrentTab(localProductId:string, mode:'auto'|'fixed', preset?:unknown):Promise<{url:string;mode:string;filledFields:string[];skippedFields:string[];warnings:string[];filledAt:string}>
+        fillCurrentTab(localProductId:string, mode:'auto'|'fixed', preset?:unknown):Promise<{url:string;mode:string;filledFields:string[];skippedFields:string[];warnings:string[];inferredFields:string[];filledAt:string}>
         specificsLlmSuggestions(input:{title:string;descriptionText:string;slots:Array<{name:string;control:string;options:string[];maxLength:number}>}):Promise<Array<{name:string;value:string}>>
         removeLocalProduct(localProductId:string):Promise<boolean>
         removeLocalListing(storeId:string,listingId:string):Promise<boolean>

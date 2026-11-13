@@ -11,8 +11,9 @@ import type { EbayLocalProduct } from '../../../shared/contracts'
  */
 const fillMethod = BrowserWorkspace.prototype.fillCurrentEbayTab as unknown as (
   this: Record<string, unknown>, accountId: string, product: EbayLocalProduct, mode: 'auto' | 'fixed',
-  preset?: unknown, specificsRows?: Array<{ name: string; value: string; control: string }>
-) => Promise<{ filledFields: string[]; skippedFields: string[]; warnings: string[] }>
+  preset?: unknown, specificsRows?: Array<{ name: string; value: string; control: string; inferred?: boolean; evidence?: string }>,
+  specificsManual?: Array<{ name: string; reason: string }>
+) => Promise<{ filledFields: string[]; skippedFields: string[]; warnings: string[]; inferredFields: string[] }>
 
 const PRODUCT = {
   id: 'lp1', storeId: 's1', listingId: 'T1', title: 'Seat', imageUrl: '', imageUrls: [], price: '9', currency: 'USD',
@@ -24,11 +25,11 @@ const PRODUCT = {
   }
 } as unknown as EbayLocalProduct
 
-function makeHost() {
+function makeHost(settleRows?: Array<{ name: string; settled: boolean; reason: string }>) {
   const scripts: string[] = []
   const executeJavaScript = vi.fn(async (script: string) => {
     scripts.push(script)
-    if (script.includes('__yanduSpecificsWrite')) return [{ name: 'Brand', settled: true, reason: '' }, { name: 'Color', settled: false, reason: '候选里没有该值' }]
+    if (script.includes('__yanduSpecificsWrite')) return settleRows ?? [{ name: 'Brand', settled: true, reason: '' }, { name: 'Color', settled: false, reason: '候选里没有该值' }]
     if (script.includes('const targets=')) return { url: 'https://www.ebay.com/lstng?draftId=1&mode=AddItem', login: false, verification: false, errorPage: { detected: false, reason: '' }, ready: true, filledFields: ['标题'], skippedFields: [], policyPending: [], warnings: [] }
     return { policyModels: {} }
   })
@@ -62,6 +63,15 @@ describe('fillCurrentEbayTab auto 档 · 类目属性写页', () => {
     await fillMethod.call(host, 'ebay:s1', PRODUCT, 'auto', undefined, undefined)
     expect(scripts.some(script => script.includes('__yanduSpecificsWrite'))).toBe(false)
   })
+
+  it('V：推断行落定后标「待确认+证据」，无源行按人工点名进跳过', async () => {
+    const { host } = makeHost([{ name: 'Vintage Part', settled: true, reason: '' }])
+    const result = await fillMethod.call(host, 'ebay:s1', PRODUCT, 'auto', undefined,
+      [{ name: 'Vintage Part', value: 'No', control: 'YESNO', inferred: true, evidence: 'aftermarket racing seats' }],
+      [{ name: 'UPC', reason: '无源数据，需人工填写' }])
+    expect(result.inferredFields.some(label => label.includes('Vintage Part=No') && label.includes('待确认') && label.includes('aftermarket'))).toBe(true)
+    expect(result.skippedFields.some(label => label.includes('UPC') && label.includes('需人工填写'))).toBe(true)
+  })
 })
 
 describe('S 批接线守卫 · 单一写页来源与 shared 计划复用', () => {
@@ -91,5 +101,29 @@ describe('S 批接线守卫 · 单一写页来源与 shared 计划复用', () =>
     expect(method).toContain('const ensureOpen=async()')
     expect(method).toContain('setNative(inp,part)')
     expect(method).not.toContain('valueText.toLowerCase().includes')
+  })
+
+  it('V：写页对推断行已有人工选中时不覆盖（五硬要求·不被覆盖）', () => {
+    const si = workspaceSource.indexOf('private buildSpecificsWriteScript(')
+    const method = workspaceSource.slice(si, workspaceSource.indexOf('\n  private buildFixedFillScript(', si))
+    expect(method).toContain('row.inferred')
+    expect(method).toContain('已有人工选中，不覆盖')
+  })
+
+  it('V：读取脚本多遍展开折叠尾巴行（红框九行入清单的根因修复），中英文开关都认', () => {
+    const si = workspaceSource.indexOf('private buildInspectRequirementsScript(')
+    expect(si).toBeGreaterThan(-1)
+    const method = workspaceSource.slice(si, workspaceSource.indexOf('async fillCurrentEbayTab(', si))
+    expect(method).toContain('for(let i=0;i<4;i+=1)')
+    expect(method).toMatch(/show more/i)
+    expect(method).toContain('显示更多内容')
+  })
+
+  it('V：main auto 档接 YESNO 证据推断与无源人工点名', () => {
+    const start = mainSource.indexOf("ipcMain.handle('ebay:fill-current-tab'")
+    const handler = mainSource.slice(start, mainSource.indexOf("ipcMain.handle('ebay:specifics-llm'", start))
+    expect(handler).toContain('inferEbaySpecificsYesNo(')
+    expect(handler).toContain('ebaySpecificsUnfilledRows(')
+    expect(handler).toContain('inferred:true')
   })
 })

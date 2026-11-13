@@ -157,11 +157,54 @@ export function applyLlmSpecificAnswers(slots: EbayItemSpecificSlot[], answers: 
   for (const answer of answers) {
     const slot = slots.find(item => sameName(item.name, answer.name))
     if (!slot || seen.has(slot.name)) continue
+    // V：无源五项只认本地真值，LLM 即便给出过校验的值也丢弃——编造 UPC/保修/Prop65 有合规风险。
+    if (EBAY_SPECIFICS_NO_LLM_NAMES.some(name => sameName(name, answer.name))) continue
     if (specificValueIssue(slot, answer.value)) continue
     seen.add(slot.name)
     kept.push({ name: slot.name, value: normalizeSpecificValue(slot, answer.value), source: 'AI' })
   }
   return kept
+}
+
+/**
+ * V：无源五项（描述/规格表无对应真值）。只认本地真值（ENUM_MATCH），LLM 不得造值；
+ * 未填时在结果里点名「需人工填写」。本地真有值（如规格表写了保修）仍走规则档正常填。
+ */
+export const EBAY_SPECIFICS_NO_LLM_NAMES = ['Manufacturer Warranty', 'Interchange Part Number', 'Superseded Part Number', 'California Prop 65 Warning', 'UPC']
+
+export interface EbaySpecificsInferredRow {
+  name: string
+  value: 'Yes' | 'No'
+  evidence: string
+}
+
+/**
+ * V：YESNO 三件套无结构化源，按描述/标题文字证据保守推断，证据原文随值返回（标来源）。
+ * 只作用 YESNO 槽位；无证据不造值。规则顺序即优先级（先具体后宽泛）。
+ */
+const YESNO_EVIDENCE_RULES: Array<{ name: string; value: 'Yes' | 'No'; pattern: RegExp }> = [
+  { name: 'Vintage Part', value: 'No', pattern: /aftermarket|brand new|reproduction/i },
+  { name: 'Vintage Part', value: 'Yes', pattern: /\bvintage\b|antique|original period/i },
+  { name: 'Universal Fitment', value: 'Yes', pattern: /universal for \d+% cars|universal fit|universal design|fits most/i },
+  { name: 'Universal Fitment', value: 'Yes', pattern: /\buniversal\b/i },
+  { name: 'Universal Fitment', value: 'No', pattern: /vehicle[- ]specific|direct fit|custom fit/i },
+  { name: 'Performance Part', value: 'Yes', pattern: /racing seats|racing|performance|sport/i }
+]
+
+export function inferEbaySpecificsYesNo(slots: EbayItemSpecificSlot[], input: { title: string; descriptionText: string }): EbaySpecificsInferredRow[] {
+  const text = `${input.title}\n${input.descriptionText}`
+  const rows: EbaySpecificsInferredRow[] = []
+  for (const slot of slots) {
+    if (slot.control !== 'YESNO') continue
+    for (const rule of YESNO_EVIDENCE_RULES) {
+      if (!sameName(rule.name, slot.name)) continue
+      const hit = text.match(rule.pattern)
+      if (!hit) continue
+      rows.push({ name: slot.name, value: rule.value, evidence: hit[0] })
+      break
+    }
+  }
+  return rows
 }
 
 /**

@@ -36,7 +36,7 @@ import { EbayImageGroundingService } from './services/EbayImageGroundingService'
 import { importProductUrl } from './services/ImageSourceService'
 import { downloadUrlsToLocalMedia, type LocalMediaDownloadResult } from './ebayLocalMediaFiles'
 import { EBAY_IMAGE_LIMIT } from '../shared/ebayUploadMediaPlan'
-import { applyLlmSpecificAnswers, ebaySpecificsLlmOptions, planEbaySpecificsFill } from '../shared/ebaySpecificsFillPlan'
+import { applyLlmSpecificAnswers, ebaySpecificsLlmOptions, ebaySpecificsUnfilledRows, inferEbaySpecificsYesNo, planEbaySpecificsFill } from '../shared/ebaySpecificsFillPlan'
 import type { EbayItemSpecificSlot } from '../shared/ebayItemSpecificsModel'
 import { imageHashService } from './services/ImageHashService'
 import { parseEbayListingsReport } from './services/EbayReportService'
@@ -3491,7 +3491,8 @@ ipcMain.handle('ebay:fill-current-tab', async (_event, localProductId:string, mo
   const product=database.getEbayLocalProducts().find(item=>item.id===localProductId)
   if(!product)throw new Error('本地产品不存在或已删除')
   // S2：auto 档除legacy 11 项外，再按产品真实内容算类目属性填槽（规则别名＋LLM 真候选），交给当前页签写页。
-  let specificsRows:Array<{name:string;value:string;control:EbayItemSpecificSlot['control']}>|undefined
+  let specificsRows:Array<{name:string;value:string;control:EbayItemSpecificSlot['control'];inferred?:boolean;evidence?:string}>|undefined
+  let specificsManual:Array<{name:string;reason:string}>|undefined
   if(mode==='auto'){
     const section=database.getEbaySpecificsSection(product.id)?.section
       ??(product.platformCategoryId?database.getEbayCategorySpecificsSection(product.storeId,product.platformCategoryId)?.section:null)
@@ -3509,13 +3510,24 @@ ipcMain.handle('ebay:fill-current-tab', async (_event, localProductId:string, mo
           llmRows=applyLlmSpecificAnswers(pending,answers||[])
         }catch{llmRows=[]}
       }
-      specificsRows=[...rulePlan.fills,...llmRows].map(fill=>{
+      // V：YESNO 三件套按描述证据保守推断（标待确认+证据），不与规则/LLM 已填行重复。
+      const taken=new Set([...rulePlan.fills,...llmRows].map(row=>row.name.trim().toLowerCase()))
+      const inferredRows=inferEbaySpecificsYesNo(section.slots,{title:details.title||'',descriptionText:details.descriptionText||''}).filter(row=>!taken.has(row.name.trim().toLowerCase()))
+      const baseRows=[...rulePlan.fills,...llmRows].map(fill=>{
         const slot=section.slots.find(item=>item.name.trim().toLowerCase()===fill.name.trim().toLowerCase())
         return slot?{name:slot.name,value:fill.value,control:slot.control}:null
       }).filter((row):row is {name:string;value:string;control:EbayItemSpecificSlot['control']}=>Boolean(row))
+      const inferredMapped=inferredRows.map(row=>{
+        const slot=section.slots.find(item=>item.name.trim().toLowerCase()===row.name.trim().toLowerCase())
+        return slot?{name:slot.name,value:row.value as string,control:slot.control,inferred:true,evidence:row.evidence}:null
+      }).filter((row):row is {name:string;value:string;control:EbayItemSpecificSlot['control'];inferred:boolean;evidence:string}=>Boolean(row))
+      specificsRows=[...baseRows,...inferredMapped]
+      // V：无源/未填行点名人工（不编造值），随写页结果上屏。
+      const allFills=[...rulePlan.fills,...llmRows,...inferredRows.map(row=>({name:row.name,value:row.value,source:'AI' as const}))]
+      specificsManual=ebaySpecificsUnfilledRows(section.slots,allFills,rulePlan.skipped).map(row=>({name:row.name,reason:row.reason==='本地没有该属性的记录'?'无源数据，需人工填写':row.reason}))
     }
   }
-  return workspace.fillCurrentEbayTab(`ebay:${product.storeId}`,product,mode,preset as Parameters<typeof workspace.fillCurrentEbayTab>[3],specificsRows)
+  return workspace.fillCurrentEbayTab(`ebay:${product.storeId}`,product,mode,preset as Parameters<typeof workspace.fillCurrentEbayTab>[3],specificsRows,specificsManual)
 })
 ipcMain.handle('ebay:specifics-llm', (_event, input:{title:string;descriptionText:string;slots:Array<{name:string;control:string;options:string[];maxLength:number}>}) => aiEmployeeChatService.deriveEbaySpecifics(input))
 ipcMain.handle('ebay:local-products:remove', (_event, localProductId:string) => removeEbayLocalProduct(localProductId))

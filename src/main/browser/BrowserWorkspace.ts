@@ -2105,19 +2105,22 @@ export class BrowserWorkspace {
         const custom=attributeBox.querySelector('button[class*="--custom-specific"]');
         return {groups,rows,toggles,customAction:clean(custom?custom.textContent:'')};
       };
-      // 折叠态现网会把尾巴行整块摘出 DOM：先抄当下这一遍，页上若有 Show more 就点开再抄全量遍，
+      // 折叠态现网会把尾巴行整块摘出 DOM：先抄当下这一遍，再最多四遍点 Show more 逐遍抄全量，
       // 两遍都只抄原文；点开关只改页面视觉折叠态，读取收尾不替用户保留展开（由 TS 侧如实回传两遍）。
+      // V：单遍展开曾漏掉折叠尾巴行（红框九行），改多遍直至无 Show more。
       let collected=attributeBox?collectAttributes():{groups:[],rows:[],toggles:[],customAction:''};
       let attributeCollapsed=null;
       if(attributeBox){
-        const showMore=[...attributeBox.querySelectorAll('button')].find(node=>/show more/i.test(node.innerText||''));
-        if(showMore){
-          const before=collected;
+        const before=collected;
+        for(let i=0;i<4;i+=1){
+          const scopeNow=document.querySelector('.summary__attributes')||document;
+          const showMore=[...scopeNow.querySelectorAll('button')].find(node=>/显示更多内容|show more/i.test(node.innerText||''))||[...document.querySelectorAll('button')].find(node=>/显示更多内容|show more/i.test(node.innerText||''));
+          if(!showMore)break;
           showMore.click();
           await new Promise(resolve=>setTimeout(resolve,600));
           collected=collectAttributes();
-          attributeCollapsed={rows:before.rows,toggles:before.toggles};
         }
+        if(collected.rows.length!==before.rows.length)attributeCollapsed={rows:before.rows,toggles:before.toggles};
       }
       const attributeGroups=collected.groups;
       const attributeRows=collected.rows;
@@ -2165,7 +2168,7 @@ export class BrowserWorkspace {
    * URL 只认读回的 ebay.com/lstng 刊登页；其余页签一律点名拒绝，绝不写错页。
    * 固定档只写预设授权的控件；费用项是否写入由 shared 计划裁决（默认关），页内不再自行决定。
    */
-  async fillCurrentEbayTab(accountId:string,product:EbayLocalProduct,mode:'auto'|'fixed',preset?:EbayFixedFillPreset,specificsRows?:Array<{name:string;value:string;control:EbayItemSpecificSlot['control']}>):Promise<{url:string;mode:string;filledFields:string[];skippedFields:string[];warnings:string[];filledAt:string}> {
+  async fillCurrentEbayTab(accountId:string,product:EbayLocalProduct,mode:'auto'|'fixed',preset?:EbayFixedFillPreset,specificsRows?:Array<{name:string;value:string;control:EbayItemSpecificSlot['control'];inferred?:boolean;evidence?:string}>,specificsManual?:Array<{name:string;reason:string}>):Promise<{url:string;mode:string;filledFields:string[];skippedFields:string[];warnings:string[];inferredFields:string[];filledAt:string}> {
     const tab=this.detailTabs.get(this.activeTabId)
     if(!tab)throw new Error('当前没有打开的页签，请先在 eBay 浏览器打开刊登页')
     const url=tab.view.webContents.getURL()
@@ -2180,6 +2183,7 @@ export class BrowserWorkspace {
     const filledFields:string[]=[]
     const skippedFields:string[]=[]
     const warnings:string[]=[]
+    const inferredFields:string[]=[]
     if(mode==='auto'){
       const details=product.snapshot.details
       const listing=product.snapshot.sourceListing
@@ -2204,8 +2208,15 @@ export class BrowserWorkspace {
           const bad=settle.filter(row=>!row.settled)
           if(ok.length)filledFields.push(`类目属性 ${ok.length}/${specificsRows.length}`)
           for(const row of bad)skippedFields.push(`类目属性 ${row.name}（${row.reason}）`)
+          // V：推断行落定后标「待确认+证据原文」，供渲染器上屏；未落定的推断行不标待确认（按跳过点名）。
+          for(const row of ok){
+            const src=specificsRows.find(item=>item.name===row.name&&item.inferred)
+            if(src)inferredFields.push(`${src.name}=${src.value}（待确认·证据：${src.evidence||'描述文字'}）`)
+          }
         }else skippedFields.push('类目属性（写页脚本无返回，按未填处理）')
       }
+      // V：无源/未填行按人工点名进跳过清单，绝不编造值。
+      for(const row of specificsManual||[])skippedFields.push(`${row.name}（${row.reason}）`)
       warnings.push('建议物品详情卡为 eBay.ai 平台建议、非产品真值，未自动应用；如需要请人工点「全部应用」')
     }else{
       const plan=ebayFixedFillPlan(normalizeEbayFixedFillPreset(preset))
@@ -2219,11 +2230,11 @@ export class BrowserWorkspace {
       skippedFields.push(...result.skippedFields)
       warnings.push(...result.warnings)
     }
-    return {url,mode,filledFields:[...new Set(filledFields)],skippedFields:[...new Set(skippedFields)],warnings,filledAt:new Date().toISOString()}
+    return {url,mode,filledFields:[...new Set(filledFields)],skippedFields:[...new Set(skippedFields)],warnings,inferredFields,filledAt:new Date().toISOString()}
   }
 
   /** R3 固定档页内脚本：只按描述符操作现网控件并逐段回读；不点任何最终提交按钮。 */
-  private buildSpecificsWriteScript(specificsRows:Array<{name:string;value:string;control:EbayItemSpecificSlot['control']}>):string{
+  private buildSpecificsWriteScript(specificsRows:Array<{name:string;value:string;control:EbayItemSpecificSlot['control'];inferred?:boolean;evidence?:string}>):string{
     return `(async()=>{
         const __yanduSpecificsWrite=${JSON.stringify(specificsRows)};
         const clean=t=>(t||'').replace(/\\s+/g,' ').trim();
@@ -2244,6 +2255,8 @@ export class BrowserWorkspace {
           if(!field){out.push({name:row.name,settled:false,reason:'页面没有该槽位'});continue}
           try{
             if(row.control==='YESNO'){
+              // V：推断行（inferred）若已有人工选中（任一 pill aria-pressed=true）不覆盖——五硬要求·不被覆盖。
+              if(row.inferred&&[...field.querySelectorAll('button')].some(b=>b.getAttribute('aria-pressed')==='true')){out.push({name:row.name,settled:false,reason:'已有人工选中，不覆盖'});continue}
               const pill=[...field.querySelectorAll('button')].find(b=>clean(b.textContent).toLowerCase()===row.value.toLowerCase());
               if(!pill){out.push({name:row.name,settled:false,reason:'页面没有该 Yes/No 选项'});continue}
               pill.click();await wait(400);
