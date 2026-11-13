@@ -115,7 +115,8 @@ function makeHost(page: {
     detailTabs: new Map([['tab-1', { view: { webContents: { executeJavaScript } } }]]),
     sleep: async () => undefined,
     buildRevisionFillScript: (BrowserWorkspace.prototype as unknown as Record<string, unknown>).buildRevisionFillScript,
-    buildInspectRequirementsScript: (BrowserWorkspace.prototype as unknown as Record<string, unknown>).buildInspectRequirementsScript
+    buildInspectRequirementsScript: (BrowserWorkspace.prototype as unknown as Record<string, unknown>).buildInspectRequirementsScript,
+    buildSpecificsWriteScript: (BrowserWorkspace.prototype as unknown as Record<string, unknown>).buildSpecificsWriteScript
   }
   return { host, executeJavaScript, scripts, modelScripts }
 }

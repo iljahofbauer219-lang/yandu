@@ -2165,7 +2165,7 @@ export class BrowserWorkspace {
    * URL 只认读回的 ebay.com/lstng 刊登页；其余页签一律点名拒绝，绝不写错页。
    * 固定档只写预设授权的控件；费用项是否写入由 shared 计划裁决（默认关），页内不再自行决定。
    */
-  async fillCurrentEbayTab(accountId:string,product:EbayLocalProduct,mode:'auto'|'fixed',preset?:EbayFixedFillPreset):Promise<{url:string;mode:string;filledFields:string[];skippedFields:string[];warnings:string[];filledAt:string}> {
+  async fillCurrentEbayTab(accountId:string,product:EbayLocalProduct,mode:'auto'|'fixed',preset?:EbayFixedFillPreset,specificsRows?:Array<{name:string;value:string;control:EbayItemSpecificSlot['control']}>):Promise<{url:string;mode:string;filledFields:string[];skippedFields:string[];warnings:string[];filledAt:string}> {
     const tab=this.detailTabs.get(this.activeTabId)
     if(!tab)throw new Error('当前没有打开的页签，请先在 eBay 浏览器打开刊登页')
     const url=tab.view.webContents.getURL()
@@ -2196,6 +2196,17 @@ export class BrowserWorkspace {
       warnings.push(...result.warnings)
       if(result.policyPending.length)warnings.push(`${result.policyPending.join('、')}：已点选但回读未落定，按未填处理，请在页面人工核对`)
       warnings.push('图片与视频：当前页已有媒体，自动填写不重复上传；如需替换请在页面人工操作')
+      // S1：类目属性按产品真值写当前页（值由 main 用 shared 计划算好），逐控件回读落定，落不定逐行点名保留原值。
+      if(specificsRows&&specificsRows.length){
+        const settle=await tab.view.webContents.executeJavaScript(this.buildSpecificsWriteScript(specificsRows),true).catch(()=>null) as Array<{name:string;settled:boolean;reason:string}>|null
+        if(Array.isArray(settle)){
+          const ok=settle.filter(row=>row.settled)
+          const bad=settle.filter(row=>!row.settled)
+          if(ok.length)filledFields.push(`类目属性 ${ok.length}/${specificsRows.length}`)
+          for(const row of bad)skippedFields.push(`类目属性 ${row.name}（${row.reason}）`)
+        }else skippedFields.push('类目属性（写页脚本无返回，按未填处理）')
+      }
+      warnings.push('建议物品详情卡为 eBay.ai 平台建议、非产品真值，未自动应用；如需要请人工点「全部应用」')
     }else{
       const plan=ebayFixedFillPlan(normalizeEbayFixedFillPreset(preset))
       const mapped=ebayFixedFillPageTargets(plan,policyModels)
@@ -2212,6 +2223,80 @@ export class BrowserWorkspace {
   }
 
   /** R3 固定档页内脚本：只按描述符操作现网控件并逐段回读；不点任何最终提交按钮。 */
+  private buildSpecificsWriteScript(specificsRows:Array<{name:string;value:string;control:EbayItemSpecificSlot['control']}>):string{
+    return `(async()=>{
+        const __yanduSpecificsWrite=${JSON.stringify(specificsRows)};
+        const clean=t=>(t||'').replace(/\\s+/g,' ').trim();
+        const wait=ms=>new Promise(r=>setTimeout(r,ms));
+        const scope=document.querySelector('.summary__attributes')||document;
+        const fields=[...scope.querySelectorAll('.summary__attributes--field')];
+        const rowOf=name=>{const want=String(name).toLowerCase();return fields.find(f=>{const control=f.querySelector('[name]');const raw=control?clean(control.getAttribute('name')):'';const own=raw.replace(/^(?:search-box-)?attributes[._-]?/i,'').toLowerCase();if(own&&(own===want||raw.toLowerCase()===want))return true;const label=f.querySelector('.summary__attributes--label');return Boolean(label)&&clean((label.innerText||label.textContent||'').split('\\n')[0]).replace(/\\s*\\*$/,'').toLowerCase()===want})};
+        const optionText=el=>{const node=el.querySelector('.filter-menu__text')||el;const own=[...node.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('');return clean(own)||clean(node.textContent)};
+        const setNative=(el,value)=>{const proto=el.tagName==='TEXTAREA'?window.HTMLTextAreaElement.prototype:window.HTMLInputElement.prototype;const setter=Object.getOwnPropertyDescriptor(proto,'value').set;setter.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}))};
+        const out=[];
+        for(const row of __yanduSpecificsWrite){
+          const field=rowOf(row.name);
+          if(!field){out.push({name:row.name,settled:false,reason:'页面没有该槽位'});continue}
+          try{
+            if(row.control==='YESNO'){
+              const pill=[...field.querySelectorAll('button')].find(b=>clean(b.textContent).toLowerCase()===row.value.toLowerCase());
+              if(!pill){out.push({name:row.name,settled:false,reason:'页面没有该 Yes/No 选项'});continue}
+              pill.click();await wait(400);
+              const now=[...field.querySelectorAll('button')].find(b=>clean(b.textContent).toLowerCase()===row.value.toLowerCase());
+              const pressed=Boolean(now&&now.getAttribute('aria-pressed')==='true');
+              out.push({name:row.name,settled:pressed,reason:pressed?'':'点击后未落定'})
+            } else if(row.control==='TEXT'||row.control==='TEXTAREA'){
+              const input=field.querySelector('input.textbox__control,textarea.textbox__control');
+              if(!input){out.push({name:row.name,settled:false,reason:'页面没有输入框'});continue}
+              setNative(input,row.value);await wait(300);
+              const same=clean(input.value)===clean(row.value);
+              out.push({name:row.name,settled:same,reason:same?'':'回读不一致'})
+            } else {
+              // I5：先在面板已渲染的候选里按原文点（读取时捕获的那一页），点不到再走面板检索框按名搜；
+              // 多选形（MENU_MULTI）把值按逗号拆成多段逐段点选；写完关面板并回读落定。
+              // J3：面板与候选都认本行 field 里的那一个；列表未点开就已挂好，所以自行输入项（没有列表）
+              // 连面板都不开，直接点名跳过——绝不在 eBay 页里派发回车，避免误触整页提交。
+              const menu=field.querySelector('button.se-expand-button__button');
+              if(!menu){out.push({name:row.name,settled:false,reason:'页面没有菜单控件'});continue}
+              const panel=field.querySelector('.se-filter-menu-button__menu-container');
+              if(!panel){out.push({name:row.name,settled:false,reason:'菜单面板没读到'});continue}
+              const list=panel.querySelector('.filter-menu__items')||panel.querySelector('.menu__items');
+              if(!list){out.push({name:row.name,settled:false,reason:'此项无预设候选（eBay 自行输入），请在页面人工填写'});continue}
+              menu.click();await wait(700);
+              const parts=row.control==='MENU_MULTI'?row.value.split(',').map(part=>clean(part)).filter(Boolean):[row.value];
+              const pick=async part=>{
+                // 每次点选后现网会重渲染列表，必须重查 panel/list，复用一次性捕获的 list 会让后续段找不到候选。
+                const panelNow=field.querySelector('.se-filter-menu-button__menu-container');
+                const listNow=panelNow?(panelNow.querySelector('.filter-menu__items')||panelNow.querySelector('.menu__items')):null;
+                let target=listNow?[...listNow.children].find(el=>optionText(el).toLowerCase()===part.toLowerCase())||null:null;
+                if(!target){
+                  const panelInput=panelNow?panelNow.querySelector('input'):null;
+                  if(!panelInput)return null;
+                  setNative(panelInput,part);await wait(1100);
+                  const list2=panelNow.querySelector('.filter-menu__items')||panelNow.querySelector('.menu__items');
+                  target=list2?[...list2.children].find(el=>optionText(el).toLowerCase()===part.toLowerCase())||null:null;
+                }
+                if(target){const clickEl=target.querySelector('button,[role="option"]')||target;clickEl.click();await wait(350)}
+                return target;
+              };
+              let done=0;
+              for(const part of parts){const picked=await pick(part);if(picked)done+=1;else break}
+              // 落定只读「已选值列表」chips（现网真选中态在那里，且仅面板打开时挂载），
+              // 绝不用整 field 文本（含候选清单）做 includes，避免把没选中报成已填。
+              if(!panel.getClientRects().length){menu.click();await wait(500)}
+              const chipList=field.querySelector('[aria-label="已选值列表"],[aria-label="Selected values"]');
+              let selected=chipList?[...chipList.querySelectorAll('li,[role="option"]')].map(el=>clean(el.textContent)).filter(Boolean):[];
+              if(!selected.length){const vr=field.querySelector('.summary__attributes--value');const head=vr?clean(vr.textContent).split('清除')[0]:'';if(head&&!/^显示/.test(head))selected=[head]}
+              if(panel.getClientRects().length){menu.click();await wait(300)}
+              const settled=done===parts.length&&parts.every(part=>selected.some(s=>s.toLowerCase().includes(part.toLowerCase())||part.toLowerCase().includes(s.toLowerCase())));
+              out.push({name:row.name,settled,reason:settled?'':(done<parts.length?'候选里没有该值':'回读未选中该值')})
+            }
+          }catch(error){out.push({name:row.name,settled:false,reason:'写入异常：'+(error&&error.message?error.message:'unknown')})}
+        }
+        return out;
+      })()`
+  }
+
   private buildFixedFillScript(targets:unknown[]):string{
     return String.raw`(async () => {
       const targets=${JSON.stringify(targets)};
@@ -2498,69 +2583,8 @@ export class BrowserWorkspace {
       })
       .filter((row):row is {name:string;value:string;control:EbayItemSpecificSlot['control']}=>Boolean(row))
     if(specificsRows.length){
-      const specificsScript=`(async()=>{
-        const __yanduSpecificsWrite=${JSON.stringify(specificsRows)};
-        const clean=t=>(t||'').replace(/\\s+/g,' ').trim();
-        const wait=ms=>new Promise(r=>setTimeout(r,ms));
-        const scope=document.querySelector('.summary__attributes')||document;
-        const fields=[...scope.querySelectorAll('.summary__attributes--field')];
-        const rowOf=name=>{const want=String(name).toLowerCase();return fields.find(f=>{const control=f.querySelector('[name]');const raw=control?clean(control.getAttribute('name')):'';const own=raw.replace(/^(?:search-box-)?attributes[._-]?/i,'').toLowerCase();if(own&&(own===want||raw.toLowerCase()===want))return true;const label=f.querySelector('.summary__attributes--label');return Boolean(label)&&clean((label.innerText||label.textContent||'').split('\\n')[0]).replace(/\\s*\\*$/,'').toLowerCase()===want})};
-        const optionText=el=>{const node=el.querySelector('.filter-menu__text')||el.querySelector('span')||el;const own=[...node.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('');return clean(own)||clean(node.textContent)};
-        const setNative=(el,value)=>{const proto=el.tagName==='TEXTAREA'?window.HTMLTextAreaElement.prototype:window.HTMLInputElement.prototype;const setter=Object.getOwnPropertyDescriptor(proto,'value').set;setter.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}))};
-        const out=[];
-        for(const row of __yanduSpecificsWrite){
-          const field=rowOf(row.name);
-          if(!field){out.push({name:row.name,settled:false,reason:'页面没有该槽位'});continue}
-          try{
-            if(row.control==='YESNO'){
-              const pill=[...field.querySelectorAll('button')].find(b=>clean(b.textContent).toLowerCase()===row.value.toLowerCase());
-              if(!pill){out.push({name:row.name,settled:false,reason:'页面没有该 Yes/No 选项'});continue}
-              pill.click();await wait(400);
-              const now=[...field.querySelectorAll('button')].find(b=>clean(b.textContent).toLowerCase()===row.value.toLowerCase());
-              const pressed=Boolean(now&&now.getAttribute('aria-pressed')==='true');
-              out.push({name:row.name,settled:pressed,reason:pressed?'':'点击后未落定'})
-            } else if(row.control==='TEXT'||row.control==='TEXTAREA'){
-              const input=field.querySelector('input.textbox__control,textarea.textbox__control');
-              if(!input){out.push({name:row.name,settled:false,reason:'页面没有输入框'});continue}
-              setNative(input,row.value);await wait(300);
-              const same=clean(input.value)===clean(row.value);
-              out.push({name:row.name,settled:same,reason:same?'':'回读不一致'})
-            } else {
-              // I5：先在面板已渲染的候选里按原文点（读取时捕获的那一页），点不到再走面板检索框按名搜；
-              // 多选形（MENU_MULTI）把值按逗号拆成多段逐段点选；写完关面板并回读落定。
-              // J3：面板与候选都认本行 field 里的那一个；列表未点开就已挂好，所以自行输入项（没有列表）
-              // 连面板都不开，直接点名跳过——绝不在 eBay 页里派发回车，避免误触整页提交。
-              const menu=field.querySelector('button.se-expand-button__button');
-              if(!menu){out.push({name:row.name,settled:false,reason:'页面没有菜单控件'});continue}
-              const panel=field.querySelector('.se-filter-menu-button__menu-container');
-              if(!panel){out.push({name:row.name,settled:false,reason:'菜单面板没读到'});continue}
-              const list=panel.querySelector('.filter-menu__items')||panel.querySelector('.menu__items');
-              if(!list){out.push({name:row.name,settled:false,reason:'此项无预设候选（eBay 自行输入），请在页面人工填写'});continue}
-              menu.click();await wait(700);
-              const parts=row.control==='MENU_MULTI'?row.value.split(',').map(part=>clean(part)).filter(Boolean):[row.value];
-              const pick=async part=>{
-                let target=[...list.children].find(el=>optionText(el).toLowerCase()===part.toLowerCase())||null;
-                if(!target){
-                  const panelInput=panel.querySelector('input');
-                  if(!panelInput)return null;
-                  setNative(panelInput,part);await wait(1100);
-                  target=[...list.children].find(el=>optionText(el).toLowerCase()===part.toLowerCase())||null;
-                }
-                if(target){target.click();await wait(350)}
-                return target;
-              };
-              let done=0;
-              for(const part of parts){const picked=await pick(part);if(picked)done+=1;else break}
-              if(panel.getClientRects().length){menu.click();await wait(300)}
-              const after=rowOf(row.name);
-              const valueText=after?clean(after.textContent):'';
-              const settled=done===parts.length&&parts.every(part=>valueText.toLowerCase().includes(part.toLowerCase()));
-              out.push({name:row.name,settled,reason:settled?'':(done<parts.length?'候选里没有该值':'回读不含该值')})
-            }
-          }catch(error){out.push({name:row.name,settled:false,reason:'写入异常：'+(error&&error.message?error.message:'unknown')})}
-        }
-        return out;
-      })()`
+      const specificsScript=this.buildSpecificsWriteScript(specificsRows)
+
       const settle=await tab.view.webContents.executeJavaScript(specificsScript,true).catch(()=>null) as Array<{name:string;settled:boolean;reason:string}>|null
       const okCount=Array.isArray(settle)?settle.filter(row=>row.settled).length:0
       result.filledFields=result.filledFields.filter(label=>!label.startsWith('类目属性'))

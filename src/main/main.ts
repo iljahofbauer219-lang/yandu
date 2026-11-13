@@ -36,6 +36,8 @@ import { EbayImageGroundingService } from './services/EbayImageGroundingService'
 import { importProductUrl } from './services/ImageSourceService'
 import { downloadUrlsToLocalMedia, type LocalMediaDownloadResult } from './ebayLocalMediaFiles'
 import { EBAY_IMAGE_LIMIT } from '../shared/ebayUploadMediaPlan'
+import { applyLlmSpecificAnswers, ebaySpecificsLlmOptions, planEbaySpecificsFill } from '../shared/ebaySpecificsFillPlan'
+import type { EbayItemSpecificSlot } from '../shared/ebayItemSpecificsModel'
 import { imageHashService } from './services/ImageHashService'
 import { parseEbayListingsReport } from './services/EbayReportService'
 import { ServerProcessManager } from './services/ServerProcessManager'
@@ -3488,7 +3490,32 @@ ipcMain.handle('ebay:fill-current-tab', async (_event, localProductId:string, mo
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
   const product=database.getEbayLocalProducts().find(item=>item.id===localProductId)
   if(!product)throw new Error('本地产品不存在或已删除')
-  return workspace.fillCurrentEbayTab(`ebay:${product.storeId}`,product,mode,preset as Parameters<typeof workspace.fillCurrentEbayTab>[3])
+  // S2：auto 档除legacy 11 项外，再按产品真实内容算类目属性填槽（规则别名＋LLM 真候选），交给当前页签写页。
+  let specificsRows:Array<{name:string;value:string;control:EbayItemSpecificSlot['control']}>|undefined
+  if(mode==='auto'){
+    const section=database.getEbaySpecificsSection(product.id)?.section
+      ??(product.platformCategoryId?database.getEbayCategorySpecificsSection(product.storeId,product.platformCategoryId)?.section:null)
+      ??null
+    if(section&&section.slots.length){
+      const details=product.snapshot.details
+      const existing=details.itemSpecifics||[]
+      const rulePlan=planEbaySpecificsFill(section.slots,{title:details.title||'',descriptionText:details.descriptionText||'',local:existing},existing)
+      const filledNames=new Set(rulePlan.fills.map(row=>row.name))
+      const pending=section.slots.filter(slot=>!filledNames.has(slot.name))
+      let llmRows:ReturnType<typeof applyLlmSpecificAnswers>=[]
+      if(pending.length){
+        try{
+          const answers=await aiEmployeeChatService.deriveEbaySpecifics({title:details.title||'',descriptionText:details.descriptionText||'',slots:pending.map(slot=>({name:slot.name,control:slot.control,options:ebaySpecificsLlmOptions(slot),maxLength:slot.maxLength}))})
+          llmRows=applyLlmSpecificAnswers(pending,answers||[])
+        }catch{llmRows=[]}
+      }
+      specificsRows=[...rulePlan.fills,...llmRows].map(fill=>{
+        const slot=section.slots.find(item=>item.name.trim().toLowerCase()===fill.name.trim().toLowerCase())
+        return slot?{name:slot.name,value:fill.value,control:slot.control}:null
+      }).filter((row):row is {name:string;value:string;control:EbayItemSpecificSlot['control']}=>Boolean(row))
+    }
+  }
+  return workspace.fillCurrentEbayTab(`ebay:${product.storeId}`,product,mode,preset as Parameters<typeof workspace.fillCurrentEbayTab>[3],specificsRows)
 })
 ipcMain.handle('ebay:specifics-llm', (_event, input:{title:string;descriptionText:string;slots:Array<{name:string;control:string;options:string[];maxLength:number}>}) => aiEmployeeChatService.deriveEbaySpecifics(input))
 ipcMain.handle('ebay:local-products:remove', (_event, localProductId:string) => removeEbayLocalProduct(localProductId))
