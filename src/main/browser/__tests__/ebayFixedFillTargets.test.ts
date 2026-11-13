@@ -24,11 +24,20 @@ describe('ebayFixedFillPageTargets · 控件形映射', () => {
     const byKey = Object.fromEntries(targets.map(t => [t.key, t]))
     expect(byKey.condition).toMatchObject({ control: 'condition-pill', matcher: 'New', desired: 'New' })
     expect(byKey.bestOfferEnabled).toMatchObject({ control: 'switch-name', matcher: 'bestOfferEnabled', desired: true })
-    expect(byKey.vpSelection).toMatchObject({ control: 'switch-name', matcher: 'vpSelection', desired: false })
+    expect(byKey.vpSelection).toMatchObject({ control: 'volume-pricing', matcher: 'vpSelection', desired: false })
     expect(byKey.productDocumentsEnabled).toMatchObject({ control: 'switch-section', matcher: '物品披露信息', desired: true })
     expect(byKey.promotedRegularEnabled).toMatchObject({ control: 'switch-aria', matcher: '切换为常规', desired: true, fee: true })
     expect(byKey.itemLocation).toMatchObject({ control: 'preferences', matcher: 'itemLocation', desired: 'Guangdong' })
     expect(byKey.postalCode).toMatchObject({ control: 'preferences', matcher: 'postalCode', desired: '528000' })
+  })
+
+  it('X：批量购买价格三态——开→volume-pricing 带默认档位；关→desired false；不改动→不出目标', () => {
+    const on = ebayFixedFillPageTargets(ebayFixedFillPlan({ ...defaultEbayFixedFillPreset(), volumePricingEnabled: true }), models)
+    expect(on.targets.find(t => t.key === 'vpSelection')).toMatchObject({ control: 'volume-pricing', matcher: 'vpSelection', desired: true, tiers: { 2: '5', 3: '7', 4: '10' } })
+    const off = ebayFixedFillPageTargets(ebayFixedFillPlan({ ...defaultEbayFixedFillPreset(), volumePricingEnabled: false }), models)
+    expect(off.targets.find(t => t.key === 'vpSelection')).toMatchObject({ control: 'volume-pricing', desired: false })
+    const none = ebayFixedFillPageTargets(ebayFixedFillPlan(defaultEbayFixedFillPreset()), models)
+    expect(none.targets.some(t => t.key === 'vpSelection')).toBe(false)
   })
 
   it('政策 combobox 复用编号→显示文本裁决；模型缺失则点名跳过不出目标', () => {

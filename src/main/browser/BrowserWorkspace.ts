@@ -2341,6 +2341,32 @@ export class BrowserWorkspace {
           if(onNow||summaryOk())filledFields.push(t.label);else skippedFields.push(t.label+'（点选后回读未确认）');
           continue;
         }
+        if(t.control==='volume-pricing'){
+          const el=document.querySelector('input[name="'+CSS.escape(t.matcher)+'"][role="switch"],input[name="'+CSS.escape(t.matcher)+'"][type="checkbox"]');
+          if(!el||!visible(el)){skippedFields.push(t.label+'（当前页没有批量折扣开关，保留原值）');continue}
+          const want=Boolean(t.desired);
+          if(readSwitch(el)!==want)el.click();
+          await wait(400);
+          const onNow=readSwitch(el)===true;
+          if(onNow!==want){skippedFields.push(t.label+'（开关回读未落定）');continue}
+          if(!want){filledFields.push(t.label);continue}
+          const tiers=t.tiers||{};
+          const tierNames=['tierRate2','tierRate3','tierRate4'];
+          let tierOk=true;
+          for(let i=0;i<tierNames.length;i++){
+            const sel=document.querySelector('select[name="'+tierNames[i]+'"]');
+            if(!sel)continue;
+            const cur=clean(sel.value);
+            if(!cur||cur==='-'){
+              const wantV=String(tiers[String(i+2)]||'');
+              if(wantV){Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value')?.set?.call(sel,wantV);sel.dispatchEvent(new Event('change',{bubbles:true}));await wait(200)}
+            }
+            const after=clean((document.querySelector('select[name="'+tierNames[i]+'"]')||{}).value);
+            if(!after||after==='-')tierOk=false;
+          }
+          if(tierOk)filledFields.push(t.label);else skippedFields.push(t.label+'（开关已开但折扣档位未落定）');
+          continue;
+        }
         if(t.control==='switch-name'||t.control==='switch-aria'||t.control==='switch-section'){
           let el=null;
           if(t.control==='switch-name')el=document.querySelector('input[name="'+CSS.escape(t.matcher)+'"][role="switch"],input[name="'+CSS.escape(t.matcher)+'"][type="checkbox"]');

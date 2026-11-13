@@ -12,7 +12,7 @@ export interface EbayFixedFillPreset {
   condition: '' | 'New' | 'Used'
   /** 允许议价；null=不改动 */
   bestOfferEnabled: boolean | null
-  /** 添加批量购买价格；null=不改动（折扣档位现网需人工设，开关只写开/关） */
+  /** 添加批量购买价格；null=不改动。开→开关打开且空档位写默认折扣(2件5%/3件7%/4件+10%)，不覆盖人工已设档位；关→关闭 */
   volumePricingEnabled: boolean | null
   /** 商品文件（物品披露信息段内唯一开关）；null=不改动 */
   productDocumentsEnabled: boolean | null

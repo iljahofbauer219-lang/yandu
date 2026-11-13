@@ -113,10 +113,12 @@ export interface EbayFixedFillPageTarget {
   key:string
   label:string
   fee:boolean
-  control:'condition-pill'|'switch-name'|'switch-aria'|'switch-section'|'combobox'|'preferences'
+  control:'condition-pill'|'switch-name'|'switch-aria'|'switch-section'|'combobox'|'preferences'|'volume-pricing'
   matcher:string
   desired:string|boolean
   optionText?:string
+  /** X：批量折扣三档（购买2/3/4件+）默认百分比，仅「开」时写入空档位，不覆盖人工已设值 */
+  tiers?:Record<string,string>
 }
 
 export function ebayFixedFillPageTargets(
@@ -135,6 +137,7 @@ export function ebayFixedFillPageTargets(
     if(row.kind==='condition'){targets.push({...base,control:'condition-pill',matcher:String(row.value),desired:row.value});continue}
     if(row.kind==='switch'){
       if(row.key==='productDocumentsEnabled')targets.push({...base,control:'switch-section',matcher:'物品披露信息',desired:row.value})
+      else if(row.key==='vpSelection')targets.push({...base,control:'volume-pricing',matcher:'vpSelection',desired:row.value,tiers:{2:'5',3:'7',4:'10'}})
       else if(row.key==='promotedRegularEnabled')targets.push({...base,control:'switch-aria',matcher:'切换为常规',desired:row.value})
       else if(row.key==='promotedPriorityEnabled')targets.push({...base,control:'switch-aria',matcher:'切换为优先',desired:row.value})
       else targets.push({...base,control:'switch-name',matcher:row.key,desired:row.value})

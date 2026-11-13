@@ -126,4 +126,14 @@ describe('S 批接线守卫 · 单一写页来源与 shared 计划复用', () =>
     expect(handler).toContain('ebaySpecificsUnfilledRows(')
     expect(handler).toContain('inferred:true')
   })
+
+  it('X：固定填写批量分支真写开关+三档折扣并回读，关/不改动不写档位', () => {
+    const si = workspaceSource.indexOf('private buildFixedFillScript(')
+    expect(si).toBeGreaterThan(-1)
+    const method = workspaceSource.slice(si, workspaceSource.indexOf('\n  private buildRevisionFillScript(', si))
+    expect(method).toContain("t.control==='volume-pricing'")
+    expect(method).toContain('tierRate2')
+    expect(method).toContain('tierRate3')
+    expect(method).toContain('tierRate4')
+  })
 })
