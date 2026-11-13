@@ -3367,14 +3367,14 @@ ipcMain.handle('marketplace-publish:create', (_event, marketplaceSelectionId: st
 ipcMain.handle('marketplace-publish:update', (_event, request: MarketplacePublishDraftUpdate, action: string) => database?.updateMarketplacePublishDraft(request,action))
 ipcMain.handle('marketplace-publish:audits', (_event, marketplaceCode: MarketplacePlatformCode) => database?.getMarketplacePublishAudits(marketplaceCode) ?? [])
 ipcMain.handle('ebay:status', () => ({...ebayService.configuration(),marketDataConfigured:Boolean(readAmazonDataSource().encryptedApiKey)}))
-ipcMain.handle('ebay:stores:list', () => database?.getEbayStores() ?? [])
-ipcMain.handle('ebay:stores:create', (_event, name:string, username:string, password:string, marketplaceId:string) => {
+ipcMain.handle('ebay:stores:list', (_event, workspace?:string) => database?.getEbayStores(workspace) ?? [])
+ipcMain.handle('ebay:stores:create', (_event, name:string, username:string, password:string, marketplaceId:string, workspace?:string) => {
   if(!name.trim())throw new Error('请输入 eBay 店铺名称')
   if(!username.trim())throw new Error('请输入 eBay 登录账号')
   if(!password)throw new Error('请输入 eBay 登录密码')
   if(!secretStorageAvailable())throw new Error('当前系统安全存储不可用，未保存店铺密码')
   const encryptedPassword=encryptSecret(password)
-  return database?.createEbayStore(name.trim(),username.trim(),encryptedPassword,marketplaceId||'EBAY_US')
+  return database?.createEbayStore(name.trim(),username.trim(),encryptedPassword,marketplaceId||'EBAY_US',workspace||'ebay')
 })
 ipcMain.handle('ebay:authorize', (_event, storeId:string) => authorizeEbayStore(storeId))
 ipcMain.handle('ebay:seller-hub:open', (_event, storeId:string) => openEbaySellerHub(storeId))

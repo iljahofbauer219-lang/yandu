@@ -190,6 +190,7 @@ export class AppDatabase {
         refresh_token_expires_at TEXT,
         last_sync_at TEXT,
         sync_error TEXT,
+        workspace TEXT NOT NULL DEFAULT 'ebay',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -1361,6 +1362,7 @@ export class AppDatabase {
       if (!columns.some(item => item.name === column)) this.database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
     }
     ensureColumn('market_candidates', 'deleted_at', 'TEXT')
+    ensureColumn('ebay_stores', 'workspace', "TEXT NOT NULL DEFAULT 'ebay'")
     ensureColumn('supply_candidates', 'deleted_at', 'TEXT')
     ensureColumn('supply_warehouse_products', 'delisted_reason', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_warehouse_products', 'delisted_at', 'TEXT')
@@ -1692,9 +1694,10 @@ export class AppDatabase {
 
   deleteMarketplaceCredential(accountId: string) { this.database.prepare(`DELETE FROM marketplace_account_credentials WHERE account_id = ?`).run(accountId) }
 
-  getEbayStores():EbayStore[] {
-    const rows=this.database.prepare(`SELECT s.id,s.name,s.seller_id,s.public_store_url,s.public_store_verified_at,s.marketplace_id,s.status,s.last_sync_at,s.sync_error,c.username login_username,CASE WHEN c.encrypted_password IS NOT NULL AND c.encrypted_password != '' THEN 1 ELSE 0 END password_saved,COUNT(l.id) listing_count FROM ebay_stores s LEFT JOIN ebay_listings l ON l.store_id=s.id AND l.status='ACTIVE' LEFT JOIN marketplace_account_credentials c ON c.account_id=('ebay:' || s.id) GROUP BY s.id ORDER BY s.created_at`).all() as unknown as Array<Record<string,unknown>>
-    return rows.map(row=>({id:String(row.id),name:String(row.name),sellerId:String(row.seller_id),publicStoreUrl:String(row.public_store_url||''),publicStoreVerifiedAt:row.public_store_verified_at?String(row.public_store_verified_at):undefined,loginUsername:row.login_username?String(row.login_username):'',passwordSaved:Boolean(row.password_saved),marketplaceId:String(row.marketplace_id),status:row.status as EbayStore['status'],lastSyncAt:row.last_sync_at?String(row.last_sync_at):undefined,syncError:row.sync_error?String(row.sync_error):undefined,listingCount:Number(row.listing_count)}))
+  getEbayStores(workspace?:string):EbayStore[] {
+    const filter=workspace?' WHERE s.workspace=?':''
+    const rows=this.database.prepare(`SELECT s.id,s.name,s.seller_id,s.public_store_url,s.public_store_verified_at,s.marketplace_id,s.status,s.last_sync_at,s.sync_error,s.workspace,c.username login_username,CASE WHEN c.encrypted_password IS NOT NULL AND c.encrypted_password != '' THEN 1 ELSE 0 END password_saved,COUNT(l.id) listing_count FROM ebay_stores s LEFT JOIN ebay_listings l ON l.store_id=s.id AND l.status='ACTIVE' LEFT JOIN marketplace_account_credentials c ON c.account_id=('ebay:' || s.id)${filter} GROUP BY s.id ORDER BY s.created_at`).all(...(workspace?[workspace]:[])) as unknown as Array<Record<string,unknown>>
+    return rows.map(row=>({id:String(row.id),name:String(row.name),sellerId:String(row.seller_id),publicStoreUrl:String(row.public_store_url||''),publicStoreVerifiedAt:row.public_store_verified_at?String(row.public_store_verified_at):undefined,loginUsername:row.login_username?String(row.login_username):'',passwordSaved:Boolean(row.password_saved),marketplaceId:String(row.marketplace_id),status:row.status as EbayStore['status'],lastSyncAt:row.last_sync_at?String(row.last_sync_at):undefined,syncError:row.sync_error?String(row.sync_error):undefined,listingCount:Number(row.listing_count),workspace:String(row.workspace||'ebay')}))
   }
 
   saveEbayPublicStore(storeId:string,publicStoreUrl:string,sellerId='') {
@@ -1971,11 +1974,11 @@ export class AppDatabase {
     return this.saveEbayMarketResearch({...snapshot,id:crypto.randomUUID()})
   }
 
-  createEbayStore(name:string,username:string,encryptedPassword:string,marketplaceId='EBAY_US'):EbayStore {
+  createEbayStore(name:string,username:string,encryptedPassword:string,marketplaceId='EBAY_US',workspace='ebay'):EbayStore {
     const id=crypto.randomUUID(),now=new Date().toISOString()
     this.database.exec('BEGIN IMMEDIATE')
     try {
-      this.database.prepare(`INSERT INTO ebay_stores (id,name,seller_id,marketplace_id,status,created_at,updated_at) VALUES (?,?,?,?, 'PENDING',?,?)`).run(id,name,'待同步',marketplaceId,now,now)
+      this.database.prepare(`INSERT INTO ebay_stores (id,name,seller_id,marketplace_id,status,workspace,created_at,updated_at) VALUES (?,?,?,?, 'PENDING',?,?,?)`).run(id,name,'待同步',marketplaceId,workspace,now,now)
       this.database.prepare(`INSERT INTO marketplace_account_credentials (account_id,platform_code,username,encrypted_password,automation_mode,updated_at) VALUES (?,?,?,?,?,?)`).run(`ebay:${id}`,'EBAY',username,encryptedPassword,'AUTO_FILL',now)
       this.database.exec('COMMIT')
     } catch(error) {

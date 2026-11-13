@@ -119,6 +119,7 @@ export interface EbayStore {
   lastSyncAt?:string
   syncError?:string
   listingCount:number
+  workspace:string
 }
 
 export type EbayTitleSource = 'EBAY_STORE_LINK'|'EBAY_STRUCTURED_DATA'|'EBAY_API'|'EBAY_REPORT'|'UNVERIFIED_PAGE_TEXT'|'SEMANTIC_FALLBACK'
