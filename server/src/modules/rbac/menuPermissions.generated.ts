@@ -1,7 +1,7 @@
 /**
  * 本文件由 tools/gen-server-menu-permissions.ts 生成，请勿手改。
- * 唯一真值源：src/shared/menuPermissionTree.ts（11 个一级栏目 / 148 个权限码，
- * 其中货盘采集二级 114 个）。前端树改动后重新生成，漂移由对账单测拦截。
+ * 唯一真值源：src/shared/menuPermissionTree.ts（12 个一级栏目 / 156 个权限码，
+ * 其中货盘采集二级 120 个）。前端树改动后重新生成，漂移由对账单测拦截。
  */
 export const MENU_PERMISSION_CODES = [
   'menu.ie-browser', // IE浏览
@@ -120,6 +120,14 @@ export const MENU_PERMISSION_CODES = [
   'menu.collect.triplea', // 货盘采集·Triple-A
   'menu.collect.emex', // 货盘采集·eMEX
   'menu.collect.1688global', // 货盘采集·1688跨境专供
+  'menu.collect.toybaba', // 货盘采集·玩具巴巴
+  'menu.collect.ichunt', // 货盘采集·猎芯网
+  'menu.collect.hqew', // 货盘采集·华强电子网
+  'menu.collect.boqii', // 货盘采集·波奇网
+  'menu.collect.popfashion', // 货盘采集·POP趋势
+  'menu.collect.yunchepin', // 货盘采集·云车品
+  'menu.search-collect', // 搜索采集
+  'menu.search-collect.ebay', // 搜索采集·ebay搜索
   'menu.warehouse', // 货盘仓库
   'menu.warehouse.hub', // 货盘仓库·货盘总览
   'menu.warehouse.pool', // 货盘仓库·采集池
@@ -273,6 +281,14 @@ export const MENU_PERMISSION_LABELS: Record<MenuPermissionCode, string> = {
   'menu.collect.triplea': '货盘采集·Triple-A',
   'menu.collect.emex': '货盘采集·eMEX',
   'menu.collect.1688global': '货盘采集·1688跨境专供',
+  'menu.collect.toybaba': '货盘采集·玩具巴巴',
+  'menu.collect.ichunt': '货盘采集·猎芯网',
+  'menu.collect.hqew': '货盘采集·华强电子网',
+  'menu.collect.boqii': '货盘采集·波奇网',
+  'menu.collect.popfashion': '货盘采集·POP趋势',
+  'menu.collect.yunchepin': '货盘采集·云车品',
+  'menu.search-collect': '搜索采集',
+  'menu.search-collect.ebay': '搜索采集·ebay搜索',
   'menu.warehouse': '货盘仓库',
   'menu.warehouse.hub': '货盘仓库·货盘总览',
   'menu.warehouse.pool': '货盘仓库·采集池',

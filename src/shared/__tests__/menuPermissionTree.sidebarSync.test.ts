@@ -14,10 +14,14 @@ describe('使用权限树与侧边栏分类同步', () => {
   it('侧边栏一级条目与顺序对齐导航', () => {
     const sidebar = MENU_PERMISSION_TREE.filter(node => node.group === 'sidebar')
     expect(sidebar.map(node => node.code)).toEqual([
-      'menu.ie-browser', 'menu.collect', 'menu.warehouse', 'menu.crossborder',
+      'menu.ie-browser', 'menu.collect', 'menu.search-collect', 'menu.warehouse', 'menu.crossborder',
       'menu.advisor', 'menu.employee', 'menu.planet', 'menu.hq'
     ])
-    expect(sidebar.map(node => node.label)).toEqual(['IE浏览', '货盘采集', '货盘仓库', 'AI跨境', 'AI参谋', 'AI员工', 'AI星球', 'AI总部'])
+    expect(sidebar.map(node => node.label)).toEqual(['IE浏览', '货盘采集', '搜索采集', '货盘仓库', 'AI跨境', 'AI参谋', 'AI员工', 'AI星球', 'AI总部'])
+  })
+
+  it('搜索采集栏目仅一张 ebay搜索 二级卡片', () => {
+    expect(nodeOf('menu.search-collect').cards).toEqual([{ code: 'menu.search-collect.ebay', label: 'ebay搜索' }])
   })
 
   it('已撤下侧边栏的入口单列 entry 组，分组标题与之一一对应', () => {
@@ -30,10 +34,10 @@ describe('使用权限树与侧边栏分类同步', () => {
     expect(nodeOf('menu.hq').cards.map(card => card.code)).toContain('menu.planet.compliance')
   })
 
-  it('码表不增不减：148 码全唯一，历史授权记录不会失效', () => {
+  it('码表不增不减：156 码全唯一，历史授权记录不会失效', () => {
     const codes = MENU_PERMISSION_TREE.flatMap(node => [node.code, ...node.cards.map(card => card.code)])
-    expect(codes.length).toBe(148)
-    expect(new Set(codes).size).toBe(148)
+    expect(codes.length).toBe(156)
+    expect(new Set(codes).size).toBe(156)
   })
 
   it('只持旧位置二级码的成员仍可进入归位后的栏目', () => {

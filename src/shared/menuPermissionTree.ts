@@ -138,7 +138,16 @@ export const MENU_PERMISSION_TREE: MenuPermNode[] = [
     { code: 'menu.collect.saaz', label: 'SAAZ' },
     { code: 'menu.collect.triplea', label: 'Triple-A' },
     { code: 'menu.collect.emex', label: 'eMEX' },
-    { code: 'menu.collect.1688global', label: '1688跨境专供' }
+    { code: 'menu.collect.1688global', label: '1688跨境专供' },
+    { code: 'menu.collect.toybaba', label: '玩具巴巴' },
+    { code: 'menu.collect.ichunt', label: '猎芯网' },
+    { code: 'menu.collect.hqew', label: '华强电子网' },
+    { code: 'menu.collect.boqii', label: '波奇网' },
+    { code: 'menu.collect.popfashion', label: 'POP趋势' },
+    { code: 'menu.collect.yunchepin', label: '云车品' }
+  ] },
+  { code: 'menu.search-collect', label: '搜索采集', group: 'sidebar', cards: [
+    { code: 'menu.search-collect.ebay', label: 'ebay搜索' }
   ] },
   // 侧边栏「我的货盘」与「货盘仓库」共用 menu.warehouse.hub（App.tsx aiModuleNav），故不单列节点
   { code: 'menu.warehouse', label: '货盘仓库', group: 'sidebar', cards: [

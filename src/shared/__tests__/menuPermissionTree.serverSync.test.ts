@@ -17,9 +17,14 @@ describe('菜单权限码前后端对账（服务端白名单以权限树为唯�
     expect(extra).toEqual([])
   })
 
-  it('货盘采集二级 114 个平台卡全部在服务端白名单内', () => {
+  it('搜索采集一级码与 ebay搜索 二级码已同步到服务端白名单', () => {
+    expect(PERMISSION_CODE_SET.has('menu.search-collect')).toBe(true)
+    expect(PERMISSION_CODE_SET.has('menu.search-collect.ebay')).toBe(true)
+  })
+
+  it('货盘采集二级 120 个平台卡全部在服务端白名单内', () => {
     const collect = treeCodes.filter(code => code.startsWith('menu.collect.'))
-    expect(collect).toHaveLength(114)
+    expect(collect).toHaveLength(120)
     const missing = collect.filter(code => !PERMISSION_CODE_SET.has(code))
     expect(missing, `服务端白名单缺少货盘采集二级码: ${missing.join(', ')}`).toEqual([])
   })
@@ -29,7 +34,7 @@ describe('菜单权限码前后端对账（服务端白名单以权限树为唯�
       const dropped = expandMenuSelection([node.code]).filter(code => !PERMISSION_CODE_SET.has(code))
       expect(dropped, `「${node.label}」(${node.code}) 展开后被服务端丢弃: ${dropped.join(', ')}`).toEqual([])
     }
-    expect(expandMenuSelection(['menu.collect'])).toHaveLength(115)
+    expect(expandMenuSelection(['menu.collect'])).toHaveLength(121)
   })
 
   it('每个菜单码都有非空显示名，预置角色权限码全部合法', () => {
