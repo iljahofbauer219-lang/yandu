@@ -435,6 +435,7 @@ contextBridge.exposeInMainWorld('desktop', {
     status: ():Promise<EbayConfigurationStatus> => ipcRenderer.invoke('ebay:status'),
     stores: (workspace?:string):Promise<EbayStore[]> => ipcRenderer.invoke('ebay:stores:list',workspace),
     createStore: (name:string,username:string,password:string,marketplaceId='EBAY_US',workspace='ebay'):Promise<EbayStore> => ipcRenderer.invoke('ebay:stores:create',name,username,password,marketplaceId,workspace),
+    removeStore: (storeId:string):Promise<boolean> => ipcRenderer.invoke('ebay:stores:remove',storeId),
     authorize: (storeId:string):Promise<EbayStore> => ipcRenderer.invoke('ebay:authorize',storeId),
     openSellerHub: (storeId:string):Promise<string> => ipcRenderer.invoke('ebay:seller-hub:open',storeId),
     newBrowserTab: (storeId:string):Promise<string> => ipcRenderer.invoke('ebay:browser-tab:new',storeId),

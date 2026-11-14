@@ -3376,6 +3376,7 @@ ipcMain.handle('ebay:stores:create', (_event, name:string, username:string, pass
   const encryptedPassword=encryptSecret(password)
   return database?.createEbayStore(name.trim(),username.trim(),encryptedPassword,marketplaceId||'EBAY_US',workspace||'ebay')
 })
+ipcMain.handle('ebay:stores:remove', (_event, storeId:string) => database?.removeEbayStore(storeId) ?? false)
 ipcMain.handle('ebay:authorize', (_event, storeId:string) => authorizeEbayStore(storeId))
 ipcMain.handle('ebay:seller-hub:open', (_event, storeId:string) => openEbaySellerHub(storeId))
 ipcMain.handle('ebay:browser-tab:new', (_event, storeId:string) => newEbayBrowserTab(storeId))

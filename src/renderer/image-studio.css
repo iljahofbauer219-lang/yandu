@@ -172,6 +172,14 @@ button.ebay-market-card-media { width:100%; border:0; cursor:pointer; font:inher
 .ebay-workspace.app-browser-fullscreen { padding:0; background:#f3f5f6; }
 .ebay-workspace.app-browser-fullscreen .ebay-browser-layout { padding-bottom:0; gap:0; grid-template-columns:minmax(0,1fr); }
 .ebay-workspace.app-browser-fullscreen .ebay-login-workbench,.ebay-workspace.app-browser-fullscreen .panel-expand-rail,.ebay-workspace.app-browser-fullscreen .ebay-auto-login-banner { display:none; }
+.ebay-remove-store { margin-top:12px; width:100%; height:32px; border:1px solid #f3c1c1; background:#fdf3f3; color:#b42318; border-radius:9px; font-size:11px; font-weight:650; cursor:pointer; transition:background .15s,border-color .15s; }
+.ebay-remove-store:hover:not(:disabled) { background:#fbe7e7; border-color:#e5a3a3; }
+.ebay-remove-store:disabled { opacity:.6; cursor:default; }
+.ebay-login-workbench .ebay-auto-login-banner { flex-direction:column; align-items:stretch; gap:7px; margin-top:12px; margin-bottom:0; }
+.ebay-login-workbench .ebay-auto-login-banner>i { display:none; }
+.ebay-login-workbench .ebay-auto-login-banner>div { flex:none; }
+.ebay-login-workbench .ebay-auto-login-banner small { white-space:normal; }
+.ebay-login-workbench .ebay-auto-login-banner button { width:100%; }
 .ebay-workspace.app-browser-fullscreen .ebay-browser-panel { border:0; border-radius:0; }
 .browser-panel.app-browser-fullscreen { border:0; border-radius:0; }
 .ie-browser-page.app-browser-fullscreen { padding:0; }

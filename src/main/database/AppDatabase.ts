@@ -1988,6 +1988,21 @@ export class AppDatabase {
     return this.getEbayStores().find(store=>store.id===id)!
   }
 
+  removeEbayStore(storeId:string):boolean {
+    // 级联依赖外键开关，迁移只在 finally 置 ON，这里显式开启保证子表随店铺删除
+    this.database.exec('PRAGMA foreign_keys=ON')
+    this.database.exec('BEGIN IMMEDIATE')
+    try {
+      this.deleteMarketplaceCredential(`ebay:${storeId}`)
+      this.database.prepare(`DELETE FROM ebay_stores WHERE id=?`).run(storeId)
+      this.database.exec('COMMIT')
+      return true
+    } catch(error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
+  }
+
   getEbayTokenRecord(storeId:string) {
     return this.database.prepare(`SELECT id,encrypted_access_token,encrypted_refresh_token,access_token_expires_at,refresh_token_expires_at FROM ebay_stores WHERE id=?`).get(storeId) as {id:string;encrypted_access_token:string;encrypted_refresh_token:string;access_token_expires_at:string;refresh_token_expires_at:string}|undefined
   }

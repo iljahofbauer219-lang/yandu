@@ -48,4 +48,16 @@ describe('eBay 店铺按 workspace 命名空间隔离（搜索采集独立工作
     expect(db.getEbayStores('search-collect')).toHaveLength(1)
     expect(db.getEbayStores('ebay')).toHaveLength(1)
   })
+
+  it('removeEbayStore 删除店铺与凭据，不影响其它工作区店铺', async () => {
+    db = await freshDatabase()
+    const main = db.createEbayStore('美国主店', 'mainuser', 'enc-main', 'EBAY_US')
+    const search = db.createEbayStore('搜索店', 'searchuser', 'enc-search', 'EBAY_US', 'search-collect')
+
+    expect(db.removeEbayStore(search.id)).toBe(true)
+    expect(db.getEbayStores('search-collect')).toHaveLength(0)
+    expect(db.getEbayStores().map(store => store.id)).toEqual([main.id])
+    expect(db.getMarketplaceCredential(`ebay:${search.id}`)).toBeUndefined()
+    expect(db.getMarketplaceCredential(`ebay:${main.id}`)).toBeDefined()
+  })
 })

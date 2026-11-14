@@ -374,6 +374,7 @@ declare global {
         status():Promise<EbayConfigurationStatus>
         stores(workspace?:string):Promise<EbayStore[]>
         createStore(name:string,username:string,password:string,marketplaceId?:string,workspace?:string):Promise<EbayStore>
+        removeStore(storeId:string):Promise<boolean>
         authorize(storeId:string):Promise<EbayStore>
         openSellerHub(storeId:string):Promise<string>
         newBrowserTab(storeId:string):Promise<string>
