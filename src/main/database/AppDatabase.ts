@@ -2086,6 +2086,11 @@ export class AppDatabase {
     return rows.map(row => ({ id: String(row.id), storeId: String(row.store_id), keyword: String(row.keyword), itemId: String(row.item_id), url: String(row.url), title: String(row.title), imageUrl: String(row.image_url), avgSoldPrice: Number(row.avg_sold_price), itemSoldCount: Number(row.item_sold_count), totalSales: Number(row.total_sales), collectedAt: String(row.collected_at) }))
   }
 
+  listCollectedCandidateUrls(platformCode: string): string[] {
+    const rows = this.database.prepare(`SELECT DISTINCT url FROM supply_candidates WHERE deleted_at IS NULL AND COALESCE(json_extract(payload, '$.platformCode'), '1688') = ?`).all(platformCode) as unknown as Array<{ url: string }>
+    return rows.map(row => row.url)
+  }
+
   getEbayTokenRecord(storeId:string) {
     return this.database.prepare(`SELECT id,encrypted_access_token,encrypted_refresh_token,access_token_expires_at,refresh_token_expires_at FROM ebay_stores WHERE id=?`).get(storeId) as {id:string;encrypted_access_token:string;encrypted_refresh_token:string;access_token_expires_at:string;refresh_token_expires_at:string}|undefined
   }

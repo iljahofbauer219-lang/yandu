@@ -174,6 +174,10 @@ export class BrowserWorkspace {
   private erpCollectorRules: Record<string, any> = {}
   private readonly erpCollectedStates = new Map<string, string>()
   private ebayPluginActive = false
+  private ebayCollectedUrls: string[] = []
+  private supplyCollectedUrls: string[] = []
+  private collectedUrlProvider?: (kind: 'ebay' | 'supply') => string[]
+  setCollectedUrlProvider(fn: (kind: 'ebay' | 'supply') => string[]) { this.collectedUrlProvider = fn }
   private readonly ebayPluginProducts = new Map<string,EbayCollectedProduct>()
   private gigaAutoLoginAttemptedAt = 0
   private gigaLoginInFlight: { version: number; promise: Promise<SupplyActivationResult | null> } | null = null
@@ -1163,6 +1167,7 @@ export class BrowserWorkspace {
     if (!view || !this.isGigaCloudView(view)) throw new Error('请先在右侧打开大健云仓商品列表或详情页')
     if (!this.builtInCollectorActive) this.builtInCollectorProducts.clear()
     this.builtInCollectorActive = true
+    this.supplyCollectedUrls = this.collectedUrlProvider?.('supply') || []
     await Promise.all(this.getGigaCloudViews().map(item => this.injectBuiltInCollector(item).catch(() => undefined)))
     return this.getBuiltInCollectorState()
   }
@@ -1355,6 +1360,7 @@ export class BrowserWorkspace {
       window.__crossBorderEbayPlugin?.stop?.();
       const changes=previous.changes||[];
       const selected=new Map([...${JSON.stringify(seeded)},...(previous.products||[])].map(item=>[item.url,item]));
+      const collected=new Set(${JSON.stringify(this.ebayCollectedUrls)});
       const overlay=document.createElement('div');overlay.id='cross-border-ebay-plugin-overlay';document.documentElement.appendChild(overlay);
       const entries=new Map();
       const normalize=raw=>{try{const url=new URL(raw,location.href);const match=url.pathname.match(/\/itm\/(?:[^/]+\/)?(\d+)/);return match?url.origin+'/itm/'+match[1]:url.origin+url.pathname}catch{return raw||''}};
@@ -1367,9 +1373,9 @@ export class BrowserWorkspace {
       const researchNums=card=>{const tds=card.querySelectorAll('td');const num=s=>parseFloat(String(s||'').replace(/[^0-9.]/g,''))||0;return{itemSoldCount:num(tds[4]&&tds[4].textContent),totalSales:num(tds[5]&&tds[5].textContent),avgSoldPrice:num(tds[2]&&tds[2].textContent)}};
       const extract=(anchor,card)=>{const url=normalize(anchor?.href||location.href);const listingId=url.match(/\/itm\/(\d+)/)?.[1]||'';const image=anchor?.querySelector('img')||card.querySelector('img');const text=textOf(card);const titleNode=card.querySelector('h1,h2,h3,[class*="title"]');const linkOriginalTitle=originalTextOf(anchor);const structuredTitle=!anchor&&/\/itm\//.test(location.pathname)?structuredTitleOf():'';const fallbackTitle=originalTextOf(titleNode)||anchor?.getAttribute('title')||image?.alt||originalTextOf(card).slice(0,180)||text.slice(0,180);const originalTitle=linkOriginalTitle||structuredTitle||fallbackTitle;const originalTitleVerified=Boolean(linkOriginalTitle||structuredTitle);const titleSource=linkOriginalTitle?'EBAY_STORE_LINK':structuredTitle?'EBAY_STRUCTURED_DATA':'UNVERIFIED_PAGE_TEXT';const translatedTitle=translatedTextOf(anchor)||translatedTextOf(titleNode);const title=originalTitle;const priceText=text.match(/(?:US\s*)?\$\s*[\d,.]+|(?:RMB|USD|CNY|GBP|EUR)\s*[\d,.]+|[\d,.]+\s*(?:RMB|USD|CNY|GBP|EUR)/i)?.[0]||'';const currency=/GBP|\u00a3/i.test(priceText)?'GBP':/EUR|\u20ac/i.test(priceText)?'EUR':/RMB/i.test(priceText)?'RMB':/CNY|\u00a5|\uffe5/i.test(priceText)?'CNY':'USD';const price=priceText.replace(/[^0-9.,-]/g,'').replace(/,/g,'');return {url,listingId,title,originalTitle,translatedTitle:translatedTitle!==originalTitle?translatedTitle:'',originalTitleVerified,titleSource,imageUrl:imageOf(image,card),price,currency,...categoryOf(),...(card&&card.tagName==='TR'?researchNums(card):{})}};
       const isResearchPage=/\/sh\/research/.test(location.pathname);
-      const update=entry=>{const chosen=selected.has(entry.product.url);entry.button.textContent=chosen?(isResearchPage?'\u2713':'\u2713 \u5df2\u9009'):(isResearchPage?'\ud83e\udd16':'\ud83e\udd16 \u91c7\u96c6');entry.button.classList.toggle('is-selected',chosen);entry.card?.classList.toggle('cross-border-ebay-card-active',chosen)};
+      const update=entry=>{const isCollected=collected.has(entry.product.url);const chosen=selected.has(entry.product.url)||isCollected;entry.button.textContent=chosen?(isResearchPage?'\u2713':'\u2713 \u5df2\u9009'):(isResearchPage?'\ud83e\udd16':'\ud83e\udd16 \u91c7\u96c6');entry.button.classList.toggle('is-selected',chosen);entry.button.classList.toggle('is-collected',isCollected);entry.button.title=isCollected?'已入库':'';entry.card?.classList.toggle('cross-border-ebay-card-active',chosen)};
       const remove=entry=>{entry.card?.classList.remove('cross-border-ebay-card-active');entry.button.remove();entries.delete(entry.url)};
-      const toggle=entry=>{const chosen=!selected.has(entry.product.url);if(chosen){entry.product=extract(entry.anchor,entry.card||document.body);selected.set(entry.product.url,entry.product)}else selected.delete(entry.product.url);changes.push({selected:chosen,product:entry.product});update(entry)};
+      const toggle=entry=>{if(collected.has(entry.product.url))return;const chosen=!selected.has(entry.product.url);if(chosen){entry.product=extract(entry.anchor,entry.card||document.body);selected.set(entry.product.url,entry.product)}else selected.delete(entry.product.url);changes.push({selected:chosen,product:entry.product});update(entry)};
       const position=()=>entries.forEach(entry=>{if(!entry.target?.isConnected){remove(entry);return}const rect=entry.target.getBoundingClientRect();const min=/\/sh\/research/.test(location.pathname)?20:60;const visible=rect.width>min&&rect.height>min&&rect.bottom>0&&rect.top<innerHeight&&rect.right>0&&rect.left<innerWidth;entry.button.hidden=!visible;if(!visible)return;entry.button.style.top=Math.max(6,rect.top+8)+'px';entry.button.style.left=Math.min(innerWidth-8,Math.max(rect.left+90,rect.right-8))+'px';update(entry)});
       const scan=()=>{
         const anchors=[...document.querySelectorAll('a[href*="/itm/"]')];const seen=new Set();
@@ -1378,7 +1384,7 @@ export class BrowserWorkspace {
         if(/\/itm\//.test(location.pathname)&&!entries.has(normalize(location.href))){const url=normalize(location.href);const button=document.createElement('button');button.type='button';button.className='cross-border-ebay-select cross-border-ebay-current';const entry={url,anchor:null,card:document.body,target:document.documentElement,button,detail:true,product:extract(null,document.body)};if(selected.has(url))selected.set(url,entry.product);button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();toggle(entry)});entries.set(url,entry);overlay.appendChild(button);update(entry)}
         position();
       };
-      const style=document.createElement('style');style.id='cross-border-ebay-plugin-style';style.textContent='#cross-border-ebay-plugin-overlay{position:fixed!important;z-index:2147483646!important;inset:0!important;width:0!important;height:0!important;overflow:visible!important;pointer-events:none!important}.cross-border-ebay-select{position:fixed!important;z-index:2147483647!important;transform:translateX(-100%)!important;padding:9px 12px!important;border:2px solid #fff!important;border-radius:8px!important;color:#fff!important;background:#4f92cf!important;box-shadow:0 4px 14px rgba(30,91,145,.35)!important;font:700 13px/1 sans-serif!important;white-space:nowrap!important;pointer-events:auto!important;cursor:pointer!important}.cross-border-ebay-select.is-selected{background:#e79500!important}.cross-border-ebay-card-active{outline:3px solid #e79500!important;outline-offset:-3px!important;border-radius:12px!important}.cross-border-ebay-current{top:auto!important;left:auto!important;right:24px!important;bottom:24px!important;transform:none!important;padding:14px 18px!important}';if(isResearchPage){document.documentElement.setAttribute('data-cb-research','1');style.textContent+='html[data-cb-research] .cross-border-ebay-select.is-selected{background:#e5484d!important}'}document.documentElement.appendChild(style);
+      const style=document.createElement('style');style.id='cross-border-ebay-plugin-style';style.textContent='#cross-border-ebay-plugin-overlay{position:fixed!important;z-index:2147483646!important;inset:0!important;width:0!important;height:0!important;overflow:visible!important;pointer-events:none!important}.cross-border-ebay-select{position:fixed!important;z-index:2147483647!important;transform:translateX(-100%)!important;padding:9px 12px!important;border:2px solid #fff!important;border-radius:8px!important;color:#fff!important;background:#4f92cf!important;box-shadow:0 4px 14px rgba(30,91,145,.35)!important;font:700 13px/1 sans-serif!important;white-space:nowrap!important;pointer-events:auto!important;cursor:pointer!important}.cross-border-ebay-select.is-selected{background:#e79500!important}.cross-border-ebay-select.is-collected{background:#e5484d!important}.cross-border-ebay-card-active{outline:3px solid #e79500!important;outline-offset:-3px!important;border-radius:12px!important}.cross-border-ebay-current{top:auto!important;left:auto!important;right:24px!important;bottom:24px!important;transform:none!important;padding:14px 18px!important}';if(isResearchPage){document.documentElement.setAttribute('data-cb-research','1');style.textContent+='html[data-cb-research] .cross-border-ebay-select.is-selected{background:#e5484d!important}'}document.documentElement.appendChild(style);
       let queued=false;const queue=()=>{if(queued)return;queued=true;setTimeout(()=>{queued=false;scan()},180)};const observer=new MutationObserver(queue);observer.observe(document.body||document.documentElement,{childList:true,subtree:true});const timer=setInterval(scan,1000);document.addEventListener('scroll',position,true);addEventListener('resize',position);scan();
       window.__crossBorderEbayPlugin={snapshot:()=>({recognizedCount:entries.size,products:[...selected.values()],changes:changes.splice(0)}),sync:products=>{selected.clear();products.forEach(product=>selected.set(product.url,product));entries.forEach(update)},remove:url=>{selected.delete(url);const entry=entries.get(url);if(entry)update(entry)},stop:()=>{observer.disconnect();clearInterval(timer);document.removeEventListener('scroll',position,true);removeEventListener('resize',position);[...entries.values()].forEach(remove);overlay.remove();style.remove();delete window.__crossBorderEbayPlugin}};
       return true;
@@ -1389,6 +1395,7 @@ export class BrowserWorkspace {
     const views = this.getEbayViews()
     if (!views.length) throw new Error('请先在右侧打开 eBay 页面')
     this.ebayPluginActive = true
+    this.ebayCollectedUrls = this.collectedUrlProvider?.('ebay') || []
     // 注入全部 eBay 视图（含未激活的研究页标签），保证后台标签也能识别/勾选
     await Promise.all(views.map(view => this.injectEbayPlugin(view).catch(() => undefined)))
     return this.getEbayPluginState()
@@ -1462,6 +1469,7 @@ export class BrowserWorkspace {
       const changes = previousSnapshot.changes || [];
       window.__crossBorderCollector?.stop?.();
       const selected = new Map([...${JSON.stringify(seeded)},...previousSelected].map(item => [item.url, item]));
+      const collected = new Set(${JSON.stringify(this.supplyCollectedUrls)});
       const knownCategoryPaths=${JSON.stringify(GIGA_CATEGORY_PATHS)};
       const buttonClass = 'cross-border-collector-select';
       const textOf = node => (node?.innerText || node?.textContent || '').replace(/\s+/g,' ').trim();
@@ -1542,8 +1550,8 @@ export class BrowserWorkspace {
       };
       const overlay=document.createElement('div');overlay.id='cross-border-collector-overlay';document.documentElement.appendChild(overlay);
       const entries=new Map();
-      const update = entry => { const chosen=selected.has(entry.product.url); entry.button.textContent=chosen?'✓':'🤖'; entry.button.classList.toggle('is-selected',chosen); entry.card?.classList.toggle('cross-border-collector-card-active',chosen); };
-      const toggle = async entry => { const isSelected=!selected.has(entry.product.url);if(isSelected){entry.product={...entry.product,...await extract(entry.anchor,entry.product.capturedFrom||'LIST')};selected.set(entry.product.url,entry.product)}else selected.delete(entry.product.url);changes.push({selected:isSelected,product:entry.product});update(entry); };
+      const update = entry => { const isCollected=collected.has(entry.product.url); const chosen=selected.has(entry.product.url)||isCollected; entry.button.textContent=chosen?'✓':'🤖'; entry.button.classList.toggle('is-selected',chosen); entry.button.classList.toggle('is-collected',isCollected); entry.button.title=isCollected?'已入库':''; entry.card?.classList.toggle('cross-border-collector-card-active',chosen); };
+      const toggle = async entry => { if(collected.has(entry.product.url))return; const isSelected=!selected.has(entry.product.url);if(isSelected){entry.product={...entry.product,...await extract(entry.anchor,entry.product.capturedFrom||'LIST')};selected.set(entry.product.url,entry.product)}else selected.delete(entry.product.url);changes.push({selected:isSelected,product:entry.product});update(entry); };
       const removeEntry = entry => { entry.card?.classList.remove('cross-border-collector-card-active');entry.button.remove();entries.delete(entry.product.url); };
       const position = () => {
         entries.forEach(entry=>{
@@ -1577,7 +1585,7 @@ export class BrowserWorkspace {
         }
         schedulePosition();
       };
-      const style=document.createElement('style');style.id='cross-border-collector-style';style.textContent='#cross-border-collector-overlay{position:fixed!important;z-index:2147483646!important;inset:0!important;width:0!important;height:0!important;overflow:visible!important;pointer-events:none!important}.cross-border-collector-select{position:fixed!important;z-index:2147483647!important;transform:translateX(-100%)!important;padding:9px 12px!important;border:2px solid #fff!important;border-radius:8px!important;color:#fff!important;background:#4f92cf!important;box-shadow:0 4px 14px rgba(30,91,145,.35)!important;font:700 13px/1 sans-serif!important;white-space:nowrap!important;pointer-events:auto!important;cursor:pointer!important}.cross-border-collector-select.is-selected{background:#e5484d!important}.cross-border-collector-card-active{outline:3px solid #e79500!important;outline-offset:-3px!important;border-radius:12px!important}.cross-border-collector-select.cross-border-collector-current{top:auto!important;left:auto!important;right:24px!important;bottom:24px!important;transform:none!important;padding:14px 18px!important}';document.documentElement.appendChild(style);
+      const style=document.createElement('style');style.id='cross-border-collector-style';style.textContent='#cross-border-collector-overlay{position:fixed!important;z-index:2147483646!important;inset:0!important;width:0!important;height:0!important;overflow:visible!important;pointer-events:none!important}.cross-border-collector-select{position:fixed!important;z-index:2147483647!important;transform:translateX(-100%)!important;padding:9px 12px!important;border:2px solid #fff!important;border-radius:8px!important;color:#fff!important;background:#4f92cf!important;box-shadow:0 4px 14px rgba(30,91,145,.35)!important;font:700 13px/1 sans-serif!important;white-space:nowrap!important;pointer-events:auto!important;cursor:pointer!important}.cross-border-collector-select.is-selected{background:#e5484d!important}.cross-border-collector-select.is-collected{background:#e5484d!important}.cross-border-collector-card-active{outline:3px solid #e79500!important;outline-offset:-3px!important;border-radius:12px!important}.cross-border-collector-select.cross-border-collector-current{top:auto!important;left:auto!important;right:24px!important;bottom:24px!important;transform:none!important;padding:14px 18px!important}';document.documentElement.appendChild(style);
       let timer=0;let scanQueued=false;const queueScan=()=>{if(scanQueued)return;scanQueued=true;timer=setTimeout(()=>{scanQueued=false;void scan()},180)};const observer=new MutationObserver(queueScan);observer.observe(document.body||document.documentElement,{childList:true,subtree:true});const scanInterval=setInterval(()=>{void scan()},1000);document.addEventListener('scroll',schedulePosition,true);addEventListener('resize',schedulePosition);void scan();
       window.__crossBorderCollector={
         snapshot:()=>({products:[...selected.values()],visibleUrls:[...entries.keys()],changes:changes.splice(0)}),
