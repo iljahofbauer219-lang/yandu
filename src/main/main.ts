@@ -3530,6 +3530,10 @@ ipcMain.handle('ebay:fill-current-tab', async (_event, localProductId:string, mo
   }
   return workspace.fillCurrentEbayTab(`ebay:${product.storeId}`,product,mode,preset as Parameters<typeof workspace.fillCurrentEbayTab>[3],specificsRows,specificsManual)
 })
+ipcMain.handle('ebay:read-current-settings', async (_event, storeId:string) => {
+  if(!workspace)throw new Error('应用内浏览器尚未初始化')
+  return workspace.readCurrentEbaySettings(`ebay:${storeId}`)
+})
 ipcMain.handle('ebay:specifics-llm', (_event, input:{title:string;descriptionText:string;slots:Array<{name:string;control:string;options:string[];maxLength:number}>}) => aiEmployeeChatService.deriveEbaySpecifics(input))
 ipcMain.handle('ebay:local-products:remove', (_event, localProductId:string) => removeEbayLocalProduct(localProductId))
 ipcMain.handle('ebay:listings:remove-local', (_event, storeId:string, listingId:string) => {

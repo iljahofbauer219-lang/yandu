@@ -2168,6 +2168,35 @@ export class BrowserWorkspace {
    * URL 只认读回的 ebay.com/lstng 刊登页；其余页签一律点名拒绝，绝不写错页。
    * 固定档只写预设授权的控件；费用项是否写入由 shared 计划裁决（默认关），页内不再自行决定。
    */
+  /** AA：只读现网已有设置（政策当前ID+选项、所在地/邮编），供预设打开时预填默认，不写页面。 */
+  async readCurrentEbaySettings(accountId:string):Promise<{paymentPolicy:{current:string;options:Array<{id:string;text:string}>};shippingPolicy:{current:string;options:Array<{id:string;text:string}>};returnPolicy:{current:string;options:Array<{id:string;text:string}>};itemLocation:string;postalCode:string}>{
+    let tab=this.detailTabs.get(this.activeTabId)
+    const isLstng=(u:string)=>/^https:\/\/([a-z0-9-]+\.)*ebay\.com\/lstng\?/.test(u)
+    if(!tab||!isLstng(tab.view.webContents.getURL()))tab=[...this.detailTabs.values()].find(t=>isLstng(t.view.webContents.getURL()))
+    if(!tab)throw new Error('当前没有打开的 eBay 刊登页，无法读取现网设置')
+    const modelRead=await tab.view.webContents.executeJavaScript(READ_EBAY_POLICY_MODELS_SCRIPT,true) as {policyModels?:Record<string,string>}
+    const raw=modelRead?.policyModels||{}
+    const pick=(field:EbayPolicyModelField)=>{
+      let m:{value?:unknown;options?:unknown}
+      try{m=JSON.parse(String(raw[field]||'')) as {value?:unknown;options?:unknown}}catch{return {current:'',options:[] as Array<{id:string;text:string}>}}
+      if(!m||typeof m!=='object'||!Array.isArray(m.options))return {current:'',options:[] as Array<{id:string;text:string}>}
+      const text=(v:unknown)=>{const s=(v as {textSpans?:unknown})?.textSpans;return Array.isArray(s)?s.map(x=>String((x as {text?:unknown})?.text??'')).join(''):''}
+      const options:Array<{id:string;text:string}>=[]
+      for(const o of m.options as Array<{value?:unknown;label?:unknown;listingCount?:unknown}>){
+        const id=String(o?.value??'').trim();const name=text(o?.label).replace(/\s+/g,' ').trim()
+        if(!/^\d{4,}$/.test(id)||!name)continue
+        const lc=text(o?.listingCount).replace(/\s+/g,' ').trim()
+        options.push({id,text:lc?`${name} ${lc}`:name})
+      }
+      const current=String(m.value??'').trim()
+      return {current:options.some(o=>o.id===current)?current:'',options}
+    }
+    const prefs=await tab.view.webContents.executeJavaScript(`(()=>{const clean=s=>String(s||'').replace(/\\s+/g,' ').trim();const block=[...document.querySelectorAll('div,section')].find(n=>/您的设置|偏好设置/.test(clean(n.textContent))&&/物品所在地/.test(clean(n.textContent))&&clean(n.textContent).length<400);const text=clean(block?block.textContent:'');const loc=(text.match(/物品所在地\\s*([^退]+?)(?:退货政策|$)/)||[])[1]||'';const postal=(loc.match(/\\b(\\d{5})\\b/)||[])[1]||'';return JSON.stringify({location:clean(loc),postal})})()`,true) as string
+    let location='',postal=''
+    try{const p=JSON.parse(prefs) as {location?:string;postal?:string};location=p.location||'';postal=p.postal||''}catch{}
+    return {paymentPolicy:pick('paymentPolicy'),shippingPolicy:pick('shippingPolicy'),returnPolicy:pick('returnPolicy'),itemLocation:location,postalCode:postal}
+  }
+
   async fillCurrentEbayTab(accountId:string,product:EbayLocalProduct,mode:'auto'|'fixed',preset?:EbayFixedFillPreset,specificsRows?:Array<{name:string;value:string;control:EbayItemSpecificSlot['control'];inferred?:boolean;evidence?:string}>,specificsManual?:Array<{name:string;reason:string}>):Promise<{url:string;mode:string;filledFields:string[];skippedFields:string[];warnings:string[];inferredFields:string[];filledAt:string}> {
     const tab=this.detailTabs.get(this.activeTabId)
     if(!tab)throw new Error('当前没有打开的页签，请先在 eBay 浏览器打开刊登页')
