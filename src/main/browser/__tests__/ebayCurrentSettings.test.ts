@@ -59,4 +59,12 @@ describe('AA 接线守卫', () => {
   it('弹窗政策三项为可选下拉（绑定选项），不再空白文本框', () => {
     expect(appSource).toContain('presetPolicyOptions')
   })
+  it('AB：偏好编辑入口认铅笔图标(aria/class)、保存认完成、邮编/所在地按弹窗字段匹配', () => {
+    const ws = readFileSync(path.resolve(process.cwd(), 'src/main/browser/BrowserWorkspace.ts'), 'utf8')
+    const si = ws.indexOf('private buildFixedFillScript(')
+    const method = ws.slice(si, ws.indexOf('\n  private buildRevisionFillScript(', si))
+    expect(method).toContain('summary__header-edit-button')
+    expect(method).toContain('邮政编码')
+    expect(method).toContain('完成|Done')
+  })
 })

@@ -2258,6 +2258,18 @@ export class BrowserWorkspace {
       filledFields.push(...result.filledFields)
       skippedFields.push(...result.skippedFields)
       warnings.push(...result.warnings)
+      // AB：偏好三项（退货/所在地/邮编）若现网已等于预设即判已生效（不谎报跳过）；仅当不一致且写入失败才保留跳过。
+      const normPreset=normalizeEbayFixedFillPreset(preset)
+      const cur=await this.readCurrentEbaySettings(accountId).catch(()=>null)
+      if(cur){
+        const checks:Array<[string,string,string]>=[['returnPolicyId','退货政策',cur.returnPolicy.current],['postalCode','邮编',cur.postalCode],['itemLocation','物品所在地',cur.itemLocation]]
+        for(const [key,label,now] of checks){
+          const want=String(normPreset[key as keyof typeof normPreset]||'').trim()
+          if(!want||!now)continue
+          const same=now===want||(key==='itemLocation'&&now.replace(/\s/g,'').includes(want.replace(/\s/g,'').split('(')[0]))
+          if(same){if(!filledFields.includes(label))filledFields.push(label);for(let i=skippedFields.length-1;i>=0;i--)if(skippedFields[i].startsWith(label))skippedFields.splice(i,1)}
+        }
+      }
     }
     return {url,mode,filledFields:[...new Set(filledFields)],skippedFields:[...new Set(skippedFields)],warnings,inferredFields,filledAt:new Date().toISOString()}
   }
@@ -2394,12 +2406,19 @@ export class BrowserWorkspace {
           const tierNames=['tierRate2','tierRate3','tierRate4'];
           let tierOk=true;
           for(let i=0;i<tierNames.length;i++){
-            const sel=document.querySelector('select[name="'+tierNames[i]+'"]');
+            const name=tierNames[i];
+            const sel=document.querySelector('select[name="'+name+'"]');
             if(!sel)continue;
             const wantV=String(tiers[String(i+2)]||'');
-            if(wantV&&clean(sel.value)!==wantV){Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value')?.set?.call(sel,wantV);sel.dispatchEvent(new Event('change',{bubbles:true}));await wait(200)}
-            const after=clean((document.querySelector('select[name="'+tierNames[i]+'"]')||{}).value);
-            if(wantV&&after!==wantV)tierOk=false;
+            if(!wantV||clean(sel.value)===wantV)continue;
+            // eBay 批量折扣是自定义 listbox（select 仅 listbox__native fallback）：合成写原生 select
+            // 不更新组件状态与下一档可选区间，须点可见按钮+选项，按 2→3→4 顺序联动刷新
+            let root=sel;for(let d=0;d<5&&root;d++){root=root.parentElement;if(root&&/listbox-button/.test(root.className))break}
+            let clicked=false;
+            if(root){const btn=root.querySelector('button');if(btn){btn.click();await wait(250);const opt=[...root.querySelectorAll('[role="option"]')].find(o=>o.textContent.replace(/selected/gi,'').replace(/%/g,'').trim()===wantV);if(opt){opt.click();await wait(300);clicked=true}}}
+            if(!clicked){Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value')?.set?.call(sel,wantV);sel.dispatchEvent(new Event('change',{bubbles:true}));await wait(200)}
+            const after=clean((document.querySelector('select[name="'+name+'"]')||{}).value);
+            if(after!==wantV)tierOk=false;
           }
           if(tierOk)filledFields.push(t.label);else skippedFields.push(t.label+'（开关已开但折扣档位未落定）');
           continue;
@@ -2435,7 +2454,7 @@ export class BrowserWorkspace {
           const nodes=[...document.querySelectorAll('h2,h3,h4,button')];
           const hi=nodes.findIndex(n=>/^H[234]$/.test(n.tagName)&&clean(n.textContent)==='偏好设置');
           let edit=null;
-          if(hi>=0){for(let i=hi+1;i<nodes.length;i++){const n=nodes[i];if(/^H[234]$/.test(n.tagName)&&clean(n.textContent)!=='您的设置')break;if(n.tagName==='BUTTON'&&/编辑/.test(clean(n.textContent))){edit=n;break}}}
+          if(hi>=0){for(let i=hi+1;i<nodes.length;i++){const n=nodes[i];if(/^H[234]$/.test(n.tagName)&&clean(n.textContent)!=='您的设置')break;if(n.tagName==='BUTTON'&&(/编辑/.test(clean(n.textContent))||/编辑/.test(clean(n.getAttribute('aria-label')))||/summary__header-edit-button/.test(String(n.className)))){edit=n;break}}}
           if(!edit){skippedFields.push(t.label+'（偏好设置编辑入口不在当前页，保留原值）');continue}
           edit.click();await wait(800);
           const dlg=[...document.querySelectorAll('[role="dialog"],[class*=lightbox],[class*=modal]')].find(d=>visible(d)&&/物品所在地|退货政策|您的设置/.test(clean(d.textContent)));
@@ -2445,10 +2464,23 @@ export class BrowserWorkspace {
             const combo=dlg.querySelector('input[role="combobox"][name="returnPolicyId"]')||[...dlg.querySelectorAll('input[role="combobox"]')].find(visible);
             if(combo){combo.click();await wait(300);const lid=clean(combo.getAttribute('aria-controls')||'');const list=lid?document.getElementById(lid):null;const hit=list?[...list.querySelectorAll('[role="option"]')].filter(n=>clean(n.textContent).includes('('+t.desired+')')):[];if(hit.length===1){hit[0].click();ok=true}}
           }else{
-            const input=[...dlg.querySelectorAll('input')].find(el=>visible(el)&&new RegExp(t.matcher==='postalCode'?'邮编|postal':'所在地|location','i').test(clean(el.getAttribute('aria-label')||'')+clean(el.closest('label,[class*=field]')?.textContent)+el.name));
-            if(input){Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set?.call(input,String(t.desired));input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));ok=clean(input.value)===clean(String(t.desired))}
+            const byLabel=(re)=>[...dlg.querySelectorAll('input')].find(el=>visible(el)&&re.test(clean(el.getAttribute('aria-label')||'')+clean(el.closest('label,[class*=field]')?.textContent||'')+clean(el.name)));
+            const setVal=(el,v)=>{if(!el)return false;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set?.call(el,v);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return clean(el.value)===clean(v)};
+            if(t.matcher==='postalCode'){ok=setVal(byLabel(/邮政编码|邮编|postal|zip/i),String(t.desired))}
+            else{
+              const inner=(String(t.desired).match(/\(([^)]+)\)/)||[])[1]||String(t.desired);
+              const country=inner.split(/，|,/).pop().trim();
+              const idx=inner.lastIndexOf(country);
+              const city=(idx>=0?inner.slice(0,idx):inner).replace(/[，,]\s*$/,'').trim();
+              const cityEl=byLabel(/县\/市\/州\/省|县\/市|城市|city/i);const countryEl=byLabel(/国家或地区|国家|country/i);
+              let okc=true;
+              if(cityEl)okc=setVal(cityEl,city)&&okc;
+              if(countryEl)okc=setVal(countryEl,country)&&okc;
+              ok=okc&&Boolean(cityEl||countryEl);
+              if(!ok)ok=setVal(byLabel(/所在地|location/i),String(t.desired));
+            }
           }
-          const save=[...dlg.querySelectorAll('button')].find(b=>/保存|Save|应用|Apply/.test(clean(b.textContent)));
+          const save=[...dlg.querySelectorAll('button')].find(b=>/保存|Save|应用|Apply|完成|Done/.test(clean(b.textContent)));
           if(save)save.click();
           await wait(600);
           if(ok)filledFields.push(t.label);else skippedFields.push(t.label+'（偏好弹窗内未写入成功，保留原值）');
