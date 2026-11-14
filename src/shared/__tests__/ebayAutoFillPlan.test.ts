@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  defaultEbayFixedFillPreset, ebayFixedFillPlan, normalizeEbayFixedFillPreset,
+  defaultEbayFixedFillPreset, ebayFixedFillPlan, migrateEbayFixedFillPresetV1, normalizeEbayFixedFillPreset,
   type EbayFixedFillPreset
 } from '../ebayAutoFillPlan'
 
@@ -67,6 +67,15 @@ describe('ebayFixedFillPlan · 固定填写计划', () => {
     const row = plan.rows.find(r => r.key === 'promotedRegularEnabled')
     expect(row?.fee).toBe(true)
     expect(row?.rate).toBe('5')
+  })
+
+  it('AD：v1 legacy 迁移强制推广·常规开+费率5；v2 显式关闭不被覆盖', () => {
+    const legacy = migrateEbayFixedFillPresetV1({ promotedRegularEnabled: false, condition: 'New' })
+    expect(legacy.promotedRegularEnabled).toBe(true)
+    expect(legacy.promotedRegularRate).toBe('5')
+    expect(legacy.condition).toBe('New')
+    const v2 = normalizeEbayFixedFillPreset({ promotedRegularEnabled: false })
+    expect(v2.promotedRegularEnabled).toBe(false)
   })
 
   it('状况/开关/政策/偏好按预设出写入行，开关 false 也写（非费用项）', () => {

@@ -31,7 +31,7 @@ import { EBAY_SITE_ALLOWED_MESSAGE, isEbaySiteUrl } from '../shared/ebaySites'
 import { ebayHardRequiredFieldsForRoute, formatFormGaps, formValuesFromInput, isEbayPolicyId, requiredFormGaps } from '../shared/ebayListingForm'
 import { resolveEbayListingTarget, resolveEbayListingTargetForProduct } from '../shared/ebayListingTarget'
 import { applyLlmSpecificAnswers, ebaySpecificsLlmOptions, ebaySpecificsUnfilledRows, planEbaySpecificsFill } from '../shared/ebaySpecificsFillPlan'
-import { defaultEbayFixedFillPreset, normalizeEbayFixedFillPreset, type EbayFixedFillPreset } from '../shared/ebayAutoFillPlan'
+import { defaultEbayFixedFillPreset, migrateEbayFixedFillPresetV1, normalizeEbayFixedFillPreset, type EbayFixedFillPreset } from '../shared/ebayAutoFillPlan'
 import type { EbayProfitAutoFill } from '../shared/ebayPricingAutoFill'
 import { riskBadge } from '../shared/riskBadge'
 import { copiedWarehouseIds } from '../shared/copiedPallet'
@@ -4371,15 +4371,22 @@ function EbayPlatformWorkspace({browserFullscreen,onBrowserSurface,initialTab,lo
   useEffect(()=>{if(activeTab!=='browser'||!activeStore)return;if(ebayFixedPresetOpen){void window.desktop.browser.hide();return}void window.desktop.browser.show('web').catch(()=>undefined)},[ebayFixedPresetOpen,activeTab,activeStore?.id])
   const [ebayFixedPresetDraft,setEbayFixedPresetDraft]=useState<EbayFixedFillPreset>(()=>defaultEbayFixedFillPreset())
   const [presetPolicyOptions,setPresetPolicyOptions]=useState<{paymentPolicy:Array<{id:string;text:string}>;shippingPolicy:Array<{id:string;text:string}>;returnPolicy:Array<{id:string;text:string}>}>({paymentPolicy:[],shippingPolicy:[],returnPolicy:[]})
-  const ebayFixedPresetKey=activeStore?scopedStorageKey('ebay-fixed-fill-preset:v1',activeStore.id):''
+  const ebayFixedPresetKey=activeStore?scopedStorageKey('ebay-fixed-fill-preset:v2',activeStore.id):''
   // 关闭编辑器会清空 localEditorProduct/publishEditorProduct，但浏览器页签上的两键仍要知道填哪个商品：记住最近一次选定的商品。
   const [ebayFillLastProduct,setEbayFillLastProduct]=useState('')
   useEffect(()=>{const id=publishEditorProduct?.id||localEditorProduct?.id;if(id)setEbayFillLastProduct(id)},[publishEditorProduct,localEditorProduct])
   const ebayFillTargetId=publishEditorProduct?.id||localEditorProduct?.id||ebayFillLastProduct
   const ebayFillOnListing=/^https:\/\/([a-z0-9-]+\.)*ebay\.com\/lstng\?/.test(ebayAddress)
   const readEbayFixedPreset=():EbayFixedFillPreset=>{
-    if(!ebayFixedPresetKey)return defaultEbayFixedFillPreset()
-    try{return normalizeEbayFixedFillPreset(JSON.parse(readScopedItem(localStorage,ebayFixedPresetKey)||'null'))}catch{return defaultEbayFixedFillPreset()}
+    if(!ebayFixedPresetKey||!activeStore)return defaultEbayFixedFillPreset()
+    const v2=readScopedItem(localStorage,ebayFixedPresetKey)
+    if(v2){try{return normalizeEbayFixedFillPreset(JSON.parse(v2))}catch{return defaultEbayFixedFillPreset()}}
+    // AD：v1 legacy 迁移——旧默认「推广·常规」关提升为开（经授权），费率补5；回写 v2 后不再迁移。
+    const v1Key=scopedStorageKey('ebay-fixed-fill-preset:v1',activeStore.id)
+    let migrated=defaultEbayFixedFillPreset()
+    try{const raw=readScopedItem(localStorage,v1Key);if(raw)migrated=migrateEbayFixedFillPresetV1(JSON.parse(raw))}catch{}
+    writeScopedItem(localStorage,ebayFixedPresetKey,JSON.stringify(migrated))
+    return migrated
   }
   const openEbayFixedPreset=()=>{
     if(!ebayFixedPresetKey){setEbayError('请先选择店铺再设置固定填写预设');return}

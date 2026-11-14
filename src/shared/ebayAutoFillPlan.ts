@@ -113,6 +113,15 @@ export function normalizeEbayFixedFillPreset(raw: unknown): EbayFixedFillPreset 
   }
 }
 
+/**
+ * AD：v1 legacy 预设迁移。旧默认「推广·常规」关是历史产物，升版时统一提升为开（经用户授权），
+ * 费率缺省补5；其余字段保留。v2 存储不再走此函数，用户显式关闭不被覆盖。
+ */
+export function migrateEbayFixedFillPresetV1(raw: unknown): EbayFixedFillPreset {
+  const p = normalizeEbayFixedFillPreset(raw)
+  return { ...p, promotedRegularEnabled: true, promotedRegularRate: p.promotedRegularRate || '5' }
+}
+
 const LABELS: Record<string, string> = {
   condition: '物品状况',
   quantity: '数量',
