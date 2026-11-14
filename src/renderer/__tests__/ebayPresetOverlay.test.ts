@@ -10,10 +10,11 @@ import { describe, expect, it } from 'vitest'
 const source = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8')
 
 describe('预设弹窗显隐联动（W）', () => {
-  it('弹窗打开隐藏原生视图、关闭恢复（复用 browser.hide/show，不新增 IPC）', () => {
-    expect(source).toContain("if(ebayFixedPresetOpen){void window.desktop.browser.hide()")
+  it('弹窗/刊登资料抽屉打开隐藏原生视图、关闭恢复（复用 browser.hide/show，不新增 IPC）', () => {
+    expect(source).toContain("const overlayOpen=ebayFixedPresetOpen||(localEditorMode==='details'&&Boolean(localEditorProduct))")
+    expect(source).toContain("if(overlayOpen){void window.desktop.browser.hide()")
     expect(source).toContain("window.desktop.browser.show('web')")
-    expect(source).toMatch(/\[ebayFixedPresetOpen,activeTab,activeStore\?\.id\]/)
+    expect(source).toMatch(/\[ebayFixedPresetOpen,localEditorMode,localEditorProduct,activeTab,activeStore\?\.id\]/)
   })
 
   it('弹窗打开时残留通知/错误/下载/登录横条不渲染，关闭后恢复', () => {

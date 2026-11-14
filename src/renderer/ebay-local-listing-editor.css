@@ -331,3 +331,18 @@ button[data-ebay-slot="section-action"]:disabled{background:#ececec;border-color
 .ebay-revise-native-cn #ebay-revise-title .ebay-revise-band-head h2,.ebay-revise-native-cn #ebay-revise-category .ebay-revise-band-head h2,.ebay-revise-native-cn #ebay-revise-variations .ebay-revise-band-head h2{text-transform:none;margin:0 0 12px}
 .ebay-revise-native-cn #ebay-revise-title .ebay-revise-field,.ebay-revise-native-cn #ebay-revise-category .ebay-revise-cols{margin:0}
 .ebay-revise-native-cn #ebay-revise-variations .ebay-variations-notice{margin:0}
+
+/* 极简重构（2026-11-14）：core=本地核心编辑，隐藏 eBay 资料六段；details=仅 eBay 资料（浏览器「刊登资料」复用）。
+   数据/保存/准备/自动填写链路不变，仅显隐迁移。 */
+.ebay-revise-shell[data-mode="core"] .ebay-revise-validation,
+.ebay-revise-shell[data-mode="core"] #ebay-revise-specifics,
+.ebay-revise-shell[data-mode="core"] #ebay-revise-condition,
+.ebay-revise-shell[data-mode="core"] #ebay-revise-policies,
+.ebay-revise-shell[data-mode="core"] #ebay-revise-others,
+.ebay-revise-shell[data-mode="core"] .ebay-pricing-aside,
+.ebay-revise-shell[data-mode="core"] [data-policy-kind="payment"]{display:none}
+.ebay-revise-shell[data-mode="details"] #ebay-revise-media,
+.ebay-revise-shell[data-mode="details"] #ebay-revise-title,
+.ebay-revise-shell[data-mode="details"] #ebay-revise-category,
+.ebay-revise-shell[data-mode="details"] #ebay-revise-variations,
+.ebay-revise-shell[data-mode="details"] #ebay-revise-description{display:none}

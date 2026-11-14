@@ -51,6 +51,8 @@ type Props={
   inline?:boolean
   /** 中国态：eBay 后台为原生中文，页头与媒体段照现网中文逐字单语渲染 */
   nativeChinese?:boolean
+  /** 极简重构：full=十段全显（默认，内联发布编辑器用）；core=本地核心编辑（隐藏eBay资料六段）；details=仅eBay资料（浏览器「刊登资料」抽屉复用） */
+  mode?:'core'|'details'|'full'
 }
 
 type RouteCopy={prepare:string;preparing:string;gapNote:string;fieldNote:string;routeNote:string}
@@ -200,7 +202,7 @@ function CustomCategoryDropdown({options,value,onChange,disabled,placeholder,sav
   )
 }
 
-export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,gaps,businessPolicies,readingPolicies,onReadPolicies,policyCarrierItemId,onPolicyCarrierItemIdChange,routeKind='revise',attributeSection,attributeSlotsAt='',suggestedCard=null,onReadSpecifics,onFillSpecifics,readingSpecifics=false,fillingSpecifics=false,specificsFilledAt='',nativeChinese=false,inline}:Props) {
+export default function EbayLocalListingEditor({product,draft,saving,uploading,preparing,categories,onChange,onSave,onClose,onUpload,onPrepare,onSetCategory,onAutoClassify,platformCategory,gaps,businessPolicies,readingPolicies,onReadPolicies,policyCarrierItemId,onPolicyCarrierItemIdChange,routeKind='revise',attributeSection,attributeSlotsAt='',suggestedCard=null,onReadSpecifics,onFillSpecifics,readingSpecifics=false,fillingSpecifics=false,specificsFilledAt='',nativeChinese=false,inline,mode='full'}:Props) {
   const fileInput=useRef<HTMLInputElement>(null)
   const [draggedId,setDraggedId]=useState('')
   // 视频瓦片左上的时长徽章照现网画（现网原文「00:41」）：只画媒体元素真读到的秒数，读不到就不画，不编 00:00
@@ -353,7 +355,7 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
               <div className="ebay-media-tips-pop"><strong><Bi en="Photo tips" zh="拍照技巧"/></strong><p><Bi en="Learn how to take photos that attract buyers and help avoid returns." zh="了解如何拍出能吸引买家、并有助于减少退货的照片。"/></p></div>
             </details>)
   return <NativeChineseContext.Provider value={nativeChinese}><div className={`${inline?'ebay-revise-inline':'ebay-revise-overlay'}${nativeChinese?' ebay-revise-native-cn':''}`} role={inline?undefined:'dialog'} aria-modal={inline?undefined:true} aria-label="本地 eBay 商品编辑器">
-    <div className="ebay-revise-shell">
+    <div className="ebay-revise-shell" data-mode={mode}>
       <header className="ebay-revise-topbar">
         <div className="ebay-wordmark" aria-label="eBay"><i>e</i><i>b</i><i>a</i><i>y</i></div>
         <div><b>本地产品编辑</b><span>Item ID {product.listingId} · 本地版本 V{product.versionCount}</span></div>
