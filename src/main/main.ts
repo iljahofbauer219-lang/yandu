@@ -13,6 +13,7 @@ import { hotFile } from './hotPaths'
 import { decryptSecret, encryptSecret, secretStorageAvailable, tryDecryptSecret, warmSecretStorage } from './secureVault'
 import { BrowserWorkspace, EBAY_STORE_VIEW_REQUIRED } from './browser/BrowserWorkspace'
 import { AppDatabase } from './database/AppDatabase'
+import { queryEbayResearch } from './ebayResearch'
 import { BailianImageService } from './services/BailianImageService'
 import { VolcImageService } from './services/VolcImageService'
 import { OpenAIImageService } from './services/OpenAIImageService'
@@ -3377,6 +3378,12 @@ ipcMain.handle('ebay:stores:create', (_event, name:string, username:string, pass
   return database?.createEbayStore(name.trim(),username.trim(),encryptedPassword,marketplaceId||'EBAY_US',workspace||'ebay')
 })
 ipcMain.handle('ebay:stores:remove', (_event, storeId:string) => database?.removeEbayStore(storeId) ?? false)
+ipcMain.handle('ebay:research:query', (_event, storeId:string, keyword:string) => queryEbayResearch(`persist:login:ebay:${storeId}`, keyword))
+ipcMain.handle('ebay:shortlist:add', (_event, items:Array<Omit<import('../shared/ebayResearch').EbayShortlistItem,'id'|'addedAt'>>) => database?.addShortlistItems(items) ?? [])
+ipcMain.handle('ebay:shortlist:remove', (_event, id:string) => database?.removeShortlistItem(id) ?? false)
+ipcMain.handle('ebay:shortlist:list', () => database?.listShortlist() ?? [])
+ipcMain.handle('ebay:research:collect', (_event, items:Array<Omit<import('../shared/ebayResearch').ResearchCollectedItem,'id'|'collectedAt'>>) => database?.addResearchCollected(items) ?? [])
+ipcMain.handle('ebay:research:collected:list', () => database?.listResearchCollected() ?? [])
 ipcMain.handle('ebay:authorize', (_event, storeId:string) => authorizeEbayStore(storeId))
 ipcMain.handle('ebay:seller-hub:open', (_event, storeId:string) => openEbaySellerHub(storeId))
 ipcMain.handle('ebay:browser-tab:new', (_event, storeId:string) => newEbayBrowserTab(storeId))

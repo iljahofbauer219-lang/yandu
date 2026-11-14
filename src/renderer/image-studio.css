@@ -180,6 +180,38 @@ button.ebay-market-card-media { width:100%; border:0; cursor:pointer; font:inher
 .ebay-login-workbench .ebay-auto-login-banner>div { flex:none; }
 .ebay-login-workbench .ebay-auto-login-banner small { white-space:normal; }
 .ebay-login-workbench .ebay-auto-login-banner button { width:100%; }
+/* 搜索采集·关键词研究/入选榜单 页内工作台 */
+.research-page { flex:1; min-height:0; display:flex; flex-direction:column; gap:12px; padding:16px; overflow-y:auto; background:#f3f5f6; }
+.research-bar { display:flex; gap:8px; }
+.research-bar input { flex:1; height:38px; padding:0 12px; border:1px solid var(--line); border-radius:9px; font-size:13px; background:#fff; }
+.research-bar button { height:38px; padding:0 16px; border-radius:9px; font-size:13px; font-weight:650; }
+.research-threshold { display:flex; align-items:center; gap:12px; font-size:12px; color:var(--yd-content-muted,#5c6b67); }
+.research-threshold label { display:flex; align-items:center; gap:4px; }
+.research-threshold input { width:70px; height:28px; padding:0 6px; border:1px solid var(--line); border-radius:7px; font-size:12px; }
+.research-threshold button { height:28px; padding:0 10px; border:1px solid var(--line); background:#fff; border-radius:7px; font-size:12px; cursor:pointer; }
+.research-error { padding:8px 12px; background:#fff1f0; border:1px solid #efcfcc; color:#923f38; border-radius:9px; font-size:12px; }
+.research-notice { padding:8px 12px; background:var(--yd-content-brand-wash,#e6f7f5); border:1px solid #bde9e5; color:var(--yd-content-brand-ink,#0a6d68); border-radius:9px; font-size:12px; }
+.research-empty { color:var(--yd-content-muted,#5c6b67); font-size:13px; text-align:center; padding:24px 0; }
+.research-stats { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+.research-stats>div { background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:2px; }
+.research-stats b { font-size:15px; color:var(--yd-content-ink,#22312e); }
+.research-stats small { font-size:11px; color:var(--yd-content-muted,#5c6b67); }
+.research-table-wrap { flex:1; min-height:0; overflow:auto; background:#fff; border:1px solid var(--line); border-radius:10px; }
+.research-table { width:100%; border-collapse:collapse; font-size:12px; }
+.research-table th { position:sticky; top:0; background:#f6f8f8; text-align:left; padding:8px 10px; font-weight:650; color:var(--yd-content-muted,#5c6b67); border-bottom:1px solid var(--line); }
+.research-table td { padding:8px 10px; border-bottom:1px solid #eef1f2; vertical-align:middle; color:var(--yd-content-ink,#22312e); }
+.research-table tr.hot td { background:#f0fbf9; }
+.research-title { display:flex; align-items:center; gap:8px; max-width:420px; }
+.research-title img { width:36px; height:36px; object-fit:cover; border-radius:6px; flex:none; }
+.research-title span { overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.research-hot-tag { flex:none; font-style:normal; font-size:10px; color:#0a6d68; background:#d9f99d; border-radius:5px; padding:1px 6px; }
+.research-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.research-footer button { height:36px; padding:0 16px; border-radius:9px; font-size:13px; font-weight:650; }
+.shortlist-group { background:#fff; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+.shortlist-group-head { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#f6f8f8; border-bottom:1px solid var(--line); }
+.shortlist-group-head b { font-size:13px; }
+.shortlist-group-head span { font-size:11px; color:var(--yd-content-muted,#5c6b67); }
+.shortlist-group .research-table td button { height:26px; padding:0 10px; border:1px solid #efcfcc; background:#fff1f0; color:#923f38; border-radius:7px; font-size:11px; cursor:pointer; }
 .ebay-workspace.app-browser-fullscreen .ebay-browser-panel { border:0; border-radius:0; }
 .browser-panel.app-browser-fullscreen { border:0; border-radius:0; }
 .ie-browser-page.app-browser-fullscreen { padding:0; }

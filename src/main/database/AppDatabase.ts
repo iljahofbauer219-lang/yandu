@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite'
 import path from 'node:path'
 import type { CandidateCollectionRecord, CandidateCollectionRun, CandidateUpdateRequest, CandidateWorkspace, CollectedOzonProduct, CollectedSupplyProduct, CollectorDuplicateProduct, CollectorDuplicateStage, CollectorPluginImportResult, ComparisonCostSettings, ComparisonImportRequest, ComparisonPromotionRequest, ComparisonPromotionResult, ComparisonRecordView, ComparisonSupplierMatch, ComparisonUpdateRequest, ComplianceAlert, ComplianceAlertStatus, ComplianceAuditEvent, ComplianceBatchRecheckResult, ComplianceCategoryTemplate, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementAction, ComplianceEnforcementCase, ComplianceEnforcementStatus, ComplianceFinding, ComplianceKnowledgeWorkspace, ComplianceProductProfile, ComplianceProductProfileDraft, ComplianceRecall, ComplianceReleasePermit, ComplianceReviewStatus, ComplianceRule, ComplianceRuleDraft, ComplianceRuleVersion, ComplianceSource, ComplianceSourceChange, ComplianceSourceChangeDecision, ComplianceSourceChangeReviewResult, ComplianceTaskRecord, ComplianceTaskStatus, DelistedPalletItem, EbayAcceptanceBatch, EbayBusinessPolicyKind, EbayCategoryChange, EbayCategorySyncSummary, EbayCategoryWorkspace, EbayCollectedProduct, EbayContentOptimizationRecord, EbayContentOptimizationRecordInput, EbayDirectoryProductScanCategory, EbayDirectoryProductSyncCheckpoint, EbayImageVisualInspectionReport, EbayImageVisualReviewInput, EbayListing, EbayLocalProduct, EbayLocalProductSnapshot, EbayLocalProductSnapshotInput, EbayMarketResearchDecisionRequest, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayOptimizationDraftInput, EbayProductDetails, EbayProductSyncChange, EbayProductSyncRun, EbayPublishComplianceValidation, EbayPublishTask, EbayScrapedPolicyOption, EbayStore, EbayStoreBusinessPolicy, EbayStoreCategory, EbayTitleDecision, EbayTitleDecisionInput, EbayTitleHandoff, EliminatedOrigin, EliminatedProductRecord, EliminatedRecordStatus, EliminateRequest, InboundErpIntakeInput, InboundOrigin, InboundProcessingItem, InboundSnapshot, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplaceMediaAssetType, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishDraftUpdate, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, SelectionCatalogItem, SelectionDecision, SelectionImportRequest, SelectionTask, SupplyProductDownload, SupplyWarehouseCode, SupplyWarehouseProduct } from '../../shared/contracts'
 import type { EbayItemSpecificsSection } from '../../shared/ebayItemSpecificsModel'
+import type { EbayShortlistItem, ResearchCollectedItem } from '../../shared/ebayResearch'
 import { complianceCheckFingerprint } from '../../shared/complianceFingerprint'
 import { mergeCandidateFacts } from '../../shared/candidateFactsMerge'
 import { badgeFallbackScore } from '../../shared/badgeScore'
@@ -1361,6 +1362,35 @@ export class AppDatabase {
       const columns = this.database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
       if (!columns.some(item => item.name === column)) this.database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
     }
+    this.database.exec(`CREATE TABLE IF NOT EXISTS ebay_shortlist_items (
+      id TEXT PRIMARY KEY,
+      keyword TEXT NOT NULL,
+      store_id TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      image_url TEXT NOT NULL DEFAULT '',
+      item_sold_count REAL NOT NULL DEFAULT 0,
+      avg_sold_price REAL NOT NULL DEFAULT 0,
+      avg_shipping REAL NOT NULL DEFAULT 0,
+      total_sales REAL NOT NULL DEFAULT 0,
+      last_sold_date_time TEXT NOT NULL DEFAULT '',
+      added_at TEXT NOT NULL,
+      UNIQUE(store_id, keyword, item_id)
+    )`)
+    this.database.exec(`CREATE TABLE IF NOT EXISTS ebay_research_collected (
+      id TEXT PRIMARY KEY,
+      store_id TEXT NOT NULL,
+      keyword TEXT NOT NULL DEFAULT '',
+      item_id TEXT NOT NULL,
+      url TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL DEFAULT '',
+      image_url TEXT NOT NULL DEFAULT '',
+      avg_sold_price REAL NOT NULL DEFAULT 0,
+      item_sold_count REAL NOT NULL DEFAULT 0,
+      total_sales REAL NOT NULL DEFAULT 0,
+      collected_at TEXT NOT NULL,
+      UNIQUE(store_id, item_id)
+    )`)
     ensureColumn('market_candidates', 'deleted_at', 'TEXT')
     ensureColumn('ebay_stores', 'workspace', "TEXT NOT NULL DEFAULT 'ebay'")
     ensureColumn('supply_candidates', 'deleted_at', 'TEXT')
@@ -2001,6 +2031,59 @@ export class AppDatabase {
       this.database.exec('ROLLBACK')
       throw error
     }
+  }
+
+  addShortlistItems(items: Array<Omit<EbayShortlistItem, 'id' | 'addedAt'>>): EbayShortlistItem[] {
+    const now = new Date().toISOString()
+    const stmt = this.database.prepare(`INSERT INTO ebay_shortlist_items (id,keyword,store_id,item_id,title,image_url,item_sold_count,avg_sold_price,avg_shipping,total_sales,last_sold_date_time,added_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(store_id,keyword,item_id) DO UPDATE SET title=excluded.title,image_url=excluded.image_url,item_sold_count=excluded.item_sold_count,avg_sold_price=excluded.avg_sold_price,avg_shipping=excluded.avg_shipping,total_sales=excluded.total_sales,last_sold_date_time=excluded.last_sold_date_time`)
+    const out: EbayShortlistItem[] = []
+    this.database.exec('BEGIN IMMEDIATE')
+    try {
+      for (const it of items) {
+        const id = crypto.randomUUID()
+        stmt.run(id, it.keyword, it.storeId, it.itemId, it.title, it.imageUrl, it.itemSoldCount, it.avgSoldPrice, it.avgShipping, it.totalSales, it.lastSoldDateTime, now)
+        out.push({ ...it, id, addedAt: now })
+      }
+      this.database.exec('COMMIT')
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
+    return out
+  }
+
+  removeShortlistItem(id: string): boolean {
+    this.database.prepare(`DELETE FROM ebay_shortlist_items WHERE id=?`).run(id)
+    return true
+  }
+
+  listShortlist(): EbayShortlistItem[] {
+    const rows = this.database.prepare(`SELECT * FROM ebay_shortlist_items ORDER BY added_at DESC`).all() as unknown as Array<Record<string, unknown>>
+    return rows.map(row => ({ id: String(row.id), keyword: String(row.keyword), storeId: String(row.store_id), itemId: String(row.item_id), title: String(row.title), imageUrl: String(row.image_url), itemSoldCount: Number(row.item_sold_count), avgSoldPrice: Number(row.avg_sold_price), avgShipping: Number(row.avg_shipping), totalSales: Number(row.total_sales), lastSoldDateTime: String(row.last_sold_date_time), addedAt: String(row.added_at) }))
+  }
+
+  addResearchCollected(items: Array<Omit<ResearchCollectedItem, 'id' | 'collectedAt'>>): ResearchCollectedItem[] {
+    const now = new Date().toISOString()
+    const stmt = this.database.prepare(`INSERT INTO ebay_research_collected (id,store_id,keyword,item_id,url,title,image_url,avg_sold_price,item_sold_count,total_sales,collected_at) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(store_id,item_id) DO UPDATE SET keyword=excluded.keyword,title=excluded.title,image_url=excluded.image_url,avg_sold_price=excluded.avg_sold_price,item_sold_count=excluded.item_sold_count,total_sales=excluded.total_sales,collected_at=excluded.collected_at`)
+    const out: ResearchCollectedItem[] = []
+    this.database.exec('BEGIN IMMEDIATE')
+    try {
+      for (const it of items) {
+        const id = crypto.randomUUID()
+        stmt.run(id, it.storeId, it.keyword, it.itemId, it.url, it.title, it.imageUrl, it.avgSoldPrice, it.itemSoldCount, it.totalSales, now)
+        out.push({ ...it, id, collectedAt: now })
+      }
+      this.database.exec('COMMIT')
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
+    return out
+  }
+
+  listResearchCollected(): ResearchCollectedItem[] {
+    const rows = this.database.prepare(`SELECT * FROM ebay_research_collected ORDER BY collected_at DESC`).all() as unknown as Array<Record<string, unknown>>
+    return rows.map(row => ({ id: String(row.id), storeId: String(row.store_id), keyword: String(row.keyword), itemId: String(row.item_id), url: String(row.url), title: String(row.title), imageUrl: String(row.image_url), avgSoldPrice: Number(row.avg_sold_price), itemSoldCount: Number(row.item_sold_count), totalSales: Number(row.total_sales), collectedAt: String(row.collected_at) }))
   }
 
   getEbayTokenRecord(storeId:string) {

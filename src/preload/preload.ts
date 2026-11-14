@@ -3,6 +3,7 @@ import type { BrowserBounds, BrowserState, BrowserTab, BrowserTranslationMode, B
 import type { ComplianceBatchRecheckResult, EbayImageInspectionReport } from '../shared/contracts'
 import type { EbayMarketingFacts } from '../shared/ebayImageCategoryPlan'
 import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
+import type { EbayResearchResult, EbayShortlistItem } from '../shared/ebayResearch'
 import type { EbayBusinessPolicyKind, EbayLocalListingRequirements, EbayLocalRevisionPreparationResult, EbayStoreBusinessPolicy } from '../shared/contracts'
 import type { EbayItemSpecificsSection } from '../shared/ebayItemSpecificsModel'
 import type { EbayTitleDecision, EbayTitleDecisionInput } from '../shared/contracts'
@@ -436,6 +437,16 @@ contextBridge.exposeInMainWorld('desktop', {
     stores: (workspace?:string):Promise<EbayStore[]> => ipcRenderer.invoke('ebay:stores:list',workspace),
     createStore: (name:string,username:string,password:string,marketplaceId='EBAY_US',workspace='ebay'):Promise<EbayStore> => ipcRenderer.invoke('ebay:stores:create',name,username,password,marketplaceId,workspace),
     removeStore: (storeId:string):Promise<boolean> => ipcRenderer.invoke('ebay:stores:remove',storeId),
+    research: {
+      query: (storeId:string, keyword:string):Promise<EbayResearchResult> => ipcRenderer.invoke('ebay:research:query',storeId,keyword),
+      collect: (items:Array<Omit<import('../shared/ebayResearch').ResearchCollectedItem,'id'|'collectedAt'>>):Promise<import('../shared/ebayResearch').ResearchCollectedItem[]> => ipcRenderer.invoke('ebay:research:collect',items),
+      collectedList: ():Promise<import('../shared/ebayResearch').ResearchCollectedItem[]> => ipcRenderer.invoke('ebay:research:collected:list')
+    },
+    shortlist: {
+      add: (items:Array<Omit<EbayShortlistItem,'id'|'addedAt'>>):Promise<EbayShortlistItem[]> => ipcRenderer.invoke('ebay:shortlist:add',items),
+      remove: (id:string):Promise<boolean> => ipcRenderer.invoke('ebay:shortlist:remove',id),
+      list: ():Promise<EbayShortlistItem[]> => ipcRenderer.invoke('ebay:shortlist:list')
+    },
     authorize: (storeId:string):Promise<EbayStore> => ipcRenderer.invoke('ebay:authorize',storeId),
     openSellerHub: (storeId:string):Promise<string> => ipcRenderer.invoke('ebay:seller-hub:open',storeId),
     newBrowserTab: (storeId:string):Promise<string> => ipcRenderer.invoke('ebay:browser-tab:new',storeId),
