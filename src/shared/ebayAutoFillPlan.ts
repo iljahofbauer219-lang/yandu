@@ -27,8 +27,10 @@ export interface EbayFixedFillPreset {
   returnPolicyId: string
   itemLocation: string
   postalCode: string
-  /** 推广·常规：费用项，默认关 */
+  /** 推广·常规：费用项，默认开（用户授权）；关闭则不写 */
   promotedRegularEnabled: boolean
+  /** 推广·常规广告费率百分比，默认5，可调；空=不写费率 */
+  promotedRegularRate: string
   /** 推广·优先：费用项，默认关 */
   promotedPriorityEnabled: boolean
   /** 慈善机构：费用项，默认关；开启也只记录意愿，不代选机构 */
@@ -44,6 +46,7 @@ export interface EbayFixedFillRow {
   value: string | boolean
   fee: boolean
   tiers?: Record<string, string>
+  rate?: string
 }
 
 export interface EbayFixedFillPlan {
@@ -68,7 +71,8 @@ export function defaultEbayFixedFillPreset(): EbayFixedFillPreset {
     returnPolicyId: '',
     itemLocation: '',
     postalCode: '',
-    promotedRegularEnabled: false,
+    promotedRegularEnabled: true,
+    promotedRegularRate: '5',
     promotedPriorityEnabled: false,
     charityEnabled: false
   }
@@ -102,7 +106,8 @@ export function normalizeEbayFixedFillPreset(raw: unknown): EbayFixedFillPreset 
     returnPolicyId: asText(input.returnPolicyId),
     itemLocation: asText(input.itemLocation),
     postalCode: asText(input.postalCode),
-    promotedRegularEnabled: asBool(input.promotedRegularEnabled),
+    promotedRegularEnabled: input.promotedRegularEnabled === undefined || input.promotedRegularEnabled === null ? true : asBool(input.promotedRegularEnabled),
+    promotedRegularRate: asText(input.promotedRegularRate) || '5',
     promotedPriorityEnabled: asBool(input.promotedPriorityEnabled),
     charityEnabled: asBool(input.charityEnabled)
   }
@@ -141,7 +146,7 @@ export function ebayFixedFillPlan(preset: EbayFixedFillPreset): EbayFixedFillPla
   if (preset.itemLocation) push('itemLocation', 'preferences', preset.itemLocation)
   if (preset.postalCode) push('postalCode', 'preferences', preset.postalCode)
   for (const key of ['promotedRegularEnabled', 'promotedPriorityEnabled'] as const) {
-    if (preset[key]) push(key, 'switch', true, true)
+    if (preset[key]) rows.push({ key, label: LABELS[key], kind: 'switch', value: true, fee: true, ...(key === 'promotedRegularEnabled' ? { rate: preset.promotedRegularRate } : {}) })
     else skipped.push({ key, label: LABELS[key], reason: '费用项预设未开启，不写入' })
   }
   if (preset.charityEnabled) {

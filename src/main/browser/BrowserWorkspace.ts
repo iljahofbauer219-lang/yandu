@@ -2432,7 +2432,15 @@ export class BrowserWorkspace {
           const want=Boolean(t.desired);
           if(readSwitch(el)!==want)el.click();
           await wait(300);
-          if(readSwitch(el)===want)filledFields.push(t.label);else skippedFields.push(t.label+'（开关回读未落定）');
+          if(readSwitch(el)===want){
+            let rateOk=true;
+            if(t.control==='switch-aria'&&t.matcher==='切换为常规'&&want&&t.rate){
+              await wait(400);
+              const rateEl=document.querySelector('input[name="adRate"]');
+              if(rateEl){Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set?.call(rateEl,String(t.rate));rateEl.dispatchEvent(new Event('input',{bubbles:true}));rateEl.dispatchEvent(new Event('change',{bubbles:true}));await wait(200);rateOk=clean(rateEl.value)===clean(String(t.rate))}
+            }
+            if(rateOk)filledFields.push(t.label);else skippedFields.push(t.label+'（开关已开但广告费率未落定）');
+          }else skippedFields.push(t.label+'（开关回读未落定）');
           continue;
         }
         if(t.control==='combobox'){

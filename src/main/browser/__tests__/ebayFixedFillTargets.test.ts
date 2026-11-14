@@ -66,10 +66,15 @@ describe('ebayFixedFillPageTargets · 控件形映射', () => {
   })
 
   it('计划自带的 skipped（费用项未开启/慈善）原样并入', () => {
-    const plan = ebayFixedFillPlan({ ...defaultEbayFixedFillPreset(), quantity: '' })
+    const plan = ebayFixedFillPlan({ ...defaultEbayFixedFillPreset(), quantity: '', promotedRegularEnabled: false, promotedPriorityEnabled: false })
     const { targets, skipped } = ebayFixedFillPageTargets(plan, models)
     expect(targets).toEqual([])
     expect(skipped.some(s => s.key === 'promotedRegularEnabled')).toBe(true)
     expect(skipped.some(s => s.key === 'charityEnabled')).toBe(true)
+  })
+
+  it('AC：推广·常规默认开映射 switch-aria 且带广告费率', () => {
+    const { targets } = ebayFixedFillPageTargets(ebayFixedFillPlan(defaultEbayFixedFillPreset()), models)
+    expect(targets.find(t => t.key === 'promotedRegularEnabled')).toMatchObject({ control: 'switch-aria', matcher: '切换为常规', desired: true, rate: '5', fee: true })
   })
 })

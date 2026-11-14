@@ -66,5 +66,6 @@ describe('AA 接线守卫', () => {
     expect(method).toContain('summary__header-edit-button')
     expect(method).toContain('邮政编码')
     expect(method).toContain('完成|Done')
+    expect(method).toContain('adRate')
   })
 })

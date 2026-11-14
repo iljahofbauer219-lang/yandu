@@ -10,9 +10,10 @@ import {
  * 慈善机构即使开启也不代选机构（现网是编辑弹窗人工选），只如实点名。
  */
 describe('defaultEbayFixedFillPreset · 默认值', () => {
-  it('费用项默认全关，其余默认不改动', () => {
+  it('AC：推广·常规默认开+费率5，其余费用项默认关、其余默认不改动', () => {
     const preset = defaultEbayFixedFillPreset()
-    expect(preset.promotedRegularEnabled).toBe(false)
+    expect(preset.promotedRegularEnabled).toBe(true)
+    expect(preset.promotedRegularRate).toBe('5')
     expect(preset.promotedPriorityEnabled).toBe(false)
     expect(preset.charityEnabled).toBe(false)
     expect(preset.condition).toBe('')
@@ -54,8 +55,18 @@ describe('ebayFixedFillPlan · 固定填写计划', () => {
   const preset = (over: Partial<EbayFixedFillPreset> = {}): EbayFixedFillPreset => ({ ...defaultEbayFixedFillPreset(), ...over })
 
   it('空预设不产生任何写入行', () => {
-    const plan = ebayFixedFillPlan(preset({ quantity: '' }))
+    const plan = ebayFixedFillPlan(preset({ quantity: '', promotedRegularEnabled: false, promotedPriorityEnabled: false }))
     expect(plan.rows).toEqual([])
+  })
+
+  it('AC：推广·常规默认开启且带默认广告费率5，随计划下发', () => {
+    const def = defaultEbayFixedFillPreset()
+    expect(def.promotedRegularEnabled).toBe(true)
+    expect(def.promotedRegularRate).toBe('5')
+    const plan = ebayFixedFillPlan(def)
+    const row = plan.rows.find(r => r.key === 'promotedRegularEnabled')
+    expect(row?.fee).toBe(true)
+    expect(row?.rate).toBe('5')
   })
 
   it('状况/开关/政策/偏好按预设出写入行，开关 false 也写（非费用项）', () => {
@@ -81,7 +92,7 @@ describe('ebayFixedFillPlan · 固定填写计划', () => {
   })
 
   it('费用项未开启不写并点名；开启才出写入行且标 fee', () => {
-    const off = ebayFixedFillPlan(preset())
+    const off = ebayFixedFillPlan(preset({ promotedRegularEnabled: false, promotedPriorityEnabled: false }))
     expect(off.rows.some(row => row.fee)).toBe(false)
     expect(off.skipped.some(item => item.key === 'promotedRegularEnabled')).toBe(true)
     const on = ebayFixedFillPlan(preset({ promotedRegularEnabled: true, promotedPriorityEnabled: true }))
