@@ -32,4 +32,9 @@ describe('预设弹窗显隐联动（W）', () => {
   it('Z：预设弹窗物品状况下渲染数量输入且绑定 draft', () => {
     expect(source).toContain('ebayFixedPresetDraft.quantity')
   })
+
+  it('AE：预设弹窗不再显示费用项警示段（费用授权逻辑保留）', () => {
+    expect(source).not.toContain('ebay-fixed-preset-fee-warn')
+    expect(source).toContain('promotedRegularEnabled')
+  })
 })
