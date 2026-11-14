@@ -446,3 +446,11 @@ button.ebay-market-card-media { width:100%; border:0; cursor:pointer; font:inher
 .supply-error-modal-actions{display:flex;justify-content:flex-end;gap:10px}
 .supply-error-modal-actions button{height:36px;padding:0 16px;border:1px solid #d3dcda;border-radius:9px;background:#fff;font-size:13px;font-weight:650;color:#3c4a47;cursor:pointer}
 .supply-error-modal-actions button.primary{background:#087a75;border-color:#087a75;color:#fff}
+
+/* 信息框归位左栏槽位（2026-11-14 用户口径）：堆叠在左栏底部，toast 不再 fixed 遮罩内容 */
+.ebay-workbench-info{display:grid;gap:8px;margin-top:10px;align-content:start}
+.ebay-workbench-info .ebay-download-toast{position:static;width:auto;box-shadow:none;grid-template-columns:24px minmax(0,1fr) 20px;padding:10px 11px;font-size:11px;line-height:16px}
+.ebay-workbench-info .ebay-download-toast>span{width:24px;height:24px;font-size:13px}
+.ebay-workbench-info .ebay-download-toast b{font-size:11px;line-height:16px}
+.ebay-workbench-info .ebay-success-notice,.ebay-workbench-info .ebay-error-notice{align-items:flex-start;font-size:10px;line-height:16px;margin-top:0}
+.ebay-workbench-info .ebay-auto-login-banner{margin-top:0}
