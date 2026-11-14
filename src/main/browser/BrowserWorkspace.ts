@@ -2341,6 +2341,17 @@ export class BrowserWorkspace {
           if(onNow||summaryOk())filledFields.push(t.label);else skippedFields.push(t.label+'（点选后回读未确认）');
           continue;
         }
+        if(t.control==='text-name'){
+          let el=document.querySelector('input[name="'+CSS.escape(t.matcher)+'"]')||document.querySelector('input[name="quantity"]');
+          if(!el){const lab=[...document.querySelectorAll('label,[class*="--label"]')].find(n=>clean(n.textContent)==='数量'||/^Quantity$/i.test(clean(n.textContent)));if(lab){el=lab.querySelector('input')||(lab.htmlFor?document.getElementById(lab.htmlFor):null)||((lab.closest('[class*="field"]')||lab.parentElement||document).querySelector('input'))}}
+          if(!el||!visible(el)){skippedFields.push(t.label+'（当前页没有该输入框，保留原值）');continue}
+          const want=clean(String(t.desired));
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set?.call(el,want);
+          el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));
+          await wait(300);
+          if(clean(el.value)===want)filledFields.push(t.label);else skippedFields.push(t.label+'（写入后回读不一致）');
+          continue;
+        }
         if(t.control==='volume-pricing'){
           const el=document.querySelector('input[name="'+CSS.escape(t.matcher)+'"][role="switch"],input[name="'+CSS.escape(t.matcher)+'"][type="checkbox"]');
           if(!el||!visible(el)){skippedFields.push(t.label+'（当前页没有批量折扣开关，保留原值）');continue}

@@ -113,7 +113,7 @@ export interface EbayFixedFillPageTarget {
   key:string
   label:string
   fee:boolean
-  control:'condition-pill'|'switch-name'|'switch-aria'|'switch-section'|'combobox'|'preferences'|'volume-pricing'
+  control:'condition-pill'|'switch-name'|'switch-aria'|'switch-section'|'combobox'|'preferences'|'volume-pricing'|'text-name'
   matcher:string
   desired:string|boolean
   optionText?:string
@@ -149,6 +149,7 @@ export function ebayFixedFillPageTargets(
       targets.push({...base,control:'combobox',matcher:entry.anchor,desired:entry.policyId,optionText:entry.optionText})
       continue
     }
+    if(row.kind==='text'){targets.push({...base,control:'text-name',matcher:row.key,desired:row.value});continue}
     targets.push({...base,control:'preferences',matcher:row.key,desired:row.value})
   }
   return {targets,skipped}

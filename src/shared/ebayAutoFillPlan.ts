@@ -10,6 +10,8 @@
 export interface EbayFixedFillPreset {
   /** 物品状况：''=不改动；现网 pills 只有 New/Used */
   condition: '' | 'New' | 'Used'
+  /** 数量：默认2；''=不改动；固定填写写入现网数量框 */
+  quantity: string
   /** 允许议价；null=不改动 */
   bestOfferEnabled: boolean | null
   /** 添加批量购买价格；null=不改动。开→开关打开并按预设三档写折扣；关→关闭 */
@@ -33,7 +35,7 @@ export interface EbayFixedFillPreset {
   charityEnabled: boolean
 }
 
-export type EbayFixedFillRowKind = 'condition' | 'switch' | 'combobox' | 'preferences'
+export type EbayFixedFillRowKind = 'condition' | 'switch' | 'combobox' | 'preferences' | 'text'
 
 export interface EbayFixedFillRow {
   key: string
@@ -54,6 +56,7 @@ export const FEE_PRESET_KEYS = ['promotedRegularEnabled', 'promotedPriorityEnabl
 export function defaultEbayFixedFillPreset(): EbayFixedFillPreset {
   return {
     condition: '',
+    quantity: '2',
     bestOfferEnabled: null,
     volumePricingEnabled: null,
     volumeTier2: '5',
@@ -87,6 +90,7 @@ export function normalizeEbayFixedFillPreset(raw: unknown): EbayFixedFillPreset 
   const condition = asText(input.condition)
   return {
     condition: condition === 'New' || condition === 'Used' ? condition : '',
+    quantity: input.quantity === undefined || input.quantity === null ? '2' : asText(input.quantity),
     bestOfferEnabled: asTriState(input.bestOfferEnabled),
     volumePricingEnabled: asTriState(input.volumePricingEnabled),
     volumeTier2: asText(input.volumeTier2) || '5',
@@ -106,6 +110,7 @@ export function normalizeEbayFixedFillPreset(raw: unknown): EbayFixedFillPreset 
 
 const LABELS: Record<string, string> = {
   condition: '物品状况',
+  quantity: '数量',
   bestOfferEnabled: '允许议价',
   vpSelection: '添加批量购买价格',
   productDocumentsEnabled: '商品文件',
@@ -126,6 +131,7 @@ export function ebayFixedFillPlan(preset: EbayFixedFillPreset): EbayFixedFillPla
     rows.push({ key, label: LABELS[key] || key, kind, value, fee })
   }
   if (preset.condition) push('condition', 'condition', preset.condition)
+  if (preset.quantity.trim()) push('quantity', 'text', preset.quantity.trim())
   if (preset.bestOfferEnabled !== null) push('bestOfferEnabled', 'switch', preset.bestOfferEnabled)
   if (preset.volumePricingEnabled !== null) rows.push({ key: 'vpSelection', label: LABELS.vpSelection, kind: 'switch', value: preset.volumePricingEnabled, fee: false, tiers: { 2: preset.volumeTier2, 3: preset.volumeTier3, 4: preset.volumeTier4 } })
   if (preset.productDocumentsEnabled !== null) push('productDocumentsEnabled', 'switch', preset.productDocumentsEnabled)

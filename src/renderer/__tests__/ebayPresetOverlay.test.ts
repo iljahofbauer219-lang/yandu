@@ -28,4 +28,8 @@ describe('预设弹窗显隐联动（W）', () => {
     expect(source).toContain('volumeTier3')
     expect(source).toContain('volumeTier4')
   })
+
+  it('Z：预设弹窗物品状况下渲染数量输入且绑定 draft', () => {
+    expect(source).toContain('ebayFixedPresetDraft.quantity')
+  })
 })

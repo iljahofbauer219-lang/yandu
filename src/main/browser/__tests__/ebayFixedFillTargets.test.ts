@@ -47,6 +47,15 @@ describe('ebayFixedFillPageTargets · 控件形映射', () => {
     expect(targets.find(t => t.key === 'vpSelection')?.tiers).toEqual({ 2: '3', 3: '6', 4: '9' })
   })
 
+  it('Z：预设数量默认2随计划下发映射 text-name；空=不改动不出目标', () => {
+    const def = ebayFixedFillPlan(defaultEbayFixedFillPreset())
+    expect(def.rows.find(r => r.key === 'quantity')).toMatchObject({ kind: 'text', value: '2' })
+    const { targets } = ebayFixedFillPageTargets(def, models)
+    expect(targets.find(t => t.key === 'quantity')).toMatchObject({ control: 'text-name', matcher: 'quantity', desired: '2' })
+    const none = ebayFixedFillPlan({ ...defaultEbayFixedFillPreset(), quantity: '' })
+    expect(none.rows.some(r => r.key === 'quantity')).toBe(false)
+  })
+
   it('政策 combobox 复用编号→显示文本裁决；模型缺失则点名跳过不出目标', () => {
     const plan = ebayFixedFillPlan({ ...defaultEbayFixedFillPreset(), shippingPolicyId: '2585', paymentPolicyId: '999' })
     const { targets, skipped } = ebayFixedFillPageTargets(plan, models)
@@ -57,7 +66,7 @@ describe('ebayFixedFillPageTargets · 控件形映射', () => {
   })
 
   it('计划自带的 skipped（费用项未开启/慈善）原样并入', () => {
-    const plan = ebayFixedFillPlan(defaultEbayFixedFillPreset())
+    const plan = ebayFixedFillPlan({ ...defaultEbayFixedFillPreset(), quantity: '' })
     const { targets, skipped } = ebayFixedFillPageTargets(plan, models)
     expect(targets).toEqual([])
     expect(skipped.some(s => s.key === 'promotedRegularEnabled')).toBe(true)

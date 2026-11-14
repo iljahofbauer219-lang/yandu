@@ -136,4 +136,12 @@ describe('S 批接线守卫 · 单一写页来源与 shared 计划复用', () =>
     expect(method).toContain('tierRate3')
     expect(method).toContain('tierRate4')
   })
+
+  it('Z：固定填写 text-name 分支写数量并回读一致', () => {
+    const si = workspaceSource.indexOf('private buildFixedFillScript(')
+    expect(si).toBeGreaterThan(-1)
+    const method = workspaceSource.slice(si, workspaceSource.indexOf('\n  private buildRevisionFillScript(', si))
+    expect(method).toContain("t.control==='text-name'")
+    expect(method).toContain('quantity')
+  })
 })

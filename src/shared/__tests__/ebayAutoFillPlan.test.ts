@@ -54,7 +54,7 @@ describe('ebayFixedFillPlan · 固定填写计划', () => {
   const preset = (over: Partial<EbayFixedFillPreset> = {}): EbayFixedFillPreset => ({ ...defaultEbayFixedFillPreset(), ...over })
 
   it('空预设不产生任何写入行', () => {
-    const plan = ebayFixedFillPlan(preset())
+    const plan = ebayFixedFillPlan(preset({ quantity: '' }))
     expect(plan.rows).toEqual([])
   })
 
