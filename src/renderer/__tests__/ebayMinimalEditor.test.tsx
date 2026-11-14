@@ -81,9 +81,9 @@ describe('极简编辑器 · App.tsx 接线', () => {
     expect(overlay).toContain('mode={localEditorMode}')
     expect(overlay).toContain("setLocalEditorMode('core')")
   })
-  it('内联发布编辑器不传 mode（保持 full，十段全显）', () => {
+  it('内联发布编辑器传 mode="core"（仅核心段、六段隐；draft/保存/抽屉入口保留）', () => {
     const inline=app().split('\n').find(line=>line.includes('<EbayLocalListingEditor inline'))??''
-    expect(inline).not.toContain('mode=')
+    expect(inline).toContain('mode="core"')
   })
   it('W 隐藏原生视图扩展到 details 抽屉：抽屉开时隐藏、关闭恢复', () => {
     expect(app()).toContain("const overlayOpen=ebayFixedPresetOpen||(localEditorMode==='details'&&Boolean(localEditorProduct))")
