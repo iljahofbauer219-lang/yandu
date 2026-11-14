@@ -21,4 +21,11 @@ describe('预设弹窗显隐联动（W）', () => {
     expect(source).toContain('{ebayError&&!ebayFixedPresetOpen&&')
     expect(source).toContain('{downloadToast&&!ebayFixedPresetOpen&&')
   })
+
+  it('Y：预设弹窗「开」时渲染三档折扣下拉且绑定 draft，可保存', () => {
+    expect(source).toContain('ebayFixedPresetDraft.volumePricingEnabled===true&&')
+    expect(source).toContain('volumeTier2')
+    expect(source).toContain('volumeTier3')
+    expect(source).toContain('volumeTier4')
+  })
 })

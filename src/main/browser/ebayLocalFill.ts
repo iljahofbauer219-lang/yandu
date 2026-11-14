@@ -137,7 +137,7 @@ export function ebayFixedFillPageTargets(
     if(row.kind==='condition'){targets.push({...base,control:'condition-pill',matcher:String(row.value),desired:row.value});continue}
     if(row.kind==='switch'){
       if(row.key==='productDocumentsEnabled')targets.push({...base,control:'switch-section',matcher:'物品披露信息',desired:row.value})
-      else if(row.key==='vpSelection')targets.push({...base,control:'volume-pricing',matcher:'vpSelection',desired:row.value,tiers:{2:'5',3:'7',4:'10'}})
+      else if(row.key==='vpSelection')targets.push({...base,control:'volume-pricing',matcher:'vpSelection',desired:row.value,tiers:row.tiers||{2:'5',3:'7',4:'10'}})
       else if(row.key==='promotedRegularEnabled')targets.push({...base,control:'switch-aria',matcher:'切换为常规',desired:row.value})
       else if(row.key==='promotedPriorityEnabled')targets.push({...base,control:'switch-aria',matcher:'切换为优先',desired:row.value})
       else targets.push({...base,control:'switch-name',matcher:row.key,desired:row.value})

@@ -2356,13 +2356,10 @@ export class BrowserWorkspace {
           for(let i=0;i<tierNames.length;i++){
             const sel=document.querySelector('select[name="'+tierNames[i]+'"]');
             if(!sel)continue;
-            const cur=clean(sel.value);
-            if(!cur||cur==='-'){
-              const wantV=String(tiers[String(i+2)]||'');
-              if(wantV){Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value')?.set?.call(sel,wantV);sel.dispatchEvent(new Event('change',{bubbles:true}));await wait(200)}
-            }
+            const wantV=String(tiers[String(i+2)]||'');
+            if(wantV&&clean(sel.value)!==wantV){Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value')?.set?.call(sel,wantV);sel.dispatchEvent(new Event('change',{bubbles:true}));await wait(200)}
             const after=clean((document.querySelector('select[name="'+tierNames[i]+'"]')||{}).value);
-            if(!after||after==='-')tierOk=false;
+            if(wantV&&after!==wantV)tierOk=false;
           }
           if(tierOk)filledFields.push(t.label);else skippedFields.push(t.label+'（开关已开但折扣档位未落定）');
           continue;

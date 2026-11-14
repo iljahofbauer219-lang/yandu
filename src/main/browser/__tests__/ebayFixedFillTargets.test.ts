@@ -40,6 +40,13 @@ describe('ebayFixedFillPageTargets · 控件形映射', () => {
     expect(none.targets.some(t => t.key === 'vpSelection')).toBe(false)
   })
 
+  it('Y：预设三档折扣随计划下发，映射 tiers 用预设值而非固定默认', () => {
+    const plan = ebayFixedFillPlan({ ...defaultEbayFixedFillPreset(), volumePricingEnabled: true, volumeTier2: '3', volumeTier3: '6', volumeTier4: '9' })
+    expect(plan.rows.find(r => r.key === 'vpSelection')?.tiers).toEqual({ 2: '3', 3: '6', 4: '9' })
+    const { targets } = ebayFixedFillPageTargets(plan, models)
+    expect(targets.find(t => t.key === 'vpSelection')?.tiers).toEqual({ 2: '3', 3: '6', 4: '9' })
+  })
+
   it('政策 combobox 复用编号→显示文本裁决；模型缺失则点名跳过不出目标', () => {
     const plan = ebayFixedFillPlan({ ...defaultEbayFixedFillPreset(), shippingPolicyId: '2585', paymentPolicyId: '999' })
     const { targets, skipped } = ebayFixedFillPageTargets(plan, models)
