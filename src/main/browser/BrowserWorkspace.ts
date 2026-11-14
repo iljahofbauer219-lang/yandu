@@ -2497,9 +2497,7 @@ export class BrowserWorkspace {
         }
         skippedFields.push(t.label+'（未知控件形）');
       }
-      let banner=document.getElementById('__cross_border_local_revision_guard');
-      if(!banner){banner=document.createElement('div');banner.id='__cross_border_local_revision_guard';banner.style.cssText='position:fixed;z-index:2147483647;left:20px;right:20px;bottom:20px;padding:14px 18px;border:2px solid #12a9a3;border-radius:12px;background:#e8faf8;color:#075b57;font:700 14px/20px system-ui;box-shadow:0 8px 30px rgba(0,0,0,.18)';document.body.appendChild(banner)}
-      banner.textContent='固定填写：已写 '+filledFields.length+' 项，跳过 '+skippedFields.length+' 项；尚未提交。请逐项核对后再由您点击 eBay 最终提交按钮。';
+      document.getElementById('__cross_border_local_revision_guard')?.remove();
       return {url:location.href,login,verification,filledFields:[...new Set(filledFields)],skippedFields:[...new Set(skippedFields)],warnings};
     })()`
   }
@@ -2556,7 +2554,7 @@ export class BrowserWorkspace {
       const submitButtonDetected=[...document.querySelectorAll('button,input[type="submit"],a[role="button"]')].filter(visible).some(node=>/^(submit|publish|list it|revise it|update listing|save changes|modify|提交|发布|修改|确认修改|更新刊登)/i.test(clean(node.textContent||node.value||node.getAttribute('aria-label'))));
       if(desired.localImageCount)warnings.push('本地已保存 '+desired.localImageCount+' 张图片；为防止误覆盖线上媒体，图片仍需在本页人工核对。');
       warnings.push('本次填写：'+namesOf(filledFields)+'；未写入：'+namesOf(skippedFields)+'。图片、类目与业务政策内容仍需在页面人工核对，且本次尚未提交，最终修改仍由您在 eBay 页面点击确认。');
-      let banner=document.getElementById('__cross_border_local_revision_guard');if(!banner){banner=document.createElement('div');banner.id='__cross_border_local_revision_guard';banner.style.cssText='position:fixed;z-index:2147483647;left:20px;right:20px;bottom:20px;padding:14px 18px;border:2px solid #12a9a3;border-radius:12px;background:#e8faf8;color:#075b57;font:700 14px/20px system-ui;box-shadow:0 8px 30px rgba(0,0,0,.18)';document.body.appendChild(banner)}banner.textContent='已从本地版本填写 '+[...new Set(filledFields)].length+' 项，跳过 '+[...new Set(skippedFields)].length+' 项；尚未提交。请逐项核对图片、类目、业务政策和费用，再由您点击 eBay 最终提交按钮。';
+      document.getElementById('__cross_border_local_revision_guard')?.remove();
       const reason=/(?:lstng|sl)\/error\?reason=([^&]*)/.exec(location.href)?.[1]||'';
       const errorPage={detected:Boolean(reason)||/well, this is embarrassing/i.test(bodyText),reason:(()=>{try{return decodeURIComponent(reason.replace(/%25/g,'%'))}catch{return reason}})()};
       return {url:location.href,login,verification,errorPage,ready:Boolean(titleField),filledFields:[...new Set(filledFields)],skippedFields:[...new Set(skippedFields)],policyPending:[...new Set(policyPending)],warnings,submitButtonDetected};
@@ -2721,8 +2719,7 @@ export class BrowserWorkspace {
         result.warnings.push(`类目属性 ${bad.length} 项未能写入 eBay 页面：${bad.slice(0,6).map(row=>`${row.name}（${row.reason}）`).join('；')}${bad.length>6?' 等':''}；请在页面人工补齐。`)
       }
     }
-    const bannerText=`已从本地版本填写 ${[...new Set(result.filledFields)].length} 项，跳过 ${[...new Set(result.skippedFields)].length} 项；尚未提交。请逐项核对图片、类目、业务政策和费用，再由您点击 eBay 最终提交按钮。`
-    await tab.view.webContents.executeJavaScript(`(()=>{const banner=document.getElementById('__cross_border_local_revision_guard');if(banner)banner.textContent=${JSON.stringify(bannerText)}})()`,true).catch(()=>undefined)
+    await tab.view.webContents.executeJavaScript(`(()=>{document.getElementById('__cross_border_local_revision_guard')?.remove()})()`,true).catch(()=>undefined)
 return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledFields:result.filledFields,skippedFields:result.skippedFields,warnings:[target.note,...policyWarnings,...policyPendingWarnings,...result.warnings],submitButtonDetected:result.submitButtonDetected,preparedAt:new Date().toISOString()}
   }
 
@@ -2749,7 +2746,7 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
       const specificFields=allFields.filter(field=>/attributes/i.test((field.name||'')+' '+(field.id||'')));
       for(const field of specificFields){const label=labelFor(field);if(!label||label.length>120||/title|标题|description|描述|price|价格|quantity|数量|sku/i.test(label))continue;const normalized=label.replace(/\*|required|必填/ig,'').replace(/[:：]$/,'').trim();const options=field.tagName==='SELECT'?[...field.options].map(item=>clean(item.textContent)).filter(Boolean).slice(0,80):[];const required=Boolean(field.required||field.getAttribute('aria-required')==='true'||/\[ESSENTIAL\]/i.test(field.id||'')||/\*|required|必填/i.test(label));const current=clean(field.value||field.textContent);if(required||options.length||desired.has(normalized.toLowerCase())){categorySpecifics.push({name:normalized,required,value:current,options,source:'SELLER_HUB'});const value=desired.get(normalized.toLowerCase());if(value&&visible(field)&&setValue(field,value))filledFields.push('属性：'+normalized)}}
       const actions=[...document.querySelectorAll('button,input[type="submit"],a[role="button"]')].filter(visible);const submitButtonDetected=actions.some(node=>/^(submit|publish|list it|revise it|update listing|save changes|modify|提交|发布|修改|确认修改|更新刊登)/i.test(clean(node.textContent||node.value||node.getAttribute('aria-label'))));
-      let banner=document.getElementById('__cross_border_publish_guard');if(!banner){banner=document.createElement('div');banner.id='__cross_border_publish_guard';banner.style.cssText='position:fixed;z-index:2147483647;left:20px;right:20px;bottom:20px;padding:14px 18px;border:2px solid #12a9a3;border-radius:12px;background:#e8faf8;color:#075b57;font:700 14px/20px system-ui;box-shadow:0 8px 30px rgba(0,0,0,.18)';document.body.appendChild(banner)}banner.textContent='第五步：已统一预填 '+filledFields.length+' 项确认资料，尚未提交。图片、价格、库存和业务政策保留线上原值，请人工核对全部资料后再点击 eBay 最终提交按钮。';
+      document.getElementById('__cross_border_publish_guard')?.remove();
       const warnings=[];if(!titleField)warnings.push('未识别标题输入框');if(!descriptionField)warnings.push('未识别描述输入框，可能位于独立编辑器');if(!submitButtonDetected)warnings.push('尚未识别最终提交按钮，请确认页面已完整加载');warnings.push('图片、价格、库存和业务政策保留 Seller Hub 线上原值，最终提交前需人工核对');
       return {url:location.href,login,verification,ready:Boolean(titleField&&descriptionField&&submitButtonDetected),categorySpecifics,filledFields:[...new Set(filledFields)],warnings,submitButtonDetected};
     })()`
@@ -2779,7 +2776,7 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
       let input=document.querySelector(selector);
       if(!input){const action=[...document.querySelectorAll('button,[role="button"],a')].find(node=>visible(node)&&/^(add video|upload video|video|添加视频|上传视频)$/i.test(clean(node.textContent||node.getAttribute('aria-label'))));if(action)action.click()}
       input=document.querySelector(selector);
-      let banner=document.getElementById('__cross_border_publish_guard');if(!banner){banner=document.createElement('div');banner.id='__cross_border_publish_guard';banner.style.cssText='position:fixed;z-index:2147483647;left:20px;right:20px;bottom:20px;padding:14px 18px;border:2px solid #12a9a3;border-radius:12px;background:#e8faf8;color:#075b57;font:700 14px/20px system-ui;box-shadow:0 8px 30px rgba(0,0,0,.18)';document.body.appendChild(banner)}banner.textContent=input?'砚都助手已定位视频上传控件，正在选择本地视频；尚未提交。':'尚未识别 eBay 视频上传控件。视频文件已生成，请在本页人工选择；系统不会点击最终提交。';
+      document.getElementById('__cross_border_publish_guard')?.remove();
       return {url:location.href,login,verification,fileInputDetected:Boolean(input)};
     })()`
     let state:{url:string;login:boolean;verification:boolean;fileInputDetected:boolean}={url:view.webContents.getURL(),login:false,verification:false,fileInputDetected:false}
@@ -2801,7 +2798,7 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
       await debuggerApi.sendCommand('DOM.setFileInputFiles',{nodeId:selected.nodeId,files:[videoPath]})
       await this.sleep(1000)
       const processing=await view.webContents.executeJavaScript(`(()=>/正在审查|processing|reviewing|uploading|正在上传/i.test(document.body?.innerText||''))()`,true) as boolean
-      await view.webContents.executeJavaScript(`(()=>{const banner=document.getElementById('__cross_border_publish_guard');if(banner)banner.textContent='砚都助手已选择本地视频文件，eBay ${processing?'已开始审查':'可能正在上传或处理'}；尚未提交。请人工检查视频状态，再由您点击最终提交按钮。'})()`,true)
+      await view.webContents.executeJavaScript(`(()=>{document.getElementById('__cross_border_publish_guard')?.remove()})()`,true).catch(()=>undefined)
       return {status:'FILE_SELECTED',reviseUrl:state.url,fileInputDetected:true,preparedAt:new Date().toISOString(),message:`已选择本地视频文件，eBay ${processing?'已开始审查':'可能正在上传或处理'}；尚未提交，请人工确认处理结果`}
     } catch(error) {
       return {status:'MANUAL_SELECTION_REQUIRED',reviseUrl:state.url,fileInputDetected:true,preparedAt:new Date().toISOString(),message:`已定位视频区域，但自动选择文件失败：${error instanceof Error?error.message:'未知错误'}；请人工选择，系统未提交`}
