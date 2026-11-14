@@ -454,3 +454,19 @@ button.ebay-market-card-media { width:100%; border:0; cursor:pointer; font:inher
 .ebay-workbench-info .ebay-download-toast b{font-size:11px;line-height:16px}
 .ebay-workbench-info .ebay-success-notice,.ebay-workbench-info .ebay-error-notice{align-items:flex-start;font-size:10px;line-height:16px;margin-top:0}
 .ebay-workbench-info .ebay-auto-login-banner{margin-top:0}
+
+/* C 现状精修（2026-11-14 用户拍板）：不动布局，修浏览器外壳可读性与一致性。
+   字号 7–8px→12px；地址栏控件统一 32px 高；间距 4/8/12/16 scale；补 focus-visible；页签溢出两端渐隐。 */
+.ebay-browser-tabs button{font-size:12px;font-weight:600;gap:8px;padding:0 12px}
+.ebay-browser-tabs .tab-scroll{mask-image:linear-gradient(90deg,transparent 0,#000 12px,#000 calc(100% - 12px),transparent 100%);scroll-padding:0 12px}
+.ebay-address-bar{gap:8px;padding:0 8px}
+.ebay-browser-panel .ebay-address-bar.address-bar button{height:32px;min-height:32px;font-size:12px;border-radius:8px}
+.ebay-browser-panel .ebay-address-bar.address-bar input{height:32px;min-height:32px;font-size:12px;border-radius:8px}
+.ebay-address-bar .translation-trigger{height:32px;min-height:32px;font-size:12px}
+.ebay-address-bar .built-in-collector-trigger{height:32px;min-height:32px;font-size:12px}
+.ie-browser-page .ebay-address-bar .built-in-collector-trigger.address-extra-btn{height:32px;min-height:32px;font-size:12px}
+.ie-browser-page .ebay-address-bar .browser-translation.address-extra-btn .translation-trigger{height:32px;min-height:32px;font-size:12px}
+.tabs .run-state{font-size:12px;height:24px;gap:4px;padding:0 8px}
+.ebay-browser-tabs button:focus-visible,.ebay-address-bar button:focus-visible,.ebay-address-bar input:focus-visible{outline:none;box-shadow:0 0 0 2px #fff,0 0 0 4px var(--yd-content-brand-bright,#08766d)}
+.browser-heading-actions .translation-trigger{height:32px;min-height:32px;font-size:12px}
+.browser-heading-actions .ebay-fill-actions button{height:32px;min-height:32px;font-size:12px}
