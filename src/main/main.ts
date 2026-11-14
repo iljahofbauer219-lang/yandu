@@ -2447,7 +2447,7 @@ ipcMain.handle('window:maximize-toggle', () => {
 })
 ipcMain.handle('window:close', () => { mainWindow?.close() })
 ipcMain.handle('window:is-maximized', () => mainWindow?.isMaximized() ?? false)
-ipcMain.handle('browser:new-tab', () => workspace?.newTab())
+ipcMain.handle('browser:new-tab', (_event, platform?: 'ie' | 'web') => workspace?.newTab(platform === 'ie' ? 'ie' : 'web'))
 ipcMain.handle('browser:switch-tab', (_event, tabId: string) => workspace?.switchTab(tabId))
 ipcMain.handle('browser:close-tab', (_event, tabId: string) => workspace?.closeTab(tabId))
 ipcMain.handle('browser:1688-search-url', (_event, keyword: string) => {

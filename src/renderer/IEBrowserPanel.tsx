@@ -40,7 +40,7 @@ export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browse
 
   useEffect(() => {
     const unsubscribe = window.desktop.browser.onState((next) => {
-      if (next.platform === 'web') {
+      if (next.platform === 'ie') {
         setBrowserState(next)
         setAddress(next.url)
       }
@@ -51,7 +51,7 @@ export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browse
   }, [])
 
   useEffect(() => {
-    const unsubscribe = window.desktop.browser.onTabs((next) => setTabs(next.filter((tab) => tab.platform === 'web' && !tab.scopeId)))
+    const unsubscribe = window.desktop.browser.onTabs((next) => setTabs(next.filter((tab) => tab.platform === 'ie' && !tab.scopeId)))
     // 自愈：订阅完成后请主进程确保通用 web tab 存在（没有则建默认 nav 站点，已有则补推一次快照）。
     // 覆盖冷启动钩子失效、切到 eBay/1688 栏目被 closeDetailTabs 清空等场景；
     // 主进程 openDefaultNavIfNeeded 幂等 + 并发去重，StrictMode 双 mount 不会重复建 tab。
@@ -99,9 +99,9 @@ export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browse
     update()
     // 通知 BrowserWorkspace：用户进入 web 浏览器区域，触发 attachView。
     // 必须在 update() 之后调用，否则 attachView 拿不到有效 bounds。
-    // 冷启动瞬间 tab 可能尚未建成，get('web') 会抛“通用网页标签不存在”——
+    // 冷启动瞬间 tab 可能尚未建成，get('ie') 会抛“通用网页标签不存在”——
     // 此处容忍失败，ensureDefaultNav 建成 tab 后 tabs.length 变化会重跑本 effect 再 show。
-    void window.desktop.browser.show('web').catch(() => undefined)
+    void window.desktop.browser.show('ie').catch(() => undefined)
     const observer = new ResizeObserver(update)
     if (slotRef.current) observer.observe(slotRef.current)
     window.addEventListener('resize', update)
@@ -127,15 +127,15 @@ export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browse
     try {
       // 首次访问：当前没有 web 标签页时自动建一个，避免 navigate 抛 “通用网页标签不存在”
       if (tabs.length === 0) {
-        await window.desktop.browser.newTab()
+        await window.desktop.browser.newTab('ie')
         // 等待主进程 emit 推送新 tab（跨 IPC + React 渲染需要几十毫秒）
         await new Promise((resolve) => window.setTimeout(resolve, 120))
       }
-      // 强制调一次 show('web')：确保 attachView 被触发，把 view 实际加进 BrowserWindow。
+      // 强制调一次 show('ie')：确保 attachView 被触发，把 view 实际加进 BrowserWindow。
       // attachView 内部受 browserVisible 保护，必须 show 才会 addChildView。
       // show 在有 web tab 时是幂等的，可安全重复调。
-      await window.desktop.browser.show('web')
-      await window.desktop.browser.navigate('web', target.toString())
+      await window.desktop.browser.show('ie')
+      await window.desktop.browser.navigate('ie', target.toString())
     } catch (reason) {
       window.alert(`打开网页失败：${reason instanceof Error ? reason.message : String(reason)}`)
     }
@@ -143,9 +143,9 @@ export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browse
 
   const createTab = async () => {
     try {
-      await window.desktop.browser.newTab()
+      await window.desktop.browser.newTab('ie')
       // 强制触发 attachView，让新 tab 的 view 实际可见
-      await window.desktop.browser.show('web')
+      await window.desktop.browser.show('ie')
     } catch (reason) {
       window.alert(`新建标签失败：${reason instanceof Error ? reason.message : String(reason)}`)
     }
@@ -154,9 +154,9 @@ export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browse
   const activateTab = async (tab: BrowserTab) => {
     try {
       // 强制触发 attachView，确保切换标签后 view 可见
-      await window.desktop.browser.show('web')
+      await window.desktop.browser.show('ie')
       await window.desktop.browser.switchTab(tab.id)
-      const next = await window.desktop.browser.getState('web')
+      const next = await window.desktop.browser.getState('ie')
       setBrowserState(next)
       if (next) setAddress(next.url)
     } catch (reason) {
@@ -233,11 +233,11 @@ export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browse
       try {
         await new Promise((resolve) => window.setTimeout(resolve, 80))
         if (cancelled) return
-        await window.desktop.browser.newTab()
+        await window.desktop.browser.newTab('ie')
         await new Promise((resolve) => window.setTimeout(resolve, 80))
         if (cancelled) return
-        await window.desktop.browser.show('web')
-        await window.desktop.browser.navigate('web', 'about:blank')
+        await window.desktop.browser.show('ie')
+        await window.desktop.browser.navigate('ie', 'about:blank')
       } catch (reason) {
         if (!cancelled) console.warn('IE浏览空白占位标签创建失败：', reason)
       }
@@ -318,7 +318,7 @@ export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browse
             type="button"
             title="后退"
             disabled={!browserState?.canGoBack}
-            onClick={() => void window.desktop.browser.back('web')}
+            onClick={() => void window.desktop.browser.back('ie')}
           >
             ←
           </button>
@@ -326,11 +326,11 @@ export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browse
             type="button"
             title="前进"
             disabled={!browserState?.canGoForward}
-            onClick={() => void window.desktop.browser.forward('web')}
+            onClick={() => void window.desktop.browser.forward('ie')}
           >
             →
           </button>
-          <button type="button" title="刷新" onClick={() => void window.desktop.browser.reload('web')}>
+          <button type="button" title="刷新" onClick={() => void window.desktop.browser.reload('ie')}>
             ↻
           </button>
           <input aria-label="网页地址" placeholder="输入网址并访问（首次访问会自动新建标签）" value={address} onChange={(event) => setAddress(event.target.value)} />

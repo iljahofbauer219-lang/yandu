@@ -132,7 +132,8 @@ export interface SupplyProductPageSnapshot {
 const HOME: Record<Platform, string> = {
   ozon: 'https://www.ozon.ru/',
   '1688': 'https://www.1688.com/',
-  web: 'about:blank'
+  web: 'about:blank',
+  ie: 'about:blank'
 }
 
 /** 页面向只读诊断账本：回答「这次采集失败是渲染崩了、页面挂死、加载被拒还是脚本报错」。 */
@@ -299,7 +300,7 @@ export class BrowserWorkspace {
   }
 
   private createView(platform: Platform, initialLoad = true) {
-    if (platform === 'web') throw new Error('通用网页必须通过新标签页创建')
+    if (platform === 'web' || platform === 'ie') throw new Error('通用网页必须通过新标签页创建')
     const view = new WebContentsView({
       webPreferences: {
         partition: platform === 'ozon' ? this.marketplacePartition : `persist:supply:${this.supplyPlatformCode}:default`,
@@ -3606,7 +3607,7 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     try {
       const { protocol, hostname } = new URL(rawUrl)
       if (!['http:', 'https:'].includes(protocol)) return false
-      if (platform === 'web') return true
+      if (platform === 'web' || platform === 'ie') return true
       return platform === 'ozon'
         ? this.marketplaceDomains.some(domain => hostname === domain || hostname.endsWith(`.${domain}`))
         : [
@@ -3620,12 +3621,17 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     }
   }
 
-  show(platform: Platform) {
+  async show(platform: Platform) {
     this.browserVisible = true
+    // 采集工作台/文章采集复用 'web' 罐：IE浏览 迁到独立 'ie' 后不再替它们持有页签，缺页签时自建空白页
+    if (platform === 'web' && ![...this.detailTabs.values()].some(item => item.platform === 'web')) {
+      await this.newTab('web')
+      return
+    }
     const view = this.get(platform)
     this.attachView(view)
     this.active = platform
-    if (platform === 'web') {
+    if (platform === 'web' || platform === 'ie') {
       const tab = [...this.detailTabs.values()].find(item => item.view === view)
       if (tab) this.activeTabId = tab.id
     } else {
@@ -3657,12 +3663,12 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
 
   navigate(platform: Platform, rawUrl: string) {
     const url = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`
-    const currentTab=platform==='web'?this.detailTabs.get(this.activeTabId):undefined
+    const currentTab=platform==='web'||platform==='ie'?this.detailTabs.get(this.activeTabId):undefined
     const isAllowed=(target:string)=>currentTab?.domains?.length
       ? (()=>{try{const parsed=new URL(target);return parsed.protocol==='https:'&&currentTab.domains!.some(domain=>parsed.hostname===domain||parsed.hostname.endsWith(`.${domain}`))}catch{return false}})()
       : this.isAllowedUrl(platform,target)
     if (!isAllowed(url)) throw new Error('当前标签只允许访问对应平台域名')
-    if (platform === 'web') {
+    if (platform === 'web' || platform === 'ie') {
       const tab = this.detailTabs.get(this.activeTabId)
       if (tab?.generic) {
         try { tab.title = new URL(url).hostname.replace(/^www\./, '') || '新标签页' } catch { tab.title = '新标签页' }
@@ -3697,6 +3703,8 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
   private partitionForTab(platform: Platform, url: string): string {
     if (platform === 'ozon') return this.marketplacePartition
     if (platform === '1688') return 'persist:supply:1688:default'
+    // IE浏览 独立 cookie 罐：与 AI跨境 店铺会话(persist:login:*)、采集通用罐(persist:web-general)互不相通
+    if (platform === 'ie') return 'persist:ie-browser:default'
     if (platform === 'web') {
       try {
         const host = new URL(url).hostname
@@ -3740,7 +3748,7 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
       view.webContents.setUserAgent(cleanUserAgent)
     }
 
-    const tab: DetailTab = { id, platform, title: initialTitle || (platform === 'ozon' ? 'Ozon 详情' : platform === 'web' ? '新标签页' : '1688 搜款'), view, generic: platform === 'web' }
+    const tab: DetailTab = { id, platform, title: initialTitle || (platform === 'ozon' ? 'Ozon 详情' : platform === 'web' || platform === 'ie' ? '新标签页' : '1688 搜款'), view, generic: platform === 'web' || platform === 'ie' }
     this.detailTabs.set(id, tab)
     view.webContents.setWindowOpenHandler(({ url: nextUrl }) => {
       if (this.isAllowedUrl(platform, nextUrl)) void this.openTab(platform, nextUrl)
@@ -3795,34 +3803,34 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
   }
 
   private async doOpenDefaultNavIfNeeded(url: string): Promise<string | null> {
-    const genericWebTabs = [...this.detailTabs.values()].filter(tab => tab.platform === 'web' && !tab.scopeId)
+    const genericWebTabs = [...this.detailTabs.values()].filter(tab => tab.platform === 'ie' && !tab.scopeId)
     if (genericWebTabs.length > 0) {
       // 已有 tab：补推一次快照，让刚挂载订阅的面板立即拿到 tab 列表
       this.emitTabs()
       return genericWebTabs[0].id
     }
     try {
-      return await this.openTab('web', url, '跨境导航')
+      return await this.openTab('ie', url, '跨境导航')
     } catch (reason) {
       console.warn('[BrowserWorkspace] 自动打开默认 nav 站点失败：', reason instanceof Error ? reason.message : String(reason))
       return null
     }
   }
 
-  async newTab() {
+  async newTab(platform: 'web' | 'ie' = 'web') {
     if (this.visibleTabCount() >= 8) throw new Error('最多同时打开8个浏览标签，请先关闭不需要的标签')
     const id = crypto.randomUUID()
-    const view = new WebContentsView({ webPreferences: { partition: 'persist:web-general', nodeIntegration: false, contextIsolation: true, sandbox: true } })
+    const view = new WebContentsView({ webPreferences: { partition: platform === 'ie' ? 'persist:ie-browser:default' : 'persist:web-general', nodeIntegration: false, contextIsolation: true, sandbox: true } })
     view.setBackgroundColor('#ffffff')
     view.webContents.setUserAgent(view.webContents.getUserAgent().replace(/\sElectron\/[^\s]+/g, '').replace(/\scross-border-sourcing-desktop\/[^\s]+/g, ''))
-    const tab: DetailTab = { id, platform: 'web', title: '新标签页', view, generic: true }
+    const tab: DetailTab = { id, platform, title: '新标签页', view, generic: true }
     this.detailTabs.set(id, tab)
     view.webContents.setWindowOpenHandler(({ url: nextUrl }) => {
-      if (this.isAllowedUrl('web', nextUrl)) void this.openTab('web', nextUrl)
+      if (this.isAllowedUrl(platform, nextUrl)) void this.openTab(platform, nextUrl)
       return { action: 'deny' }
     })
-    view.webContents.on('will-navigate', (event, url) => { if (!this.isAllowedUrl('web', url)) event.preventDefault() })
-    const emit = () => { if (this.activeTabId === id) this.emitState('web'); this.emitTabs() }
+    view.webContents.on('will-navigate', (event, url) => { if (!this.isAllowedUrl(platform, url)) event.preventDefault() })
+    const emit = () => { if (this.activeTabId === id) this.emitState(platform); this.emitTabs() }
     view.webContents.on('did-navigate', (_event, url) => {
       if (url !== 'about:blank' && tab.title === '新标签页') {
         try { tab.title = new URL(url).hostname.replace(/^www\./, '') || tab.title } catch { /* 保留现有标题 */ }
@@ -3830,15 +3838,15 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
       emit()
     })
     view.webContents.on('did-navigate-in-page', () => { emit(); if (this.builtInCollectorActive) void this.injectBuiltInCollector(view).catch(() => undefined) })
-    view.webContents.on('did-start-loading', () => this.emitState('web'))
+    view.webContents.on('did-start-loading', () => this.emitState(platform))
     view.webContents.on('dom-ready', () => { if (this.builtInCollectorActive) void this.injectBuiltInCollector(view).catch(() => undefined) })
     view.webContents.on('did-stop-loading', () => { emit(); if (this.builtInCollectorActive) void this.injectBuiltInCollector(view).catch(() => undefined) })
     view.webContents.on('page-title-updated', (_event, title) => { tab.title = title || tab.title; emit() })
-    this.active = 'web'
+    this.active = platform
     this.activeTabId = id
     this.attachView(view)
     await view.webContents.loadURL('about:blank')
-    this.emitState('web')
+    this.emitState(platform)
     this.emitTabs()
     return id
   }
@@ -4240,10 +4248,10 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
   }
 
   private get(platform: Platform) {
-    if (platform === 'web') {
+    if (platform === 'web' || platform === 'ie') {
       const activeTab = this.detailTabs.get(this.activeTabId)
-      if (activeTab?.platform === 'web') return activeTab.view
-      const tab = [...this.detailTabs.values()].find(item => item.platform === 'web')
+      if (activeTab?.platform === platform) return activeTab.view
+      const tab = [...this.detailTabs.values()].find(item => item.platform === platform)
       if (tab) return tab.view
       throw new Error('通用网页标签不存在')
     }

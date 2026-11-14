@@ -276,7 +276,7 @@ contextBridge.exposeInMainWorld('desktop', {
     openSupply: (platformCode: '1688' | 'GIGACLOUD', url: string): Promise<string> => ipcRenderer.invoke('browser:supply:open', platformCode, url),
     openTab: (platform: Platform, url: string, title?: string) => ipcRenderer.invoke('browser:open-tab', platform, url, title),
     ensureDefaultNav: () => ipcRenderer.invoke('browser:ensure-default-nav'),
-    newTab: () => ipcRenderer.invoke('browser:new-tab'),
+    newTab: (platform?: 'ie' | 'web') => ipcRenderer.invoke('browser:new-tab', platform),
     switchTab: (tabId: string) => ipcRenderer.invoke('browser:switch-tab', tabId),
     closeTab: (tabId: string) => ipcRenderer.invoke('browser:close-tab', tabId),
     create1688SearchUrl: (keyword: string): Promise<string> => ipcRenderer.invoke('browser:1688-search-url', keyword),

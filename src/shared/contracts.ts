@@ -1,7 +1,7 @@
 import type { SemanticFallbackMark } from './semanticFallback'
 import type { EbayItemSpecificsSection, EbaySuggestedSpecificsCard } from './ebayItemSpecificsModel'
 
-export type Platform = 'ozon' | '1688' | 'web'
+export type Platform = 'ozon' | '1688' | 'web' | 'ie'
 export type SelectionMode = 'FORWARD_SUPPLY' | 'REVERSE_MARKET'
 export type SupplyPlatformCode = '1688' | 'TAOBAO' | 'TMALL' | 'JD' | 'PINDUODUO' | 'DOUYIN' | 'XIAOHONGSHU' | 'KUAISHOU' | 'GIGACLOUD' | 'YIWUGO' | 'CUSTOM'
 export type CollectionMethod = 'KEYWORD' | 'PRODUCT_URL' | 'CATEGORY_URL'

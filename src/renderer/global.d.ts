@@ -229,7 +229,7 @@ declare global {
         openTab(platform: Platform, url: string, title?: string): Promise<string>
         /** IE 浏览挂载自愈：无通用 web tab 则建默认 nav 站点，已有则补推 tab 快照；返回 tab id 或 null */
         ensureDefaultNav(): Promise<string | null>
-        newTab(): Promise<string>
+        newTab(platform?: 'ie' | 'web'): Promise<string>
         switchTab(tabId: string): Promise<void>
         closeTab(tabId: string): Promise<void>
         create1688SearchUrl(keyword: string): Promise<string>
