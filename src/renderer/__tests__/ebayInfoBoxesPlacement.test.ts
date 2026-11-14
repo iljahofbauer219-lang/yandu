@@ -38,13 +38,10 @@ describe('信息框归位左栏 · 渲染点守卫', () => {
     expect(appSource.split('className="ebay-workbench-info"').length - 1).toBe(5)
   })
 
-  it('折叠或无左栏时回落顶部，信息不丢', () => {
-    expect(appSource).toContain('{!ebayInfoInAside&&ebayInfoBoxes}')
-    const start = appSource.indexOf('const ebayInfoInAside=')
-    const body = appSource.slice(start, appSource.indexOf('\n', appSource.indexOf(')', appSource.indexOf('lockTitleMode', start))))
-    expect(body).toContain('ebayWorkbenchPanel.collapsed')
-    expect(body).toContain('ebayCatalogPanel.collapsed')
-    expect(body).toContain('lockTitleMode')
+  it('顶部一律不再渲染信息框：回落渲染必须不存在（2026-11-14 用户拍板）', () => {
+    expect(appSource).not.toContain('{!ebayInfoInAside&&ebayInfoBoxes}')
+    expect(appSource.split('{ebayInfoBoxes}').length - 1).toBe(5)
+    expect(appSource).not.toMatch(/ebay-workspace[^\n]*>\s*\{ebayInfoBoxes\}/)
   })
 })
 
