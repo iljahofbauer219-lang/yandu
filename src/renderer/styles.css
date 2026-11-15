@@ -874,3 +874,21 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .yd-page-frame { display:contents; }
 .yd-page-frame.yd-page-frame-hidden { display:none; }
 .warehouse-region-select select { padding:4px 6px; border:1px solid var(--erp-border, #e5e7eb); border-radius:8px; background:#fff; font-size:12px; }
+/* 本地定时发布列表（2026-11-15）：彩色扁平对齐列 */
+.ebay-scheduled-publish{margin:14px 0 0;padding:12px;border:1px solid #dce4e5;border-radius:12px;background:#f8fafb}
+.ebay-scheduled-publish>header{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.ebay-scheduled-publish>header b{font-size:13px;color:var(--yd-content-brand-ink,#0f766e)}
+.ebay-scheduled-publish>header small{color:#788582;font-size:10px}
+.ebay-scheduled-row{display:grid;grid-template-columns:56px minmax(0,1fr) auto auto auto auto auto;gap:8px;align-items:center;padding:8px;margin-bottom:6px;background:#fff;border:1px solid #e2e8e8;border-radius:10px}
+.ebay-scheduled-row img,.ebay-scheduled-noimg{width:56px;height:56px;object-fit:contain;border-radius:8px;background:#f1f4f4;display:grid;place-items:center;color:#9aa4a2;font-size:9px}
+.ebay-scheduled-title{min-width:0;display:grid;gap:2px}
+.ebay-scheduled-title b{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ebay-scheduled-title small{color:#788582;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ebay-scheduled-row>button{height:30px;padding:0 10px;border:1px solid #62d0ca;border-radius:8px;background:var(--yd-content-brand-wash,#f0faf9);color:var(--yd-content-brand-ink,#0f766e);font-size:10px;font-weight:700;cursor:pointer}
+.ebay-scheduled-row>button.primary{background:var(--tiffany,#14b8a6);border-color:var(--tiffany,#14b8a6);color:#fff}
+.ebay-scheduled-row>button:disabled{opacity:.45;cursor:not-allowed}
+.ebay-scheduled-time{display:grid;gap:2px}
+.ebay-scheduled-time span{color:#788582;font-size:9px}
+.ebay-scheduled-time input{height:28px;padding:0 6px;border:1px solid #cfd8d9;border-radius:7px;font-size:10px}
+.ebay-scheduled-time input:disabled{opacity:.5}
+.ebay-scheduled-empty{margin:0;color:#788582;font-size:11px}

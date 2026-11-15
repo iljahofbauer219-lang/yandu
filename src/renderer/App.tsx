@@ -63,6 +63,7 @@ import { EliminateReasonDialog } from './EliminateReasonDialog'
 import { FactsGateDialog } from './FactsGateDialog'
 import { describeTranslateError, isBailianKeyMissing } from './translateError'
 import { readScopedItem, scopedStorageKey, writeScopedItem } from './scopedStorage'
+import { normalizeScheduledPublish, toggleScheduledPublish, dueScheduledPublish, type EbayScheduledPublishMap } from '../shared/ebayScheduledPublish'
 import WindowTitleControls from './WindowTitleControls'
 import { IEBrowserPanel } from './IEBrowserPanel'
 import { ResearchPanel, ShortlistPanel } from './EbayResearchPanels'
@@ -4299,6 +4300,16 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   }
   const setLocalCategory=async(categoryId:string,categoryName:string,productId=localEditorProductId)=>{if(!productId)return;setEbayError('');try{const product=await window.desktop.ebay.setLocalCategory(productId,categoryId,categoryName);setLocalProducts(current=>[product,...current.filter(item=>item.id!==product.id)]);setPublishEditorProduct(current=>current&&current.id===product.id?product:current);setNotice(`本地产品类目已更新为『${categoryName||'未分类'}』。`)}catch(reason){setEbayError(readableError(reason,'更新本地产品类目失败'))}}
   const autoClassifyLocal=async(productId=localEditorProductId)=>{if(!productId)return;setEbayError('');setBusy(`local-classify:${productId}`);try{const result=await window.desktop.ebay.autoClassifyLocal(productId);if(result.categoryId){const written=await window.desktop.ebay.setLocalCategory(productId,result.categoryId,result.categoryName);setLocalProducts(current=>[written,...current.filter(item=>item.id!==written.id)]);setPublishEditorProduct(current=>current&&current.id===written.id?written:current);setNotice(`已自动归入『${result.categoryName}』。`)}else{setEbayError(result.reason||'未匹配到合适类目，请在类目下拉中手工选择。')}}catch(reason){setEbayError(readableError(reason,'自动分类失败'))}finally{setBusy('')}}
+  // 本地定时发布：每商品 {enabled,at} 调度记录，按店铺持久化；到点自动 prepare+auto 填写（不点最终提交）。
+  const [scheduledPublish,setScheduledPublish]=useState<EbayScheduledPublishMap>({})
+  const scheduledPublishRef=useRef(scheduledPublish)
+  scheduledPublishRef.current=scheduledPublish
+  const scheduledRunning=useRef<Record<string,boolean>>({})
+  useEffect(()=>{if(!activeStore){setScheduledPublish({});return}try{setScheduledPublish(normalizeScheduledPublish(JSON.parse(readScopedItem(localStorage,scopedStorageKey('ebay-scheduled-publish:v1',activeStore.id))||'null')))}catch{setScheduledPublish({})}},[activeStore?.id])
+  const writeScheduledPublish=(next:EbayScheduledPublishMap)=>{setScheduledPublish(next);if(activeStore)writeScopedItem(localStorage,scopedStorageKey('ebay-scheduled-publish:v1',activeStore.id),JSON.stringify(next))}
+  const openPublishVersion=(product:EbayLocalProduct)=>{setPublishEditorDraftId(product.id);publishEditorSession.current=`local:${product.id}`;setPublishEditorProduct(product);setPublishEditorDraft({...ebayLocalProductFormSeed(product),title:product.title,descriptionText:product.snapshot.details.descriptionText||'',descriptionHtml:product.snapshot.details.descriptionHtml||'',price:product.snapshot.details.price||'0',currency:product.snapshot.details.currency||'USD',media:product.snapshot.media});setActiveTab('publish')}
+  const manualPublishLocal=async(product:EbayLocalProduct)=>{setBusy(`sched-manual:${product.id}`);setEbayError('');setActiveTab('browser');try{await new Promise(resolve=>window.setTimeout(resolve,900));await window.desktop.ebay.prepareLocalProductRevision(product.id);setNotice(`已打开 Seller Hub 并统一预填（${product.title.slice(0,40)}）。系统没有点击最终提交按钮。`)}catch(reason){setEbayError(readableError(reason,'手动发布准备失败'))}finally{setBusy('')}}
+  useEffect(()=>{const timer=window.setInterval(()=>{const due=dueScheduledPublish(scheduledPublishRef.current,new Date().toISOString());due.forEach(id=>{if(scheduledRunning.current[id])return;const product=localProducts.find(item=>item.id===id);if(!product)return;scheduledRunning.current[id]=true;void (async()=>{try{await window.desktop.ebay.prepareLocalProductRevision(id);await window.desktop.ebay.fillCurrentTab(id,'auto',undefined);setNotice(`定时发布已执行：${product.title.slice(0,40)}（预填+自动填写），未点最终提交。`)}catch(reason){setEbayError(readableError(reason,'定时发布执行失败'))}finally{scheduledRunning.current[id]=false;writeScheduledPublish({...scheduledPublishRef.current,[id]:{enabled:false,at:scheduledPublishRef.current[id]?.at||''}})}})()})},15000);return()=>window.clearInterval(timer)},[localProducts])
   const refreshLocalProduct=(updated:EbayLocalProduct)=>setLocalProducts(current=>[updated,...current.filter(item=>item.id!==updated.id)])
   const overlayPlatformCategory=useEbayPlatformCategory({product:localEditorProduct??null,onUpdated:refreshLocalProduct,notify:setNotice,fail:message=>setEbayError(message)})
   const inlinePlatformCategory=useEbayPlatformCategory({product:publishEditorProduct,onUpdated:refreshLocalProduct,notify:setNotice,fail:message=>setEbayError(message)})
@@ -5301,7 +5312,20 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
               {!ready&&<button onClick={()=>{setSelectedListingId(draft.listing.id);setSelectedLocalProductId(localProducts.find(product=>product.listingId===draft.listing.listingId)?.id||'');setTitleResult({originalTitle:draft.listing.title,optimizedTitle:draft.selectedTitle,keywords:[],rationale:'从发布阶段返回完善',model:'saved',variants:draft.titleVariants,itemSpecifics:draft.itemSpecifics,description:draft.description});setSelectedTitle(draft.selectedTitle);setImageCandidateReviews({});setAcceptedGeneratedImages({});setComplianceReviewed(Boolean(draft.complianceReviewedAt));setOptimizeMode('image');setActiveTab('optimize')}}>返回完善</button>}
             </div>
           </article>
-        })}</div>:<EbayEmpty title="暂无待发布版本" description="请先在AI优化中完成内容与合规检查，再保存到优品仓库。" action="查看优品仓库" onAction={()=>setActiveTab('premium')}/>}</>}
+        })}</div>:<EbayEmpty title="暂无待发布版本" description="请先在AI优化中完成内容与合规检查，再保存到优品仓库。" action="查看优品仓库" onAction={()=>setActiveTab('premium')}/>}
+        <section className="ebay-scheduled-publish">
+          <header><b>本地定时发布</b><small>产品图 · 英中标题 · 优化版本 · 发布版本 · 手动发布 · 自动发布 · 发布时间</small></header>
+          {localProducts.length?localProducts.map(product=>{const sch=scheduledPublish[product.id]||{enabled:false,at:''};const m=product.snapshot.media.find(item=>item.mediaType==='IMAGE');const img=m?(m.localPath?`cross-media://local/${encodeURIComponent(m.localPath)}`:m.remoteUrl):'';return (
+            <article key={product.id} className="ebay-scheduled-row">
+              {img?<img src={img} alt=""/>:<span className="ebay-scheduled-noimg">无图</span>}
+              <div className="ebay-scheduled-title"><b title={product.title}>{product.title}</b><small>{product.coreTermZh||'—'}</small></div>
+              <button type="button" onClick={()=>void openLocalEditor(product)}>优化版本</button>
+              <button type="button" onClick={()=>openPublishVersion(product)}>发布版本</button>
+              <button type="button" disabled={Boolean(busy)} onClick={()=>void manualPublishLocal(product)}>手动发布</button>
+              <button type="button" className={sch.enabled?'primary':''} onClick={()=>writeScheduledPublish(toggleScheduledPublish(scheduledPublish,product.id,!sch.enabled,sch.at,new Date().toISOString()))}>{sch.enabled?'自动发布·开':'自动发布'}</button>
+              <label className="ebay-scheduled-time"><span>发布时间</span><input type="datetime-local" disabled={!sch.enabled} value={sch.at} onChange={event=>writeScheduledPublish({...scheduledPublish,[product.id]:{enabled:sch.enabled,at:event.target.value}})}/></label>
+            </article>) }):<p className="ebay-scheduled-empty">暂无本地产品；先在「我的货盘」送 eBay 或在本地产品库保存。</p>}
+        </section></>}
       </div>}
     </div>
     {localEditorProduct&&localEditorProduct.snapshot.details.semanticFallback&&<div className="ebay-config-notice"><b>来源标记：{localEditorProduct.snapshot.details.semanticFallback.label}</b><span>{localEditorProduct.snapshot.details.semanticFallback.note}（读取时间 {new Date(localEditorProduct.snapshot.details.semanticFallback.at).toLocaleString('zh-CN')}）</span></div>}
