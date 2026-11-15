@@ -1307,7 +1307,7 @@ export function App() {
   const keepAliveRef = useRef(createKeepAliveRegistry([page]))
   keepAliveRef.current.visit(page)
   const alive = (key: AppPage) => keepAliveRef.current.alive(key)
-  const [ebayEntryTab, setEbayEntryTab] = useState<EbayWorkspaceTab>('browser')
+  const [ebayEntryTab, setEbayEntryTab] = useState<EbayWorkspaceTab|undefined>(undefined)
   // 全局侧面板收起/展开：AI采集工作台左栏（标题栏开关经注册表作用于当前页主面板）
   const collectPanel = usePanelCollapse('collect-workbench', { active: page === 'tasks' })
   const candidatesPanel = usePanelCollapse('candidates-panel', { active: page === 'ozon' })
@@ -3435,14 +3435,30 @@ function hasCurrentEbayTitleVariants(variants:Array<{id:string}>|undefined) {
   return (variants?.length||0)>=currentEbayTitleStrategyIds.length&&currentEbayTitleStrategyIds.every(id=>ids.has(id))
 }
 
+const EBAY_WORKSPACE_TABS:Array<{id:EbayWorkspaceTab;name:string}>=[
+  {id:'browser',name:'店铺采集'},
+  {id:'local',name:'本地产品'},
+  {id:'optimize',name:'AI优化'},
+  {id:'premium',name:'优品仓库'},
+  {id:'publish',name:'线上发布'},
+  {id:'library',name:'线上产品'}
+]
+const ebayWorkspaceTabKey=(workspace:string)=>`ebay-workspace-tab:v1:${workspace}`
+
 function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initialTab,lockTitleMode,browserOnly,workspace='ebay',onOpenMyPallet,onOpenAmazonDataSource,onOpenLlmKeys}:{active:boolean;browserFullscreen:boolean;onBrowserSurface:(next:BrowserSurface|null)=>void;initialTab?:EbayWorkspaceTab;lockTitleMode?:boolean;browserOnly?:boolean;workspace?:string;onOpenMyPallet?:()=>void;onOpenAmazonDataSource?:()=>void;onOpenLlmKeys?:()=>void}) {
-  const [activeTabState,setActiveTab]=useState<EbayWorkspaceTab>(initialTab||'browser')
+  // 顶栏刷新走整窗 reload：子页签读会话存储恢复，停在原页签重拉内容，不回落店铺采集；显式 initialTab（入口跳转）优先
+  const [activeTabState,setActiveTab]=useState<EbayWorkspaceTab>(()=>{
+    if(initialTab)return initialTab
+    try{const saved=sessionStorage.getItem(ebayWorkspaceTabKey(workspace));if(saved&&EBAY_WORKSPACE_TABS.some(tab=>tab.id===saved))return saved as EbayWorkspaceTab}catch{/* ignore */}
+    return 'browser'
+  })
   // browserOnly：搜索采集入口复用本工作台但只保留「店铺采集」，锁定 browser 页签并隐藏页签栏
   const activeTab=browserOnly?'browser':activeTabState
   // 搜索采集独立 7 页签：浏览器=现有工作台+内嵌浏览器，其余仅名称占位（暂不实现功能）
   const [searchTab,setSearchTab]=useState('浏览器')
   const showBrowser=!browserOnly||searchTab==='浏览器'
   useEffect(()=>{if(initialTab)setActiveTab(initialTab)},[initialTab])
+  useEffect(()=>{try{sessionStorage.setItem(ebayWorkspaceTabKey(workspace),activeTabState)}catch{/* ignore quota */}},[activeTabState,workspace])
   const ebayWorkbenchPanel=usePanelCollapse(workspace==='ebay'?'ebay-login-workbench':`ebay-login-workbench:${workspace}`,{active:activeTab==='browser'})
   const ebayCatalogPanel=usePanelCollapse(workspace==='ebay'?'ebay-product-catalog':`ebay-product-catalog:${workspace}`,{active:activeTab==='library'||activeTab==='local'||activeTab==='premium'})
   const [storeScope,setStoreScope]=useState('')
@@ -4853,14 +4869,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   const prepareDraftInSellerHub=async(draft:EbayOptimizationDraft)=>{const key=`publish-prepare:${draft.id}`;setBusy(key);setEbayError('');setActiveTab('browser');try{await new Promise(resolve=>window.setTimeout(resolve,900));const task=await window.desktop.ebay.preparePublishTask(draft.id);setPublishTasks(await window.desktop.ebay.publishTasks(draft.storeId));if(task.status==='WAITING_CONFIRMATION')setNotice(`${task.message}。系统没有点击最终提交按钮。`);else setEbayError(task.message)}catch(reason){setEbayError(readableError(reason,'Seller Hub 发布准备失败'))}finally{setBusy('')}}
   const generateDraftVideo=async(draft:EbayOptimizationDraft)=>{const key=`publish-video:${draft.id}`;setBusy(key);setEbayError('');try{const task=await runWithSessionRetry(token=>window.desktop.ebay.generatePublishVideo(draft.id,token));setPublishTasks(current=>[task,...current.filter(item=>item.id!==task.id)]);setNotice(`${task.video?.message||task.message}，请先完整预览再上传。`)}catch(reason){setEbayError(readableError(reason,'15秒商品视频生成失败'))}finally{setBusy('')}}
   const prepareDraftVideoUpload=async(draft:EbayOptimizationDraft)=>{const key=`publish-video-upload:${draft.id}`;setBusy(key);setEbayError('');setActiveTab('browser');try{await new Promise(resolve=>window.setTimeout(resolve,900));const task=await window.desktop.ebay.preparePublishVideoUpload(draft.id);setPublishTasks(await window.desktop.ebay.publishTasks(draft.storeId));setNotice(`${task.videoUpload?.message||task.message}。系统没有点击最终提交按钮。`)}catch(reason){setEbayError(readableError(reason,'Seller Hub 视频上传准备失败'))}finally{setBusy('')}}
-  const tabs:Array<{id:EbayWorkspaceTab;name:string}>=[
-    {id:'browser',name:'店铺采集'},
-    {id:'local',name:'本地产品'},
-    {id:'optimize',name:'AI优化'},
-    {id:'premium',name:'优品仓库'},
-    {id:'publish',name:'线上发布'},
-    {id:'library',name:'线上产品'}
-  ]
+  const tabs=EBAY_WORKSPACE_TABS
   const draftPublishIssues=(draft:EbayOptimizationDraft)=>[
     !draft.complianceGateStatus?'缺少合规快照':draft.complianceGateStatus==='BLOCKED'||draft.complianceGateStatus==='RECHECK_REQUIRED'?'合规门禁未通过':draft.complianceGateStatus==='REVIEW_REQUIRED'&&!draft.complianceReviewedAt?'待人工复核':'',
     !draft.selectedTitle.trim()?'缺少标题':draft.selectedTitle.length>80?'标题超过80字符':'',
