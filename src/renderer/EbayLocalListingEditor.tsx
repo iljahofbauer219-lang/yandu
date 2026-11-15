@@ -59,21 +59,21 @@ type RouteCopy={prepare:string;preparing:string;gapNote:string;fieldNote:string;
 // 三条路由的页面名不同，「沿用 eBay 线上原值」只在修改页成立：首次刊登页与新建刊登首页根本没有线上原值。
 const ROUTE_COPY:Record<EbayListingRouteKind,RouteCopy>={
   revise:{
-    prepare:'保存并准备到 eBay 修改',
+    prepare:'eBay保存发布',
     preparing:'正在准备 Seller Hub…',
     gapNote:'未在 APP 记录；准备到 Seller Hub 时这些字段沿用 eBay 线上原值，请人工核对。',
     fieldNote:'eBay 发布硬必填。留空的字段在准备 Seller Hub 时不写入，页面沿用线上原值。',
     routeNote:''
   },
   add:{
-    prepare:'保存并准备到 eBay 首次刊登',
+    prepare:'eBay保存发布',
     preparing:'正在准备 eBay 首次刊登页…',
     gapNote:'未在 APP 记录；首次刊登页的政策与所在地由 eBay 自带默认，其余请在页面逐项补齐。',
     fieldNote:'eBay 发布硬必填。首次刊登页由 eBay 逐项索取，留空的请在页面补齐。',
     routeNote:'该商品还没有可修改的 eBay 在架编号，本次按上方「平台类目」选定的类目打开 eBay 首次刊登页。'
   },
   prelist:{
-    prepare:'保存并打开 eBay 新建刊登',
+    prepare:'eBay保存发布',
     preparing:'正在打开 eBay…',
     gapNote:'未在 APP 记录；本次不写入任何字段，全部由您在 eBay 页面填写。',
     fieldNote:'eBay 发布硬必填。本次只打开新建刊登首页，字段全部由您在页面填写。',
@@ -640,7 +640,7 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
         </div>
       </main>
 
-      <footer className="ebay-revise-footer"><span>{errors.length?`还有 ${errors.length} 项必须修改后才能保存`:'保存标题、描述、价格、状况、数量、SKU、类目属性与政策所在地；库存与业务政策仍只在 eBay 页面生效'}</span><button type="button" disabled={saving||preparing} onClick={onClose}>取消</button><button type="button" disabled={saving||preparing||uploading||errors.length>0} onClick={onSave}>{saving?'正在保存…':'保存本地新版本'}</button><button className="primary" type="button" disabled={saving||preparing||uploading||errors.length>0} onClick={onPrepare}>{preparing?route.preparing:route.prepare}</button></footer>
+      <footer className="ebay-revise-footer"><span>{errors.length?`还有 ${errors.length} 项必须修改后才能保存`:'保存标题、描述、价格、状况、数量、SKU、类目属性与政策所在地；库存与业务政策仍只在 eBay 页面生效'}</span><button type="button" disabled={saving||preparing} onClick={onClose}>取消</button><button type="button" disabled={saving||preparing||uploading||errors.length>0} onClick={onSave}>{saving?'正在保存…':'本地定时发布'}</button><button className="primary" type="button" disabled={saving||preparing||uploading||errors.length>0} onClick={onPrepare}>{preparing?route.preparing:route.prepare}</button></footer>
     </div>
   </div></NativeChineseContext.Provider>
 }

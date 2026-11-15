@@ -191,8 +191,10 @@ describe('EbayLocalListingEditor · 开页路由文案', () => {
   const conditionGap={kind:'FIELD' as const,name:'condition',label:'商品状况'}
 
   it('未传路由时保持修改页口径：按钮写「修改」，缺口句仍说沿用 eBay 线上原值', () => {
-    expect(primaryTag()).toContain('保存并准备到 eBay 修改')
+    expect(primaryTag()).toContain('eBay保存发布')
     const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({condition:''}),{gaps:[conditionGap]})}/>)
+    expect(html).toContain('本地定时发布')
+    expect(html).not.toContain('保存本地新版本')
     expect(html).toContain('商品状况 未在 APP 记录')
     expect(html).toContain('沿用 eBay 线上原值')
     expect(html).not.toContain('首次刊登')
@@ -200,15 +202,15 @@ describe('EbayLocalListingEditor · 开页路由文案', () => {
 
   it('首次刊登路由：按钮写「首次刊登」，点名按平台类目开页，且不再谎称沿用线上原值', () => {
     const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf({condition:''}),{gaps:[conditionGap],routeKind:'add'})}/>)
-    expect(primaryTag({routeKind:'add'})).toContain('保存并准备到 eBay 首次刊登')
+    expect(primaryTag({routeKind:'add'})).toContain('eBay保存发布')
     expect(html).toContain('按上方「平台类目」选定的类目打开 eBay 首次刊登页')
     expect(html).not.toContain('沿用 eBay 线上原值')
     expect(html).not.toContain('Seller Hub 修改页')
   })
 
-  it('新建刊登路由：按钮写「新建刊登」，点名先在「平台类目」定类目，且按钮照样能点', () => {
+  it('新建刊登路由：按钮写「eBay保存发布」，点名先在「平台类目」定类目，且按钮照样能点', () => {
     const tag=primaryTag({routeKind:'prelist'})
-    expect(tag).toContain('保存并打开 eBay 新建刊登')
+    expect(tag).toContain('eBay保存发布')
     expect(tag).not.toContain('disabled')
     const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf(),{routeKind:'prelist'})}/>)
     expect(html).toContain('请先在上方「平台类目」确定类目')
