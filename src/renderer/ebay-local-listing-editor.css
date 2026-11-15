@@ -346,3 +346,6 @@ button[data-ebay-slot="section-action"]:disabled{background:#ececec;border-color
 .ebay-revise-shell[data-mode="details"] #ebay-revise-category,
 .ebay-revise-shell[data-mode="details"] #ebay-revise-variations,
 .ebay-revise-shell[data-mode="details"] #ebay-revise-description{display:none}
+/* 2026-11-15 用户拍板删除：运输与所在地/其他刊登选项两段全 mode 不显示（仅隐 UI，draft 字段与保存/填写链路保留）。
+   政策/所在地读取入口随段移除，政策改由 prepare/预设现网读取或页面人工补齐。 */
+.ebay-revise-shell #ebay-revise-policies,.ebay-revise-shell #ebay-revise-others{display:none}

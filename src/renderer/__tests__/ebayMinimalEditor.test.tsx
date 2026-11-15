@@ -59,6 +59,10 @@ describe('极简编辑器 · 显隐口径（data-mode + CSS）', () => {
     }
     expect(css).toContain('{display:none}')
   })
+  it('运输与所在地/其他刊登选项两段全 mode 隐藏（删 UI 不删数据）', () => {
+    const css=readFileSync(path.resolve(process.cwd(),'src/renderer/ebay-local-listing-editor.css'),'utf8')
+    expect(css).toContain('.ebay-revise-shell #ebay-revise-policies,.ebay-revise-shell #ebay-revise-others{display:none}')
+  })
 })
 
 describe('极简编辑器 · App.tsx 接线', () => {
