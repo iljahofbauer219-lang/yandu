@@ -36,8 +36,10 @@ describe('页内注入横幅移除 · 渲染器通道守卫', () => {
     expect(appSource).toContain('ebayInfoBoxes')
   })
 
-  it('prepare 与视频上传提示经 task.message 进 notice', () => {
-    expect(appSource).toContain('setNotice(`${task.message}。系统没有点击最终提交按钮。`)')
-    expect(appSource).toContain('setNotice(`${task.videoUpload?.message||task.message}。系统没有点击最终提交按钮。`)')
+  it('发布准备提示仍声明未点最终提交；已删的草稿预填/视频上传提示不再存在', () => {
+    expect(appSource).toContain('系统没有点击最终提交按钮。')
+    expect(appSource).toContain('已打开 Seller Hub 并统一预填（')
+    expect(appSource).not.toContain('setNotice(`${task.message}。系统没有点击最终提交按钮。`)')
+    expect(appSource).not.toContain('setNotice(`${task.videoUpload?.message||task.message}。系统没有点击最终提交按钮。`)')
   })
 })

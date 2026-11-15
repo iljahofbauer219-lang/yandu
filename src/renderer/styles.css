@@ -879,7 +879,7 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .ebay-scheduled-publish>header{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
 .ebay-scheduled-publish>header b{font-size:13px;color:var(--yd-content-brand-ink,#0f766e)}
 .ebay-scheduled-publish>header small{color:#788582;font-size:10px}
-.ebay-scheduled-row{display:grid;grid-template-columns:56px minmax(0,1fr) auto auto auto auto auto;gap:8px;align-items:center;padding:8px;margin-bottom:6px;background:#fff;border:1px solid #e2e8e8;border-radius:10px}
+.ebay-scheduled-row{display:grid;grid-template-columns:56px minmax(0,1fr) auto auto auto auto auto auto auto;gap:8px;align-items:center;padding:8px;margin-bottom:6px;background:#fff;border:1px solid #e2e8e8;border-radius:10px}
 .ebay-scheduled-row img,.ebay-scheduled-noimg{width:56px;height:56px;object-fit:contain;border-radius:8px;background:#f1f4f4;display:grid;place-items:center;color:#9aa4a2;font-size:9px}
 .ebay-scheduled-title{min-width:0;display:grid;gap:2px}
 .ebay-scheduled-title b{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

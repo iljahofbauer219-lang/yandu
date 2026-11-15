@@ -92,12 +92,24 @@ describe('极简编辑器 · App.tsx 接线', () => {
   it('W 隐藏原生视图扩展到 details 抽屉：抽屉开时隐藏、关闭恢复', () => {
     expect(app()).toContain("const overlayOpen=ebayFixedPresetOpen||(localEditorMode==='details'&&Boolean(localEditorProduct))")
   })
-  it('线上发布页三块红框 UI 已删除（交付页眉/验收中心/就绪横幅），保留逐商品发布卡片', () => {
+  it('线上发布页只留本地定时发布：交付页眉/验收中心/就绪横幅/逐商品发布卡片均已删除', () => {
     const source=app()
     expect(source).not.toContain('ebay-final-handoff-heading')
     expect(source).not.toContain('ebay-acceptance-center')
     expect(source).not.toContain('ebay-publish-readiness')
-    expect(source).toContain('ebay-premium-grid')
+    expect(source).not.toContain('ebay-premium-grid')
+    expect(source).not.toContain('ebay-publish-actions')
+    expect(source).toContain('ebay-scheduled-publish')
+  })
+  it('本地定时发布每行在手动发布后、自动发布前有草稿发布/草稿查看两按钮，本轮不接业务', () => {
+    const source=app()
+    const seg=source.split('>手动发布</button>')[1]?.split('<button type="button" className={sch.enabled?\'primary\':\'\'}')[0] ?? ''
+    expect(seg, '手动发布与自动发布之间要有草稿发布').toContain('>草稿发布</button>')
+    expect(seg, '手动发布与自动发布之间要有草稿查看').toContain('>草稿查看</button>')
+    expect(seg.indexOf('>草稿发布</button>'), '草稿发布在草稿查看之前').toBeLessThan(seg.indexOf('>草稿查看</button>'))
+    expect(seg, '本轮只落地按钮，不得接任何 onClick 业务').not.toContain('onClick')
+    const css=readFileSync(path.resolve(process.cwd(),'src/renderer/styles.css'),'utf8')
+    expect(css, '行网格要随两枚新按钮扩到 9 列，否则错位').toContain('grid-template-columns:56px minmax(0,1fr) auto auto auto auto auto auto auto')
   })
   it('内联发布编辑器店铺类目「自动分类/手动选类」接通真实 handler（非 noop），作用于 publishEditorProduct', () => {
     const source=app()
