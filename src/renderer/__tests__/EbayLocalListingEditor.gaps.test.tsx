@@ -152,14 +152,13 @@ describe('EbayLocalListingEditor · 页眉范围声明', () => {
     const topbar=html.slice(html.indexOf('ebay-revise-topbar'),html.indexOf('ebay-revise-body'))
     return /<em>([^<]*)<\/em>/.exec(topbar)?.[1]??''
   }
-  it('页眉 <em> 不再声明只处理标题/描述/价格，且说明不代您提交线上刊登', () => {
+  it('页眉不再渲染范围声明/代提交提示/Item ID 副标题（红框文案已删），且无代提交暗示', () => {
     const html=renderToStaticMarkup(<EbayLocalListingEditor {...props(draftOf())}/>)
-    const em=headerEm(html)
-    expect(em).not.toBe('')
-    expect(em).not.toContain('仅保存图片、标题、描述和价格')
-    expect(em).not.toContain('标题、描述和价格')
-    expect(em).toContain('不代您提交线上刊登')
-    expect(em).not.toMatch(/。$/)
+    const topbar=html.slice(html.indexOf('ebay-revise-topbar'),html.indexOf('ebay-revise-body'))
+    expect(headerEm(html)).toBe('')
+    expect(topbar).not.toContain('不代您提交线上刊登')
+    expect(topbar).not.toContain('仅保存图片、标题、描述和价格')
+    expect(topbar).not.toContain('Item ID')
   })
 
   it('源码守卫：App.tsx 本地详情准备提示与「进入发布」副本同口径，旧「标题、描述和价格」范围声明不得残留', () => {

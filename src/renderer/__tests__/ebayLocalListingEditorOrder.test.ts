@@ -57,8 +57,8 @@ describe('本地产品编辑器 · 逐段复刻 eBay 现网修改页布局', () 
 
   it('每一段都是「段名左 + 动作或读数右」的行式段头（eBay 段头几何，不是卡片右上角胶囊）', () => {
     expect((body.match(/className="ebay-revise-band-head"/g) || []).length).toBe(10)
-    // 现网款式段段头没有右侧动作（L1 量测：.summary__variations 只有 header-label），其余九段都有。
-    expect((body.match(/data-ebay-slot="section-action"/g) || []).length).toBe(9)
+    // 现网款式段段头没有右侧动作；定价右上 USD 徽标已按拍板删除，故其余八段有右侧动作/读数。
+    expect((body.match(/data-ebay-slot="section-action"/g) || []).length).toBe(8)
     expect(band('variations')).not.toContain('data-ebay-slot="section-action"')
   })
 
@@ -87,7 +87,7 @@ describe('本地产品编辑器 · 逐段复刻 eBay 现网修改页布局', () 
     expect(pricing).toContain("'listingFormat'")
     expect(pricing).toContain('data-policy-kind="payment"')
     expect(pricing).toContain('className="ebay-pricing-aside"')
-    expect(pricing).toContain('价格必须是大于 0')
+    expect(pricing).not.toContain('价格必须是大于 0')
   })
 
   it('状况段只剩 eBay 的 Item condition（上一版把数量/SKU 混在状况里，与真页不符）', () => {

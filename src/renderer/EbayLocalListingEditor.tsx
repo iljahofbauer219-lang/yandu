@@ -358,8 +358,7 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
     <div className="ebay-revise-shell" data-mode={mode}>
       <header className="ebay-revise-topbar">
         <div className="ebay-wordmark" aria-label="eBay"><i>e</i><i>b</i><i>a</i><i>y</i></div>
-        <div><b>本地产品编辑</b><span>Item ID {product.listingId} · 本地版本 V{product.versionCount}</span></div>
-        <em>保存本地版本并准备 eBay 必填字段，不代您提交线上刊登</em>
+        <div><b>本地产品编辑</b></div>
         <button type="button" aria-label="关闭编辑器" disabled={saving} onClick={onClose}>×</button>
       </header>
 
@@ -568,19 +567,19 @@ export default function EbayLocalListingEditor({product,draft,saving,uploading,p
           </section>
 
           <section id="ebay-revise-description" className="ebay-revise-band">
-            <header className="ebay-revise-band-head"><div><h2>描述</h2><p>保留可供 AI 诊断和优化的纯文本与原始 HTML。</p></div><span className="ebay-band-counter" data-ebay-slot="section-action">{descriptionLength} 字符</span></header>
+            <header className="ebay-revise-band-head"><div><h2>描述</h2></div><span className="ebay-band-counter" data-ebay-slot="section-action">{descriptionLength} 字符</span></header>
             <div className="ebay-revise-segment"><button className={descriptionMode==='TEXT'?'active':''} type="button" onClick={()=>setDescriptionMode('TEXT')}>文本</button><button className={descriptionMode==='HTML'?'active':''} type="button" onClick={()=>setDescriptionMode('HTML')}>HTML</button></div>
             {descriptionMode==='TEXT'?<textarea className="ebay-revise-description" value={draft.descriptionText} onChange={event=>set('descriptionText',event.target.value)}/>:<textarea className="ebay-revise-description code" value={draft.descriptionHtml} onChange={event=>set('descriptionHtml',event.target.value)}/>}
           </section>
 
           <section id="ebay-revise-pricing" className="ebay-revise-band">
-            <header className="ebay-revise-band-head"><div><h2>定价</h2><p>直接使用 eBay 原刊登币种与售价，作为后续成本和利润核算基准。</p></div><span className="ebay-band-counter" data-ebay-slot="section-action">{priceCurrency}</span></header>
+            <header className="ebay-revise-band-head"><div><h2>定价</h2></div></header>
             <div className="ebay-revise-cols">
               <div className="ebay-band-main" data-ebay-col="left">
                 <label className="ebay-revise-field"><span>刊登格式</span><select value={draft.listingFormat||'FIXED_PRICE'} onChange={event=>set('listingFormat',event.target.value as 'FIXED_PRICE'|'AUCTION')}><option value="FIXED_PRICE">现在购买</option><option value="AUCTION">拍卖</option></select></label>
-                <label className="ebay-revise-field ebay-price-field"><span>商品价格</span><div className="ebay-price-box"><b>{priceSymbol}</b><input aria-label={`商品价格（${priceCurrency}）`} inputMode="decimal" value={draft.price} onChange={event=>set('price',event.target.value)}/></div><small className="ebay-field-note">价格必须是大于 0 的数字 · 币种 {priceCurrency} 取自 eBay 原刊登</small></label>
+                <label className="ebay-revise-field ebay-price-field"><span>商品价格</span><div className="ebay-price-box"><b>{priceSymbol}</b><input aria-label={`商品价格（${priceCurrency}）`} inputMode="decimal" value={draft.price} onChange={event=>set('price',event.target.value)}/></div></label>
                 <label className="ebay-revise-field"><span>数量</span><input data-gap={gaps.some(item=>item.name==='quantity')?'quantity':undefined} inputMode="numeric" value={draft.quantity??''} onChange={event=>set('quantity',event.target.value.replace(/[^\d]/g,''))}/></label>
-                <label className="ebay-revise-field"><span>付款政策</span><select data-policy-kind="payment" data-gap={gaps.some(item=>item.name==='paymentPolicy')?'paymentPolicy':undefined} value={draft.policyIds?.payment||''} onChange={event=>set('policyIds',{...(draft.policyIds||{}),payment:event.target.value})}>
+                <label className="ebay-revise-field"><select aria-label="付款政策" data-policy-kind="payment" data-gap={gaps.some(item=>item.name==='paymentPolicy')?'paymentPolicy':undefined} value={draft.policyIds?.payment||''} onChange={event=>set('policyIds',{...(draft.policyIds||{}),payment:event.target.value})}>
                   <option value="">未选择（沿用线上原值）</option>
                   {policyOptions('payment').map(item=><option key={item.policyId} value={item.policyId}>{item.label}{item.listingCount?` · ${item.listingCount} 条`:''}</option>)}
                 </select></label>
