@@ -4320,6 +4320,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   // D1：进入发布前把优品草稿的 AI 出图真下载到本地目录再打开编辑器。主进程 updateEbayLocalProduct 只认
   // 「downloadStatus==='DOWNLOADED' 且 localPath 非空」，种子行绝不许声称没落过盘的图已下载；单张失败如实标 FAILED
   // 并点名，编辑器照常打开——建议不得阻断操作，出口是 01 图片与视频的手工上传。
+  const openOptimizedVersion=(draft:EbayOptimizationDraft)=>{setSelectedListingId(draft.listing.id);setSelectedLocalProductId(localProducts.find(product=>product.listingId===draft.listing.listingId)?.id||'');setTitleResult({originalTitle:draft.listing.title,optimizedTitle:draft.selectedTitle,keywords:[],rationale:'已从优品仓库恢复',model:'saved',variants:draft.titleVariants,itemSpecifics:draft.itemSpecifics,description:draft.description,marketDecision:draft.marketDecision});setSelectedTitle(draft.selectedTitle);setImageCandidateReviews({});setAcceptedGeneratedImages({});setContentResult(null);setComplianceReviewed(Boolean(draft.complianceReviewedAt));setOptimizeMode('image');setActiveTab('optimize')}
   const openPublishEditorFromDraft=async(premium:EbayOptimizationDraft)=>{
     const lp=localProducts.find(product=>product.listingId===premium.listing.listingId)
     if(!lp){setNotice('未找到本地产品，请先在本地产品中同步该商品');return}
@@ -5262,7 +5263,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
                 <p>{draft.listing.categoryName||'未分类'} · {draft.itemSpecifics.length} 个属性</p>
                 <div className="ebay-premium-tags"><span>{draft.salePrice?`核算售价 ${ebayDisplayPrice(draft.saleCurrency||draft.listing.currency||'USD',draft.salePrice)}`:`快照价 ${ebayDisplayPrice(draft.listing.currency||'USD',draft.listing.price||'0')}`}</span><span>{draft.complianceGateStatus?`合规 ${draft.complianceGateStatus}`:'缺少合规快照'}</span><span>{draft.marketDecision?'市场决策已保存':'缺少市场决策'}</span></div>
                 {issues.length?<small className="ebay-premium-issues">{issues.slice(0,3).join(' · ')}</small>:<small className="ebay-premium-ready">标题、图片、详情与属性已通过发布前检查</small>}
-                <div className="ebay-premium-card-actions"><button disabled={busy==='publish-localize-media'} onClick={()=>{setSelectedListingId(draft.listing.id);setSelectedLocalProductId(localProducts.find(product=>product.listingId===draft.listing.listingId)?.id||'');setTitleResult({originalTitle:draft.listing.title,optimizedTitle:draft.selectedTitle,keywords:[],rationale:'已从优品仓库恢复',model:'saved',variants:draft.titleVariants,itemSpecifics:draft.itemSpecifics,description:draft.description,marketDecision:draft.marketDecision});setSelectedTitle(draft.selectedTitle);setImageCandidateReviews({});setAcceptedGeneratedImages({});setContentResult(null);setComplianceReviewed(Boolean(draft.complianceReviewedAt));setOptimizeMode('image');setActiveTab('optimize')}}>查看优化版本</button><button disabled={busy==='publish-localize-media'} onClick={()=>{void openPublishEditorFromDraft(draft)}}>{busy==='publish-localize-media'?'正在保存图片到本地…':'进入发布'}</button></div>
+                <div className="ebay-premium-card-actions"><button disabled={busy==='publish-localize-media'} onClick={()=>openOptimizedVersion(draft)}>查看优化版本</button><button disabled={busy==='publish-localize-media'} onClick={()=>{void openPublishEditorFromDraft(draft)}}>{busy==='publish-localize-media'?'正在保存图片到本地…':'进入发布'}</button></div>
               </div>
             </article>
           })}</div>:optimizationDrafts.length?<EbayEmpty title="当前筛选下暂无优品" description="可切换目录、状态或清空搜索条件继续查看。"/>:<EbayEmpty title="优品仓库暂无商品" description="完成产品合规检查和AI内容优化，经人工确认的版本会保存到这里；原线上商品不会被直接覆盖。" action="进入AI优化" onAction={()=>setActiveTab('optimize')}/>}
@@ -5319,8 +5320,8 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
             <article key={product.id} className="ebay-scheduled-row">
               {img?<img src={img} alt=""/>:<span className="ebay-scheduled-noimg">无图</span>}
               <div className="ebay-scheduled-title"><b title={product.title}>{product.title}</b><small>{product.coreTermZh||'—'}</small></div>
-              <button type="button" onClick={()=>void openLocalEditor(product)}>优化版本</button>
-              <button type="button" onClick={()=>openPublishVersion(product)}>发布版本</button>
+              <button type="button" onClick={()=>{const draft=optimizationDrafts.find(item=>item.listing.listingId===product.listingId);if(draft)openOptimizedVersion(draft);else void openLocalEditor(product)}}>优化版本</button>
+              <button type="button" onClick={()=>{const draft=optimizationDrafts.find(item=>item.listing.listingId===product.listingId);if(draft)void openPublishEditorFromDraft(draft);else openPublishVersion(product)}}>发布版本</button>
               <button type="button" disabled={Boolean(busy)} onClick={()=>void manualPublishLocal(product)}>手动发布</button>
               <button type="button" className={sch.enabled?'primary':''} onClick={()=>writeScheduledPublish(toggleScheduledPublish(scheduledPublish,product.id,!sch.enabled,sch.at,new Date().toISOString()))}>{sch.enabled?'自动发布·开':'自动发布'}</button>
               <label className="ebay-scheduled-time"><span>发布时间</span><input type="datetime-local" disabled={!sch.enabled} value={sch.at} onChange={event=>writeScheduledPublish({...scheduledPublish,[product.id]:{enabled:sch.enabled,at:event.target.value}})}/></label>
