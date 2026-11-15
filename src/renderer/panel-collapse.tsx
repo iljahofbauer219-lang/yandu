@@ -1,5 +1,6 @@
 // 全局侧面板收起/展开：按区域独立状态（localStorage 持久化）+ 标题栏统一开关 + 面板内收起按钮与收起后展开轨。
-import { useEffect, useSyncExternalStore } from 'react'
+import { useContext, useEffect, useSyncExternalStore } from 'react'
+import { PageVisibilityContext } from './PageFrame'
 import './panel-collapse.css'
 
 const STORAGE_KEY = 'app-panel-collapse:v1'
@@ -46,13 +47,15 @@ export function usePanelCollapse(key: string, options?: { primary?: boolean; sid
   const primary = options?.primary !== false
   const side = options?.side || 'left'
   const active = options?.active !== false
+  // 栏目保活后隐藏页面仍然挂载，主面板栈不能照旧常驻，否则顶栏开关会打到看不见的面板上
+  const inVisiblePage = useContext(PageVisibilityContext)
   const collapsed = useSyncExternalStore(subscribeState, () => isCollapsed(key), () => SMALL_SCREEN_DEFAULT)
   useEffect(() => {
-    if (!primary || !active) return
+    if (!primary || !active || !inVisiblePage) return
     primaryStack = [...primaryStack, key]
     emitRegistry()
     return () => { primaryStack = primaryStack.filter(item => item !== key); emitRegistry() }
-  }, [key, primary, active])
+  }, [key, primary, active, inVisiblePage])
   return { key, collapsed, side, toggle: () => setCollapsed(key, !isCollapsed(key)) }
 }
 

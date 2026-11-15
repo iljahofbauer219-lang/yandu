@@ -867,4 +867,10 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .warehouse-card-select { display:flex; width:20px; height:20px; margin:0 0 6px; }
 .warehouse-card-select input { width:15px; height:15px; margin:0; accent-color:var(--tiffany, #0fbdb2); cursor:pointer; }
 .warehouse-region-select { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--erp-text-muted, #6b7280); }
+
+/* 栏目保活容器：切走只隐藏、不卸载，页面内状态与滚动位置原样保留。
+   可见态必须对布局完全透明（display:contents），否则多套一层盒子会改变 main 的 flex 结构；
+   隐藏态整棵子树不渲染（display:none），做到不可见也不可点。 */
+.yd-page-frame { display:contents; }
+.yd-page-frame.yd-page-frame-hidden { display:none; }
 .warehouse-region-select select { padding:4px 6px; border:1px solid var(--erp-border, #e5e7eb); border-radius:8px; background:#fff; font-size:12px; }

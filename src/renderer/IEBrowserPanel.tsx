@@ -10,6 +10,8 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import type { BrowserState, BrowserTab, BrowserTranslationMode, EbayCollectedProduct } from '../shared/contracts'
 import { useBrowserFullscreenBounds, useBrowserSurfaceRegistration, type BrowserSurface } from './BrowserFullscreen'
+import { activeTabIdOf } from './pageKeepAlive'
+import { addressAfterPush } from './addressDraft'
 import { describeTranslateError } from './translateError'
 
 const initialAddress = ''
@@ -19,7 +21,7 @@ const initialAddress = ''
 //   避免 React StrictMode 双调用 + App.tsx IIFE 路由 remount 导致 renderer 端 useEffect 重跑问题。
 // - 本组件只负责：tab 订阅渲染、地址栏、采集插件、翻译、主动关闭兜底。
 
-export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browserFullscreen: boolean; onBrowserSurface: (next: BrowserSurface | null) => void }) {
+export function IEBrowserPanel({active,browserFullscreen,onBrowserSurface}:{active:boolean;browserFullscreen:boolean;onBrowserSurface: (next: BrowserSurface | null) => void }) {
   const [browserState, setBrowserState] = useState<BrowserState | null>(null)
   const [tabs, setTabs] = useState<BrowserTab[]>([])
   const [address, setAddress] = useState(initialAddress)
@@ -37,32 +39,47 @@ export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browse
   // 记录上一次 tabs 数量：用于区分「用户主动关闭最后一个 tab」与「remount 初始为空」，
   // 避免切回 IE 浏览时（remount 触发 onTabs 订阅补齐前）兜底逻辑误建一个 about:blank。
   const prevTabsLengthRef = useRef(0)
+  // 本页自己的页签 id：切走期间主进程不再推送页签事件，切回来只能凭这个记住的 id 点名要回上次那一枚，
+  // 否则按平台名附着会拿到 IE 的默认首页页签，用户正看着的内容被换掉。
+  const ownTabIdRef = useRef<string | null>(null)
+  // 地址栏跟随基准：用户敲了还没回车的网址是草稿，状态推送不得覆盖（见 addressDraft）
+  const addressPushedUrlRef = useRef<string | null>(null)
 
   useEffect(() => {
+    // 栏目保活后本页切走不再卸载：隐藏期间视图归当前可见栏目，事件订阅与轮询都要停歇。
+    if (!active) return
     const unsubscribe = window.desktop.browser.onState((next) => {
       if (next.platform === 'ie') {
         setBrowserState(next)
-        setAddress(next.url)
+        const basis = addressPushedUrlRef.current
+        addressPushedUrlRef.current = next.url
+        setAddress(prev => addressAfterPush(prev, basis, next.url))
       }
     })
     return () => {
       if (typeof unsubscribe === 'function') unsubscribe()
     }
-  }, [])
+  }, [active])
 
   useEffect(() => {
-    const unsubscribe = window.desktop.browser.onTabs((next) => setTabs(next.filter((tab) => tab.platform === 'ie' && !tab.scopeId)))
+    if (!active) return
+    const unsubscribe = window.desktop.browser.onTabs((next) => {
+      const mine = next.filter((tab) => tab.platform === 'ie' && !tab.scopeId)
+      setTabs(mine)
+      const tabId = activeTabIdOf(mine)
+      if (tabId) ownTabIdRef.current = tabId
+    })
     // 自愈：订阅完成后请主进程确保通用 web tab 存在（没有则建默认 nav 站点，已有则补推一次快照）。
-    // 覆盖冷启动钩子失效、切到 eBay/1688 栏目被 closeDetailTabs 清空等场景；
+    // 覆盖冷启动钩子失效、以及用户把 IE 页签全部关掉的场景；
     // 主进程 openDefaultNavIfNeeded 幂等 + 并发去重，StrictMode 双 mount 不会重复建 tab。
     void window.desktop.browser.ensureDefaultNav()
     return () => {
       if (typeof unsubscribe === 'function') unsubscribe()
     }
-  }, [])
+  }, [active])
 
   useEffect(() => {
-    if (!pluginActive) return
+    if (!active || !pluginActive) return
     const refresh = () => {
       void window.desktop.browser
         .ebayPluginState()
@@ -77,31 +94,33 @@ export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browse
     refresh()
     const timer = window.setInterval(refresh, 700)
     return () => window.clearInterval(timer)
-  }, [pluginActive])
+  }, [active, pluginActive])
 
   useEffect(() => {
-    if (!translationActive) return
+    if (!active || !translationActive) return
     const timer = window.setInterval(() => {
       void translatePage(translationMode, true)
     }, 5000)
     return () => window.clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [translationActive, translationMode])
+  }, [active, translationActive, translationMode])
 
   useEffect(() => {
+    if (!active) return
     // 依赖 tabs.length：slot 只在存在 web 标签页时才挂载。
     // 首次进页面 tabs 为空，slot 不渲染，不出现「正在打开网页…」placeholder；
     // 用户点击导航卡片或地址栏提交后 tabs 增加，slot 才出现并填充 WebContentsView。
     const update = () => {
       const rect = slotRef.current?.getBoundingClientRect()
-      if (rect) void window.desktop.browser.setBounds({ x: rect.x, y: rect.y, width: rect.width, height: rect.height })
+      // 隐藏栏目里 slot 宽度为 0，此时上报会把可见栏目的视图缩成主进程允许的最小尺寸。
+      if (rect && rect.width > 0) void window.desktop.browser.setBounds({ x: rect.x, y: rect.y, width: rect.width, height: rect.height })
     }
     update()
     // 通知 BrowserWorkspace：用户进入 web 浏览器区域，触发 attachView。
     // 必须在 update() 之后调用，否则 attachView 拿不到有效 bounds。
     // 冷启动瞬间 tab 可能尚未建成，get('ie') 会抛“通用网页标签不存在”——
     // 此处容忍失败，ensureDefaultNav 建成 tab 后 tabs.length 变化会重跑本 effect 再 show。
-    void window.desktop.browser.show('ie').catch(() => undefined)
+    void window.desktop.browser.show('ie', ownTabIdRef.current).catch(() => undefined)
     const observer = new ResizeObserver(update)
     if (slotRef.current) observer.observe(slotRef.current)
     window.addEventListener('resize', update)
@@ -109,10 +128,10 @@ export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browse
       observer.disconnect()
       window.removeEventListener('resize', update)
     }
-  }, [tabs.length])
+  }, [active, tabs.length])
   // 顶栏「全屏」在本页可见期间接管本页浏览器
-  useBrowserSurfaceRegistration('ie', onBrowserSurface)
-  useBrowserFullscreenBounds(slotRef, tabs.length > 0, browserFullscreen)
+  useBrowserSurfaceRegistration(active ? 'ie' : null, onBrowserSurface)
+  useBrowserFullscreenBounds(slotRef, active && tabs.length > 0, browserFullscreen)
 
   const navigate = async (event: FormEvent) => {
     event.preventDefault()
@@ -135,6 +154,7 @@ export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browse
       // attachView 内部受 browserVisible 保护，必须 show 才会 addChildView。
       // show 在有 web tab 时是幂等的，可安全重复调。
       await window.desktop.browser.show('ie')
+      addressPushedUrlRef.current = address
       await window.desktop.browser.navigate('ie', target.toString())
     } catch (reason) {
       window.alert(`打开网页失败：${reason instanceof Error ? reason.message : String(reason)}`)
@@ -158,7 +178,7 @@ export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browse
       await window.desktop.browser.switchTab(tab.id)
       const next = await window.desktop.browser.getState('ie')
       setBrowserState(next)
-      if (next) setAddress(next.url)
+      if (next) { setAddress(next.url); addressPushedUrlRef.current = next.url }
     } catch (reason) {
       window.alert(`切换标签失败：${reason instanceof Error ? reason.message : String(reason)}`)
     }
@@ -222,6 +242,7 @@ export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browse
   //   - 用户主动关闭最后一个 tab（prev > 0 → 0）→ 需要兜底
   //   - remount 初始空（prev === 0 → 0）→ 不要兜底，避免切回 IE 浏览时多建一个 tab
   useEffect(() => {
+    if (!active) return
     if (tabs.length !== 0) {
       prevTabsLengthRef.current = tabs.length
       return
@@ -244,7 +265,7 @@ export function IEBrowserPanel({ browserFullscreen, onBrowserSurface }: { browse
     }
     void spawn()
     return () => { cancelled = true }
-  }, [tabs.length])
+  }, [active, tabs.length])
 
   // 组件卸载时关闭 BrowserView，避免退出登录后浏览器视图残留在 BrowserWindow。
   // 关键：必须用独立 useEffect（依赖 []），不能挂在已有 useEffect(..., [tabs.length]) 的 cleanup 上，

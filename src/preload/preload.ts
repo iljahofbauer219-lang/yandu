@@ -264,7 +264,7 @@ contextBridge.exposeInMainWorld('desktop', {
     }
   },
   browser: {
-    show: (platform: Platform) => ipcRenderer.invoke('browser:show', platform),
+    show: (platform: Platform, tabId?: string | null) => ipcRenderer.invoke('browser:show', platform, tabId ?? undefined),
     hide: () => ipcRenderer.invoke('browser:hide'),
     setBounds: (bounds: BrowserBounds) => ipcRenderer.invoke('browser:bounds', bounds),
     navigate: (platform: Platform, url: string) => ipcRenderer.invoke('browser:navigate', platform, url),

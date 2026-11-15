@@ -2206,7 +2206,7 @@ function startFeishuBot() {
   void feishuBot.start().catch(error => { console.error('飞书机器人长连接启动失败', error); feishuBot = null })
 }
 
-ipcMain.handle('browser:show', (_event, platform: Platform) => workspace?.show(platform))
+ipcMain.handle('browser:show', (_event, platform: Platform, tabId?: string) => workspace?.show(platform, tabId))
 ipcMain.handle('browser:hide', () => workspace?.hide())
 ipcMain.handle('browser:bounds', (_event, bounds: BrowserBounds) => workspace?.setBounds(bounds))
 ipcMain.handle('browser:navigate', (_event, platform: Platform, url: string) => workspace?.navigate(platform, url))

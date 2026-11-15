@@ -215,7 +215,8 @@ declare global {
         onEvent(callback: (event: import('../shared/executionEvent').ExecutionEvent) => void): () => void
       }
       browser: {
-        show(platform: Platform): Promise<void>
+        /** tabId = 调用栏目自己的页签；保活切回时带上它才拿得到自己上次看的那一枚，不带则按平台默认页签 */
+        show(platform: Platform, tabId?: string | null): Promise<void>
         hide(): Promise<void>
         setBounds(bounds: BrowserBounds): Promise<void>
         navigate(platform: Platform, url: string): Promise<void>

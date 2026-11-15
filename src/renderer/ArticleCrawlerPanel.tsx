@@ -90,8 +90,8 @@ function truncate(s: string, max = 80): string {
   return s.length > max ? `${s.slice(0, max)}…` : s
 }
 
-export function ArticleCrawlerPanel(props: { onBack: () => void; browserFullscreen: boolean; onBrowserSurface: (next: BrowserSurface | null) => void }) {
-  const { onBack, browserFullscreen, onBrowserSurface } = props
+export function ArticleCrawlerPanel(props: { active: boolean; onBack: () => void; browserFullscreen: boolean; onBrowserSurface: (next: BrowserSurface | null) => void }) {
+  const { active, onBack, browserFullscreen, onBrowserSurface } = props
   const [status, setStatus] = useState<CrawlerStatus | null>(null)
   const [articles, setArticles] = useState<CrawlerArticleSummary[]>([])
   const [busy, setBusy] = useState<'start' | 'stop' | 'extract' | 'import' | null>(null)
@@ -132,20 +132,23 @@ export function ArticleCrawlerPanel(props: { onBack: () => void; browserFullscre
     }
   }, [])
 
-  // 5s 轮询服务状态；首次挂载时拉一次
+  // 5s 轮询服务状态；首次挂载与切回本页时各拉一次
   useEffect(() => {
+    if (!active) return
     void refreshStatus()
     void refreshArticles()
     void refreshKbs()
     const timer = window.setInterval(() => { void refreshStatus() }, 5000)
     return () => window.clearInterval(timer)
-  }, [refreshStatus, refreshArticles, refreshKbs])
+  }, [active, refreshStatus, refreshArticles, refreshKbs])
 
-  // BrowserView 复用：show('web') + 跟随 slot bounds + 卸载时 hide
+  // BrowserView 复用：show('web') + 跟随 slot bounds；栏目保活后切走不卸载，隐藏期间不再持有视图
   useEffect(() => {
+    if (!active) return
     const updateBounds = () => {
       const rect = slotRef.current?.getBoundingClientRect()
-      if (rect) void window.desktop.browser.setBounds({ x: rect.x, y: rect.y, width: rect.width, height: rect.height })
+      // 隐藏时宽度为 0，此时上报会把可见栏目的视图缩成主进程允许的最小尺寸。
+      if (rect && rect.width > 0) void window.desktop.browser.setBounds({ x: rect.x, y: rect.y, width: rect.width, height: rect.height })
     }
     updateBounds()
     void window.desktop.browser.show('web')
@@ -156,17 +159,18 @@ export function ArticleCrawlerPanel(props: { onBack: () => void; browserFullscre
       observer.disconnect()
       window.removeEventListener('resize', updateBounds)
     }
-  }, [])
+  }, [active])
   // 顶栏「全屏」在本页可见期间接管本页内嵌 NewsCrawler Web UI
-  useBrowserSurfaceRegistration('crawler', onBrowserSurface)
-  useBrowserFullscreenBounds(slotRef, true, browserFullscreen)
+  useBrowserSurfaceRegistration(active ? 'crawler' : null, onBrowserSurface)
+  useBrowserFullscreenBounds(slotRef, active, browserFullscreen)
 
   // 一旦 Web UI 可达，自动 navigate 到 NewsCrawler 首页
   useEffect(() => {
+    if (!active) return
     if (status?.webUiReachable && status.config.webUiUrl) {
       void window.desktop.browser.navigate('web', status.config.webUiUrl).catch(() => undefined)
     }
-  }, [status?.webUiReachable, status?.config.webUiUrl])
+  }, [active, status?.webUiReachable, status?.config.webUiUrl])
 
   // 卸载时关闭 BrowserView
   useEffect(() => () => { void window.desktop.browser.hide() }, [])

@@ -1058,7 +1058,6 @@ export class BrowserWorkspace {
     this.activeTabId = 'home-ozon'
     this.supplyTabVisible = false
     this.marketplaceTabVisible = true
-    this.closeDetailTabs()
     const previous = this.views.get('ozon')
     if (previous && this.attached === previous) {
       this.window.contentView.removeChildView(previous)
@@ -1109,7 +1108,6 @@ export class BrowserWorkspace {
     this.marketplaceTabVisible = false
     this.active = '1688'
     this.activeTabId = 'home-1688'
-    this.closeDetailTabs()
     this.supplyPlatformCode = platformCode
     let view = this.supplyViews.get(platformCode)
     if (!view || view.webContents.isDestroyed()) {
@@ -3630,8 +3628,16 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     }
   }
 
-  async show(platform: Platform) {
+  async show(platform: Platform, tabId?: string) {
     this.browserVisible = true
+    // 栏目保活后切回来仍要看到自己上次那枚页签：页签归属由调用方给出，这里只按 id 精确附着。
+    if (tabId) {
+      const own = this.detailTabs.get(tabId)
+      if (own?.platform === platform) {
+        this.switchTab(tabId)
+        return
+      }
+    }
     // 采集工作台/文章采集复用 'web' 罐：IE浏览 迁到独立 'ie' 后不再替它们持有页签，缺页签时自建空白页
     if (platform === 'web' && ![...this.detailTabs.values()].some(item => item.platform === 'web')) {
       await this.newTab('web')
@@ -3796,7 +3802,7 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
   // 调用点：
   //   1. main.ts createWindow 末尾的 shell 'did-finish-load' 回调（冷启动）
   //   2. IPC 'browser:ensure-default-nav'（IEBrowserPanel 每次挂载时自愈调用，
-  //      覆盖 tab 被 activateMarketplace/activateSupplyPlatform 的 closeDetailTabs 清空后的场景）
+  //      覆盖冷启动钩子失效、以及用户把 IE 页签全部关掉的场景）
   // 特点：
   //   - 查 detailTabs 中所有 platform==='web' && !scopeId 的 tab（与 IEBrowserPanel 的 onTabs filter 一致）
   //   - 已有就不动（remount/重启 electron 但 tab 仍在）→ 实现 IE 浏览页的“保留原状”语义
@@ -4259,6 +4265,10 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
   private get(platform: Platform) {
     if (platform === 'web' || platform === 'ie') {
       const activeTab = this.detailTabs.get(this.activeTabId)
+      if (activeTab?.platform === platform && !activeTab.scopeId) return activeTab.view
+      // 带 scopeId 的页签属于它自己的栏目（如 eBay 店铺会话），不带 id 的默认附着不得顶用别人的会话。
+      const generic = [...this.detailTabs.values()].find(item => item.platform === platform && !item.scopeId)
+      if (generic) return generic.view
       if (activeTab?.platform === platform) return activeTab.view
       const tab = [...this.detailTabs.values()].find(item => item.platform === platform)
       if (tab) return tab.view
@@ -4270,19 +4280,6 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
 
   private visibleTabCount() {
     return Number(this.supplyTabVisible) + Number(this.marketplaceTabVisible) + this.detailTabs.size
-  }
-
-  private closeDetailTabs() {
-    const tabs = [...this.detailTabs.values()]
-    this.detailTabs.clear()
-    this.credentialDomains = []
-    for (const tab of tabs) {
-      if (this.attached === tab.view) {
-        this.window.contentView.removeChildView(tab.view)
-        this.attached = null
-      }
-      tab.view.webContents.close()
-    }
   }
 
   private showVisibleHome() {

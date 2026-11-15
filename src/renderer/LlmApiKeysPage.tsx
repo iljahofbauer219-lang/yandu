@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { createPortal } from 'react-dom'
 import { getTokens, SESSION_EXPIRED_EVENT } from './serverApi'
 import { refreshSession } from '../shared/serverHttp'
 import { unwrapIpcError } from './friendlyError'
+import { PagePortal } from './PageFrame'
 import type { LinduoLoginStatus, LinduoModelPricing } from '../shared/contracts'
 
 type LlmKeyStatus = { id: string; configured: boolean; maskedKey: string }
@@ -224,7 +224,7 @@ function LinduoLoginPanel({ configured }: { configured: boolean }) {
       </button>
     </div>
 
-    {modalOpen && createPortal(<div className="linduo-credential-modal" role="dialog" aria-modal="true" aria-labelledby="linduo-modal-title">
+    {modalOpen && <PagePortal><div className="linduo-credential-modal" role="dialog" aria-modal="true" aria-labelledby="linduo-modal-title">
       <div className="linduo-credential-backdrop" onClick={closeModal} />
       <div className="linduo-credential-card">
         <header>
@@ -283,7 +283,7 @@ function LinduoLoginPanel({ configured }: { configured: boolean }) {
           </div>
         </footer>
       </div>
-    </div>, document.body)}
+    </div></PagePortal>}
   </>
 }
 

@@ -13,8 +13,11 @@ describe('预设弹窗显隐联动（W）', () => {
   it('弹窗/刊登资料抽屉打开隐藏原生视图、关闭恢复（复用 browser.hide/show，不新增 IPC）', () => {
     expect(source).toContain("const overlayOpen=ebayFixedPresetOpen||(localEditorMode==='details'&&Boolean(localEditorProduct))")
     expect(source).toContain("if(overlayOpen){void window.desktop.browser.hide()")
-    expect(source).toContain("window.desktop.browser.show('web')")
-    expect(source).toMatch(/\[ebayFixedPresetOpen,localEditorMode,localEditorProduct,activeTab,activeStore\?\.id\]/)
+    const overlayEffect = source.split('\n').find(line => line.includes('const overlayOpen=')) ?? ''
+    expect(overlayEffect, '关闭弹窗后要重新附着内嵌视图').toContain('browser.show(')
+    expect(overlayEffect, '重新附着必须带上本栏目自己的页签 id，否则拿到别的栏目的页面').toMatch(/browser\.show\(\s*'web',\s*ebayOwnTabId\.current\s*\)/)
+    // 依赖数组可含保活可见性 active（栏目保活后隐藏界面不得再动视图），其余项不变
+    expect(source).toMatch(/\[(?:active,)?ebayFixedPresetOpen,localEditorMode,localEditorProduct,activeTab,activeStore\?\.id\]/)
   })
 
   it('弹窗打开时残留通知/错误/下载/登录横条不渲染，关闭后恢复', () => {
