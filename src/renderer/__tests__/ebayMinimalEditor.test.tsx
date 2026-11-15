@@ -99,4 +99,10 @@ describe('极简编辑器 · App.tsx 接线', () => {
     expect(source).not.toContain('ebay-publish-readiness')
     expect(source).toContain('ebay-premium-grid')
   })
+  it('内联发布编辑器店铺类目「自动分类/手动选类」接通真实 handler（非 noop），作用于 publishEditorProduct', () => {
+    const source=app()
+    expect(source).toContain('onAutoClassify={()=>void autoClassifyLocal(publishEditorProduct?.id)}')
+    expect(source).toContain('onSetCategory={(categoryId,categoryName)=>void setLocalCategory(categoryId,categoryName,publishEditorProduct?.id)}')
+    expect(source).not.toContain('onSetCategory={()=>{}} onAutoClassify={()=>{}}')
+  })
 })
