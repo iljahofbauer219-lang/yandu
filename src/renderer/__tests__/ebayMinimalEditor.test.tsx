@@ -92,4 +92,11 @@ describe('极简编辑器 · App.tsx 接线', () => {
   it('W 隐藏原生视图扩展到 details 抽屉：抽屉开时隐藏、关闭恢复', () => {
     expect(app()).toContain("const overlayOpen=ebayFixedPresetOpen||(localEditorMode==='details'&&Boolean(localEditorProduct))")
   })
+  it('线上发布页三块红框 UI 已删除（交付页眉/验收中心/就绪横幅），保留逐商品发布卡片', () => {
+    const source=app()
+    expect(source).not.toContain('ebay-final-handoff-heading')
+    expect(source).not.toContain('ebay-acceptance-center')
+    expect(source).not.toContain('ebay-publish-readiness')
+    expect(source).toContain('ebay-premium-grid')
+  })
 })
