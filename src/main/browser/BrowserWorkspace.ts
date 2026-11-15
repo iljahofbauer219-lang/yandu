@@ -76,6 +76,19 @@ const READ_EBAY_POLICY_MODELS_SCRIPT = `(() => {
       return {url:location.href,policyModels};
     })()`
 
+// 页签额度：8 枚按栏目计（与渲染层页签条的过滤口径一致），24 枚为跨栏目全局硬顶防内存失控。
+// 保活后其它栏目的页签不再被自动清理，若仍按全局计 8 枚，用户会被要求去关当前页签条里看不见的页签。
+const TAB_LIMIT_PER_GROUP = 8
+const TAB_LIMIT_TOTAL = 24
+
+function tabGroupLabel(platform: Platform, scopeId?: string) {
+  if (scopeId) return scopeId.startsWith('ebay:') ? 'eBay 店铺' : '店铺会话'
+  if (platform === 'ie') return 'IE浏览'
+  if (platform === 'web') return '通用网页'
+  if (platform === '1688') return '1688 采购'
+  return 'Ozon'
+}
+
 interface DetailTab {
   id: string
   platform: Platform
@@ -1679,7 +1692,7 @@ export class BrowserWorkspace {
   }
 
   async newEbayTab(accountId:string,title:string,targetUrl='https://www.ebay.com/') {
-    if(this.visibleTabCount()>=8)throw new Error('最多同时打开8个浏览标签，请先关闭不需要的标签')
+    this.assertTabCapacity('web',accountId)
     const base=this.detailTabs.get(`login-${accountId}`)
     if(!base||base.view.webContents.isDestroyed())throw ebayStoreViewError('请先打开当前eBay店铺浏览器')
     const domains = EBAY_SITE_ROOT_DOMAINS
@@ -3732,7 +3745,7 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
   }
 
   async openTab(platform: Platform, url: string, initialTitle?: string) {
-    if (this.visibleTabCount() >= 8) throw new Error('最多同时打开8个浏览标签，请先关闭不需要的标签')
+    this.assertTabCapacity(platform)
     if (!this.isAllowedUrl(platform, url)) throw new Error('链接不属于当前平台，已阻止打开')
     let targetUrl = url
     try {
@@ -3833,7 +3846,7 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
   }
 
   async newTab(platform: 'web' | 'ie' = 'web') {
-    if (this.visibleTabCount() >= 8) throw new Error('最多同时打开8个浏览标签，请先关闭不需要的标签')
+    this.assertTabCapacity(platform)
     const id = crypto.randomUUID()
     const view = new WebContentsView({ webPreferences: { partition: platform === 'ie' ? 'persist:ie-browser:default' : 'persist:web-general', nodeIntegration: false, contextIsolation: true, sandbox: true } })
     view.setBackgroundColor('#ffffff')
@@ -4278,8 +4291,35 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     return view || this.createView(platform)
   }
 
-  private visibleTabCount() {
+  private tabGroupKey(platform: Platform, scopeId?: string) {
+    return scopeId ? `scope:${scopeId}` : `platform:${platform}`
+  }
+
+  private groupTabCount(platform: Platform, scopeId?: string) {
+    const key = this.tabGroupKey(platform, scopeId)
+    let count = 0
+    for (const tab of this.detailTabs.values()) if (this.tabGroupKey(tab.platform, tab.scopeId) === key) count += 1
+    if (key === 'platform:1688' && this.supplyTabVisible) count += 1
+    if (key === 'platform:ozon' && this.marketplaceTabVisible) count += 1
+    return count
+  }
+
+  private totalTabCount() {
     return Number(this.supplyTabVisible) + Number(this.marketplaceTabVisible) + this.detailTabs.size
+  }
+
+  private tabCensus() {
+    const counts = new Map<string, number>()
+    const bump = (label: string) => counts.set(label, (counts.get(label) || 0) + 1)
+    for (const tab of this.detailTabs.values()) bump(tabGroupLabel(tab.platform, tab.scopeId))
+    if (this.supplyTabVisible) bump('1688 采购')
+    if (this.marketplaceTabVisible) bump('Ozon')
+    return [...counts.entries()].map(([label, count]) => `${label} ${count} 枚`).join('、')
+  }
+
+  private assertTabCapacity(platform: Platform, scopeId?: string) {
+    if (this.groupTabCount(platform, scopeId) >= TAB_LIMIT_PER_GROUP) throw new Error(`当前栏目最多同时打开${TAB_LIMIT_PER_GROUP}个浏览标签，请先关闭不需要的标签`)
+    if (this.totalTabCount() >= TAB_LIMIT_TOTAL) throw new Error(`全部栏目合计已打开${TAB_LIMIT_TOTAL}个浏览标签（${this.tabCensus()}），请先关闭不需要的标签`)
   }
 
   private showVisibleHome() {
