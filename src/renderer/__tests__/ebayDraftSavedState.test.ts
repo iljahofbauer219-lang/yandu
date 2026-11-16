@@ -51,4 +51,14 @@ describe('草稿发布完成态 · 按钮禁用异色与恢复', () => {
   it('完成态后手动发布仅打开既有草稿（viewPublishDraft），未置位保持原串联', () => {
     expect(app).toContain('onClick={()=>product.draftSavedAt?viewPublishDraft(product):void manualPublishLocal(product)}>手动发布')
   })
+  it('viewPublishDraft 只打开不填写不保存（无 fillCurrentTab/saveCurrentDraft）', () => {
+    const seg = app.split('const viewPublishDraft=')[1]?.split('\n')[0] ?? ''
+    expect(seg).toContain('window.desktop.browser.navigate')
+    expect(seg).not.toContain('fillCurrentTab')
+    expect(seg).not.toContain('saveCurrentDraft')
+  })
+  it('未置位串联含自动填写→固定填写且顺序正确（manualPublishLocal）', () => {
+    const seg = app.split('const manualPublishLocal=')[1]?.split('const sendBackToPremium=')[0] ?? ''
+    expect(seg.indexOf("runCurrentTabFill('auto',product.id)")).toBeLessThan(seg.indexOf("runCurrentTabFill('fixed',product.id)"))
+  })
 })
