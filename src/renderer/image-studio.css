@@ -132,7 +132,7 @@ button.ebay-market-card-media { width:100%; border:0; cursor:pointer; font:inher
 .ebay-local-product-card .ebay-local-price-row { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 8px; margin-top:0; }
 .ebay-local-product-card .ebay-local-price-row strong { color:#9d3d09; font-size:19px; margin:7px 0 3px; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ebay-local-product-card .ebay-local-price-row em { overflow:hidden; color:#7d8983; font-size:11px; font-style:normal; font-weight:600; line-height:1.2; text-overflow:ellipsis; white-space:nowrap; }
-.ebay-local-product-card .ebay-local-card-actions { position:static; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px; margin:12px 0 0; }
+.ebay-local-product-card .ebay-local-card-actions { position:static; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; margin:12px 0 0; }
 .ebay-local-product-card .ebay-local-card-actions button { min-width:0; overflow:hidden; padding:8px 4px; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
 .ebay-local-product-card .ebay-local-card-actions button.danger { color:#b42318; border-color:#efc8c4; background:#fff; }
 .ebay-card-menu { position:absolute; right:0; bottom:0; z-index:10; }
