@@ -49,13 +49,13 @@ describe('极简编辑器 · 显隐口径（data-mode + CSS）', () => {
       expect(details).toContain(`id="ebay-revise-${id}"`)
     }
   })
-  it('CSS：core 隐藏 eBay 资料六段＋定价选项侧栏＋付款政策；details 隐藏核心五段', () => {
+  it('CSS：core 隐藏 eBay 资料六段＋定价选项侧栏＋付款政策；details（刊登资料抽屉）不隐藏核心五段，须含图片等与本地产品编辑同源', () => {
     const css=readFileSync(path.resolve(process.cwd(),'src/renderer/ebay-local-listing-editor.css'),'utf8')
     for(const sel of ['.ebay-revise-validation','#ebay-revise-specifics','#ebay-revise-condition','#ebay-revise-policies','#ebay-revise-others','.ebay-pricing-aside','[data-policy-kind="payment"]']){
       expect(css).toContain(`.ebay-revise-shell[data-mode="core"] ${sel}`)
     }
     for(const sel of ['#ebay-revise-media','#ebay-revise-title','#ebay-revise-category','#ebay-revise-variations','#ebay-revise-description']){
-      expect(css).toContain(`.ebay-revise-shell[data-mode="details"] ${sel}`)
+      expect(css, `刊登资料抽屉须显示 ${sel}（与图1本地产品编辑同源，不得少图片）`).not.toContain(`.ebay-revise-shell[data-mode="details"] ${sel}`)
     }
     expect(css).toContain('{display:none}')
   })

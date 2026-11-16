@@ -332,8 +332,9 @@ button[data-ebay-slot="section-action"]:disabled{background:#ececec;border-color
 .ebay-revise-native-cn #ebay-revise-title .ebay-revise-field,.ebay-revise-native-cn #ebay-revise-category .ebay-revise-cols{margin:0}
 .ebay-revise-native-cn #ebay-revise-variations .ebay-variations-notice{margin:0}
 
-/* 极简重构（2026-11-14）：core=本地核心编辑，隐藏 eBay 资料六段；details=仅 eBay 资料（浏览器「刊登资料」复用）。
-   数据/保存/准备/自动填写链路不变，仅显隐迁移。 */
+/* 极简重构（2026-11-14）：core=本地核心编辑，隐藏 eBay 资料六段。
+   2026-11-16：details=浏览器「刊登资料」抽屉，须与本地产品编辑（图1）同源含图片等核心段，
+   故不再隐藏核心五段，核心＋eBay 资料同屏显示。数据/保存/准备/自动填写链路不变，仅显隐迁移。 */
 .ebay-revise-shell[data-mode="core"] .ebay-revise-validation,
 .ebay-revise-shell[data-mode="core"] #ebay-revise-specifics,
 .ebay-revise-shell[data-mode="core"] #ebay-revise-condition,
@@ -341,11 +342,6 @@ button[data-ebay-slot="section-action"]:disabled{background:#ececec;border-color
 .ebay-revise-shell[data-mode="core"] #ebay-revise-others,
 .ebay-revise-shell[data-mode="core"] .ebay-pricing-aside,
 .ebay-revise-shell[data-mode="core"] [data-policy-kind="payment"]{display:none}
-.ebay-revise-shell[data-mode="details"] #ebay-revise-media,
-.ebay-revise-shell[data-mode="details"] #ebay-revise-title,
-.ebay-revise-shell[data-mode="details"] #ebay-revise-category,
-.ebay-revise-shell[data-mode="details"] #ebay-revise-variations,
-.ebay-revise-shell[data-mode="details"] #ebay-revise-description{display:none}
 /* 2026-11-15 用户拍板删除：运输与所在地/其他刊登选项两段全 mode 不显示（仅隐 UI，draft 字段与保存/填写链路保留）。
    政策/所在地读取入口随段移除，政策改由 prepare/预设现网读取或页面人工补齐。 */
 .ebay-revise-shell #ebay-revise-policies,.ebay-revise-shell #ebay-revise-others{display:none}
