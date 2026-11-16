@@ -602,10 +602,14 @@ describe('Seller Hub 灌字段脚本 · 政策 combobox 分支', () => {
 
 describe('AddItem 页图片与描述写入（E 批静态守卫）', () => {
   const source = readFileSync(path.resolve(process.cwd(), 'src/main/browser/BrowserWorkspace.ts'), 'utf8')
-  it('图片走既有的 debugger 选文件通道：认 fehelix 上传控件，多文件一次投递', () => {
-    expect(source).toContain('fehelix-uploader')
+  it('图片/视频走 debugger 选文件通道但按 accept 分流：图片进 image 口、视频进 video 口，绝不混灌；复用草稿先清空防累积', () => {
+    expect(source).toContain('classifyMediaInputAccept')
+    expect(source).toContain('planEbayMediaSync')
     expect(source).toContain('DOM.setFileInputFiles')
     expect(source).toContain('planEbayUploadMedia')
+    expect(source).toContain('imageNodeId')
+    expect(source).toContain('videoNodeId')
+    expect(source).not.toContain("selector:'#fehelix-uploader,input[type=\"file\"][accept*=\"image\"]'")
   })
   it('图片写入后回读缩略图计数落定才记 filled：不凭 setFileInputFiles 返回就谎报', () => {
     expect(source).toContain(')\\\\s*\\\\/\\\\s*25')

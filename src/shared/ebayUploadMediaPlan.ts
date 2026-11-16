@@ -62,3 +62,19 @@ export function planEbayUploadMedia(rows: EbayUploadMediaPlanRow[]): EbayUploadM
   const toItem = (row: EbayUploadMediaPlanRow): EbayUploadMediaPlanItem => ({ localPath: row.localPath, sortOrder: row.sortOrder, mediaType: row.mediaType })
   return { images: images.slice(0, EBAY_IMAGE_LIMIT).map(toItem), videos: videos.slice(0, 1).map(toItem), dropped }
 }
+
+/** 上传口 accept 分流：图片绝不能灌进 video-only 口（现网 #fehelix-uploader 仅 accept video）。 */
+export function classifyMediaInputAccept(accept: string): 'image' | 'video' | 'both' | 'none' {
+  const value = String(accept || '').toLowerCase()
+  const hasImage = /image\//.test(value)
+  const hasVideo = /video\//.test(value)
+  if (hasImage && hasVideo) return 'both'
+  if (hasImage) return 'image'
+  if (hasVideo) return 'video'
+  return 'none'
+}
+
+/** 幂等同步决策：草稿已有媒体先清空再写，防重复累积超 25 上限后 eBay 撤掉图片输入框。 */
+export function planEbayMediaSync(existingCount: number, _localImageCount: number): { clearExisting: boolean; imageLimit: number } {
+  return { clearExisting: (existingCount || 0) > 0, imageLimit: EBAY_IMAGE_LIMIT }
+}

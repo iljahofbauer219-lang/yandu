@@ -17,7 +17,7 @@ import { EBAY_SITE_ROOT_DOMAINS, isEbayDotComHost } from '../../shared/ebaySites
 import { buildNativeLanguageDp1, ebayDeliveryAlpha3, ebayNativeLanguage, isEbayListingFormUrl, parseEbayPreferencePost, readEbayDeliveryPostal, resolveEbayDeliveryCountry, resolvePostalRetention } from '../../shared/ebayDeliveryCountry'
 import { extractPolicyIdFromLabel } from '../../shared/ebayListingForm'
 import { resolveEbayListingTarget, resolveEbayListingTargetForProduct, ebayPublishRefFromUrl } from '../../shared/ebayListingTarget'
-import { planEbayUploadMedia, type EbayUploadMediaPlanRow } from '../../shared/ebayUploadMediaPlan'
+import { planEbayUploadMedia, classifyMediaInputAccept, planEbayMediaSync, type EbayUploadMediaPlanRow } from '../../shared/ebayUploadMediaPlan'
 import { EBAY_POLICY_MODEL_FIELDS, parseEbayPolicyModel, parseEbayPolicyModelChoices, type EbayPolicyModelChoices, type EbayPolicyModelField } from '../../shared/ebayPolicyModel'
 import { parseEbayItemSpecificsSection, parseEbayItemSpecificsCard, type EbayItemSpecificsCardRaw, type EbayItemSpecificsRaw, type EbayItemSpecificsSection, type EbayItemSpecificSlot } from '../../shared/ebayItemSpecificsModel'
 import { EBAY_LOCAL_FILL_TARGETS, ebayLocalFillPayload, ebayPolicyFillPlan, ebayFixedFillPageTargets } from './ebayLocalFill'
@@ -2659,22 +2659,50 @@ export class BrowserWorkspace {
     // E 批其一：本地媒体写进 PHOTOS & VIDEO 上传控件（与视频链路同款的 debugger 选文件通道，零新 API）。
     // 写完回读现网缩略图计数落定才记 filled；setFileInputFiles 返回不等于 eBay 收下了图。
     const mediaPlan=planEbayUploadMedia((snapshot?.media??[]) as EbayUploadMediaPlanRow[])
-    const mediaFiles=[...mediaPlan.images,...mediaPlan.videos].map(item=>item.localPath)
     let mediaCount=0
     const debuggerApi=tab.view.webContents.debugger
-    if(mediaFiles.length&&debuggerApi&&typeof debuggerApi.isAttached==='function'){
+    if((mediaPlan.images.length||mediaPlan.videos.length)&&debuggerApi&&typeof debuggerApi.isAttached==='function'){
       const attachedHere=!debuggerApi.isAttached()
       try{
         if(attachedHere)debuggerApi.attach('1.3')
-        const documentResult=await debuggerApi.sendCommand('DOM.getDocument',{depth:-1,pierce:true}) as {root:{nodeId:number}}
-        const selected=await debuggerApi.sendCommand('DOM.querySelector',{nodeId:documentResult.root.nodeId,selector:'#fehelix-uploader,input[type="file"][accept*="image"]'}) as {nodeId:number}
-        if(selected.nodeId){
-          await debuggerApi.sendCommand('DOM.setFileInputFiles',{nodeId:selected.nodeId,files:mediaFiles})
-          for(let attempt=0;attempt<15;attempt+=1){
-            await this.sleep(1000)
-            mediaCount=await tab.view.webContents.executeJavaScript(`(()=>{const m=(document.body&&document.body.innerText||'').match(/(\\d+)\\s*\\/\\s*25/);return m?Number(m[1]):0})()`,true) as number
-            if(mediaCount>=mediaPlan.images.length)break
+        const readCount=async()=>Number(await tab.view.webContents.executeJavaScript(`(()=>{const m=(document.body&&document.body.innerText||'').match(/(\\d+)\\s*\\/\\s*25/);return m?Number(m[1]):0})()`,true))||0
+        // 幂等同步：草稿已有媒体先清空再写。重复 prepare 曾把媒体累积到 42/25，超上限后 eBay 撤掉
+        // 图片输入框、只剩 video-only 口，旧逻辑把图片灌进视频口 → 破图＋视频失败。清空后按 accept 分流。
+        const sync=planEbayMediaSync(await readCount(),mediaPlan.images.length)
+        if(sync.clearExisting){
+          for(let round=0;round<6;round+=1){
+            const removed=await tab.view.webContents.executeJavaScript(`(()=>{const btns=[...document.querySelectorAll('button,[role=button],a')].filter(n=>/删除第\\s*\\d+\\s*(张图片|个视频)/.test((n.getAttribute&&n.getAttribute('aria-label'))||''));btns.forEach(b=>b.click());return btns.length})()`,true) as number
+            await this.sleep(900)
+            if(!removed)break
+            if(await readCount()===0)break
           }
+        }
+        const documentResult=await debuggerApi.sendCommand('DOM.getDocument',{depth:-1,pierce:true}) as {root:{nodeId:number}}
+        const inputs=await debuggerApi.sendCommand('DOM.querySelectorAll',{nodeId:documentResult.root.nodeId,selector:'input[type="file"]'}) as {nodeIds:number[]}
+        let imageNodeId=0
+        let videoNodeId=0
+        for(const nodeId of inputs.nodeIds||[]){
+          const described=await debuggerApi.sendCommand('DOM.describeNode',{nodeId}) as {node:{attributes?:string[]}}
+          const attrs=described.node.attributes||[]
+          const acceptIndex=attrs.indexOf('accept')
+          const kind=classifyMediaInputAccept(acceptIndex>=0?attrs[acceptIndex+1]:'')
+          if(!imageNodeId&&(kind==='image'||kind==='both'))imageNodeId=nodeId
+          if(!videoNodeId&&(kind==='video'||kind==='both'))videoNodeId=nodeId
+        }
+        if(mediaPlan.images.length&&imageNodeId){
+          await debuggerApi.sendCommand('DOM.setFileInputFiles',{nodeId:imageNodeId,files:mediaPlan.images.map(item=>item.localPath)})
+        }else if(mediaPlan.images.length){
+          result.warnings.push('图片未写入：当前刊登页没有图片上传口（可能媒体超上限或页面未就绪），请先在页面移除多余媒体后重试')
+        }
+        if(mediaPlan.videos.length&&videoNodeId){
+          await debuggerApi.sendCommand('DOM.setFileInputFiles',{nodeId:videoNodeId,files:mediaPlan.videos.map(item=>item.localPath)})
+        }else if(mediaPlan.videos.length){
+          result.warnings.push('视频未写入：当前刊登页没有视频上传口')
+        }
+        for(let attempt=0;attempt<15;attempt+=1){
+          await this.sleep(1000)
+          mediaCount=await readCount()
+          if(mediaCount>=mediaPlan.images.length)break
         }
       }catch(error){
         console.warn('[ebay-fill-media] 图片自动选择失败：',error instanceof Error?error.message:error)
@@ -2683,7 +2711,7 @@ export class BrowserWorkspace {
       }
       result.filledFields=result.filledFields.filter(label=>label!=='图片与视频')
       result.skippedFields=result.skippedFields.filter(label=>label!=='图片与视频')
-      if(mediaCount>0)result.filledFields.push(`图片与视频 ${mediaCount}/${mediaFiles.length}`)
+      if(mediaCount>0)result.filledFields.push(`图片与视频 ${mediaCount}/${mediaPlan.images.length+mediaPlan.videos.length}`)
       else result.skippedFields.push('图片与视频')
       for(const drop of mediaPlan.dropped)result.warnings.push(`媒体未写入 ${drop.localPath||'（无本地路径）'}：${drop.reason}`)
     }
