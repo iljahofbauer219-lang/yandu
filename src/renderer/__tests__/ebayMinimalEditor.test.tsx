@@ -101,6 +101,35 @@ describe('极简编辑器 · App.tsx 接线', () => {
     expect(source).not.toContain('ebay-publish-actions')
     expect(source).toContain('ebay-scheduled-publish')
   })
+  it('优品仓库与线上发布环节互斥：列表/计数/类目树同源排除已有本地产品的草稿', () => {
+    const source=app()
+    expect(source, '要有按「已有同 listingId 本地产品」排除的单一来源').toContain('const premiumStageDrafts=optimizationDrafts.filter(')
+    expect(source).toContain('product.listingId===draft.listing.listingId')
+    for(const anchor of [
+      'const publishReadyDrafts=premiumStageDrafts.filter',
+      'const premiumListings=premiumStageDrafts.map',
+      'const visiblePremiumDrafts=premiumStageDrafts.filter',
+      'const premiumUnclassifiedCount=premiumStageDrafts.filter',
+      'const premiumReviewCount=premiumStageDrafts.filter',
+      'const premiumMissingImageCount=premiumStageDrafts.filter',
+      'const premiumMissingDecisionCount=premiumStageDrafts.filter'
+    ]) expect(source, anchor).toContain(anchor)
+    expect(source, '全部优品计数也要走同一来源').toContain('全部优品 <em>{premiumStageDrafts.length}</em>')
+  })
+  it('定时发布行两行布局：三按钮与时间设置在第二行控件块，行内发布时间删除、改弹窗设置', () => {
+    const source=app()
+    const block=source.split('<div className="ebay-scheduled-actions">')[1]?.split('</div>')[0] ?? ''
+    for(const anchor of ['>草稿发布</button>','>草稿查看</button>',"sch.enabled?'自动发布·开':'自动发布'",'>时间设置</button>'])
+      expect(block, '第二行控件块要含 '+anchor).toContain(anchor)
+    expect(block.indexOf('>草稿发布</button>')).toBeLessThan(block.indexOf('>草稿查看</button>'))
+    expect(block.indexOf('>草稿查看</button>')).toBeLessThan(block.indexOf("sch.enabled?'自动发布·开':'自动发布'"))
+    expect(block.indexOf("sch.enabled?'自动发布·开':'自动发布'")).toBeLessThan(block.indexOf('>时间设置</button>'))
+    expect(source, '行内发布时间标签与输入框要删除').not.toContain('ebay-scheduled-time')
+    expect(source, '时间设置要开弹窗').toContain('setScheduleTimeDraft({productId:product.id')
+    expect(source, '弹窗确认要写回该产品的 sch.at').toContain('writeScheduledPublish({...scheduledPublish,[scheduleTimeDraft.productId]:{enabled:')
+    const css=readFileSync(path.resolve(process.cwd(),'src/renderer/styles.css'),'utf8')
+    expect(css, '第二行控件块四列网格').toContain('.ebay-scheduled-actions{display:grid;grid-template-columns:repeat(4,auto)')
+  })
   it('本地定时发布每行在手动发布后、自动发布前有草稿发布/草稿查看两按钮，且接去重业务', () => {
     const source=app()
     const seg=source.split('>手动发布</button>')[1]?.split('<button type="button" className={sch.enabled?\'primary\':\'\'}')[0] ?? ''
@@ -110,7 +139,8 @@ describe('极简编辑器 · App.tsx 接线', () => {
     expect(seg, '草稿发布复用手动发布去重链路').toContain('onClick={()=>void manualPublishLocal(product)}>草稿发布')
     expect(seg, '草稿查看打开唯一草稿/刊登').toContain('onClick={()=>viewPublishDraft(product)}>草稿查看')
     const css=readFileSync(path.resolve(process.cwd(),'src/renderer/styles.css'),'utf8')
-    expect(css, '行网格要随两枚新按钮扩到 9 列，否则错位').toContain('grid-template-columns:56px minmax(0,1fr) auto auto auto auto auto auto auto')
+    expect(css, '行改三轨（图/标题/控件块），控件块内四列两行').toContain('.ebay-scheduled-row{display:grid;grid-template-columns:56px minmax(0,1fr) auto;')
+    expect(css).toContain('.ebay-scheduled-actions{display:grid;grid-template-columns:repeat(4,auto)')
   })
   it('内联发布编辑器店铺类目「自动分类/手动选类」接通真实 handler（非 noop），作用于 publishEditorProduct', () => {
     const source=app()
