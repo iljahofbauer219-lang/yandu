@@ -21,3 +21,41 @@ describe('本地定时发布列表 · 优化版本/发布版本 与优品卡片�
     expect(source).toContain('if(draft)void openPublishEditorFromDraft(draft);else openPublishVersion(product)')
   })
 })
+
+describe('本地定时发布列表 · 打回优品', () => {
+  const start = source.indexOf('const sendBackToPremium=')
+  const body = source.slice(start, start + 2600)
+  it('行内按钮位于重新优化左侧，带打回中禁用态', () => {
+    expect(start).toBeGreaterThan(-1)
+    expect(source).toContain("?'打回中…':'打回优品'}</button>")
+    expect(source.indexOf('打回优品\'}</button>')).toBeLessThan(source.indexOf('>重新优化</button>'))
+  })
+  it('有草稿保留合规快照作底、无草稿新建：都先落草稿再退出本地定时发布', () => {
+    expect(body).toContain('const existing=optimizationDrafts.find(item=>item.listing.listingId===product.listingId)')
+    expect(body).toContain('const base=existing?{...existing}:{}')
+    expect(body).toContain('await window.desktop.ebay.removeLocalProduct(product.id)')
+    expect(body).toContain('setLocalProducts(await window.desktop.ebay.localProducts(product.storeId))')
+  })
+  it('草稿图用服务器原 URL（本地媒体目录随移除清理，不能引用 localPath），失败中文点名', () => {
+    expect(body).toContain("map(item=>item.remoteUrl||'')")
+    expect(body).not.toContain('cross-media://local/')
+    expect(body).toContain("readableError(reason,'打回优品失败')")
+  })
+  it('落库后切优品仓库并按 Item ID 定位卡片', () => {
+    expect(body).toContain("setActiveTab('premium')")
+    expect(body).toContain('scrollIntoView')
+    expect(body).toContain('setOptimizationDrafts(await window.desktop.ebay.optimizationDrafts(product.storeId))')
+  })
+})
+
+describe('本地产品环节排除已进优品仓库的产品', () => {
+  it('派生 localStageProducts：有同 listingId 优品草稿者不列本地环节', () => {
+    expect(source).toContain('const localStageProducts=localProducts.filter(product=>!optimizationDrafts.some(draft=>draft.listing.listingId===product.listingId))')
+  })
+  it('本地页签树/计数/卡 grid 全部改走派生列表，不动 localProducts state', () => {
+    expect(source).toContain('const localListings=localStageProducts.map(product=>product.snapshot.sourceListing)')
+    expect(source).toContain('const visibleLocalProducts=localStageProducts.filter(')
+    expect(source).toContain('全部产品 <em>{localStageProducts.length}</em>')
+    expect(source).toContain('缺少本地图片 <em>{localStageProducts.filter(')
+  })
+})

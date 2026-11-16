@@ -3851,12 +3851,14 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
     return selectedCategoryIds.has(item.categoryId)
   }
   const visibleListings=listings.filter(item=>categoryMatches(item)&&(!search.trim()||[item.title,item.sku,item.listingId].some(value=>value.toLowerCase().includes(search.trim().toLowerCase()))))
-  const localListings=localProducts.map(product=>product.snapshot.sourceListing)
+  // 已进优品仓库（存在同 listingId 优品草稿）的产品不再列本地产品环节；与优品仓库的反向排除同口径，仅过滤展示、不动 localProducts state
+  const localStageProducts=localProducts.filter(product=>!optimizationDrafts.some(draft=>draft.listing.listingId===product.listingId))
+  const localListings=localStageProducts.map(product=>product.snapshot.sourceListing)
   const localCategoryMatches=(product:EbayLocalProduct)=>{
     if(selectedCategoryId==='MISSING_IMAGE')return !product.snapshot.media.some(media=>media.downloadStatus==='DOWNLOADED')
     return categoryMatches(product.snapshot.sourceListing)
   }
-  const visibleLocalProducts=localProducts.filter(product=>localCategoryMatches(product)&&(!search.trim()||[product.title,product.listingId,product.snapshot.sourceListing.sku].some(value=>value.toLowerCase().includes(search.trim().toLowerCase()))))
+  const visibleLocalProducts=localStageProducts.filter(product=>localCategoryMatches(product)&&(!search.trim()||[product.title,product.listingId,product.snapshot.sourceListing.sku].some(value=>value.toLowerCase().includes(search.trim().toLowerCase()))))
   const unclassifiedCount=listings.filter(item=>!activeCategoryIds.has(item.categoryId)).length
   const titleIssues=listings.filter(item=>item.title.length<50||item.title.length>80).length
   const imageIssues=listings.filter(item=>!item.imageUrl).length
@@ -5071,9 +5073,9 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
         {ebayCatalogPanel.collapsed?<PanelExpandRail panel={ebayCatalogPanel} label="本地产品目录"/>:<aside className="ebay-product-catalog collapsible-aside">
           <PanelCollapseButton panel={ebayCatalogPanel}/>
           <header><b>本地产品目录</b></header>
-          <button className={selectedCategoryId==='ALL'?'active':''} onClick={()=>{setSelectedCategoryId('ALL');setLocalManualPick(null)}}>全部产品 <em>{localProducts.length}</em></button>
+          <button className={selectedCategoryId==='ALL'?'active':''} onClick={()=>{setSelectedCategoryId('ALL');setLocalManualPick(null)}}>全部产品 <em>{localStageProducts.length}</em></button>
           {categoryWorkspace.categories.length?<EbayStoreCategoryTree categories={categoryWorkspace.categories} listings={localListings} selected={localManualPick?localManualPick.categoryId:selectedCategoryId} onSelect={assignLocalCategoryFromTree}/>:<p className="ebay-category-empty">请先同步 eBay 店铺目录</p>}
-          <div className="ebay-catalog-filters"><b>快照状态</b><button className={selectedCategoryId==='UNCLASSIFIED'?'active':''} onClick={()=>{setSelectedCategoryId('UNCLASSIFIED');setLocalManualPick(null)}}>未分类 <em>{localListings.filter(item=>!activeCategoryIds.has(item.categoryId)).length}</em></button><button className={selectedCategoryId==='MISSING_IMAGE'?'active':''} onClick={()=>{setSelectedCategoryId('MISSING_IMAGE');setLocalManualPick(null)}}>缺少本地图片 <em>{localProducts.filter(product=>!product.snapshot.media.some(media=>media.downloadStatus==='DOWNLOADED')).length}</em></button></div>
+          <div className="ebay-catalog-filters"><b>快照状态</b><button className={selectedCategoryId==='UNCLASSIFIED'?'active':''} onClick={()=>{setSelectedCategoryId('UNCLASSIFIED');setLocalManualPick(null)}}>未分类 <em>{localListings.filter(item=>!activeCategoryIds.has(item.categoryId)).length}</em></button><button className={selectedCategoryId==='MISSING_IMAGE'?'active':''} onClick={()=>{setSelectedCategoryId('MISSING_IMAGE');setLocalManualPick(null)}}>缺少本地图片 <em>{localStageProducts.filter(product=>!product.snapshot.media.some(media=>media.downloadStatus==='DOWNLOADED')).length}</em></button></div>
           {ebayInfoInAside&&<div className="ebay-workbench-info">{ebayInfoBoxes}</div>}
         </aside>}
         <section>
