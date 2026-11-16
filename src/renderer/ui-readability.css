@@ -142,25 +142,25 @@ form label{font-size:12px;line-height:17px}
 .warehouse-source-tabs small,.warehouse-toolbar span,.warehouse-toolbar input{font-size:12px}
 
 /* eBay platform shell */
-.ebay-store-bar{min-height:82px;height:auto;gap:12px;padding:10px 20px}
+.ebay-store-bar{height:var(--ebay-band-h);min-height:0;gap:12px;padding:0 20px;align-items:center}
 .ebay-platform-identity{width:190px;gap:12px}
-.ebay-platform-identity>span{width:48px;height:48px;border-radius:13px;font-size:25px}
+.ebay-platform-identity>span{width:32px;height:32px;border-radius:10px;font-size:18px}
 .ebay-platform-identity b{font-size:17px;line-height:23px}
 .ebay-platform-identity small{font-size:11px;line-height:16px}
 .ebay-store-scopes{gap:9px}
-.ebay-store-scopes button{min-width:176px;height:60px;padding:10px 13px}
+.ebay-store-scopes button{min-width:176px;height:36px;padding:0 13px}
 .ebay-store-scopes b{font-size:13px}
 .ebay-store-scopes small{font-size:11px;line-height:15px}
-.ebay-add-store{min-height:44px;height:44px;font-size:13px}
+.ebay-add-store{min-height:36px;height:36px;font-size:13px}
 
 .ebay-business-nav{
-  min-height:48px;
-  height:auto;
+  min-height:0;
+  height:var(--ebay-band-h);
   gap:4px;
   padding:0 20px;
   overflow-x:auto;
 }
-.ebay-business-nav button{min-width:150px;min-height:44px;padding:0 18px}
+.ebay-business-nav button{min-width:150px;min-height:0;padding:0 18px}
 .ebay-business-nav b{font-size:14px;line-height:19px}
 .ebay-workspace{padding:14px}
 .ebay-omkar-chip{font-size:11px;line-height:16px}
@@ -390,7 +390,7 @@ form label{font-size:12px;line-height:17px}
   .workspace,.publishing-layout,.ebay-library-layout,.ebay-optimize-layout{grid-template-columns:1fr}
   .task-panel{max-height:45vh}
   .warehouse-module-nav{grid-template-columns:1fr 1fr}
-  .ebay-store-bar{align-items:flex-start;flex-wrap:wrap}
+  .ebay-store-bar{align-items:center;flex-wrap:nowrap;overflow-x:auto}
   .ebay-platform-identity{width:100%}
   .ebay-business-nav{padding-inline:8px}
   .ebay-business-nav button{min-width:126px;padding-inline:12px}

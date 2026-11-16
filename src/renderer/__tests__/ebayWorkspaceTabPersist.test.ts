@@ -14,7 +14,7 @@ describe('eBay 子页签跨 reload 保持', () => {
     const block = appSource.slice(appSource.indexOf('const EBAY_WORKSPACE_TABS'), appSource.indexOf('const ebayWorkspaceTabKey'))
     const ids = [...block.matchAll(/\{id:'([a-z]+)',name:'([^']+)'\}/g)].map(m => [m[1], m[2]])
     expect(ids).toEqual([
-      ['browser', '店铺采集'],
+      ['browser', '店铺浏览'],
       ['local', '本地产品'],
       ['optimize', 'AI优化'],
       ['premium', '优品仓库'],
