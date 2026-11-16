@@ -25,3 +25,23 @@ describe('填写目标 · 草稿页 URL 反解兜底', () => {
     expect(source).toContain('const viewPublishDraft=(product:EbayLocalProduct)=>{setEbayFillLastProduct(product.id)')
   })
 })
+
+describe('手动/草稿发布 · 预填→自动填写→固定填写串联', () => {
+  it('runCurrentTabFill 接受显式目标 id（串联不依赖异步 state），并返回结果供汇总', () => {
+    expect(source).toContain("const runCurrentTabFill=async(mode:'auto'|'fixed',targetId?:string)=>{")
+    expect(source).toContain('const fillId=targetId||ebayFillTargetId')
+    expect(source).toContain('return result')
+  })
+  it('manualPublishLocal 在 prepare 后依次自动执行自动填写→固定填写（显式 product.id）', () => {
+    const seg = source.split('const manualPublishLocal=')[1]?.split('const sendBackToPremium=')[0] ?? ''
+    expect(seg).toContain("await runCurrentTabFill('auto',product.id)")
+    expect(seg).toContain("await runCurrentTabFill('fixed',product.id)")
+    expect(seg.indexOf("runCurrentTabFill('auto',product.id)")).toBeLessThan(seg.indexOf("runCurrentTabFill('fixed',product.id)"))
+  })
+  it('串联完成 notice 汇总自动填写与固定填写两阶段，且声明未点最终提交', () => {
+    const seg = source.split('const manualPublishLocal=')[1]?.split('const sendBackToPremium=')[0] ?? ''
+    expect(seg).toContain('自动填写')
+    expect(seg).toContain('固定填写')
+    expect(seg).toContain('最终提交')
+  })
+})

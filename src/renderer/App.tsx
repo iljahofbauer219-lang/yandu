@@ -4326,7 +4326,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   useEffect(()=>{if(!activeStore){setScheduledPublish({});return}try{setScheduledPublish(normalizeScheduledPublish(JSON.parse(readScopedItem(localStorage,scopedStorageKey('ebay-scheduled-publish:v1',activeStore.id))||'null')))}catch{setScheduledPublish({})}},[activeStore?.id])
   const writeScheduledPublish=(next:EbayScheduledPublishMap)=>{setScheduledPublish(next);if(activeStore)writeScopedItem(localStorage,scopedStorageKey('ebay-scheduled-publish:v1',activeStore.id),JSON.stringify(next))}
   const openPublishVersion=(product:EbayLocalProduct)=>{setPublishEditorDraftId(product.id);publishEditorSession.current=`local:${product.id}`;setPublishEditorProduct(product);setPublishEditorDraft({...ebayLocalProductFormSeed(product),title:product.title,descriptionText:product.snapshot.details.descriptionText||'',descriptionHtml:product.snapshot.details.descriptionHtml||'',price:product.snapshot.details.price||'0',currency:product.snapshot.details.currency||'USD',media:product.snapshot.media});setActiveTab('publish')}
-  const manualPublishLocal=async(product:EbayLocalProduct)=>{setEbayFillLastProduct(product.id);setBusy(`sched-manual:${product.id}`);setEbayError('');setActiveTab('browser');try{await new Promise(resolve=>window.setTimeout(resolve,900));const res=await window.desktop.ebay.prepareLocalProductRevision(product.id);setLocalProducts(await window.desktop.ebay.localProducts(product.storeId));setNotice(res.reusedRef?`已复用该商品现有的 eBay 草稿/刊登（未重复新建），统一预填完成（${product.title.slice(0,40)}）。系统没有点击最终提交按钮。`:`已打开 Seller Hub 并统一预填（${product.title.slice(0,40)}）。系统没有点击最终提交按钮。`)}catch(reason){setEbayError(readableError(reason,'手动发布准备失败'))}finally{setBusy('')}}
+  const manualPublishLocal=async(product:EbayLocalProduct)=>{setEbayFillLastProduct(product.id);setBusy(`sched-manual:${product.id}`);setEbayError('');setActiveTab('browser');try{await new Promise(resolve=>window.setTimeout(resolve,900));const res=await window.desktop.ebay.prepareLocalProductRevision(product.id);setLocalProducts(await window.desktop.ebay.localProducts(product.storeId));const autoRes=await runCurrentTabFill('auto',product.id);if(autoRes){const fixedRes=await runCurrentTabFill('fixed',product.id);setNotice(`${res.reusedRef?'已复用该商品现有 eBay 草稿/刊登（未重复新建）。':`已打开 Seller Hub 并统一预填（${product.title.slice(0,40)}）。`}串联完成：自动填写 写${autoRes.filledFields.length}项；固定填写 写${fixedRes?fixedRes.filledFields.length:0}项${fixedRes?'':'（固定填写失败，见错误提示）'}。系统没有点击最终提交按钮。`)}}catch(reason){setEbayError(readableError(reason,'手动发布准备失败'))}finally{setBusy('')}}
   // 打回优品=退出本地定时发布、回到优品仓库：优品列表按现口径排除「已有本地产品」的草稿（premiumStageDrafts），
   // 所以先把当前本地内容写进优品草稿（保留合规快照、图用服务器原 URL），再移除本地产品行（其本地媒体目录随之清理，不可逆）。
   const sendBackToPremium=async(product:EbayLocalProduct)=>{
@@ -4523,14 +4523,16 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
     setEbayFixedPresetOpen(false)
     setNotice('固定填写预设已保存（按店铺独立）；点「固定填写」即按此预设写入当前刊登页。')
   }
-  const runCurrentTabFill=async(mode:'auto'|'fixed')=>{
-    if(!ebayFillTargetId){setEbayError('请先选定要填写的商品：本地产品「本地详情」或优品仓库「进入发布」');return}
+  const runCurrentTabFill=async(mode:'auto'|'fixed',targetId?:string)=>{
+    const fillId=targetId||ebayFillTargetId
+    if(!fillId){setEbayError('请先选定要填写的商品：本地产品「本地详情」或优品仓库「进入发布」');return null}
     setEbayFillBusy(mode);setEbayError('')
     try{
       const preset=mode==='fixed'?readEbayFixedPreset():undefined
-      const result=await window.desktop.ebay.fillCurrentTab(ebayFillTargetId,mode,preset)
+      const result=await window.desktop.ebay.fillCurrentTab(fillId,mode,preset)
       setNotice(`${mode==='auto'?'自动填写':'固定填写'}完成：已写 ${result.filledFields.length} 项（${result.filledFields.join('、')||'无'}）；跳过 ${result.skippedFields.length} 项（${result.skippedFields.join('、')||'无'}）。${result.inferredFields?.length?`推断待确认 ${result.inferredFields.length} 项（${result.inferredFields.join('、')}），可在页面人工修改。`:''}${result.warnings.join(' ')}尚未提交，最终提交仍由您在 eBay 页面点击。`)
-    }catch(reason){setEbayError(readableError(reason,'填写失败'))}
+      return result
+    }catch(reason){setEbayError(readableError(reason,'填写失败'));return null}
     finally{setEbayFillBusy('')}
   }
   // 极简重构：浏览器侧「刊登资料」抽屉——按当前填写目标商品开本地编辑器的 details 态（仅eBay资料六段），
