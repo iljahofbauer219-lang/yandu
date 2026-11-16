@@ -41,7 +41,7 @@ export function ResearchPanel({ storeId }: { storeId?: string }) {
     } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
   }
 
-  if (!storeId) return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>关键词研究</h2><p>请先在「浏览器」页签添加并登录 eBay 店铺</p></div></section>
+  if (!storeId) return <section className="ai-crossborder-page"><div className="ai-crossborder-header"><h2>关键词热销</h2><p>请先在「浏览器」页签添加并登录 eBay 店铺</p></div></section>
 
   return <section className="research-page">
     <div className="research-bar">
@@ -106,7 +106,7 @@ export function ShortlistPanel() {
   return <section className="research-page">
     <div className="ai-crossborder-header"><h2>入选榜单</h2><p>按关键词分组的热销产品，供货源匹配/选品决策/立项入库使用</p></div>
     {loading && <p className="research-empty">加载中…</p>}
-    {!loading && groups.length === 0 && <p className="research-empty">暂无入选产品，请到「关键词研究」查询并勾选入榜</p>}
+    {!loading && groups.length === 0 && <p className="research-empty">暂无入选产品，请到「关键词热销」查询并勾选入榜</p>}
     {groups.map(([kw, arr]) => <div className="shortlist-group" key={kw}>
       <div className="shortlist-group-head"><b>{kw}</b><span>{arr.length} 个热品</span></div>
       <table className="research-table">
