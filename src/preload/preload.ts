@@ -478,7 +478,7 @@ contextBridge.exposeInMainWorld('desktop', {
     businessPolicies: (storeId:string,kind?:EbayBusinessPolicyKind):Promise<EbayStoreBusinessPolicy[]> => ipcRenderer.invoke('ebay:business-policies:list',storeId,kind),
     prepareLocalProductRevision: (localProductId:string):Promise<EbayLocalRevisionPreparationResult> => ipcRenderer.invoke('ebay:local-products:prepare-revision',localProductId),
     fillCurrentTab: (localProductId:string, mode:'auto'|'fixed', preset?:unknown):Promise<{url:string;mode:string;filledFields:string[];skippedFields:string[];warnings:string[];inferredFields:string[];filledAt:string}> => ipcRenderer.invoke('ebay:fill-current-tab',localProductId,mode,preset),
-    saveCurrentDraft: ():Promise<{status:'SAVED'|'FAILED';url:string;message:string;savedAt:string}> => ipcRenderer.invoke('ebay:save-current-draft'),
+    saveCurrentDraft: (localProductId?:string):Promise<{status:'SAVED'|'FAILED';url:string;message:string;savedAt:string}> => ipcRenderer.invoke('ebay:save-current-draft',localProductId),
     readCurrentEbaySettings: (storeId:string):Promise<{paymentPolicy:{current:string;options:Array<{id:string;text:string}>};shippingPolicy:{current:string;options:Array<{id:string;text:string}>};returnPolicy:{current:string;options:Array<{id:string;text:string}>};itemLocation:string;postalCode:string}> => ipcRenderer.invoke('ebay:read-current-settings',storeId),
     specificsLlmSuggestions: (input:{title:string;descriptionText:string;slots:Array<{name:string;control:string;options:string[];maxLength:number}>}):Promise<Array<{name:string;value:string}>> => ipcRenderer.invoke('ebay:specifics-llm',input),
     removeLocalProduct: (localProductId:string):Promise<boolean> => ipcRenderer.invoke('ebay:local-products:remove',localProductId),

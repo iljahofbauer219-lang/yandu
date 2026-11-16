@@ -33,7 +33,7 @@ describe('eBay 保存草稿 · 主进程点击通道', () => {
 describe('eBay 保存草稿 · 渲染器仅草稿发布触发', () => {
   it('manualPublishLocal 接受 alsoSaveDraft 开关并在串联后调 saveCurrentDraft', () => {
     expect(app).toContain('const manualPublishLocal=async(product:EbayLocalProduct,alsoSaveDraft=false)')
-    expect(app).toContain('window.desktop.ebay.saveCurrentDraft()')
+    expect(app).toContain('window.desktop.ebay.saveCurrentDraft(product.id)')
   })
   it('草稿发布按钮传 true，手动发布按钮不传（保持不点保存草稿）', () => {
     expect(app).toContain('onClick={()=>void manualPublishLocal(product,true)}>草稿发布')

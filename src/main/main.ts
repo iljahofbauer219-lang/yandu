@@ -3496,6 +3496,7 @@ ipcMain.handle('ebay:local-products:prepare-revision', async (_event, localProdu
   // 发布去重：复用的草稿/刊登在 eBay 侧已删除 → 清 ref 后重建一次；否则把本次落地 ref 持久化，后续四按钮复用它不重复新建。
   if(result.refDeleted){
     database.setEbayLocalProductPublishRef(product.id,null)
+    database.setEbayLocalProductDraftSaved(product.id,null)
     const retry=await workspace.prepareEbayLocalProductRevision(`ebay:${product.storeId}`,{...product,publishRef:null},section)
     if(retry.publishRef)database.setEbayLocalProductPublishRef(product.id,{...retry.publishRef,at:new Date().toISOString()})
     return retry
@@ -3547,9 +3548,12 @@ ipcMain.handle('ebay:fill-current-tab', async (_event, localProductId:string, mo
   }
   return workspace.fillCurrentEbayTab(`ebay:${product.storeId}`,product,mode,preset as Parameters<typeof workspace.fillCurrentEbayTab>[3],specificsRows,specificsManual)
 })
-ipcMain.handle('ebay:save-current-draft', async () => {
+ipcMain.handle('ebay:save-current-draft', async (_event, localProductId?:string) => {
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
-  return workspace.saveEbayCurrentDraft()
+  if(!database)throw new Error('数据库尚未初始化')
+  const result=await workspace.saveEbayCurrentDraft()
+  if(result.status==='SAVED'&&localProductId)database.setEbayLocalProductDraftSaved(localProductId,new Date().toISOString())
+  return result
 })
 ipcMain.handle('ebay:read-current-settings', async (_event, storeId:string) => {
   if(!workspace)throw new Error('应用内浏览器尚未初始化')

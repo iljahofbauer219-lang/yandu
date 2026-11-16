@@ -1427,6 +1427,7 @@ export class AppDatabase {
     ensureColumn('ebay_local_products', 'core_term_zh', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('ebay_local_products', 'core_term_en', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('ebay_local_products', 'publish_ref', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('ebay_local_products', 'draft_saved_at', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_warehouse_products', 'collected_at', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_warehouse_products', 'collected_by', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('inbound_processing_items', 'region', "TEXT NOT NULL DEFAULT ''")
@@ -2456,6 +2457,7 @@ export class AppDatabase {
       coreTermZh:String(row.core_term_zh ?? ''),
       coreTermEn:String(row.core_term_en ?? ''),
       publishRef:(()=>{try{const raw=String(row.publish_ref||'');if(!raw)return null;const v=JSON.parse(raw) as {kind?:string;id?:string;at?:string};return (v.kind==='draft'||v.kind==='listing')&&v.id?{kind:v.kind,id:String(v.id),at:String(v.at||'')}:null}catch{return null}})(),
+      draftSavedAt:String(row.draft_saved_at||'')||null,
       title:String(row.title),
       status:String(row.status) as EbayLocalProduct['status'],
       versionCount:Number(row.version_count),
@@ -2469,6 +2471,9 @@ export class AppDatabase {
   /** 发布去重：记录/清空该本地产品在 eBay 的唯一草稿/刊登引用（null=已删除可重建）。 */
   setEbayLocalProductPublishRef(localProductId:string, ref:{kind:'draft'|'listing';id:string;at?:string}|null):void {
     this.database.prepare(`UPDATE ebay_local_products SET publish_ref=? WHERE id=?`).run(ref?JSON.stringify(ref):'', localProductId)
+  }
+  setEbayLocalProductDraftSaved(localProductId:string, at:string|null):void {
+    this.database.prepare(`UPDATE ebay_local_products SET draft_saved_at=? WHERE id=?`).run(at||'', localProductId)
   }
 
   getEbayLocalProductSnapshots(localProductId:string):EbayLocalProductSnapshot[] {

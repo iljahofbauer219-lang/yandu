@@ -226,6 +226,8 @@ export interface EbayLocalProduct {
   coreTermEn:string
   /** 发布去重：该本地产品在 eBay 的唯一草稿/刊登引用；有则复用不重复新建，eBay 侧删除后清空才重建 */
   publishRef?:{kind:'draft'|'listing';id:string;at?:string}|null
+  /** 草稿发布完成态：成功存入 eBay 草稿栏的时间；置位后「草稿发布」禁用异色，eBay 侧草稿删除（refDeleted）才清位恢复 */
+  draftSavedAt?:string|null
   title:string
   status:'READY'|'INCOMPLETE'
   versionCount:number
