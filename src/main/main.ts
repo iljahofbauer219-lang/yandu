@@ -3547,6 +3547,10 @@ ipcMain.handle('ebay:fill-current-tab', async (_event, localProductId:string, mo
   }
   return workspace.fillCurrentEbayTab(`ebay:${product.storeId}`,product,mode,preset as Parameters<typeof workspace.fillCurrentEbayTab>[3],specificsRows,specificsManual)
 })
+ipcMain.handle('ebay:save-current-draft', async () => {
+  if(!workspace)throw new Error('应用内浏览器尚未初始化')
+  return workspace.saveEbayCurrentDraft()
+})
 ipcMain.handle('ebay:read-current-settings', async (_event, storeId:string) => {
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
   return workspace.readCurrentEbaySettings(`ebay:${storeId}`)

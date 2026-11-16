@@ -418,6 +418,7 @@ declare global {
         businessPolicies(storeId:string,kind?:EbayBusinessPolicyKind):Promise<EbayStoreBusinessPolicy[]>
         prepareLocalProductRevision(localProductId:string):Promise<EbayLocalRevisionPreparationResult>
         fillCurrentTab(localProductId:string, mode:'auto'|'fixed', preset?:unknown):Promise<{url:string;mode:string;filledFields:string[];skippedFields:string[];warnings:string[];inferredFields:string[];filledAt:string}>
+        saveCurrentDraft():Promise<{status:'SAVED'|'FAILED';url:string;message:string;savedAt:string}>
         readCurrentEbaySettings(storeId:string):Promise<{paymentPolicy:{current:string;options:Array<{id:string;text:string}>};shippingPolicy:{current:string;options:Array<{id:string;text:string}>};returnPolicy:{current:string;options:Array<{id:string;text:string}>};itemLocation:string;postalCode:string}>
         specificsLlmSuggestions(input:{title:string;descriptionText:string;slots:Array<{name:string;control:string;options:string[];maxLength:number}>}):Promise<Array<{name:string;value:string}>>
         removeLocalProduct(localProductId:string):Promise<boolean>

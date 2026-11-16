@@ -2221,6 +2221,23 @@ export class BrowserWorkspace {
     return {paymentPolicy:pick('paymentPolicy'),shippingPolicy:pick('shippingPolicy'),returnPolicy:pick('returnPolicy'),itemLocation:location,postalCode:postal}
   }
 
+  async saveEbayCurrentDraft():Promise<{status:'SAVED'|'FAILED';url:string;message:string;savedAt:string}> {
+    let tab=this.detailTabs.get(this.activeTabId)
+    const isLstng=(u:string)=>/^https:\/\/([a-z0-9-]+\.)*ebay\.com\/lstng\?/.test(u)
+    if(!tab||!isLstng(tab.view.webContents.getURL()))tab=[...this.detailTabs.values()].find(t=>isLstng(t.view.webContents.getURL()))
+    if(!tab)throw new Error('当前没有打开的 eBay 刊登页，无法保存草稿')
+    const clicked=await tab.view.webContents.executeJavaScript(String.raw`(()=>{
+      const clean=v=>(v||'').replace(/\s+/g,' ').trim();
+      const btns=[...document.querySelectorAll('button,[role=button],a')];
+      const target=btns.find(b=>{const t=clean(b.textContent||b.getAttribute('aria-label'));return /保存草稿稍后再完成|保存草稿|Save draft/i.test(t)&&!/刊登|预览|List item|Submit/i.test(t)});
+      if(!target)return false; target.click(); return true;
+    })()`,true) as boolean
+    if(!clicked)return {status:'FAILED',url:tab.view.webContents.getURL(),message:'未找到「保存草稿稍后再完成」按钮，未点击任何提交按钮',savedAt:new Date().toISOString()}
+    let url=tab.view.webContents.getURL()
+    for(let attempt=0;attempt<12;attempt+=1){await this.sleep(800);url=tab.view.webContents.getURL();if(/\/sh\/lst\/drafts|drafts/i.test(url))break}
+    const saved=/\/sh\/lst\/drafts|drafts/i.test(url)
+    return {status:saved?'SAVED':'FAILED',url,message:saved?'已点「保存草稿稍后再完成」，产品已存入 eBay 草稿栏':'已点保存草稿但页面未跳转到草稿栏，请人工核对',savedAt:new Date().toISOString()}
+  }
   async fillCurrentEbayTab(accountId:string,product:EbayLocalProduct,mode:'auto'|'fixed',preset?:EbayFixedFillPreset,specificsRows?:Array<{name:string;value:string;control:EbayItemSpecificSlot['control'];inferred?:boolean;evidence?:string}>,specificsManual?:Array<{name:string;reason:string}>):Promise<{url:string;mode:string;filledFields:string[];skippedFields:string[];warnings:string[];inferredFields:string[];filledAt:string}> {
     const tab=this.detailTabs.get(this.activeTabId)
     if(!tab)throw new Error('当前没有打开的页签，请先在 eBay 浏览器打开刊登页')

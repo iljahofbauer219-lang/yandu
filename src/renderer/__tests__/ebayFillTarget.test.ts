@@ -21,7 +21,7 @@ describe('填写目标 · 草稿页 URL 反解兜底', () => {
     expect(source).toContain('p.publishRef?.id===currentListingRef.id')
   })
   it('手动发布/草稿查看置 ebayFillLastProduct 兜底', () => {
-    expect(source).toContain('const manualPublishLocal=async(product:EbayLocalProduct)=>{setEbayFillLastProduct(product.id)')
+    expect(source).toContain('const manualPublishLocal=async(product:EbayLocalProduct,alsoSaveDraft=false)=>{setEbayFillLastProduct(product.id)')
     expect(source).toContain('const viewPublishDraft=(product:EbayLocalProduct)=>{setEbayFillLastProduct(product.id)')
   })
 })

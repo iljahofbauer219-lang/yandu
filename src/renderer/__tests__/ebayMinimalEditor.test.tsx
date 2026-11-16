@@ -136,7 +136,7 @@ describe('极简编辑器 · App.tsx 接线', () => {
     expect(seg, '手动发布与自动发布之间要有草稿发布').toContain('>草稿发布</button>')
     expect(seg, '手动发布与自动发布之间要有草稿查看').toContain('>草稿查看</button>')
     expect(seg.indexOf('>草稿发布</button>'), '草稿发布在草稿查看之前').toBeLessThan(seg.indexOf('>草稿查看</button>'))
-    expect(seg, '草稿发布复用手动发布去重链路').toContain('onClick={()=>void manualPublishLocal(product)}>草稿发布')
+    expect(seg, '草稿发布复用手动发布去重链路（并传 saveDraft 开关）').toContain('onClick={()=>void manualPublishLocal(product,true)}>草稿发布')
     expect(seg, '草稿查看打开唯一草稿/刊登').toContain('onClick={()=>viewPublishDraft(product)}>草稿查看')
     const css=readFileSync(path.resolve(process.cwd(),'src/renderer/styles.css'),'utf8')
     expect(css, '行改三轨（图/标题/控件块），控件块内四列两行').toContain('.ebay-scheduled-row{display:grid;grid-template-columns:56px minmax(0,1fr) auto;')
