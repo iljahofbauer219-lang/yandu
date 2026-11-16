@@ -3227,6 +3227,10 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     const allowedDomains = this.active === '1688' ? (this.supplyPlatformCode==='GIGACLOUD'?['gigab2b.com']:['1688.com']) : this.active === 'web' ? this.credentialDomains : this.marketplaceDomains
     const allowed = allowedDomains.some(domain=>currentUrl.hostname===domain||currentUrl.hostname.endsWith(`.${domain}`))
     if (!allowed) throw new Error('当前页面不是已允许的平台域名')
+    // 登录页门卫：刊登/草稿页与登录页同域，username 兜底 input[type=text] 会命中标题框把用户名写进标题
+    // （现网取证：草稿标题被覆盖成店铺用户名）。非登录页一律拒绝填充，绝不把凭据写进刊登/草稿表单。
+    const isLoginPage = await view.webContents.executeJavaScript(`(()=>Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/\\/signin|\\/login|\\/reg/i.test(location.pathname))()`, true) as boolean
+    if(!isLoginPage)throw new Error('当前页面不是登录页，已拒绝填充凭据，避免把账号/密码写进刊登或草稿表单；请先打开平台登录页再填写。')
     const fillOnce = () => view.webContents.executeJavaScript(`(() => {
       const visible = element => element && element.getClientRects().length > 0 && !element.disabled;
       const usernameSelectors = ['input[type="email"]','input[name*="login" i]','input[name*="user" i]','input[name*="account" i]','input[autocomplete="username"]','input[type="tel"]','input[type="text"]'];
