@@ -3555,6 +3555,14 @@ ipcMain.handle('ebay:save-current-draft', async (_event, localProductId?:string)
   if(result.status==='SAVED'&&localProductId)database.setEbayLocalProductDraftSaved(localProductId,new Date().toISOString())
   return result
 })
+ipcMain.handle('ebay:read-current-draft-title', async () => {
+  if(!workspace)throw new Error('应用内浏览器尚未初始化')
+  return workspace.readEbayCurrentTitle()
+})
+ipcMain.handle('ebay:publish-current-listing', async () => {
+  if(!workspace)throw new Error('应用内浏览器尚未初始化')
+  return workspace.publishEbayCurrentListing()
+})
 ipcMain.handle('ebay:read-current-settings', async (_event, storeId:string) => {
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
   return workspace.readCurrentEbaySettings(`ebay:${storeId}`)

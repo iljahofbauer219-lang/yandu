@@ -2221,6 +2221,32 @@ export class BrowserWorkspace {
     return {paymentPolicy:pick('paymentPolicy'),shippingPolicy:pick('shippingPolicy'),returnPolicy:pick('returnPolicy'),itemLocation:location,postalCode:postal}
   }
 
+  async readEbayCurrentTitle():Promise<{title:string;url:string}> {
+    let tab=this.detailTabs.get(this.activeTabId)
+    const isLstng=(u:string)=>/^https:\/\/([a-z0-9-]+\.)*ebay\.com\/lstng\?/.test(u)
+    if(!tab||!isLstng(tab.view.webContents.getURL()))tab=[...this.detailTabs.values()].find(t=>isLstng(t.view.webContents.getURL()))
+    if(!tab)throw new Error('当前没有打开的 eBay 刊登页，无法读回标题')
+    const title=await tab.view.webContents.executeJavaScript(`(()=>{const i=document.querySelector('input[name="title"]');return i?(i.value||''):''})()`,true) as string
+    return {title:String(title||'').trim(),url:tab.view.webContents.getURL()}
+  }
+  async publishEbayCurrentListing():Promise<{status:'PUBLISHED'|'FAILED';url:string;message:string;publishedAt:string}> {
+    let tab=this.detailTabs.get(this.activeTabId)
+    const isLstng=(u:string)=>/^https:\/\/([a-z0-9-]+\.)*ebay\.com\/lstng\?/.test(u)
+    if(!tab||!isLstng(tab.view.webContents.getURL()))tab=[...this.detailTabs.values()].find(t=>isLstng(t.view.webContents.getURL()))
+    if(!tab)throw new Error('当前没有打开的 eBay 刊登页，无法执行最终刊登')
+    // 仅调度自动发布路径调用（用户 2026-11-17 显式授权到点直接上架）；只认最终提交按钮，排除保存草稿/预览。
+    const clicked=await tab.view.webContents.executeJavaScript(String.raw`(()=>{
+      const clean=v=>(v||'').replace(/\s+/g,' ').trim();
+      const btns=[...document.querySelectorAll('button,[role=button],a')];
+      const target=btns.find(b=>{const t=clean(b.textContent||b.getAttribute('aria-label'));return /^(刊登|List item|List your item|Submit|发布)$/i.test(t)&&!/保存草稿|预览|Save draft|Preview/i.test(t)});
+      if(!target)return false; target.click(); return true;
+    })()`,true) as boolean
+    if(!clicked)return {status:'FAILED',url:tab.view.webContents.getURL(),message:'未找到最终「刊登」按钮，未提交',publishedAt:new Date().toISOString()}
+    let url=tab.view.webContents.getURL()
+    for(let attempt=0;attempt<15;attempt+=1){await this.sleep(800);url=tab.view.webContents.getURL();if(!isLstng(url))break}
+    const published=!isLstng(url)
+    return {status:published?'PUBLISHED':'FAILED',url,message:published?'已点最终「刊登」，商品已真正上架':'已点刊登但页面未离开草稿页，请人工核对是否上架',publishedAt:new Date().toISOString()}
+  }
   async saveEbayCurrentDraft():Promise<{status:'SAVED'|'FAILED';url:string;message:string;savedAt:string}> {
     let tab=this.detailTabs.get(this.activeTabId)
     const isLstng=(u:string)=>/^https:\/\/([a-z0-9-]+\.)*ebay\.com\/lstng\?/.test(u)
