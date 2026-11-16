@@ -224,6 +224,8 @@ export interface EbayLocalProduct {
   platformCategoryName?:string
   coreTermZh:string
   coreTermEn:string
+  /** 发布去重：该本地产品在 eBay 的唯一草稿/刊登引用；有则复用不重复新建，eBay 侧删除后清空才重建 */
+  publishRef?:{kind:'draft'|'listing';id:string;at?:string}|null
   title:string
   status:'READY'|'INCOMPLETE'
   versionCount:number
@@ -332,6 +334,12 @@ export interface EbayLocalRevisionPreparationResult {
   warnings:string[]
   submitButtonDetected:boolean
   preparedAt:string
+  /** 本次落地 URL 反解出的唯一草稿/刊登引用，供主进程持久化去重 */
+  publishRef?:{kind:'draft'|'listing';id:string}|null
+  /** 本次是否复用了已有草稿/刊登（未重复新建） */
+  reusedRef?:boolean
+  /** 复用的草稿/刊登在 eBay 侧已删除/报错，主进程应清 ref 后重建 */
+  refDeleted?:boolean
 }
 
 export interface EbayMarketResearchSample {

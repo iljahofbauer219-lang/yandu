@@ -18,6 +18,14 @@ export interface EbayListingTargetInput {
   itemId?: string
   /** 平台类目（eBay 真叶 ID） */
   categoryId?: string
+  /** 发布去重：该本地产品已在 eBay 产生的唯一草稿/刊登引用；有则复用，不重复新建 */
+  publishRef?: EbayPublishRef | null
+}
+
+export interface EbayPublishRef {
+  kind: 'draft' | 'listing'
+  id: string
+  at?: string
 }
 
 export interface EbayListingTarget {
@@ -36,6 +44,23 @@ const EBAY_CATEGORY_ID = /^\d{2,12}$/
 
 export function resolveEbayListingTarget(input: EbayListingTargetInput): EbayListingTarget {
   const categoryId = (input.categoryId || '').replace(/\s+/g, '')
+  // 发布去重：已有唯一草稿/刊登引用时复用它，绝不重复新建（仅 eBay 侧删除后由主进程清 ref 才重建）。
+  const ref = input.publishRef
+  if (ref && /^\d{6,}$/.test(ref.id)) {
+    if (ref.kind === 'listing') {
+      return {
+        kind: 'revise',
+        itemId: ref.id,
+        url: `https://www.ebay.com/sl/list?mode=ReviseItem&itemId=${encodeURIComponent(ref.id)}&ReturnURL=${encodeURIComponent(RETURN_URL)}`,
+        note: `复用该本地产品已有的 eBay 在架刊登 ${ref.id}（修改页），不重复新建。`
+      }
+    }
+    return {
+      kind: 'add',
+      url: `https://www.ebay.com/lstng?draftId=${encodeURIComponent(ref.id)}&mode=AddItem`,
+      note: `复用该本地产品已有的 eBay 草稿 ${ref.id}，不重复新建草稿；核对后由您提交。`
+    }
+  }
   const carrier = checkEbayPolicyCarrierItemId(input.itemId || '')
   if (carrier.ok) {
     return {
@@ -64,6 +89,15 @@ export function resolveEbayListingTarget(input: EbayListingTargetInput): EbayLis
  * 本地产品 → 开页路由。EbayLocalProduct 同时带着店铺类目树的 `categoryId` 与 eBay 平台类目 `platformCategoryId`，
  * 只有后者能拼 AddItem；取字段的活收在这里，渲染器与主进程才不会各拿错一个。
  */
-export function resolveEbayListingTargetForProduct(product: { listingId?: string; platformCategoryId?: string }): EbayListingTarget {
-  return resolveEbayListingTarget({ itemId: product.listingId, categoryId: product.platformCategoryId })
+export function resolveEbayListingTargetForProduct(product: { listingId?: string; platformCategoryId?: string; publishRef?: EbayPublishRef | null }): EbayListingTarget {
+  return resolveEbayListingTarget({ itemId: product.listingId, categoryId: product.platformCategoryId, publishRef: product.publishRef })
+}
+
+/** 从落地 URL 反解该本地产品对应的唯一 eBay 草稿/刊登引用，供主进程持久化去重。 */
+export function ebayPublishRefFromUrl(url: string): EbayPublishRef | null {
+  const draft = /[?&]draftId=(\d{6,})/.exec(url || '')
+  if (draft) return { kind: 'draft', id: draft[1] }
+  const item = /[?&]itemId=(\d{6,})/.exec(url || '') || /\/itm\/(?:[^/]+\/)?(\d{6,})/.exec(url || '')
+  if (item) return { kind: 'listing', id: item[1] }
+  return null
 }

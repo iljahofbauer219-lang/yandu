@@ -3492,7 +3492,16 @@ ipcMain.handle('ebay:local-products:prepare-revision', async (_event, localProdu
   const section=database.getEbaySpecificsSection(product.id)?.section
     ??(product.platformCategoryId?database.getEbayCategorySpecificsSection(product.storeId,product.platformCategoryId)?.section:null)
     ??null
-  return workspace.prepareEbayLocalProductRevision(`ebay:${product.storeId}`,product,section)
+  const result=await workspace.prepareEbayLocalProductRevision(`ebay:${product.storeId}`,product,section)
+  // 发布去重：复用的草稿/刊登在 eBay 侧已删除 → 清 ref 后重建一次；否则把本次落地 ref 持久化，后续四按钮复用它不重复新建。
+  if(result.refDeleted){
+    database.setEbayLocalProductPublishRef(product.id,null)
+    const retry=await workspace.prepareEbayLocalProductRevision(`ebay:${product.storeId}`,{...product,publishRef:null},section)
+    if(retry.publishRef)database.setEbayLocalProductPublishRef(product.id,{...retry.publishRef,at:new Date().toISOString()})
+    return retry
+  }
+  if(result.publishRef)database.setEbayLocalProductPublishRef(product.id,{...result.publishRef,at:new Date().toISOString()})
+  return result
 })
 ipcMain.handle('ebay:fill-current-tab', async (_event, localProductId:string, mode:'auto'|'fixed', preset?:unknown) => {
   if(!database)throw new Error('数据库尚未初始化')

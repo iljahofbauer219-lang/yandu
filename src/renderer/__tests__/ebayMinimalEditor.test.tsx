@@ -101,13 +101,14 @@ describe('极简编辑器 · App.tsx 接线', () => {
     expect(source).not.toContain('ebay-publish-actions')
     expect(source).toContain('ebay-scheduled-publish')
   })
-  it('本地定时发布每行在手动发布后、自动发布前有草稿发布/草稿查看两按钮，本轮不接业务', () => {
+  it('本地定时发布每行在手动发布后、自动发布前有草稿发布/草稿查看两按钮，且接去重业务', () => {
     const source=app()
     const seg=source.split('>手动发布</button>')[1]?.split('<button type="button" className={sch.enabled?\'primary\':\'\'}')[0] ?? ''
     expect(seg, '手动发布与自动发布之间要有草稿发布').toContain('>草稿发布</button>')
     expect(seg, '手动发布与自动发布之间要有草稿查看').toContain('>草稿查看</button>')
     expect(seg.indexOf('>草稿发布</button>'), '草稿发布在草稿查看之前').toBeLessThan(seg.indexOf('>草稿查看</button>'))
-    expect(seg, '本轮只落地按钮，不得接任何 onClick 业务').not.toContain('onClick')
+    expect(seg, '草稿发布复用手动发布去重链路').toContain('onClick={()=>void manualPublishLocal(product)}>草稿发布')
+    expect(seg, '草稿查看打开唯一草稿/刊登').toContain('onClick={()=>viewPublishDraft(product)}>草稿查看')
     const css=readFileSync(path.resolve(process.cwd(),'src/renderer/styles.css'),'utf8')
     expect(css, '行网格要随两枚新按钮扩到 9 列，否则错位').toContain('grid-template-columns:56px minmax(0,1fr) auto auto auto auto auto auto auto')
   })

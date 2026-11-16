@@ -16,7 +16,7 @@ import type { SemanticExtractionResult, SemanticField } from '../../shared/seman
 import { EBAY_SITE_ROOT_DOMAINS, isEbayDotComHost } from '../../shared/ebaySites'
 import { buildNativeLanguageDp1, ebayDeliveryAlpha3, ebayNativeLanguage, isEbayListingFormUrl, parseEbayPreferencePost, readEbayDeliveryPostal, resolveEbayDeliveryCountry, resolvePostalRetention } from '../../shared/ebayDeliveryCountry'
 import { extractPolicyIdFromLabel } from '../../shared/ebayListingForm'
-import { resolveEbayListingTarget, resolveEbayListingTargetForProduct } from '../../shared/ebayListingTarget'
+import { resolveEbayListingTarget, resolveEbayListingTargetForProduct, ebayPublishRefFromUrl } from '../../shared/ebayListingTarget'
 import { planEbayUploadMedia, type EbayUploadMediaPlanRow } from '../../shared/ebayUploadMediaPlan'
 import { EBAY_POLICY_MODEL_FIELDS, parseEbayPolicyModel, parseEbayPolicyModelChoices, type EbayPolicyModelChoices, type EbayPolicyModelField } from '../../shared/ebayPolicyModel'
 import { parseEbayItemSpecificsSection, parseEbayItemSpecificsCard, type EbayItemSpecificsCardRaw, type EbayItemSpecificsRaw, type EbayItemSpecificsSection, type EbayItemSpecificSlot } from '../../shared/ebayItemSpecificsModel'
@@ -2653,7 +2653,7 @@ export class BrowserWorkspace {
     // 政策点了没落定（policyPending 非空）时把同一段脚本再跑一遍：越晚的页面越不会再被重渲染刷回去，这是 A2 真机取证到的失效窗口。
     // 上限 6 轮（约 4 秒）后按「未填」收单并如实点名，绝不为等一个控件把「准备发布」拖成无限轮询，也绝不因为点过就当已填。
     const POLICY_SETTLE_MAX_ATTEMPTS=6
-    for(let attempt=0;attempt<20;attempt+=1){result=await tab.view.webContents.executeJavaScript(script,true) as typeof result;if(result.login)throw new Error('eBay 登录会话已失效，请先完成登录');if(result.verification)throw new Error('eBay 要求安全验证，请人工完成后重试');if(result.errorPage.detected)throw new Error(`eBay 把这次打开拒成了错误页（${result.errorPage.reason||'原因未给出'}），未写入任何字段。${target.note}`);if(result.ready&&result.submitButtonDetected&&(!result.policyPending.length||attempt+1>=POLICY_SETTLE_MAX_ATTEMPTS))break;await this.sleep(750)}
+    for(let attempt=0;attempt<20;attempt+=1){result=await tab.view.webContents.executeJavaScript(script,true) as typeof result;if(result.login)throw new Error('eBay 登录会话已失效，请先完成登录');if(result.verification)throw new Error('eBay 要求安全验证，请人工完成后重试');if(result.errorPage.detected){if(product.publishRef)return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledFields:[],skippedFields:[],warnings:[],submitButtonDetected:false,preparedAt:new Date().toISOString(),publishRef:null,reusedRef:true,refDeleted:true};throw new Error(`eBay 把这次打开拒成了错误页（${result.errorPage.reason||'原因未给出'}），未写入任何字段。${target.note}`);}if(result.ready&&result.submitButtonDetected&&(!result.policyPending.length||attempt+1>=POLICY_SETTLE_MAX_ATTEMPTS))break;await this.sleep(750)}
     if(!result.ready)throw new Error(target.kind==='revise'?'Seller Hub 修改页尚未加载出标题字段，请确认商品仍在线后重试':`eBay 首次刊登页尚未加载出标题字段，请稍后重试或在页面人工填写。${target.note}`)
     const policyPendingWarnings=result.policyPending.length?[`${result.policyPending.join('、')}：已在页面点选该政策，但回读时控件又回到了草稿原值（eBay 在页面加载完成时重渲染了政策控件），已按未填处理、未计入已填，请在页面人工核对后重做`] : []
     // E 批其一：本地媒体写进 PHOTOS & VIDEO 上传控件（与视频链路同款的 debugger 选文件通道，零新 API）。
@@ -2743,7 +2743,7 @@ export class BrowserWorkspace {
       }
     }
     await tab.view.webContents.executeJavaScript(`(()=>{document.getElementById('__cross_border_local_revision_guard')?.remove()})()`,true).catch(()=>undefined)
-return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledFields:result.filledFields,skippedFields:result.skippedFields,warnings:[target.note,...policyWarnings,...policyPendingWarnings,...result.warnings],submitButtonDetected:result.submitButtonDetected,preparedAt:new Date().toISOString()}
+return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledFields:result.filledFields,skippedFields:result.skippedFields,warnings:[target.note,...policyWarnings,...policyPendingWarnings,...result.warnings],submitButtonDetected:result.submitButtonDetected,preparedAt:new Date().toISOString(),publishRef:ebayPublishRefFromUrl(result.url),reusedRef:Boolean(product.publishRef)}
   }
 
   async prepareEbayListingRevision(accountId:string,draft:EbayOptimizationDraft):Promise<{reviseUrl:string;categorySpecifics:EbayCategorySpecificRequirement[];filledFields:string[];warnings:string[];submitButtonDetected:boolean}> {
