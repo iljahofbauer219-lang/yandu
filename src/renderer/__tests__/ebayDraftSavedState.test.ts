@@ -38,7 +38,7 @@ describe('草稿发布完成态 · 按钮禁用异色与恢复', () => {
   it('草稿发布按钮按 draftSavedAt 禁用＋draft-saved 异色类；手动发布不受影响', () => {
     expect(app).toContain("className={product.draftSavedAt?'draft-saved':''} disabled={Boolean(busy)||Boolean(product.draftSavedAt)}")
     expect(app).toContain('onClick={()=>void manualPublishLocal(product,true)}>草稿发布')
-    expect(app).toContain('onClick={()=>void manualPublishLocal(product)}>手动发布')
+    expect(app).toContain('onClick={()=>product.draftSavedAt?viewPublishDraft(product):void manualPublishLocal(product)}>手动发布')
   })
   it('保存草稿成功后回拉本地产品使按钮立即进入完成态', () => {
     const seg = app.split('const manualPublishLocal=')[1]?.split('const sendBackToPremium=')[0] ?? ''
@@ -47,5 +47,8 @@ describe('草稿发布完成态 · 按钮禁用异色与恢复', () => {
   })
   it('CSS 有 draft-saved 异色规则（区别于绿色常态）', () => {
     expect(css).toContain('.ebay-scheduled-row button.draft-saved{')
+  })
+  it('完成态后手动发布仅打开既有草稿（viewPublishDraft），未置位保持原串联', () => {
+    expect(app).toContain('onClick={()=>product.draftSavedAt?viewPublishDraft(product):void manualPublishLocal(product)}>手动发布')
   })
 })

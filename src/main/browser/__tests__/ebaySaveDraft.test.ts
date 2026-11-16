@@ -37,6 +37,6 @@ describe('eBay 保存草稿 · 渲染器仅草稿发布触发', () => {
   })
   it('草稿发布按钮传 true，手动发布按钮不传（保持不点保存草稿）', () => {
     expect(app).toContain('onClick={()=>void manualPublishLocal(product,true)}>草稿发布')
-    expect(app).toContain('onClick={()=>void manualPublishLocal(product)}>手动发布')
+    expect(app).toContain('onClick={()=>product.draftSavedAt?viewPublishDraft(product):void manualPublishLocal(product)}>手动发布')
   })
 })

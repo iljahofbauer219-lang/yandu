@@ -5315,7 +5315,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
               <button type="button" disabled={busy===`sched-back-premium:${product.id}`} onClick={()=>void sendBackToPremium(product)}>{busy===`sched-back-premium:${product.id}`?'打回中…':'打回优品'}</button>
               <button type="button" onClick={()=>{const draft=optimizationDrafts.find(item=>item.listing.listingId===product.listingId);if(draft)openOptimizedVersion(draft);else void openLocalEditor(product)}}>重新优化</button>
               <button type="button" onClick={()=>{const draft=optimizationDrafts.find(item=>item.listing.listingId===product.listingId);if(draft)void openPublishEditorFromDraft(draft);else openPublishVersion(product)}}>本地版本</button>
-              <button type="button" disabled={Boolean(busy)} onClick={()=>void manualPublishLocal(product)}>手动发布</button>
+              <button type="button" disabled={Boolean(busy)} title={product.draftSavedAt?'已存草稿：仅打开既有 eBay 草稿操作，不重新发布':'串联填写并准备发布'} onClick={()=>product.draftSavedAt?viewPublishDraft(product):void manualPublishLocal(product)}>手动发布</button>
               {/* 草稿发布/草稿查看：与手动发布/自动发布共用同一唯一草稿/刊登引用，不重复新建 */}
               <button type="button" className={product.draftSavedAt?'draft-saved':''} disabled={Boolean(busy)||Boolean(product.draftSavedAt)} title={product.draftSavedAt?'已存入 eBay 草稿栏（已完成）；eBay 删除该草稿后恢复可操作':'串联填写并保存草稿到 eBay 草稿栏'} onClick={()=>void manualPublishLocal(product,true)}>草稿发布</button>
               <button type="button" onClick={()=>viewPublishDraft(product)}>草稿查看</button>
