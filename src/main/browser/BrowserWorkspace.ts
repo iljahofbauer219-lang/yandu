@@ -3409,6 +3409,26 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     })()`,true) as Promise<{usernameFilled:boolean;passwordFilled:boolean;submitted:boolean;url:string}>
   }
 
+  // DOM 判登录态会把陈旧 signin 页签误判成未登录（分区 cookie 其实有效）：先查会话 cookie，
+  // 有效只刷新复检、绝不重填凭据；cookie 缺失/过期或刷新后仍 signin 才回落自动填写
+  private async ebaySessionCookiesAlive(view:WebContentsView):Promise<boolean>{
+    try{
+      const cookies=await view.webContents.session.cookies.get({name:'nonsession'})
+      const now=Date.now()/1000
+      return cookies.some(cookie=>/(^|\.)ebay\.com$/.test(cookie.domain||'')&&(!cookie.expirationDate||cookie.expirationDate>now))
+    }catch{return false}
+  }
+
+  // 登录成功后把同分区仍停在 signin.ebay.com 的其它页签刷回 Seller Hub；
+  // splashui 验证页签可能正在人工验证，不动；他店页签不动
+  private reviveStaleEbaySigninTabs(accountId:string,except:WebContentsView){
+    for(const tab of this.detailTabs.values()){
+      if(tab.scopeId!==accountId||tab.view===except||tab.view.webContents.isDestroyed())continue
+      if(!/^https:\/\/signin\.ebay\.com\//i.test(tab.view.webContents.getURL()))continue
+      void tab.view.webContents.loadURL('https://www.ebay.com/sh/ovw').catch(()=>undefined)
+    }
+  }
+
   async ensureEbayLogin(accountId:string,username:string,password:string,allowAutoLogin:boolean):Promise<EbayLoginResult> {
     const activeTab=this.detailTabs.get(this.activeTabId)
     const view=(activeTab?.scopeId===accountId?activeTab:this.detailTabs.get(`login-${accountId}`))?.view
@@ -3417,9 +3437,19 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     const active=()=>this.browserVisible&&this.attached===view&&runVersion===this.activationVersion
     const result=(status:EbayLoginResult['status'],message:string,url:string,autoLoginAttempted=false):EbayLoginResult=>({status,message,url,autoLoginAttempted})
     let state=await this.inspectEbayLogin(view)
-    if(state.phase==='ONLINE')return result('ONLINE','eBay会话有效，已直接进入店铺',state.url)
+    if(state.phase==='ONLINE'){this.reviveStaleEbaySigninTabs(accountId,view);return result('ONLINE','eBay会话有效，已直接进入店铺',state.url)}
     if(state.phase==='VERIFICATION')return result('VERIFICATION_REQUIRED','需要人工完成eBay验证，完成后将自动继续',state.url)
     if(state.phase==='ERROR')return result('ERROR',state.errorMessage||'eBay登录失败',state.url)
+    if((state.phase==='USERNAME'||state.phase==='PASSWORD'||state.phase==='OFFLINE')&&await this.ebaySessionCookiesAlive(view)){
+      try{await view.webContents.loadURL('https://www.ebay.com/sh/ovw')}catch{/* 刷新失败回落原自动填写流程 */}
+      for(let attempt=0;attempt<20;attempt+=1){
+        if(!active())return result('OFFLINE','已停止过期的eBay登录任务',view.webContents.getURL())
+        state=await this.inspectEbayLogin(view)
+        if(state.phase==='ONLINE'){this.reviveStaleEbaySigninTabs(accountId,view);return result('ONLINE','已恢复原有eBay登录会话',state.url)}
+        if(state.phase==='VERIFICATION')return result('VERIFICATION_REQUIRED','需要人工完成eBay验证，完成后将自动继续',state.url)
+        await this.sleep(500)
+      }
+    }
     if(!allowAutoLogin)return result('OFFLINE','eBay会话已失效；请开启“会话失效时允许安全自动填写”',state.url)
     if(!username||!password)return result('CREDENTIALS_REQUIRED','请先保存完整的eBay登录凭据',state.url)
     const recent=this.ebayAutoLoginAttemptedAt.get(accountId)||0
@@ -3428,7 +3458,7 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     for(let attempt=0;attempt<40;attempt+=1) {
       if(!active())return result('OFFLINE','已停止过期的eBay登录任务',view.webContents.getURL(),passwordSubmitted)
       state=await this.inspectEbayLogin(view)
-      if(state.phase==='ONLINE')return result('ONLINE',passwordSubmitted?'自动登录成功，已进入eBay店铺':'已恢复原有eBay登录会话',state.url,passwordSubmitted)
+      if(state.phase==='ONLINE'){this.reviveStaleEbaySigninTabs(accountId,view);return result('ONLINE',passwordSubmitted?'自动登录成功，已进入eBay店铺':'已恢复原有eBay登录会话',state.url,passwordSubmitted)}
       if(state.phase==='VERIFICATION')return result('VERIFICATION_REQUIRED','凭据已填写，请人工完成验证；完成后将自动继续',state.url,passwordSubmitted)
       if(state.phase==='ERROR')return result('ERROR',state.errorMessage||'eBay登录失败，请检查凭据',state.url,passwordSubmitted)
       if(state.phase==='USERNAME'&&!usernameSubmitted) {
