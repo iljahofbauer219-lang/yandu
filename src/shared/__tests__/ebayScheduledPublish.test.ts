@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   normalizeScheduledPublish, toggleScheduledPublish, dueScheduledPublish, defaultScheduleAt,
   zonedWallClockToUtc, nextDailyRunUtc, schedulePreviewText, applyScheduleConfigToAll,
-  normalizeSchedulePlan, validateSchedulePlan, allocateBatches, DEFAULT_SCHEDULE_PLAN, scheduleStatus,
+  normalizeSchedulePlan, validateSchedulePlan, allocateBatches, DEFAULT_SCHEDULE_PLAN, scheduleStatus, nextRunBeijingText,
   type EbayScheduledPublishMap, type EbaySchedulePlan
 } from '../ebayScheduledPublish'
 
@@ -121,6 +121,16 @@ describe('三行批次计划 · 校验/比例分配/按行 due', () => {
     expect(scheduleStatus({ enabled: true, lastSkippedAt: 'x', lastFailedAt: 'y' })).toBe('failed')
     expect(scheduleStatus({ enabled: true, lastSkippedAt: '' })).toBe('waiting')
     expect(scheduleStatus({ enabled: false })).toBe('idle')
+  })
+  it('nextRunBeijingText：daily 冬/夏按窗口起点换算北京日/时/分；once 按 at；非法 at 空串', () => {
+    // 北京 11-16 09:00 → 美东 11-15 20:00，今日窗口起点已过 → 下一次 11-16 19:00 EST = 北京 11-17 08:00
+    expect(nextRunBeijingText({ mode: 'daily', tz: 'America/New_York', start: '19:00' }, '2026-11-16T09:00:00+08:00')).toBe('17日 08:00')
+    // 夏令时：北京 07-15 09:00 → 美东 07-14 21:00 已过 → 下一次 07-15 19:00 EDT = 北京 07-16 07:00
+    expect(nextRunBeijingText({ mode: 'daily', tz: 'America/New_York', start: '19:00' }, '2026-07-15T09:00:00+08:00')).toBe('16日 07:00')
+    // 窗口起点未到：北京 11-16 07:00 → 美东 11-15 18:00，下一次 11-15 19:00 EST = 北京 11-16 08:00（同日）
+    expect(nextRunBeijingText({ mode: 'daily', tz: 'America/New_York', start: '19:00' }, '2026-11-16T07:00:00+08:00')).toBe('16日 08:00')
+    expect(nextRunBeijingText({ mode: 'once', at: '2026-11-17T08:30' }, '2026-11-16T09:00:00+08:00')).toBe('17日 08:30')
+    expect(nextRunBeijingText({ mode: 'once', at: '' }, '2026-11-16T09:00:00+08:00')).toBe('')
   })
   it('due 接计划：按分配行窗口到点判定；未到的行不触发；当日跑过不重复', () => {
     const map: EbayScheduledPublishMap = {

@@ -63,7 +63,7 @@ import { EliminateReasonDialog } from './EliminateReasonDialog'
 import { FactsGateDialog } from './FactsGateDialog'
 import { describeTranslateError, isBailianKeyMissing } from './translateError'
 import { readScopedItem, scopedStorageKey, writeScopedItem } from './scopedStorage'
-import { normalizeScheduledPublish, toggleScheduledPublish, dueScheduledPublish, applyScheduleConfigToAll, scheduleBeijingText, normalizeSchedulePlan, validateSchedulePlan, markScheduleFailure, clearScheduleFailure, scheduleStatus, customRunIso, zonedDisplay, DEFAULT_SCHEDULE_PLAN, SCHEDULE_TZ_OPTIONS, type EbayScheduledPublishMap, type EbaySchedulePlan } from '../shared/ebayScheduledPublish'
+import { normalizeScheduledPublish, toggleScheduledPublish, dueScheduledPublish, applyScheduleConfigToAll, scheduleBeijingText, normalizeSchedulePlan, validateSchedulePlan, markScheduleFailure, clearScheduleFailure, scheduleStatus, allocateBatches, nextRunBeijingText, customRunIso, zonedDisplay, DEFAULT_SCHEDULE_PLAN, SCHEDULE_TZ_OPTIONS, type EbayScheduledPublishMap, type EbaySchedulePlan } from '../shared/ebayScheduledPublish'
 import WindowTitleControls from './WindowTitleControls'
 import { IEBrowserPanel } from './IEBrowserPanel'
 import { ResearchPanel, ShortlistPanel } from './EbayResearchPanels'
@@ -5326,7 +5326,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
               <button type="button" className={product.draftSavedAt?'draft-saved':''} disabled={Boolean(busy)||Boolean(product.draftSavedAt)} title={product.draftSavedAt?'已存入 eBay 草稿栏（已完成）；eBay 删除该草稿后恢复可操作':'串联填写并保存草稿到 eBay 草稿栏'} onClick={()=>void manualPublishLocal(product,true)}>草稿发布</button>
               <button type="button" onClick={()=>viewPublishDraft(product)}>草稿查看</button>
               <button type="button" className={sch.enabled?'primary':''} onClick={()=>writeScheduledPublish(toggleScheduledPublish(scheduledPublish,product.id,!sch.enabled,sch.at,new Date().toISOString()))}>{sch.enabled?'自动发布·开':'自动发布'}</button>
-              {(()=>{const st=scheduleStatus(sch);return sch.lastFailedAt&&st==='failed'?<span className="ebay-scheduled-fail" title={sch.lastError||''}>发布失败</span>:st==='skipped'?<span className="ebay-scheduled-skip" title="已在 eBay 草稿栏，本次到点跳过重复发布">已在草稿·跳过</span>:st==='waiting'?<span className="ebay-scheduled-wait">待发布中</span>:null})()}
+              {(()=>{const st=scheduleStatus(sch);const row=allocateBatches(localProducts.filter(p=>scheduledPublish[p.id]?.enabled).map(p=>p.id),schedulePlan,new Date().toISOString().slice(0,10))[product.id];return sch.lastFailedAt&&st==='failed'?<span className="ebay-scheduled-fail" title={sch.lastError||''}>发布失败</span>:st==='skipped'?<span className="ebay-scheduled-skip" title="已在 eBay 草稿栏，本次到点跳过重复发布">已在草稿·跳过</span>:st==='waiting'?<span className="ebay-scheduled-wait" title="下一次自动发布（北京时间）">{nextRunBeijingText({...sch,tz:row?.tz||sch.tz,start:row?.start||sch.start},new Date().toISOString())}</span>:null})()}
               </div>
             </article>) }):<p className="ebay-scheduled-empty">暂无本地产品；先在「我的货盘」送 eBay 或在本地产品库保存。</p>}
         </section></>}
