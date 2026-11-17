@@ -77,6 +77,57 @@ describe('到点执行链 · 挂起超时与迟到守卫', () => {
   })
 })
 
+describe('到点执行链 · 已存草稿轻量两步（跳重填）', () => {
+  it('skipFill=true：仅 prepare(开草稿)→标题门→刊登→迁移，不跑 fillAuto/fillFixed', async () => {
+    const calls:string[]=[]
+    const deps=okDeps({
+      skipFill:true,
+      prepare:async()=>{calls.push('open');return {}},
+      readDraftTitle:async()=>{calls.push('gate');return {title:'Bracket'}},
+      fillAuto:async()=>{calls.push('auto')},
+      fillFixed:async()=>{calls.push('fixed')},
+      publish:async()=>{calls.push('publish');return {status:'PUBLISHED',message:''}},
+      removeLocal:async()=>{calls.push('remove')},
+      refreshListings:async()=>{calls.push('listings')},
+      afterPublished:()=>{calls.push('after')}
+    })
+    const promise=runScheduledPublishChain(deps)
+    await vi.advanceTimersByTimeAsync(0)
+    await expect(promise).resolves.toBeUndefined()
+    expect(calls).toEqual(['open','gate','publish','remove','listings','after'])
+  })
+  it('skipFill 缺省：原全量链不变（auto/fixed 仍跑）', async () => {
+    const calls:string[]=[]
+    const deps=okDeps({
+      fillAuto:async()=>{calls.push('auto')},
+      fillFixed:async()=>{calls.push('fixed')},
+      publish:async()=>{calls.push('publish');return {status:'PUBLISHED',message:''}}
+    })
+    const promise=runScheduledPublishChain(deps)
+    await vi.advanceTimersByTimeAsync(0)
+    await expect(promise).resolves.toBeUndefined()
+    expect(calls).toEqual(['auto','fixed','publish'])
+  })
+  it('skipFill=true 仍保留标题门：不符即中止不点刊登', async () => {
+    const publish=vi.fn(async()=>({status:'PUBLISHED',message:''}))
+    const promise=runScheduledPublishChain(okDeps({skipFill:true,readDraftTitle:async()=>({title:'别的标题'}),publish}))
+    const assertion=expect(promise).rejects.toThrow('草稿标题与本地不符')
+    await vi.advanceTimersByTimeAsync(1500)
+    await assertion
+    expect(publish).not.toHaveBeenCalled()
+  })
+  it('skipFill=true 刊登失败仍重试且不走成功移除（守卫不回归）', async () => {
+    const removeLocal=vi.fn(async()=>undefined)
+    const fillAuto=vi.fn(async()=>undefined)
+    const promise=runScheduledPublishChain(okDeps({skipFill:true,fillAuto,publish:async()=>({status:'FAILED',message:'落地页非上架成功页'}),removeLocal}))
+    const assertion=expect(promise).rejects.toThrow('落地页非上架成功页')
+    await vi.advanceTimersByTimeAsync(1500)
+    await assertion
+    expect(removeLocal).not.toHaveBeenCalled()
+    expect(fillAuto).not.toHaveBeenCalled()
+  })
+})
+
 describe('到点执行链 · 既有语义不回归', () => {
   it('正常成功：prepare→标题门→auto→fixed→刊登→刷新/移除/列表→afterPublished 各一次', async () => {
     const calls:string[]=[]

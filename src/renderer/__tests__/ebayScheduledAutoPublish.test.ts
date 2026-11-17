@@ -94,7 +94,7 @@ describe('自动发布 · prepare 长挂不再永久阻塞后续到点', () => {
   it('App 接线：走 runScheduledPublishChain，flag 复位挪进 finally（超时/失败/成功都复位）', () => {
     expect(app).toContain("import { runScheduledPublishChain } from './scheduledPublishRun'")
     const line = app.split('\n').find(l => l.includes('dueScheduledPublish(scheduledPublishRef.current')) || ''
-    expect(line).toContain('await runScheduledPublishChain({title:product.title,prepare:()=>window.desktop.ebay.prepareLocalProductRevision(id)')
+    expect(line).toContain('await runScheduledPublishChain({title:product.title,skipFill:savedDraft,prepare:()=>savedDraft?openSavedDraftForRun(product):window.desktop.ebay.prepareLocalProductRevision(id)')
     expect(line).toContain('finally{scheduledRunning.current[id]=false}')
     expect(line, '失败写回不变（daily 记 lastRunAt、once 停用）').toContain("entry?.mode==='daily'?{...entry,lastRunAt:new Date().toISOString(),lastSkippedAt:''}:{enabled:false,at:entry?.at||'',lastSkippedAt:''}")
     expect(line, '成功删 entry 不变').toContain('const m={...scheduledPublishRef.current};delete m[id];writeScheduledPublish(m)')

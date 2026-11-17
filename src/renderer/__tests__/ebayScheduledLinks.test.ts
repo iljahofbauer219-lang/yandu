@@ -22,6 +22,26 @@ describe('本地定时发布列表 · 优化版本/发布版本 与优品卡片�
   })
 })
 
+describe('本地定时发布 · 已存草稿轻量两步（开草稿+刊登，跳重填）', () => {
+  it('到点链按 draftSavedAt+draft ref 判 savedDraft，并传 skipFill 与轻量开页', () => {
+    expect(source).toContain("const savedDraft=Boolean(product.draftSavedAt&&product.publishRef?.kind==='draft')")
+    expect(source).toContain('skipFill:savedDraft')
+    expect(source).toContain('prepare:()=>savedDraft?openSavedDraftForRun(product):window.desktop.ebay.prepareLocalProductRevision(id)')
+  })
+  it('openSavedDraftForRun 与草稿查看同路由（lstng?draftId&mode=AddItem）＋navigate＋等标题就绪', () => {
+    const start = source.indexOf('const openSavedDraftForRun=')
+    expect(start).toBeGreaterThan(-1)
+    const body = source.slice(start, start + 1200)
+    expect(body).toContain("mode=AddItem")
+    expect(body).toContain("window.desktop.browser.navigate('web',url)")
+    expect(body).toContain('readCurrentDraftTitle()')
+  })
+  it('执行链 skipFill 时跳过 fillAuto/fillFixed（模块层守卫）', () => {
+    const run = readFileSync(path.resolve(process.cwd(), 'src/renderer/scheduledPublishRun.ts'), 'utf8')
+    expect(run).toContain('if(!deps.skipFill){await deps.fillAuto();guard();await deps.fillFixed();guard()}')
+  })
+})
+
 describe('本地定时发布列表 · 打回优品', () => {
   const start = source.indexOf('const sendBackToPremium=')
   const body = source.slice(start, start + 2600)

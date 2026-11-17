@@ -16,6 +16,8 @@ export interface ScheduledRunDeps {
   readDraftTitle:()=>Promise<{title:string}>
   fillAuto:()=>Promise<unknown>
   fillFixed:()=>Promise<unknown>
+  // 已存 eBay 草稿＝内容已是用户确认快照：只开草稿+刊登，跳过重填（政策/媒体重灌易失败/挂起）
+  skipFill?:boolean
   publish:()=>Promise<{status:string;message:string}>
   refreshLocal:()=>Promise<unknown>
   removeLocal:()=>Promise<unknown>
@@ -36,8 +38,7 @@ export async function runScheduledPublishChain(deps:ScheduledRunDeps,timeoutMs:n
         if(prep.refDeleted){await deps.refreshLocal();guard();throw new Error('eBay 草稿已删除，已中止自动发布（不新建顶替）；完成态已清空')}
         const gate=await deps.readDraftTitle();guard()
         if(gate.title&&gate.title!==deps.title.trim())throw new Error(`草稿标题与本地不符（${gate.title.slice(0,30)}），已中止自动发布，请先修复草稿`)
-        await deps.fillAuto();guard()
-        await deps.fillFixed();guard()
+        if(!deps.skipFill){await deps.fillAuto();guard();await deps.fillFixed();guard()}
         const pub=await deps.publish();guard()
         if(pub.status!=='PUBLISHED')throw new Error(pub.message)
         await deps.refreshLocal();guard()
