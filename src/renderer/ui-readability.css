@@ -417,6 +417,26 @@ form label{font-size:12px;line-height:17px}
 .ebay-store-category-node span{font-size:12px;line-height:17px}
 .ebay-store-category-node em{min-width:24px;padding:2px 7px;color:#656c70;font-size:11px;line-height:15px}
 .ebay-store-category-node i{width:14px;font-size:12px}
+
+/* 目录栏对齐货盘仓库「产品目录库」基准（.catalog-panel 规格）：宽度/标题/行高/计数 chip/选中 wash */
+.ebay-library-layout{grid-template-columns:var(--side-panel-w-catalog) minmax(0,1fr)}
+.ebay-library-layout>aside.ebay-product-catalog{display:flex;flex-direction:column;min-width:0;overflow:hidden;padding:var(--side-panel-pad)}
+.ebay-product-catalog>header{padding:2px 0 13px}
+.ebay-product-catalog>header b{margin:5px 0 3px;font-size:20px;line-height:1.3;font-weight:700}
+.ebay-product-catalog>header small{margin-top:0;color:var(--muted);font-size:10px;line-height:1.5}
+.ebay-library-layout>aside.ebay-product-catalog>button{justify-content:space-between;min-height:0;margin:10px 0 4px;padding:10px 11px;background:#f5f7f8;font-size:13px;font-weight:750}
+.ebay-library-layout>aside.ebay-product-catalog>button.active{color:#07625e;background:var(--yd-content-brand-wash)}
+.ebay-library-layout>aside.ebay-product-catalog em{min-width:23px;padding:2px 6px;color:#858b90;background:#eceff1;border-radius:10px;font-size:11px}
+.ebay-store-category-tree{max-height:none;flex:1;min-height:0;margin-top:0;padding:0;border-top:0;border-bottom:0}
+.ebay-store-category-node>button{height:43px;min-height:43px;gap:0;padding-top:0;padding-bottom:0;padding-right:8px;border-radius:0;color:#3c4448;font-size:12px;line-height:17px}
+.ebay-store-category-node>button.active{color:#07625e;background:var(--yd-content-brand-wash)}
+.ebay-store-category-node i{width:20px;color:#9ba1a5;font-size:17px}
+.ebay-store-category-node span{font-size:12px;line-height:17px}
+.ebay-store-category-node em{min-width:23px;padding:2px 6px;color:#858b90;background:#eceff1;border-radius:10px;font-size:11px;line-height:15px}
+.ebay-catalog-filters>b{font-size:10px}
+.ebay-catalog-filters>button{min-height:36px;color:#777e82;font-size:12px}
+.ebay-catalog-filters>button.active{color:#07625e;background:var(--yd-content-brand-wash)}
+.ebay-category-empty{font-size:10px;line-height:1.5}
 .ebay-catalog-filters>b{color:#6f767a;font-size:11px;line-height:16px}
 .ebay-catalog-filters>button{min-height:36px;padding:6px 8px;color:#6f767a;border-radius:7px;font-size:12px;line-height:17px}
 .ebay-category-empty{margin:10px 0;padding:12px 10px;color:#6a7175;font-size:12px;line-height:18px}

@@ -3424,7 +3424,7 @@ function RealShiftWorkbench() {
 function EbayStoreCategoryTree({categories,listings,selected,onSelect}:{categories:EbayCategoryWorkspace['categories'];listings:EbayListing[];selected:string;onSelect:(categoryId:string)=>void}) {
   const descendants=(categoryId:string):string[]=>[categoryId,...categories.filter(item=>item.parentCategoryId===categoryId).flatMap(item=>descendants(item.categoryId))]
   const count=(categoryId:string)=>{const ids=new Set(descendants(categoryId));return listings.filter(item=>ids.has(item.categoryId)).length}
-  const render=(parentCategoryId:string,depth=0):ReactNode=>categories.filter(item=>item.parentCategoryId===parentCategoryId).sort((a,b)=>a.sortOrder-b.sortOrder).map(item=><div className="ebay-store-category-node" key={item.categoryId}><button type="button" className={selected===item.categoryId?'active':''} style={{paddingLeft:`${12+depth*16}px`}} onClick={()=>onSelect(item.categoryId)}><i>{item.childCount?'›':'·'}</i><span>{item.name}</span><em>{count(item.categoryId)}</em></button>{render(item.categoryId,depth+1)}</div>)
+  const render=(parentCategoryId:string,depth=0):ReactNode=>categories.filter(item=>item.parentCategoryId===parentCategoryId).sort((a,b)=>a.sortOrder-b.sortOrder).map(item=><div className="ebay-store-category-node" key={item.categoryId}><button type="button" className={selected===item.categoryId?'active':''} style={{paddingLeft:`${12+depth*16}px`}} onClick={()=>onSelect(item.categoryId)}><i>{item.childCount?'⌄':''}</i><span>{item.name}</span><em>{count(item.categoryId)}</em></button>{render(item.categoryId,depth+1)}</div>)
   return <div className="ebay-store-category-tree">{render('')}</div>
 }
 
