@@ -86,6 +86,11 @@ export function ebayDeliveryCountryFromLanguage(lng: string | null | undefined):
   return null
 }
 
+/** 进入工作台自动生效判定：有已存值且页签读回的生效态与之不一致时才自动应用，读回缺失不盲写 */
+export function shouldAutoApplyEbayDelivery(stored: EbayDeliveryCountry | null, live: EbayDeliveryCountry | null): boolean {
+  return stored !== null && live !== null && stored !== live
+}
+
 export function ebayDeliveryCountryStorageKey(storeId: string): string {
   return `ebay-delivery-country:${storeId}`
 }

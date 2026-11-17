@@ -14,7 +14,8 @@ import {
   ebayNativeLanguage,
   parseStoredEbayDeliveryCountry,
   resolveEbayDeliveryCountry,
-  resolvePostalRetention
+  resolvePostalRetention,
+  shouldAutoApplyEbayDelivery
 } from '../ebayDeliveryCountry'
 
 describe('收货地二选一 · 选项与映射', () => {
@@ -373,5 +374,17 @@ describe('收货地二选一 · 语言态来源与重启兜底', () => {
     expect(parseStoredEbayDeliveryCountry('XX')).toBeNull()
     expect(parseStoredEbayDeliveryCountry('')).toBeNull()
     expect(parseStoredEbayDeliveryCountry(null)).toBeNull()
+  })
+
+  it('自动生效判定：已存与生效不一致才触发', () => {
+    expect(shouldAutoApplyEbayDelivery('CN', 'US')).toBe(true)
+    expect(shouldAutoApplyEbayDelivery('US', 'CN')).toBe(true)
+  })
+
+  it('一致或缺任一侧不触发自动应用', () => {
+    expect(shouldAutoApplyEbayDelivery('CN', 'CN')).toBe(false)
+    expect(shouldAutoApplyEbayDelivery(null, 'US')).toBe(false)
+    expect(shouldAutoApplyEbayDelivery('CN', null)).toBe(false)
+    expect(shouldAutoApplyEbayDelivery(null, null)).toBe(false)
   })
 })
