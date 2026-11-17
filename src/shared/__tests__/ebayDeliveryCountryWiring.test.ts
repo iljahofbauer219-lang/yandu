@@ -162,6 +162,11 @@ describe('收货地二选一 · 渲染端两项菜单沿用工具栏样式', () 
     expect(appSource).toContain('shouldAutoApplyEbayDelivery')
   })
 
+  it('空闲恢复页签也有应用时机：onTabs 回调追同步', () => {
+    const onTabs = slice(appSource, 'window.desktop.browser.onTabs(', '),[active,activeStore?.id])')
+    expect(onTabs).toContain('syncEbayDeliveryLanguage')
+  })
+
   it('兜底初始化不依赖浏览器页签：直进线上发布也能恢复语言态', () => {
     const effect = slice(appSource, 'useEffect(()=>{if(!activeStore)return;const stored=', '},[activeStore?.id])')
     expect(effect).toContain('parseStoredEbayDeliveryCountry')
