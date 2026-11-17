@@ -3053,19 +3053,63 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
   }
 
   /** 平台类目候选：加载 eBay prelist「Find a match」页，解析推荐类目完整路径（多级面包屑），按 Best match 优先返回 */
-  /** 库存读回：从店铺已打开的草稿/刊登页签读 quantity 输入框真值（隐藏窗会被 eBay captcha 强制重登，故不用） */
-  async readEbayActiveTabQuantity(accountId:string):Promise<{quantity:number|null;at:string;url:string}> {
+  /** 库存读回：店铺已打开页签真值——草稿/刊登页读 quantity 输入；草稿栏读「库存数量」列（按 draftId/标题定位行） */
+  async readEbayActiveTabQuantity(accountId:string, listingId='', title=''):Promise<{quantity:number|null;at:string;url:string}> {
     const tabs=[...this.detailTabs.values()].filter(item=>item.scopeId===accountId&&!item.view.webContents.isDestroyed())
     const tab=tabs.find(item=>item.view===this.attached)||tabs[0]
     const at=new Date().toISOString()
     if(!tab)return {quantity:null,at,url:''}
     const url=tab.view.webContents.getURL()
-    if(!/ebay\.com\/(lstng|sl\/list)/.test(url))return {quantity:null,at,url}
-    const value=await tab.view.webContents.executeJavaScript(String.raw`(() => {
+    const atDrafts=/ebay\.com\/sh\/lst\/drafts/.test(url)
+    const atEdit=/ebay\.com\/(lstng|sl\/list)/.test(url)
+    if(!atDrafts&&!atEdit)return {quantity:null,at,url}
+    const script=atEdit?String.raw`(() => {
       const clean=v=>(v||'').replace(/\s+/g,' ').trim();
-      const field=document.querySelector('input[name="quantity"]')||[...document.querySelectorAll('input')].find(el=>/quantity|库存数量/i.test((el.getAttribute('aria-label')||'')+(el.name||'')+(el.id||'')));
+      const field=document.querySelector('input[name="quantity"]')||[...document.querySelectorAll('input')].find(el=>/quantity|库存数量|数量/i.test((el.getAttribute('aria-label')||'')+(el.name||'')+(el.id||'')));
       return field?clean(field.value):'';
-    })()`,true) as string
+    })()`:String.raw`(() => {
+      const ID=${JSON.stringify(listingId)};const TITLE=${JSON.stringify(title)};
+      const clean=v=>(v||'').replace(/\s+/g,' ').trim();
+      const compact=v=>(v||'').replace(/\s+/g,'');
+      const hit=(row,idx,cells)=>{
+        if(cells.length<=idx)return null;
+        const hrefs=[...row.querySelectorAll('a')].map(a=>a.getAttribute('href')||'').join(' ');
+        if(!((ID&&hrefs.includes(ID))||(TITLE&&clean(row.textContent).includes(TITLE))))return null;
+        const n=parseInt(clean(cells[idx].textContent).replace(/[^0-9]/g,''),10);
+        return Number.isFinite(n)?n:null;
+      };
+      let quantity=null;
+      for(const table of [...document.querySelectorAll('table')]){
+        const headers=[...table.querySelectorAll('thead th, tr:first-child th, tr:first-child td')].map(cell=>compact(cell.textContent));
+        const idx=headers.findIndex(h=>/库存数量|quantity/i.test(h));
+        if(idx<0)continue;
+        for(const row of [...table.querySelectorAll('tbody tr')]){
+          const n=hit(row,idx,[...row.querySelectorAll('td')]);
+          if(n!==null){quantity=n;break}
+        }
+        if(quantity!==null)break;
+      }
+      if(quantity===null){
+        const leaves=[...document.querySelectorAll('th,[role="columnheader"],div,span')].filter(el=>/^(库存数量|Quantity)$/i.test(compact(el.textContent)));
+        const deepest=leaves.filter(el=>!leaves.some(other=>other!==el&&el.contains(other)));
+        for(const h of deepest){
+          const headerRow=h.closest('tr,[role="row"]')||h.parentElement;
+          if(!headerRow)continue;
+          const idx=[...headerRow.children].indexOf(h.closest('th,[role="columnheader"]')||h);
+          if(idx<0)continue;
+          const body=headerRow.parentElement;
+          if(!body)continue;
+          for(const row of [...body.children]){
+            if(row===headerRow)continue;
+            const n=hit(row,idx,[...row.children]);
+            if(n!==null){quantity=n;break}
+          }
+          if(quantity!==null)break;
+        }
+      }
+      return quantity===null?'':String(quantity);
+    })()`
+    const value=await tab.view.webContents.executeJavaScript(script,true) as string
     const n=parseInt(String(value).replace(/[^0-9]/g,''),10)
     return {quantity:Number.isFinite(n)?n:null,at,url}
   }

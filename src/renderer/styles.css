@@ -914,7 +914,7 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .ebay-scheduled-titlezh{color:#5b6472}
 .ebay-scheduled-metrics{display:flex;align-items:center;gap:8px;flex:none}
 .ebay-scheduled-price{padding:3px 10px;border:1.5px solid #f59e0b;border-radius:8px;background:#fffbeb;color:#92400e;font-size:11px;font-weight:700;white-space:nowrap}
-.ebay-scheduled-qty{min-width:34px;text-align:center;padding:3px 10px;border:1.5px solid #2563eb;border-radius:8px;background:#eff6ff;color:#1e40af;font-size:11px;font-weight:700}
+.ebay-scheduled-qty{min-width:34px;text-align:center;padding:3px 10px;border:1.5px solid #2563eb;border-radius:8px;background:#eff6ff;color:#1e40af;font-size:11px;font-weight:700;white-space:nowrap}
 .ebay-scheduled-row button{height:30px;padding:0 10px;border:1px solid #62d0ca;border-radius:8px;background:var(--yd-content-brand-wash,#f0faf9);color:var(--yd-content-brand-ink,#0f766e);font-size:10px;font-weight:700;cursor:pointer}
 .ebay-scheduled-row button.primary{background:var(--tiffany,#14b8a6);border-color:var(--tiffany,#14b8a6);color:#fff}
 .ebay-scheduled-row button:disabled{opacity:.45;cursor:not-allowed}

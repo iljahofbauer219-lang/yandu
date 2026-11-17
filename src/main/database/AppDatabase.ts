@@ -1426,6 +1426,10 @@ export class AppDatabase {
     ensureColumn('ebay_local_products', 'platform_category_name', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('ebay_local_products', 'core_term_zh', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('ebay_local_products', 'core_term_en', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('ebay_local_products', 'title_zh', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('ebay_local_products', 'title_zh_at', "TEXT NOT NULL DEFAULT ''")
+    ensureColumn('ebay_local_products', 'draft_quantity', 'INTEGER')
+    ensureColumn('ebay_local_products', 'draft_quantity_at', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('ebay_local_products', 'publish_ref', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('ebay_local_products', 'draft_saved_at', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_warehouse_products', 'collected_at', "TEXT NOT NULL DEFAULT ''")
@@ -2458,6 +2462,10 @@ export class AppDatabase {
       coreTermEn:String(row.core_term_en ?? ''),
       publishRef:(()=>{try{const raw=String(row.publish_ref||'');if(!raw)return null;const v=JSON.parse(raw) as {kind?:string;id?:string;at?:string};return (v.kind==='draft'||v.kind==='listing')&&v.id?{kind:v.kind,id:String(v.id),at:String(v.at||'')}:null}catch{return null}})(),
       draftSavedAt:String(row.draft_saved_at||'')||null,
+      titleZh:String(row.title_zh||'')||undefined,
+      titleZhAt:String(row.title_zh_at||'')||undefined,
+      draftQuantity:row.draft_quantity===undefined?undefined:(row.draft_quantity===null?null:Number(row.draft_quantity)),
+      draftQuantityAt:String(row.draft_quantity_at||'')||undefined,
       title:String(row.title),
       status:String(row.status) as EbayLocalProduct['status'],
       versionCount:Number(row.version_count),
@@ -2466,6 +2474,23 @@ export class AppDatabase {
       updatedAt:String(row.updated_at),
       snapshot:JSON.parse(String(row.snapshot_payload)) as EbayLocalProductSnapshot
     }))
+  }
+
+  /** 定时发布行展示元数据（全译标题/草稿库存读回）：只写展示列，不动 updated_at 以免列表跳序 */
+  setEbayLocalProductMeta(localProductId:string, meta:{titleZh?:string;titleZhAt?:string;draftQuantity?:number|null;draftQuantityAt?:string}):EbayLocalProduct {
+    const found=this.getEbayLocalProducts().find(item=>item.id===localProductId)
+    if(!found)throw new Error('本地产品不存在')
+    const sets:string[]=[]
+    const values:(string|number|null)[]=[]
+    if(meta.titleZh!==undefined){sets.push('title_zh=?');values.push(meta.titleZh)}
+    if(meta.titleZhAt!==undefined){sets.push('title_zh_at=?');values.push(meta.titleZhAt)}
+    if(meta.draftQuantity!==undefined){sets.push('draft_quantity=?');values.push(meta.draftQuantity)}
+    if(meta.draftQuantityAt!==undefined){sets.push('draft_quantity_at=?');values.push(meta.draftQuantityAt)}
+    if(sets.length){
+      values.push(localProductId)
+      this.database.prepare(`UPDATE ebay_local_products SET ${sets.join(',')} WHERE id=?`).run(...values)
+    }
+    return this.getEbayLocalProducts().find(item=>item.id===localProductId) as EbayLocalProduct
   }
 
   /** 发布去重：记录/清空该本地产品在 eBay 的唯一草稿/刊登引用（null=已删除可重建）。 */

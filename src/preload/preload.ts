@@ -456,6 +456,8 @@ contextBridge.exposeInMainWorld('desktop', {
     listings: (storeId?:string):Promise<EbayListing[]> => ipcRenderer.invoke('ebay:listings:list',storeId),
     localProducts: (storeId?:string):Promise<EbayLocalProduct[]> => ipcRenderer.invoke('ebay:local-products:list',storeId),
     setLocalCategory: (localProductId:string, categoryId:string, categoryName:string):Promise<EbayLocalProduct> => ipcRenderer.invoke('ebay:local-products:set-category',localProductId,categoryId,categoryName),
+    setLocalProductMeta: (localProductId:string, meta:{titleZh?:string;titleZhAt?:string;draftQuantity?:number|null;draftQuantityAt?:string}):Promise<EbayLocalProduct> => ipcRenderer.invoke('ebay:local-products:set-meta',localProductId,meta),
+    readDraftQuantity: (storeId:string, listingId?:string, title?:string):Promise<{quantity:number|null;at:string;url:string}> => ipcRenderer.invoke('ebay:local-products:draft-quantity',storeId,listingId,title),
     setLocalPlatformCategory: (localProductId:string, categoryId:string, categoryName:string):Promise<EbayLocalProduct> => ipcRenderer.invoke('ebay:local-products:set-platform-category',localProductId,categoryId,categoryName),
     platformCategories: (storeId:string, query:string):Promise<EbayPlatformCategoryOption[]> => ipcRenderer.invoke('ebay:local-products:platform-categories',storeId,query),
     autoClassifyLocal: (localProductId:string):Promise<{product:EbayLocalProduct;engine:'rule'|'llm'|'none';categoryId:string|null;categoryName:string;reason:string}> => ipcRenderer.invoke('ebay:local-products:auto-classify',localProductId),

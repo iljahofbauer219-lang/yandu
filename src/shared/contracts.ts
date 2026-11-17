@@ -228,6 +228,12 @@ export interface EbayLocalProduct {
   publishRef?:{kind:'draft'|'listing';id:string;at?:string}|null
   /** 草稿发布完成态：成功存入 eBay 草稿栏的时间；置位后「草稿发布」禁用异色，eBay 侧草稿删除（refDeleted）才清位恢复 */
   draftSavedAt?:string|null
+  /** 英文标题全文中译缓存（qwen-mt）：定时发布行红位「核心词框+两空格+全译」使用 */
+  titleZh?:string
+  titleZhAt?:string
+  /** eBay 草稿栏「库存数量」读回真值；null/缺省=尚未读回，行内显示— */
+  draftQuantity?:number|null
+  draftQuantityAt?:string
   title:string
   status:'READY'|'INCOMPLETE'
   versionCount:number
