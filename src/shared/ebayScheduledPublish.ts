@@ -1,6 +1,6 @@
 // 本地定时发布：每商品一条 {enabled, at} 调度记录；纯函数供渲染器持久化/到点判定复用。
 // 双模式：once=自选一次性（at 为本地墙钟）；daily=固定时间（店铺级统一目标时区+当地窗口，IANA 换算 DST 自适应）。
-export type EbayScheduledPublishEntry = { enabled: boolean; at: string; mode?: 'once' | 'daily'; tz?: string; start?: string; end?: string; lastRunAt?: string; lastFailedAt?: string; lastError?: string }
+export type EbayScheduledPublishEntry = { enabled: boolean; at: string; mode?: 'once' | 'daily'; tz?: string; start?: string; end?: string; lastRunAt?: string; lastSkippedAt?: string; lastFailedAt?: string; lastError?: string }
 export type EbayScheduledPublishMap = Record<string, EbayScheduledPublishEntry>
 
 export const SCHEDULE_TZ_OPTIONS: Array<{ tz: string; label: string }> = [
@@ -17,7 +17,7 @@ export const normalizeScheduledPublish = (raw: unknown): EbayScheduledPublishMap
   const out: EbayScheduledPublishMap = {}
   for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
     if (!value || typeof value !== 'object') continue
-    const entry = value as { enabled?: unknown; at?: unknown; mode?: unknown; tz?: unknown; start?: unknown; end?: unknown; lastRunAt?: unknown; lastFailedAt?: unknown; lastError?: unknown }
+    const entry = value as { enabled?: unknown; at?: unknown; mode?: unknown; tz?: unknown; start?: unknown; end?: unknown; lastRunAt?: unknown; lastSkippedAt?: unknown; lastFailedAt?: unknown; lastError?: unknown }
     if (typeof entry.enabled !== 'boolean' || typeof entry.at !== 'string') continue
     const next: EbayScheduledPublishEntry = { enabled: entry.enabled, at: entry.at }
     if (entry.mode === 'daily' || entry.mode === 'once') next.mode = entry.mode
@@ -25,6 +25,7 @@ export const normalizeScheduledPublish = (raw: unknown): EbayScheduledPublishMap
     if (typeof entry.start === 'string' && entry.start) next.start = entry.start
     if (typeof entry.end === 'string' && entry.end) next.end = entry.end
     if (typeof entry.lastRunAt === 'string' && entry.lastRunAt) next.lastRunAt = entry.lastRunAt
+    if (typeof entry.lastSkippedAt === 'string' && entry.lastSkippedAt) next.lastSkippedAt = entry.lastSkippedAt
     if (typeof entry.lastFailedAt === 'string' && entry.lastFailedAt) next.lastFailedAt = entry.lastFailedAt
     if (typeof entry.lastError === 'string' && entry.lastError) next.lastError = entry.lastError
     out[id] = next
@@ -49,6 +50,15 @@ export const toggleScheduledPublish = (
 }
 
 // 失败留痕：供行内「发布失败」小通知渲染；随 scoped localStorage 持久化，跨重启可见
+// 状态位口径（2026-11-17 拍板）：失败留痕＝发布失败；enabled 等待＝待发布中；其余不显示。
+// 真正上架成功的产品会离开本地定时发布转入线上产品，故无 success 态。
+export function scheduleStatus(entry: { enabled?: boolean; lastFailedAt?: string; lastSkippedAt?: string }): 'failed' | 'skipped' | 'waiting' | 'idle' {
+  if (entry.lastFailedAt) return 'failed'
+  if (entry.lastSkippedAt) return 'skipped'
+  if (entry.enabled) return 'waiting'
+  return 'idle'
+}
+
 export const markScheduleFailure = (map: EbayScheduledPublishMap, id: string, nowIso: string, message: string): EbayScheduledPublishMap => {
   const prev = map[id]
   if (!prev) return map

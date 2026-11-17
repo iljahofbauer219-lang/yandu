@@ -890,3 +890,5 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .ebay-scheduled-row button:disabled{opacity:.45;cursor:not-allowed}
 .ebay-scheduled-row button.draft-saved{background:#e5e7eb;border-color:#9ca3af;color:#6b7280;opacity:1}
 .ebay-scheduled-empty{margin:0;color:#788582;font-size:11px}
+.ebay-scheduled-fail{flex:none;padding:4px 8px;border:1px solid #efb2ae;border-radius:8px;background:#fff0ef;color:#a23333;font-size:10px;font-weight:700;white-space:nowrap}
+.ebay-scheduled-wait{flex:none;padding:4px 8px;border:1px solid #9fd8d2;border-radius:8px;background:#eafaf8;color:#0f766e;font-size:10px;font-weight:700;white-space:nowrap}
