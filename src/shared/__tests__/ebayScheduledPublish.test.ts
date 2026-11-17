@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   normalizeScheduledPublish, toggleScheduledPublish, dueScheduledPublish, defaultScheduleAt,
   zonedWallClockToUtc, nextDailyRunUtc, schedulePreviewText, applyScheduleConfigToAll,
-  normalizeSchedulePlan, validateSchedulePlan, allocateBatches, DEFAULT_SCHEDULE_PLAN,
+  normalizeSchedulePlan, validateSchedulePlan, allocateBatches, DEFAULT_SCHEDULE_PLAN, scheduleStatus,
   type EbayScheduledPublishMap, type EbaySchedulePlan
 } from '../ebayScheduledPublish'
 
@@ -115,6 +115,12 @@ describe('三行批次计划 · 校验/比例分配/按行 due', () => {
     expect(count('America/Los_Angeles')).toBe(3)
     expect(allocateBatches(ids, DEFAULT_SCHEDULE_PLAN, '2026-11-16')).toEqual(alloc)
     expect(allocateBatches(['solo'], DEFAULT_SCHEDULE_PLAN, '2026-11-16').solo.tz).toBe('America/New_York')
+  })
+  it('scheduleStatus：失败优先于跳过；跳过优先于等待；清跳过留痕回等待', () => {
+    expect(scheduleStatus({ enabled: true, lastSkippedAt: 'x' })).toBe('skipped')
+    expect(scheduleStatus({ enabled: true, lastSkippedAt: 'x', lastFailedAt: 'y' })).toBe('failed')
+    expect(scheduleStatus({ enabled: true, lastSkippedAt: '' })).toBe('waiting')
+    expect(scheduleStatus({ enabled: false })).toBe('idle')
   })
   it('due 接计划：按分配行窗口到点判定；未到的行不触发；当日跑过不重复', () => {
     const map: EbayScheduledPublishMap = {

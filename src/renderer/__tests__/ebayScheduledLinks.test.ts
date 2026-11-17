@@ -59,3 +59,23 @@ describe('本地产品环节排除已进优品仓库的产品', () => {
     expect(source).toContain('缺少本地图片 <em>{localStageProducts.filter(')
   })
 })
+
+describe('自动发布调度 · 已存 eBay 草稿跳过重复执行', () => {
+  const line = source.split('\n').find(l => l.includes('dueScheduledPublish(scheduledPublishRef.current')) || ''
+  it('跳过分支置于 prepare 之前：draftSavedAt 有值直接记完成态+中文 notice，不走执行链', () => {
+    expect(line).toContain('if(product.draftSavedAt){')
+    expect(line.indexOf('if(product.draftSavedAt){')).toBeLessThan(line.indexOf('prepareLocalProductRevision(id)'))
+    expect(line).toContain('已在 eBay 草稿栏，跳过重复自动发布')
+    expect(line).toContain('clearScheduleFailure(base0,id)')
+    expect(line).toContain("entry0?.mode==='daily'?{...entry0,lastRunAt:new Date().toISOString(),lastSkippedAt:new Date().toISOString()}:{enabled:false,at:entry0?.at||'',lastSkippedAt:new Date().toISOString()}")
+  })
+  it('跳过态行内可见：scheduleStatus=skipped 渲染「已在草稿·跳过」chip（publish 页签无左栏槽位）', () => {
+    expect(source).toContain("st==='skipped'?<span className=\"ebay-scheduled-skip\"")
+    expect(source).toContain('已在草稿·跳过</span>')
+    const css = readFileSync(path.resolve(process.cwd(), 'src/renderer/styles.css'), 'utf8')
+    expect(css).toContain('.ebay-scheduled-skip{')
+  })
+  it('再次执行成功清跳过留痕', () => {
+    expect(line).toContain("lastRunAt:new Date().toISOString(),lastSkippedAt:''")
+  })
+})

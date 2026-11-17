@@ -178,3 +178,21 @@ describe('极简编辑器 · App.tsx 接线', () => {
     expect(source).not.toContain('onSetCategory={()=>{}} onAutoClassify={()=>{}}')
   })
 })
+describe('定时发布弹窗与发布%输入 · 本轮守卫', () => {
+  const source=readFileSync(path.resolve(process.cwd(),'src/renderer/App.tsx'),'utf8')
+  it('三行批次弹窗：表头五列、校验就地错误、确认全店写回', () => {
+    for(const anchor of ['>选取</span>','>目标时区</span>','>当地时间</span>','>北京时间</span>','>发布%</span>'])
+      expect(source, '弹窗表头要含 '+anchor).toContain(anchor)
+    expect(source).toContain('setSchedulePlanDraft({rows:schedulePlan.rows.map(r=>({...r}))})')
+    expect(source).toContain('{schedulePlanError&&<p className="ebay-schedule-plan-error">{schedulePlanError}</p>}')
+    expect(source).toContain("writeSchedulePlan(schedulePlanDraft);writeScheduledPublish(applyScheduleConfigToAll(scheduledPublish,localProducts.map(p=>p.id),{mode:'daily'},")
+    expect(source, '自选时间已删除').not.toContain('自选时间')
+  })
+  it('发布%输入美化：ratio 单元格+% 后缀、去 spinner、居中不截断', () => {
+    expect(source).toContain('className="ebay-schedule-plan-ratio"')
+    const css=readFileSync(path.resolve(process.cwd(),'src/renderer/styles.css'),'utf8')
+    expect(css).toContain('.ebay-schedule-plan-row input[type="number"]::-webkit-inner-spin-button')
+    expect(css).toContain('text-align:center;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums')
+    expect(css).toContain('.ebay-scheduled-skip{')
+  })
+})
