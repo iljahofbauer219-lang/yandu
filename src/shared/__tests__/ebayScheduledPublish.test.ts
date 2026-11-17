@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   normalizeScheduledPublish, toggleScheduledPublish, dueScheduledPublish, defaultScheduleAt,
   zonedWallClockToUtc, nextDailyRunUtc, schedulePreviewText, applyScheduleConfigToAll,
-  normalizeSchedulePlan, validateSchedulePlan, allocateBatches, DEFAULT_SCHEDULE_PLAN, scheduleStatus, nextRunBeijingText,
+  normalizeSchedulePlan, validateSchedulePlan, allocateBatches, DEFAULT_SCHEDULE_PLAN, scheduleStatus, nextRunBeijingText, windowMinutes, jitterMinutes,
   type EbayScheduledPublishMap, type EbaySchedulePlan
 } from '../ebayScheduledPublish'
 
@@ -132,19 +132,57 @@ describe('三行批次计划 · 校验/比例分配/按行 due', () => {
     expect(nextRunBeijingText({ mode: 'once', at: '2026-11-17T08:30' }, '2026-11-16T09:00:00+08:00')).toBe('17日 08:30')
     expect(nextRunBeijingText({ mode: 'once', at: '' }, '2026-11-16T09:00:00+08:00')).toBe('')
   })
-  it('due 接计划：按分配行窗口到点判定；未到的行不触发；当日跑过不重复', () => {
+  it('jitter：窗口分钟跨 midnight 取模；同产品同日稳定、窗口内、跨产品不齐发', () => {
+    expect(windowMinutes('19:00', '21:00')).toBe(120)
+    expect(windowMinutes('22:30', '00:30')).toBe(120)
+    expect(windowMinutes('19:00', '19:00')).toBe(0)
+    expect(jitterMinutes('pA', '2026-11-16', 0)).toBe(0)
+    const a1 = jitterMinutes('pA', '2026-11-16', 120)
+    expect(jitterMinutes('pA', '2026-11-16', 120)).toBe(a1)
+    const vals = Array.from({ length: 30 }, (_, i) => jitterMinutes('p' + i, '2026-11-16', 120))
+    expect(vals.every(v => v >= 0 && v < 120)).toBe(true)
+    expect(new Set(vals).size).toBeGreaterThan(1)
+    expect(jitterMinutes('pA', '2026-11-17', 120)).not.toBe(a1)
+  })
+  it('due 与 chip 用同一偏移：同批两产品到点分钟错开，chip 显示偏移后北京时间', () => {
+    // 目标时区日＝美东 11-15（北京 11-16 08:00 对应美东 11-15 19:00）
+    const day = '2026-11-15'
+    const jA = jitterMinutes('pA', day, 120)
+    const jB = jitterMinutes('pB', day, 120)
+    expect(jA).not.toBe(jB)
+    const map: EbayScheduledPublishMap = {
+      pA: { enabled: true, at: '', mode: 'daily' },
+      pB: { enabled: true, at: '', mode: 'daily' },
+    }
+    const plan: EbaySchedulePlan = { rows: [{ tz: 'America/New_York', start: '19:00', end: '21:00', ratio: 100, selected: true }] }
+    // 美东 11-15 19:00 EST = UTC 11-16 00:00 = 北京 11-16 08:00；now 取较小偏移刚过、较大偏移未到
+    const base = Date.UTC(2026, 10, 16, 0, 0)
+    const first = Math.min(jA, jB)
+    const nowIso = new Date(base + first * 60000 + 1000).toISOString()
+    const due = dueScheduledPublish(map, nowIso, plan)
+    expect(due).toEqual([jA < jB ? 'pA' : 'pB'])
+    // chip：now 在北京 07:00（窗口起点前）→ base=今日；pA 的 chip 分钟 = 08:00 + jA
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const expectA = `16日 ${pad(8 + Math.floor(jA / 60))}:${pad(jA % 60)}`
+    expect(nextRunBeijingText({ mode: 'daily', tz: 'America/New_York', start: '19:00', end: '21:00', productId: 'pA' }, '2026-11-16T07:00:00+08:00')).toBe(expectA)
+  })
+  it('due 接计划：按分配行窗口+各自偏移到点判定；未到的行不触发；当日跑过不重复', () => {
     const map: EbayScheduledPublishMap = {
       a: { enabled: true, at: '', mode: 'daily' },
       b: { enabled: true, at: '', mode: 'daily' },
     }
-    // 2 ids 按 60/10/30 最大余数 → a=美东、b=美西
-    // 北京 09:00 = 美东前一日 20:00（窗内）/ 美西 17:00（未到 18:00）→ 仅 a
-    expect(dueScheduledPublish(map, '2026-11-16T09:00:00+08:00', DEFAULT_SCHEDULE_PLAN)).toEqual(['a'])
-    // 北京 11:00 = 美东 22:00（过窗跳过）/ 美西 19:00（窗内）→ 仅 b
-    expect(dueScheduledPublish(map, '2026-11-16T11:00:00+08:00', DEFAULT_SCHEDULE_PLAN)).toEqual(['b'])
-    // 北京 07:00 = 美东 18:00，窗口 19:00 起点未到 → 不触发
+    // 2 ids 按 60/10/30 最大余数 → a=美东、b=美西；目标时区日均为 11-15
+    const jA = jitterMinutes('a', '2026-11-15', 120)
+    const jB = jitterMinutes('b', '2026-11-15', 120)
+    const nyBase = Date.UTC(2026, 10, 16, 0, 0)   // 美东 11-15 19:00 EST
+    const laBase = Date.UTC(2026, 10, 16, 2, 0)   // 美西 11-15 18:00 PST
+    // a 偏移刚过、b 窗口起点未到 → 仅 a
+    expect(dueScheduledPublish(map, new Date(nyBase + jA * 60000 + 1000).toISOString(), DEFAULT_SCHEDULE_PLAN)).toEqual(['a'])
+    // 两行窗口起点都未到 → 不触发
     expect(dueScheduledPublish(map, '2026-11-16T07:00:00+08:00', DEFAULT_SCHEDULE_PLAN)).toEqual([])
-    const ran: EbayScheduledPublishMap = { a: { ...map.a, lastRunAt: '2026-11-16T09:00:00+08:00' }, b: map.b }
-    expect(dueScheduledPublish(ran, '2026-11-16T09:30:00+08:00', DEFAULT_SCHEDULE_PLAN)).toEqual([])
+    // a 过窗跳过、b 偏移刚过 → 仅 b
+    expect(dueScheduledPublish(map, new Date(laBase + jB * 60000 + 1000).toISOString(), DEFAULT_SCHEDULE_PLAN)).toEqual(['b'])
+    const ran: EbayScheduledPublishMap = { a: { ...map.a, lastRunAt: new Date(nyBase + jA * 60000 + 1000).toISOString() }, b: map.b }
+    expect(dueScheduledPublish(ran, new Date(nyBase + jA * 60000 + 60000).toISOString(), DEFAULT_SCHEDULE_PLAN)).toEqual([])
   })
 })

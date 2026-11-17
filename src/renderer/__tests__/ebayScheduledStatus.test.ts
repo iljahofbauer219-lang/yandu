@@ -29,7 +29,7 @@ describe('状态位渲染与成功转环节', () => {
   it('chip 按 scheduleStatus 渲染：失败红/等待显示下次北京时间/idle 不显示', () => {
     expect(app).toContain('scheduleStatus(sch)')
     expect(app).toContain('className="ebay-scheduled-wait" title="下一次自动发布（北京时间）"')
-    expect(app).toContain('nextRunBeijingText({...sch,tz:row?.tz||sch.tz,start:row?.start||sch.start},new Date().toISOString())')
+    expect(app).toContain('nextRunBeijingText({...sch,tz:row?.tz||sch.tz,start:row?.start||sch.start,end:row?.end||sch.end,productId:product.id},new Date().toISOString())')
     expect(app).toContain('ebay-scheduled-wait')
     expect(app).toContain('>发布失败</span>')
   })

@@ -51,10 +51,28 @@ export const toggleScheduledPublish = (
 
 // 失败留痕：供行内「发布失败」小通知渲染；随 scoped localStorage 持久化，跨重启可见
 // 下一次自动发布的北京时间（日/时/分）：daily 按批次行窗口起点（IANA 换算 DST 自适应），once 按 at（本地墙钟即北京）
-export const nextRunBeijingText = (opts: { mode?: 'once' | 'daily'; at?: string; tz?: string; start?: string }, nowIso: string): string => {
+// 模拟真人不规则到点：窗口分钟数（跨 midnight 取模）与确定性分钟偏移（同产品同目标日稳定、跨产品/跨日不同）
+export const windowMinutes = (start: string, end: string): number => {
+  const [sh, sm] = start.split(':').map(Number)
+  const [eh, em] = end.split(':').map(Number)
+  return ((eh * 60 + em) - (sh * 60 + sm) + 1440) % 1440
+}
+export const jitterMinutes = (productId: string, dayKey: string, window: number): number => {
+  if (window <= 0) return 0
+  let h = 2166136261
+  const s = productId + '|' + dayKey
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) }
+  return (h >>> 0) % window
+}
+
+export const nextRunBeijingText = (opts: { mode?: 'once' | 'daily'; at?: string; tz?: string; start?: string; end?: string; productId?: string }, nowIso: string): string => {
   let instant: number
   if (opts.mode === 'daily') {
-    instant = nextDailyRunUtc(opts.tz || DEFAULT_SCHEDULE_TZ, opts.start || DEFAULT_SCHEDULE_START, nowIso)
+    const tz = opts.tz || DEFAULT_SCHEDULE_TZ
+    const start = opts.start || DEFAULT_SCHEDULE_START
+    const base = nextDailyRunUtc(tz, start, nowIso)
+    const day = zonedParts(tz, base)
+    instant = base + jitterMinutes(opts.productId || '', `${day.y}-${day.m}-${day.d}`, windowMinutes(start, opts.end || start)) * 60000
   } else {
     instant = new Date(opts.at || '').getTime()
     if (!Number.isFinite(instant)) return ''
@@ -103,7 +121,8 @@ export const dueScheduledPublish = (map: EbayScheduledPublishMap, nowIso: string
       if (e.mode === 'daily' && tz && start) {
         const p = zonedParts(tz, now)
         const [sh, sm] = start.split(':').map(Number)
-        const todayRun = zonedWallClockToUtc(tz, p.y, p.m, p.d, sh, sm)
+        const win = windowMinutes(start, end || start)
+        const todayRun = zonedWallClockToUtc(tz, p.y, p.m, p.d, sh, sm) + jitterMinutes(id, `${p.y}-${p.m}-${p.d}`, win) * 60000
         if (todayRun > now) return false
         // 过窗跳过等次日：窗口终点（跨 midnight 时落到目标时区次日）之后不再补跑
         const [eh, em] = (end || start).split(':').map(Number)
