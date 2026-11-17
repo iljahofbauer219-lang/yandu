@@ -62,9 +62,9 @@ describe('本地产品环节排除已进优品仓库的产品', () => {
 
 describe('自动发布调度 · 已存 eBay 草稿跳过重复执行', () => {
   const line = source.split('\n').find(l => l.includes('dueScheduledPublish(scheduledPublishRef.current')) || ''
-  it('跳过分支置于 prepare 之前：draftSavedAt 有值直接记完成态+中文 notice，不走执行链', () => {
-    expect(line).toContain('if(product.draftSavedAt){')
-    expect(line.indexOf('if(product.draftSavedAt){')).toBeLessThan(line.indexOf('prepareLocalProductRevision(id)'))
+  it('跳过分支置于 prepare 之前：非 once 且 draftSavedAt 有值直接记完成态+中文 notice，不走执行链', () => {
+    expect(line).toContain("if(product.draftSavedAt&&scheduledPublishRef.current[id]?.mode!=='once'){")
+    expect(line.indexOf("if(product.draftSavedAt&&scheduledPublishRef.current[id]?.mode!=='once'){")).toBeLessThan(line.indexOf('prepareLocalProductRevision(id)'))
     expect(line).toContain('已在 eBay 草稿栏，跳过重复自动发布')
     expect(line).toContain('clearScheduleFailure(base0,id)')
     expect(line).toContain("entry0?.mode==='daily'?{...entry0,lastRunAt:new Date().toISOString(),lastSkippedAt:new Date().toISOString()}:{enabled:false,at:entry0?.at||'',lastSkippedAt:new Date().toISOString()}")

@@ -86,6 +86,13 @@ describe('固定时间模式 · IANA 换算与每日调度', () => {
     expect(once.b.at).toBe('2026-11-17T08:00')
     expect(once.b.mode).toBe('once')
   })
+  it('cfg.enabled 显式传值时覆盖旧 enabled（确认新计划即重新排上），不传仍保留', () => {
+    const map: EbayScheduledPublishMap = { a: { enabled: false, at: '' } }
+    const on = applyScheduleConfigToAll(map, ['a'], { mode: 'once', at: '2026-11-17T08:00', enabled: true }, '2026-11-16T09:00')
+    expect(on.a.enabled).toBe(true)
+    const keep = applyScheduleConfigToAll(map, ['a'], { mode: 'once', at: '2026-11-17T08:00' }, '2026-11-16T09:00')
+    expect(keep.a.enabled).toBe(false)
+  })
   it('normalize：v1 旧记录兼容，v2 的 mode/tz/start/end/lastRunAt 合法才保留', () => {
     expect(normalizeScheduledPublish({ a: { enabled: true, at: 'x', mode: 'daily', tz: 'America/New_York', start: '19:00', end: '21:00', lastRunAt: 'y' }, b: { enabled: true, at: 'x', mode: 'bogus', tz: 3 } }))
       .toEqual({ a: { enabled: true, at: 'x', mode: 'daily', tz: 'America/New_York', start: '19:00', end: '21:00', lastRunAt: 'y' }, b: { enabled: true, at: 'x' } })

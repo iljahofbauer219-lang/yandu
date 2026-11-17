@@ -2246,9 +2246,10 @@ export class BrowserWorkspace {
     if(!clicked)return {status:'FAILED',url:tab.view.webContents.getURL(),message:'未找到最终「刊登」按钮，未提交',publishedAt:new Date().toISOString(),itemId:''}
     let url=tab.view.webContents.getURL()
     for(let attempt=0;attempt<15;attempt+=1){await this.sleep(800);url=tab.view.webContents.getURL();if(!isLstng(url))break}
-    const published=!isLstng(url)
+    // 成功须有正向上架证据（卖家列表/Item 页）；仅「离开 lstng」会把验证码/错误页误判成已上架
+    const published=/\/sl\/list|itemId=\d+|\/itm\/\d+/.test(url)&&!/captcha|splashui|\/error/.test(url)
     const itemId=(/itemId=(\d+)/.exec(url)||/\/itm\/(?:[^/]*\/)?(\d+)/.exec(url)||[])[1]||''
-    return {status:published?'PUBLISHED':'FAILED',url,message:published?'已点最终「刊登」，商品已真正上架':'已点刊登但页面未离开草稿页，请人工核对是否上架',publishedAt:new Date().toISOString(),itemId}
+    return {status:published?'PUBLISHED':'FAILED',url,message:published?'已点最终「刊登」，商品已真正上架':(isLstng(url)?'已点刊登但页面未离开草稿页，请人工核对是否上架':'已点刊登但落地页非上架成功页（疑似验证码/错误页），未确认上架，请人工核对'),publishedAt:new Date().toISOString(),itemId}
   }
   async saveEbayCurrentDraft():Promise<{status:'SAVED'|'FAILED';url:string;message:string;savedAt:string}> {
     let tab=(this.lastFillTabId?this.detailTabs.get(this.lastFillTabId):undefined)||this.detailTabs.get(this.activeTabId)

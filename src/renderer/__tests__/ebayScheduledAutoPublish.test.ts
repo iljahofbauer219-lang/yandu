@@ -53,3 +53,28 @@ describe('自动发布 · 调度到点链与全选', () => {
     expect(app).toContain('dueScheduledPublish(scheduledPublishRef.current,new Date().toISOString(),schedulePlanRef.current)')
   })
 })
+
+const sched = readFileSync(path.resolve(process.cwd(), 'src/shared/ebayScheduledPublish.ts'), 'utf8')
+
+describe('自动发布 · chip 状态机与 once 到点放行', () => {
+  it('确认新计划（含 custom）与行内开关清除跳过留痕，chip 回到 waiting 显示下次北京时间', () => {
+    expect(sched, '清跳过留痕纯函数').toContain('export const clearScheduleSkip')
+    expect(app, '确认弹窗两分支都清留痕').toContain('clearScheduleSkip(applyScheduleConfigToAll(')
+    expect(app, '行内开关清留痕').toContain('clearScheduleSkip(toggleScheduledPublish(')
+    expect(sched, '状态优先级 failed>skipped>waiting>idle 不变').toMatch(/lastFailedAt\) return 'failed'[\s\S]*lastSkippedAt\) return 'skipped'[\s\S]*enabled\) return 'waiting'/)
+    expect(sched, 'once 的下次时间用 at').toContain("instant = new Date(opts.at || '').getTime()")
+  })
+  it('自定义 once 到点视为显式指令执行发布；每日批次仍跳过已草稿', () => {
+    expect(app, '跳过分支限定非 once').toContain("if(product.draftSavedAt&&scheduledPublishRef.current[id]?.mode!=='once'){")
+  })
+  it('确认新计划即启用（跳过分支曾置 enabled=false，确认须重新排上）', () => {
+    expect(app, 'custom 确认传 enabled:true').toContain("{mode:'once',at:customRunIso(schedulePlanDraft.custom.minutes,nowIso),enabled:true}")
+    expect(app, 'daily 确认传 enabled:true').toContain("{mode:'daily',enabled:true}")
+    expect(sched, 'cfg.enabled 可选覆盖').toContain('...(cfg.enabled === undefined ? {} : { enabled: cfg.enabled })')
+  })
+  it('刊登成功须正向上架证据，验证码/错误页不得误判 PUBLISHED', () => {
+    const pub = ws.split('async publishEbayCurrentListing(')[1]?.split('async saveEbayCurrentDraft(')[0] ?? ''
+    expect(pub, '正向证据判据').toContain("const published=/\\/sl\\/list|itemId=\\d+|\\/itm\\/\\d+/.test(url)&&!/captcha|splashui|\\/error/.test(url)")
+    expect(pub, '非成功页中文点名').toContain('落地页非上架成功页（疑似验证码/错误页）')
+  })
+})

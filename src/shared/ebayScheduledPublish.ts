@@ -107,6 +107,22 @@ export const clearScheduleFailure = (map: EbayScheduledPublishMap, id: string): 
   return { ...map, [id]: next }
 }
 
+// 确认新计划/重新开启＝新的到点意图：清除「已在草稿·跳过」留痕，chip 回到 waiting 显示下次时间；
+// 失败留痕不清（仍须成功才清），避免把失败伪装成等待
+export const clearScheduleSkip = (map: EbayScheduledPublishMap, ids: string[]): EbayScheduledPublishMap => {
+  let changed = false
+  const next = { ...map }
+  for (const id of ids) {
+    const prev = next[id]
+    if (!prev?.lastSkippedAt) continue
+    const entry = { ...prev }
+    delete entry.lastSkippedAt
+    next[id] = entry
+    changed = true
+  }
+  return changed ? next : map
+}
+
 export const dueScheduledPublish = (map: EbayScheduledPublishMap, nowIso: string, plan?: EbaySchedulePlan): string[] => {
   const now = new Date(nowIso).getTime()
   const enabledIds = Object.entries(map).filter(([, e]) => e.enabled).map(([id]) => id)
@@ -204,13 +220,14 @@ export const schedulePreviewText = (tz: string, start: string, end: string, nowI
 // 全店统一写回时间配置（保留各商品 enabled 与 once 的 at 兜底）
 export const applyScheduleConfigToAll = (
   map: EbayScheduledPublishMap, ids: string[],
-  cfg: { mode: 'once' | 'daily'; at?: string; tz?: string; start?: string; end?: string }, nowIso: string
+  cfg: { mode: 'once' | 'daily'; at?: string; tz?: string; start?: string; end?: string; enabled?: boolean }, nowIso: string
 ): EbayScheduledPublishMap => {
   const next = { ...map }
   for (const id of ids) {
     const prev = next[id] || { enabled: false, at: '' }
     next[id] = {
       ...prev,
+      ...(cfg.enabled === undefined ? {} : { enabled: cfg.enabled }),
       mode: cfg.mode,
       at: cfg.mode === 'once' ? (cfg.at || prev.at || defaultScheduleAt(nowIso)) : prev.at,
       tz: cfg.tz, start: cfg.start, end: cfg.end,
