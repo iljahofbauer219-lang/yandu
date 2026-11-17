@@ -39,12 +39,12 @@ describe('自动发布 · 调度到点链与全选', () => {
     expect(seg).toContain('readCurrentDraftTitle()')
     expect(seg).toContain("fillCurrentTab(id,'auto'")
     expect(seg).toContain("fillCurrentTab(id,'fixed'")
-    expect(seg).toContain('publishCurrentListing()')
+    expect(seg).toContain('publishCurrentListing(product.id)')
     expect(seg.indexOf("fillCurrentTab(id,'auto'")).toBeLessThan(seg.indexOf("fillCurrentTab(id,'fixed'"))
-    expect(seg.indexOf("fillCurrentTab(id,'fixed'")).toBeLessThan(seg.indexOf('publishCurrentListing()'))
+    expect(seg.indexOf("fillCurrentTab(id,'fixed'")).toBeLessThan(seg.indexOf('publishCurrentListing(product.id)'))
   })
   it('标题不符中止且不点刊登（门在 publish 之前）', () => {
-    expect(seg.indexOf('readCurrentDraftTitle()')).toBeLessThan(seg.indexOf('publishCurrentListing()'))
+    expect(seg.indexOf('readCurrentDraftTitle()')).toBeLessThan(seg.indexOf('publishCurrentListing(product.id)'))
     expect(seg).toContain('草稿标题与本地不符')
   })
   it('全选自动发布＝全部产品 enabled（时间配置为店铺级批次计划，统一作用于所有产品）', () => {

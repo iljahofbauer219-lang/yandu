@@ -3567,9 +3567,12 @@ ipcMain.handle('ebay:read-current-draft-title', async () => {
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
   return workspace.readEbayCurrentTitle()
 })
-ipcMain.handle('ebay:publish-current-listing', async () => {
+ipcMain.handle('ebay:publish-current-listing', async (_event, localProductId?:string) => {
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
-  return workspace.publishEbayCurrentListing()
+  const result=await workspace.publishEbayCurrentListing()
+  // 发布成功＝环节迁移：写回 listing 态，定时发布列表/调度据此排除，线上产品经同步可见
+  if(result.status==='PUBLISHED'&&localProductId&&database)database.setEbayLocalProductPublishRef(localProductId,{kind:'listing',id:result.itemId,at:new Date().toISOString()})
+  return result
 })
 ipcMain.handle('ebay:read-current-settings', async (_event, storeId:string) => {
   if(!workspace)throw new Error('应用内浏览器尚未初始化')

@@ -13,6 +13,18 @@ const preload = readFileSync(path.resolve(process.cwd(), 'src/preload/preload.ts
 const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8')
 
 describe('eBay 保存草稿 · 主进程点击通道', () => {
+  it('发布成功后写回 listing 态并迁移：定时列表/全选/到点调度排除已上架，自动同步目录与产品', () => {
+    const pub = ws.split('async publishEbayCurrentListing(')[1]?.split('async saveEbayCurrentDraft(')[0] ?? ''
+    expect(pub, '刊登成功要回传 itemId 供写回 listing 态').toContain('itemId')
+    expect(main, 'publish IPC 接受本地产品 id').toContain("ipcMain.handle('ebay:publish-current-listing', async (_event, localProductId?:string)")
+    expect(main, 'PUBLISHED 写回 listing 态').toContain("kind:'listing'")
+    expect(preload, 'preload 透传 id').toContain('publishCurrentListing: (localProductId?:string)')
+    expect(app, '定时候选排除已上架').toContain("const scheduledCandidates=localProducts.filter(product=>product.publishRef?.kind!=='listing')")
+    expect(app, '列表渲染用候选集').toContain('scheduledCandidates.length?scheduledCandidates.map(product=>{')
+    expect(app, '到点调度跳过已上架').toContain("if(product.publishRef?.kind==='listing')return")
+    expect(app, '自动发布传产品 id').toContain('window.desktop.ebay.publishCurrentListing(product.id)')
+    expect(app, '成功后同步目录与产品').toContain('void syncStoreCategories(activeStore,true)')
+  })
   it('数量等 text-name 写入须 focus→写→input/change/focusout→blur，回读不一致重试一次', () => {
     const block = ws.split("if(t.control==='text-name'){")[1]?.split("if(t.control==='volume-pricing'){")[0] ?? ''
     expect(block, '写入前聚焦').toContain('el.focus()')

@@ -422,7 +422,7 @@ declare global {
         fillCurrentTab(localProductId:string, mode:'auto'|'fixed', preset?:unknown):Promise<{url:string;mode:string;filledFields:string[];skippedFields:string[];warnings:string[];inferredFields:string[];filledAt:string}>
         saveCurrentDraft(localProductId?:string):Promise<{status:'SAVED'|'FAILED';url:string;message:string;savedAt:string}>
         readCurrentDraftTitle():Promise<{title:string;url:string}>
-        publishCurrentListing():Promise<{status:'PUBLISHED'|'FAILED';url:string;message:string;publishedAt:string}>
+        publishCurrentListing(localProductId?:string):Promise<{status:'PUBLISHED'|'FAILED';url:string;message:string;publishedAt:string;itemId:string}>
         readCurrentEbaySettings(storeId:string):Promise<{paymentPolicy:{current:string;options:Array<{id:string;text:string}>};shippingPolicy:{current:string;options:Array<{id:string;text:string}>};returnPolicy:{current:string;options:Array<{id:string;text:string}>};itemLocation:string;postalCode:string}>
         specificsLlmSuggestions(input:{title:string;descriptionText:string;slots:Array<{name:string;control:string;options:string[];maxLength:number}>}):Promise<Array<{name:string;value:string}>>
         removeLocalProduct(localProductId:string):Promise<boolean>
