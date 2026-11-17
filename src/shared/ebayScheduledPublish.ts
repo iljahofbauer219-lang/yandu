@@ -50,6 +50,20 @@ export const toggleScheduledPublish = (
 }
 
 // 失败留痕：供行内「发布失败」小通知渲染；随 scoped localStorage 持久化，跨重启可见
+// 下一次自动发布的北京时间（日/时/分）：daily 按批次行窗口起点（IANA 换算 DST 自适应），once 按 at（本地墙钟即北京）
+export const nextRunBeijingText = (opts: { mode?: 'once' | 'daily'; at?: string; tz?: string; start?: string }, nowIso: string): string => {
+  let instant: number
+  if (opts.mode === 'daily') {
+    instant = nextDailyRunUtc(opts.tz || DEFAULT_SCHEDULE_TZ, opts.start || DEFAULT_SCHEDULE_START, nowIso)
+  } else {
+    instant = new Date(opts.at || '').getTime()
+    if (!Number.isFinite(instant)) return ''
+  }
+  const p = zonedParts('Asia/Shanghai', instant)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${p.d}日 ${pad(p.h)}:${pad(p.mi)}`
+}
+
 // 状态位口径（2026-11-17 拍板）：失败留痕＝发布失败；enabled 等待＝待发布中；其余不显示。
 // 真正上架成功的产品会离开本地定时发布转入线上产品，故无 success 态。
 export function scheduleStatus(entry: { enabled?: boolean; lastFailedAt?: string; lastSkippedAt?: string }): 'failed' | 'skipped' | 'waiting' | 'idle' {
@@ -190,7 +204,7 @@ export const applyScheduleConfigToAll = (
 // —— 固定时间三行批次计划：选取 + 目标时区 + 当地时间 + 北京时间预览 + 发布% ——
 
 export type EbayScheduleBatchRow = { tz: string; start: string; end: string; ratio: number; selected: boolean }
-export type EbaySchedulePlan = { rows: EbayScheduleBatchRow[] }
+export type EbaySchedulePlan = { rows: EbayScheduleBatchRow[]; custom?: { selected: boolean; minutes: number } }
 
 export const DEFAULT_SCHEDULE_PLAN: EbaySchedulePlan = {
   rows: [
@@ -217,12 +231,18 @@ export const normalizeSchedulePlan = (raw: unknown): EbaySchedulePlan => {
       selected: Boolean(r.selected),
     })
   }
-  if (!rows.length) return { rows: DEFAULT_SCHEDULE_PLAN.rows.map(r => ({ ...r })) }
-  return { rows }
+  const rawCustom = (raw as { custom?: unknown }).custom
+  const custom = rawCustom && typeof rawCustom === 'object' ? { selected: Boolean((rawCustom as { selected?: unknown }).selected), minutes: Math.max(0, Math.round(Number((rawCustom as { minutes?: unknown }).minutes) || 0)) } : undefined
+  if (!rows.length) return { rows: DEFAULT_SCHEDULE_PLAN.rows.map(r => ({ ...r })), ...(custom ? { custom } : {}) }
+  return { rows, ...(custom ? { custom } : {}) }
 }
 
 // 校验：至少选一行；选中行比例和=100；选中行窗口起止合法。返回中文错误串或 null
 export const validateSchedulePlan = (plan: EbaySchedulePlan): string | null => {
+  if (plan.custom?.selected) {
+    if (!Number.isFinite(plan.custom.minutes) || plan.custom.minutes <= 0) return '自行设置的发布分钟须大于 0'
+    return null
+  }
   const selected = plan.rows.filter(r => r.selected)
   if (!selected.length) return '请至少选取一个目标时区行'
   const sum = selected.reduce((s, r) => s + r.ratio, 0)
@@ -232,6 +252,10 @@ export const validateSchedulePlan = (plan: EbaySchedulePlan): string | null => {
   }
   return null
 }
+
+// 自行设置：now+分钟 的一次性发布时刻（UTC ISO）；双时区展示同一时刻。
+export const customRunIso = (minutes: number, nowIso: string): string => new Date(new Date(nowIso).getTime() + minutes * 60000).toISOString()
+export const zonedDisplay = (iso: string, tz: string): string => new Intl.DateTimeFormat('zh-CN', { timeZone: tz, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso))
 
 // 比例分配：当日待跑集合按选中行比例用最大余数法分批；ids 排序+行序固定 → 同日稳定
 export const allocateBatches = (ids: string[], plan: EbaySchedulePlan, dayKey: string): Record<string, EbayScheduleBatchRow> => {
