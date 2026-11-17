@@ -3,6 +3,7 @@ import {
   normalizeScheduledPublish, toggleScheduledPublish, dueScheduledPublish, defaultScheduleAt,
   zonedWallClockToUtc, nextDailyRunUtc, schedulePreviewText, applyScheduleConfigToAll,
   normalizeSchedulePlan, validateSchedulePlan, allocateBatches, DEFAULT_SCHEDULE_PLAN, scheduleStatus, nextRunBeijingText, windowMinutes, jitterMinutes,
+  markScheduleFailure, clearScheduleRunTraces,
   type EbayScheduledPublishMap, type EbaySchedulePlan
 } from '../ebayScheduledPublish'
 
@@ -128,6 +129,30 @@ describe('三行批次计划 · 校验/比例分配/按行 due', () => {
     expect(scheduleStatus({ enabled: true, lastSkippedAt: 'x', lastFailedAt: 'y' })).toBe('failed')
     expect(scheduleStatus({ enabled: true, lastSkippedAt: '' })).toBe('waiting')
     expect(scheduleStatus({ enabled: false })).toBe('idle')
+  })
+  it('clearScheduleRunTraces：新到点意图清失败+跳过留痕，chip 回 waiting 且新时间不动', () => {
+    const map: EbayScheduledPublishMap = {
+      p1: { enabled: true, at: '2026-11-17T15:13:10.321Z', mode: 'once', lastFailedAt: '2026-11-17T15:12:05.352Z', lastError: 'eBay 要求安全验证，请人工完成后重试', lastSkippedAt: '' },
+      p2: { enabled: true, at: 'x' }
+    }
+    const next = clearScheduleRunTraces(map, ['p1', 'p2', 'p3'])
+    expect(next.p1.lastFailedAt).toBeUndefined()
+    expect(next.p1.lastError).toBeUndefined()
+    expect(next.p1.lastSkippedAt).toBeUndefined()
+    expect(next.p1.at).toBe('2026-11-17T15:13:10.321Z')
+    expect(scheduleStatus(next.p1)).toBe('waiting')
+    expect(next.p2).toBe(map.p2)
+    expect(clearScheduleRunTraces(map, ['p2', 'p3'])).toBe(map)
+  })
+  it('失败后重确认新计划：失败留痕作废，chip 显示新 once 时间而非「发布失败」', () => {
+    let map: EbayScheduledPublishMap = { p1: { enabled: true, at: '2026-11-17T15:11:47.815Z', mode: 'once' } }
+    map = markScheduleFailure(map, 'p1', '2026-11-17T15:12:05.352Z', 'eBay 要求安全验证，请人工完成后重试')
+    expect(scheduleStatus(map.p1)).toBe('failed')
+    map = applyScheduleConfigToAll(map, ['p1'], { mode: 'once', at: '2026-11-17T15:40:00.000Z', enabled: true }, '2026-11-17T15:38:00.000Z')
+    expect(scheduleStatus(map.p1), '仅重排不清失败留痕时仍是 failed（旧缺陷）').toBe('failed')
+    map = clearScheduleRunTraces(map, ['p1'])
+    expect(scheduleStatus(map.p1)).toBe('waiting')
+    expect(nextRunBeijingText(map.p1, '2026-11-17T15:38:00.000Z')).toBe('17日 23:40')
   })
   it('nextRunBeijingText：daily 冬/夏按窗口起点换算北京日/时/分；once 按 at；非法 at 空串', () => {
     // 北京 11-16 09:00 → 美东 11-15 20:00，今日窗口起点已过 → 下一次 11-16 19:00 EST = 北京 11-17 08:00

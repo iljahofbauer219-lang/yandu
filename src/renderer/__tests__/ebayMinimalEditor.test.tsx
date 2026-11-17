@@ -177,7 +177,7 @@ describe('极简编辑器 · App.tsx 接线', () => {
     expect(head.indexOf('>全选自动发布</button>')).toBeLessThan(head.indexOf('>时间设置</button>'))
     expect(source, '时间设置开全店统一三行批次弹窗').toContain('setSchedulePlanDraft({rows:schedulePlan.rows.map(r=>({...r}))})')
     expect(source, '弹窗确认要校验后写回计划').toContain('const err=validateSchedulePlan(schedulePlanDraft);if(err){setSchedulePlanError(err);return}setSchedulePlanError(\'\');writeSchedulePlan(schedulePlanDraft);')
-    expect(source, '自选分钟走 once、否则全店 daily 写回，且确认清跳过留痕').toContain('writeScheduledPublish(clearScheduleSkip(applyScheduleConfigToAll(scheduledPublish,localProducts.map(p=>p.id),{mode:')
+    expect(source, '自选分钟走 once、否则全店 daily 写回，且确认清失败+跳过留痕').toContain('writeScheduledPublish(clearScheduleRunTraces(applyScheduleConfigToAll(scheduledPublish,localProducts.map(p=>p.id),{mode:')
     expect(source, '校验错误弹窗内就地中文点名（不占用信息框渲染点）').toContain('{schedulePlanError&&<p className="ebay-schedule-plan-error">{schedulePlanError}</p>}')
     expect(source, '发布%输入带 % 后缀单元格').toContain('className="ebay-schedule-plan-ratio"')
     const planCss=readFileSync(path.resolve(process.cwd(),'src/renderer/styles.css'),'utf8')

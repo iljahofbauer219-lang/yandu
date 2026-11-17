@@ -123,6 +123,24 @@ export const clearScheduleSkip = (map: EbayScheduledPublishMap, ids: string[]): 
   return changed ? next : map
 }
 
+// 确认新计划/重新开启＝新的到点意图：旧运行留痕（失败+跳过）一并作废，chip 回到 waiting 显示下次时间；
+// 到点执行失败仍会重新写入失败留痕
+export const clearScheduleRunTraces = (map: EbayScheduledPublishMap, ids: string[]): EbayScheduledPublishMap => {
+  let changed = false
+  const next = { ...map }
+  for (const id of ids) {
+    const prev = next[id]
+    if (!prev || (!prev.lastFailedAt && !prev.lastError && !prev.lastSkippedAt)) continue
+    const entry = { ...prev }
+    delete entry.lastFailedAt
+    delete entry.lastError
+    delete entry.lastSkippedAt
+    next[id] = entry
+    changed = true
+  }
+  return changed ? next : map
+}
+
 export const dueScheduledPublish = (map: EbayScheduledPublishMap, nowIso: string, plan?: EbaySchedulePlan): string[] => {
   const now = new Date(nowIso).getTime()
   const enabledIds = Object.entries(map).filter(([, e]) => e.enabled).map(([id]) => id)
