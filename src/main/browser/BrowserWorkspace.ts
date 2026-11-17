@@ -163,6 +163,8 @@ export class BrowserWorkspace {
   private readonly views = new Map<Platform, WebContentsView>()
   private readonly supplyViews = new Map<'1688'|'GIGACLOUD', WebContentsView>()
   private readonly detailTabs = new Map<string, DetailTab>()
+  // 保存草稿须与填写同页签：记录最近一次 fillCurrentEbayTab 所用页签，避免回落任意 lstng 页签存错页
+  private lastFillTabId:string|null=null
   private active: Platform = '1688'
   private activeTabId = 'home-1688'
   private attached: WebContentsView | null = null
@@ -2248,7 +2250,7 @@ export class BrowserWorkspace {
     return {status:published?'PUBLISHED':'FAILED',url,message:published?'已点最终「刊登」，商品已真正上架':'已点刊登但页面未离开草稿页，请人工核对是否上架',publishedAt:new Date().toISOString()}
   }
   async saveEbayCurrentDraft():Promise<{status:'SAVED'|'FAILED';url:string;message:string;savedAt:string}> {
-    let tab=this.detailTabs.get(this.activeTabId)
+    let tab=(this.lastFillTabId?this.detailTabs.get(this.lastFillTabId):undefined)||this.detailTabs.get(this.activeTabId)
     const isLstng=(u:string)=>/^https:\/\/([a-z0-9-]+\.)*ebay\.com\/lstng\?/.test(u)
     if(!tab||!isLstng(tab.view.webContents.getURL()))tab=[...this.detailTabs.values()].find(t=>isLstng(t.view.webContents.getURL()))
     if(!tab)throw new Error('当前没有打开的 eBay 刊登页，无法保存草稿')
@@ -2269,6 +2271,7 @@ export class BrowserWorkspace {
     if(!tab)throw new Error('当前没有打开的页签，请先在 eBay 浏览器打开刊登页')
     const url=tab.view.webContents.getURL()
     if(!/^https:\/\/([a-z0-9-]+\.)*ebay\.com\/lstng\?/.test(url))throw new Error(`当前页签不是 eBay 刊登页（${url.slice(0,80)}），填写只作用于刊登页`)
+    this.lastFillTabId=tab.id
     const modelRead=await tab.view.webContents.executeJavaScript(READ_EBAY_POLICY_MODELS_SCRIPT,true) as {policyModels?:Record<string,string>}
     const modelRaw=modelRead?.policyModels||{}
     const policyModels:Partial<Record<EbayPolicyModelField,EbayPolicyModelChoices>>={}
@@ -2454,9 +2457,11 @@ export class BrowserWorkspace {
           if(!el){const lab=[...document.querySelectorAll('label,[class*="--label"]')].find(n=>clean(n.textContent)==='数量'||/^Quantity$/i.test(clean(n.textContent)));if(lab){el=lab.querySelector('input')||(lab.htmlFor?document.getElementById(lab.htmlFor):null)||((lab.closest('[class*="field"]')||lab.parentElement||document).querySelector('input'))}}
           if(!el||!visible(el)){skippedFields.push(t.label+'（当前页没有该输入框，保留原值）');continue}
           const want=clean(String(t.desired));
-          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set?.call(el,want);
-          el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));
+          // eBay 数量等自定义 textbox 只在 focus/blur 同步内部模型：只写 DOM value 会被保存草稿序列化回旧值
+          const write=()=>{el.focus();Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set?.call(el,want);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));el.dispatchEvent(new Event('focusout',{bubbles:true}));el.blur()};
+          write();
           await wait(300);
+          if(clean(el.value)!==want){write();await wait(300)}
           if(clean(el.value)===want)filledFields.push(t.label);else skippedFields.push(t.label+'（写入后回读不一致）');
           continue;
         }
@@ -3048,6 +3053,23 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
   }
 
   /** 平台类目候选：加载 eBay prelist「Find a match」页，解析推荐类目完整路径（多级面包屑），按 Best match 优先返回 */
+  /** 库存读回：从店铺已打开的草稿/刊登页签读 quantity 输入框真值（隐藏窗会被 eBay captcha 强制重登，故不用） */
+  async readEbayActiveTabQuantity(accountId:string):Promise<{quantity:number|null;at:string;url:string}> {
+    const tabs=[...this.detailTabs.values()].filter(item=>item.scopeId===accountId&&!item.view.webContents.isDestroyed())
+    const tab=tabs.find(item=>item.view===this.attached)||tabs[0]
+    const at=new Date().toISOString()
+    if(!tab)return {quantity:null,at,url:''}
+    const url=tab.view.webContents.getURL()
+    if(!/ebay\.com\/(lstng|sl\/list)/.test(url))return {quantity:null,at,url}
+    const value=await tab.view.webContents.executeJavaScript(String.raw`(() => {
+      const clean=v=>(v||'').replace(/\s+/g,' ').trim();
+      const field=document.querySelector('input[name="quantity"]')||[...document.querySelectorAll('input')].find(el=>/quantity|库存数量/i.test((el.getAttribute('aria-label')||'')+(el.name||'')+(el.id||'')));
+      return field?clean(field.value):'';
+    })()`,true) as string
+    const n=parseInt(String(value).replace(/[^0-9]/g,''),10)
+    return {quantity:Number.isFinite(n)?n:null,at,url}
+  }
+
   async readEbayPlatformCategories(accountId:string,query:string):Promise<EbayPlatformCategoryOption[]> {
     const base=this.detailTabs.get(`login-${accountId}`)
     if(!base||base.view.webContents.isDestroyed())throw new Error('请先在「店铺采集」打开当前 eBay 店铺并完成登录，再获取平台类目')

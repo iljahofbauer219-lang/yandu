@@ -3567,6 +3567,65 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   const publishEditorSession=useRef('')
   const [optimizeMode,setOptimizeMode]=useState<'title'|'image'|'content'|'video'|'pricing'>('title')
   const [profitAssumptions,setProfitAssumptions]=useState<EbayProfitAssumptions>(defaultEbayProfitAssumptions)
+  // 定时发布行黄位：美元价。USD 直显；CNY 按核算汇率折算；其余币种保留原币标识不假造美元
+  const scheduledUsdPrice=(p:EbayLocalProduct):string=>{
+    const listing=p.snapshot.sourceListing
+    const numeric=Number(String(listing.price||'').replace(/,/g,''))
+    const code=(listing.currency||'USD').trim().toUpperCase()
+    if(!Number.isFinite(numeric)||numeric<=0)return '$ --'
+    if(code==='USD')return `$${numeric.toFixed(2)}`
+    if(code==='CNY'&&profitAssumptions.exchangeRate>0)return `$${(numeric/profitAssumptions.exchangeRate).toFixed(2)}`
+    return ebayDisplayPrice(code,String(listing.price||''))
+  }
+  const scheduledMetaBusy=useRef<Set<string>>(new Set())
+  const scheduledQtyRetried=useRef<Set<string>>(new Set())
+  // 红位全译：缺 titleZh 的本地产品走 qwen-mt 逐条翻译并落库缓存
+  useEffect(()=>{
+    if(activeTab!=='publish')return
+    let cancelled=false
+    const run=async()=>{
+      for(const p of localProducts){
+        if(cancelled)return
+        if(p.titleZh||!p.title||scheduledMetaBusy.current.has(p.id))continue
+        scheduledMetaBusy.current.add(p.id)
+        try{
+          const res=await window.desktop.ebay.translateContent({segments:[{id:p.id,english:p.title}]})
+          const zh=res.segments.find(seg=>seg.id===p.id)?.chinese?.trim()
+          if(!cancelled&&zh){
+            const updated=await window.desktop.ebay.setLocalProductMeta(p.id,{titleZh:zh,titleZhAt:res.translatedAt})
+            setLocalProducts(cur=>cur.map(it=>it.id===p.id?updated:it))
+          }
+        }catch{/* 翻译失败保留占位，下轮进入再试 */}
+        finally{scheduledMetaBusy.current.delete(p.id)}
+      }
+    }
+    void run()
+    return ()=>{cancelled=true}
+  },[activeTab,localProducts])
+  // 蓝位库存：已存草稿且未读回过的产品，隐藏窗口读 eBay 草稿栏「库存数量」真值
+  useEffect(()=>{
+    if(activeTab!=='publish')return
+    let cancelled=false
+    const run=async()=>{
+      for(const p of localProducts){
+        if(cancelled)return
+        const needsRead=p.draftQuantity===undefined||(p.draftQuantity===null&&!scheduledQtyRetried.current.has(p.id))
+        if(!p.draftSavedAt||!needsRead||scheduledMetaBusy.current.has(`qty:${p.id}`))continue
+        scheduledMetaBusy.current.add(`qty:${p.id}`)
+        if(p.draftQuantity===null)scheduledQtyRetried.current.add(p.id)
+        try{
+          const res=await window.desktop.ebay.readDraftQuantity(p.storeId)
+          if(!cancelled){
+            const updated=await window.desktop.ebay.setLocalProductMeta(p.id,{draftQuantity:res.quantity,draftQuantityAt:res.at})
+            setLocalProducts(cur=>cur.map(it=>it.id===p.id?updated:it))
+          }
+        }catch{/* 读回失败显示—，不造假 */}
+        finally{scheduledMetaBusy.current.delete(`qty:${p.id}`)}
+      }
+    }
+    void run()
+    return ()=>{cancelled=true}
+  },[activeTab,localProducts])
   const [selectedPricingStrategy,setSelectedPricingStrategy]=useState<EbayPricingStrategy>('BALANCED')
   const [savedPricingDecision,setSavedPricingDecision]=useState<EbayCompetitivePricingDecision|null>(null)
   const [complianceReviewed,setComplianceReviewed]=useState(false)
@@ -4334,7 +4393,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   const writeScheduledPublish=(next:EbayScheduledPublishMap)=>{setScheduledPublish(next);if(activeStore)writeScopedItem(localStorage,scopedStorageKey('ebay-scheduled-publish:v1',activeStore.id),JSON.stringify(next))}
   const writeSchedulePlan=(next:EbaySchedulePlan)=>{setSchedulePlan(next);if(activeStore)writeScopedItem(localStorage,scopedStorageKey('ebay-schedule-plan:v1',activeStore.id),JSON.stringify(next))}
   const openPublishVersion=(product:EbayLocalProduct)=>{setPublishEditorDraftId(product.id);publishEditorSession.current=`local:${product.id}`;setPublishEditorProduct(product);setPublishEditorDraft({...ebayLocalProductFormSeed(product),title:product.title,descriptionText:product.snapshot.details.descriptionText||'',descriptionHtml:product.snapshot.details.descriptionHtml||'',price:product.snapshot.details.price||'0',currency:product.snapshot.details.currency||'USD',media:product.snapshot.media});setActiveTab('publish')}
-  const manualPublishLocal=async(product:EbayLocalProduct,alsoSaveDraft=false)=>{setEbayFillLastProduct(product.id);setBusy(`sched-manual:${product.id}`);setEbayError('');setActiveTab('browser');try{await new Promise(resolve=>window.setTimeout(resolve,900));const res=await window.desktop.ebay.prepareLocalProductRevision(product.id);setLocalProducts(await window.desktop.ebay.localProducts(product.storeId));const autoRes=await runCurrentTabFill('auto',product.id);if(autoRes){const fixedRes=await runCurrentTabFill('fixed',product.id);setNotice(`${res.reusedRef?'已复用该商品现有 eBay 草稿/刊登（未重复新建）。':`已打开 Seller Hub 并统一预填（${product.title.slice(0,40)}）。`}串联完成：自动填写 写${autoRes.filledFields.length}项；固定填写 写${fixedRes?fixedRes.filledFields.length:0}项${fixedRes?'':'（固定填写失败，见错误提示）'}。系统没有点击最终提交按钮。`);if(alsoSaveDraft){const saved=await window.desktop.ebay.saveCurrentDraft(product.id);if(saved.status==='SAVED'){setNotice(n=>`${n}已保存草稿：产品已存入 eBay 草稿栏。`);setLocalProducts(await window.desktop.ebay.localProducts(product.storeId))}else setEbayError(saved.message)}}}catch(reason){setEbayError(readableError(reason,'手动发布准备失败'))}finally{setBusy('')}}
+  const manualPublishLocal=async(product:EbayLocalProduct,alsoSaveDraft=false)=>{setEbayFillLastProduct(product.id);setBusy(`sched-manual:${product.id}`);setEbayError('');setActiveTab('browser');try{await new Promise(resolve=>window.setTimeout(resolve,900));const res=await window.desktop.ebay.prepareLocalProductRevision(product.id);setLocalProducts(await window.desktop.ebay.localProducts(product.storeId));const autoRes=await runCurrentTabFill('auto',product.id);if(autoRes){const fixedRes=await runCurrentTabFill('fixed',product.id);setNotice(`${res.reusedRef?'已复用该商品现有 eBay 草稿/刊登（未重复新建）。':`已打开 Seller Hub 并统一预填（${product.title.slice(0,40)}）。`}串联完成：自动填写 写${autoRes.filledFields.length}项；固定填写 写${fixedRes?fixedRes.filledFields.length:0}项${fixedRes?'':'（固定填写失败，见错误提示）'}。系统没有点击最终提交按钮。`);if(alsoSaveDraft){const saved=await window.desktop.ebay.saveCurrentDraft(product.id);if(saved.status==='SAVED'){setNotice(n=>`${n}已保存草稿：产品已存入 eBay 草稿栏。`);setLocalProducts(await window.desktop.ebay.localProducts(product.storeId))}else setEbayError(saved.message)}}writeScheduledPublish(clearScheduleFailure(scheduledPublishRef.current,product.id))}catch(reason){setEbayError(readableError(reason,'手动发布准备失败'))}finally{setBusy('')}}
   // 打回优品=退出本地定时发布、回到优品仓库：优品列表按现口径排除「已有本地产品」的草稿（premiumStageDrafts），
   // 所以先把当前本地内容写进优品草稿（保留合规快照、图用服务器原 URL），再移除本地产品行（其本地媒体目录随之清理，不可逆）。
   const sendBackToPremium=async(product:EbayLocalProduct)=>{
@@ -4353,7 +4412,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
       setNotice(`已打回优品仓库（${product.title.slice(0,40)}）：当前本地内容已存入优品草稿，本地定时发布不再列该产品；本地媒体目录已清理，草稿图用服务器原图。`)
     }catch(reason){setEbayError(readableError(reason,'打回优品失败'))}finally{setBusy('')}
   }
-  const viewPublishDraft=(product:EbayLocalProduct)=>{setEbayFillLastProduct(product.id);const ref=product.publishRef;if(!ref){setEbayError('该商品尚无 eBay 草稿/刊登，请先点「手动发布」创建唯一草稿。');return}const url=ref.kind==='draft'?`https://www.ebay.com/lstng?draftId=${encodeURIComponent(ref.id)}&mode=AddItem`:`https://www.ebay.com/sl/list?mode=ReviseItem&itemId=${encodeURIComponent(ref.id)}`;setActiveTab('browser');void window.desktop.browser.navigate('web',url).catch(reason=>setEbayError(readableError(reason,'打开草稿/刊登失败')))}
+  const viewPublishDraft=(product:EbayLocalProduct)=>{setEbayFillLastProduct(product.id);const ref=product.publishRef;if(!ref){setEbayError('该商品尚无 eBay 草稿/刊登，请先点「手动发布」创建唯一草稿。');return}const url=ref.kind==='draft'?`https://www.ebay.com/lstng?draftId=${encodeURIComponent(ref.id)}&mode=AddItem`:`https://www.ebay.com/sl/list?mode=ReviseItem&itemId=${encodeURIComponent(ref.id)}`;setActiveTab('browser');void window.desktop.browser.navigate('web',url).then(()=>{const tryRead=async(attempt:number):Promise<void>=>{const res=await window.desktop.ebay.readDraftQuantity(product.storeId);if(res.quantity!==null){const updated=await window.desktop.ebay.setLocalProductMeta(product.id,{draftQuantity:res.quantity,draftQuantityAt:res.at});setLocalProducts(cur=>cur.map(it=>it.id===product.id?updated:it));return}if(attempt<3)window.setTimeout(()=>{void tryRead(attempt+1).catch(()=>undefined)},5000)};window.setTimeout(()=>{void tryRead(1).catch(()=>undefined)},4000)}).catch(reason=>setEbayError(readableError(reason,'打开草稿/刊登失败')))}
   useEffect(()=>{const timer=window.setInterval(()=>{const due=dueScheduledPublish(scheduledPublishRef.current,new Date().toISOString(),schedulePlanRef.current);due.forEach(id=>{if(scheduledRunning.current[id])return;const product=localProducts.find(item=>item.id===id);if(!product)return;if(product.draftSavedAt){const entry0=scheduledPublishRef.current[id];const base0={...scheduledPublishRef.current,[id]:entry0?.mode==='daily'?{...entry0,lastRunAt:new Date().toISOString(),lastSkippedAt:new Date().toISOString()}:{enabled:false,at:entry0?.at||'',lastSkippedAt:new Date().toISOString()}};writeScheduledPublish(clearScheduleFailure(base0,id));setNotice(`已在 eBay 草稿栏，跳过重复自动发布：${product.title.slice(0,40)}。`);return}scheduledRunning.current[id]=true;void (async()=>{let lastError='';for(let attempt=0;attempt<2;attempt+=1){try{const prep=await window.desktop.ebay.prepareLocalProductRevision(id);if(prep.refDeleted){setLocalProducts(await window.desktop.ebay.localProducts(product.storeId));throw new Error('eBay 草稿已删除，已中止自动发布（不新建顶替）；完成态已清空')}const gate=await window.desktop.ebay.readCurrentDraftTitle();if(gate.title&&gate.title!==product.title.trim())throw new Error(`草稿标题与本地不符（${gate.title.slice(0,30)}），已中止自动发布，请先修复草稿`);await window.desktop.ebay.fillCurrentTab(id,'auto',undefined);await window.desktop.ebay.fillCurrentTab(id,'fixed',readEbayFixedPreset());const pub=await window.desktop.ebay.publishCurrentListing();if(pub.status!=='PUBLISHED')throw new Error(pub.message);setLocalProducts(await window.desktop.ebay.localProducts(product.storeId));await window.desktop.ebay.removeLocalProduct(id);setLocalProducts(await window.desktop.ebay.localProducts(product.storeId));setListings(await window.desktop.ebay.listings(product.storeId));if(activeStore)void syncStore(activeStore).catch(()=>undefined);setNotice(`自动发布已上架并转入线上产品：${product.title.slice(0,40)}（prepare+自动填写+固定填写+最终刊登）。`);lastError='';break}catch(reason){lastError=readableError(reason,'自动发布执行失败');if(attempt===0)await new Promise(resolve=>window.setTimeout(resolve,1500))}}if(lastError)setEbayError(lastError);scheduledRunning.current[id]=false;const entry=scheduledPublishRef.current[id];if(lastError){const base={...scheduledPublishRef.current,[id]:entry?.mode==='daily'?{...entry,lastRunAt:new Date().toISOString(),lastSkippedAt:''}:{enabled:false,at:entry?.at||'',lastSkippedAt:''}};writeScheduledPublish(markScheduleFailure(base,id,new Date().toISOString(),lastError))}else{const m={...scheduledPublishRef.current};delete m[id];writeScheduledPublish(m)}})()})},15000);return()=>window.clearInterval(timer)},[localProducts])
   const refreshLocalProduct=(updated:EbayLocalProduct)=>setLocalProducts(current=>[updated,...current.filter(item=>item.id!==updated.id)])
   const overlayPlatformCategory=useEbayPlatformCategory({product:localEditorProduct??null,onUpdated:refreshLocalProduct,notify:setNotice,fail:message=>setEbayError(message)})
@@ -5316,7 +5375,8 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
           {localProducts.length?localProducts.map(product=>{const sch=scheduledPublish[product.id]||{enabled:false,at:''};const m=product.snapshot.media.find(item=>item.mediaType==='IMAGE');const img=m?(m.localPath?`cross-media://local/${encodeURIComponent(m.localPath)}`:m.remoteUrl):'';return (
             <article key={product.id} className="ebay-scheduled-row">
               {img?<img src={img} alt=""/>:<span className="ebay-scheduled-noimg">无图</span>}
-              <div className="ebay-scheduled-title"><b title={product.title}>{product.title}</b><small>{product.coreTermZh||'—'}</small></div>
+              <div className="ebay-scheduled-title"><b title={product.title}>{product.title}</b><small className="ebay-scheduled-coreline"><span className="ebay-scheduled-coreterm">{product.coreTermZh||'—'}</span>{'  '}<span className="ebay-scheduled-titlezh">{product.titleZh||'全译生成中…'}</span></small></div>
+              <div className="ebay-scheduled-metrics"><span className="ebay-scheduled-price" title="产品价格（美元）">{scheduledUsdPrice(product)}</span><span className="ebay-scheduled-qty" title={product.draftQuantityAt?`eBay 草稿库存读回 ${new Date(product.draftQuantityAt).toLocaleString('zh-CN')}`:'尚未读回 eBay 草稿库存'}>{product.draftQuantity===undefined||product.draftQuantity===null?'—':product.draftQuantity}</span></div>
               <div className="ebay-scheduled-actions">
               <button type="button" disabled={busy===`sched-back-premium:${product.id}`} onClick={()=>void sendBackToPremium(product)}>{busy===`sched-back-premium:${product.id}`?'打回中…':'打回优品'}</button>
               <button type="button" onClick={()=>{const draft=optimizationDrafts.find(item=>item.listing.listingId===product.listingId);if(draft)openOptimizedVersion(draft);else void openLocalEditor(product)}}>重新优化</button>
