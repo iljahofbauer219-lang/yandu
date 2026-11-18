@@ -2233,13 +2233,13 @@ export class BrowserWorkspace {
     const want=norm(title)
     for(let attempt=0;attempt<10;attempt+=1){
       await this.sleep(900)
-      const id=await tab.view.webContents.executeJavaScript(`(()=>{const norm=v=>String(v||'').replace(/\\s+/g,' ').trim().toLowerCase();const want=${JSON.stringify(want)};const a=[...document.querySelectorAll('a[href*="/itm/"]')].find(x=>norm(x.textContent).includes(want)||norm(x.getAttribute('title')).includes(want));if(!a)return '';const m=(a.href||'').match(/\\/itm\\/(?:[^/]+\\/)?(\\d{9,15})/);return m?m[1]:''})()`,true) as string
+      const id=await tab.view.webContents.executeJavaScript(`(()=>{const norm=v=>String(v||'').replace(/\\s+/g,' ').trim().toLowerCase();const want=${JSON.stringify(want)};const row=[...document.querySelectorAll('tr,li,[role=row],article')].find(r=>norm(r.textContent).includes(want));const a=row?row.querySelector('a[href*="/itm/"]'):[...document.querySelectorAll('a[href*="/itm/"]')].find(x=>norm(x.textContent).includes(want));if(!a)return '';const m=(a.href||'').match(/\\/itm\\/(?:[^/]+\\/)?(\\d{9,15})/);return m?m[1]:''})()`,true) as string
       if(id)return {itemId:id,draftId:'',url:tab.view.webContents.getURL()}
     }
     await tab.view.webContents.loadURL('https://www.ebay.com/sh/lst/drafts').catch(()=>undefined)
     for(let attempt=0;attempt<10;attempt+=1){
       await this.sleep(900)
-      const draftId=await tab.view.webContents.executeJavaScript(`(()=>{const norm=v=>String(v||'').replace(/\\s+/g,' ').trim().toLowerCase();const want=${JSON.stringify(want)};const a=[...document.querySelectorAll('a[href*="draftId="],a[href*="lstng"]')].find(x=>norm(x.textContent).includes(want)||norm(x.getAttribute('title')).includes(want));if(!a)return '';const m=(a.href||'').match(/draftId=(\\d{6,})/);return m?m[1]:''})()`,true) as string
+      const draftId=await tab.view.webContents.executeJavaScript(`(()=>{const norm=v=>String(v||'').replace(/\\s+/g,' ').trim().toLowerCase();const want=${JSON.stringify(want)};const row=[...document.querySelectorAll('tr,li,[role=row],article')].find(r=>norm(r.textContent).includes(want));const a=row?row.querySelector('a[href*="draftId="],a[href*="lstng"]'):[...document.querySelectorAll('a[href*="draftId="],a[href*="lstng"]')].find(x=>norm(x.textContent).includes(want));if(!a)return '';const m=(a.href||'').match(/draftId=(\\d{6,})/);return m?m[1]:''})()`,true) as string
       if(draftId)return {itemId:'',draftId,url:tab.view.webContents.getURL()}
     }
     return {itemId:'',draftId:'',url:tab.view.webContents.getURL()}
