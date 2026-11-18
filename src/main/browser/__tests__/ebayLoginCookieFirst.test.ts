@@ -202,6 +202,51 @@ describe('一键登录 · cookie 优先于陈旧 signin DOM（修复 A）', () =
   })
 })
 
+describe('一键登录 · 复检失败不空转（卡顿修复）', () => {
+  const timedHost = (tabs: FakeTab[], activeTabId: string) => {
+    const host = makeHost(tabs, activeTabId)
+    const clock = { ms: 0 }
+    host.sleep = async (ms: number) => { clock.ms += ms }
+    return { host, clock }
+  }
+
+  it('cookie 有效但服务端真失效：刷新复检落登录表单即回落，轮询耗时≤2s（原 20×500ms 空转 10s）', async () => {
+    const dead = makeView({ phase: 'USERNAME', url: SIGNIN_URL }, { cookies: aliveCookies, serverAcceptsRefresh: false })
+    const { host, clock } = timedHost([makeTab(`login-${ACCOUNT}`, dead, ACCOUNT)], `login-${ACCOUNT}`)
+    const result = await ensureMethod.call(host, ACCOUNT, 'cnyandu', 'secret', true)
+    expect(result.status).toBe('ONLINE')
+    expect(dead.submissions).toEqual(['USERNAME', 'PASSWORD'])
+    expect(clock.ms, `复检空转耗时 ${clock.ms}ms`).toBeLessThanOrEqual(2000)
+  })
+
+  it('cookie 有效且服务端接受刷新：复检一次即 ONLINE，不提交不空转', async () => {
+    const alive = makeView({ phase: 'USERNAME', url: SIGNIN_URL }, { cookies: aliveCookies })
+    const { host, clock } = timedHost([makeTab(`login-${ACCOUNT}`, alive, ACCOUNT)], `login-${ACCOUNT}`)
+    const result = await ensureMethod.call(host, ACCOUNT, 'cnyandu', 'secret', true)
+    expect(result.status).toBe('ONLINE')
+    expect(alive.submissions).toEqual([])
+    expect(clock.ms).toBeLessThanOrEqual(500)
+  })
+
+  it('提交后导航销毁执行上下文：复检抛错不中断整链，下一轮继续直至 ONLINE', async () => {
+    const view = makeView({ phase: 'USERNAME', url: SIGNIN_URL }, { cookies: [] })
+    let thrown = false
+    const original = view.webContents.executeJavaScript
+    view.webContents.executeJavaScript = async (script: string) => {
+      if (script.includes('signedInLink') && view.submissions.includes('PASSWORD') && !thrown) {
+        thrown = true
+        throw new Error('Execution context was destroyed.')
+      }
+      return original(script)
+    }
+    const host = makeHost([makeTab(`login-${ACCOUNT}`, view, ACCOUNT)], `login-${ACCOUNT}`)
+    const result = await ensureMethod.call(host, ACCOUNT, 'cnyandu', 'secret', true)
+    expect(thrown, '应真的经历过一次上下文销毁').toBe(true)
+    expect(result.status).toBe('ONLINE')
+    expect(view.submissions).toEqual(['USERNAME', 'PASSWORD'])
+  })
+})
+
 describe('登录成功后陈旧 signin 页签自愈（修复 B）', () => {
   it('自动登录成功：同分区停在 signin 的其它页签刷回 Seller Hub；splashui 验证页与他店页签不动', async () => {
     const active = makeView({ phase: 'USERNAME', url: SIGNIN_URL }, { cookies: [] })

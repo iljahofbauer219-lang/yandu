@@ -31,7 +31,8 @@ fi
 rm -f "$HOME/Library/Application Support/cross-border-sourcing-desktop/Singleton"* 2>/dev/null || true
 
 # ELECTRON_RUN_AS_NODE 会让 electron 降为纯 Node，主进程加载即 app undefined 崩溃
-env -u ELECTRON_RUN_AS_NODE nohup npm start > /tmp/yandu-dev-start.log 2>&1 &
+# YANDU_CDP_PORT 可选：验收取证需要 CDP 时透传调试端口，默认不传保持原行为
+env -u ELECTRON_RUN_AS_NODE nohup npm start -- ${YANDU_CDP_PORT:+--remote-debugging-port=${YANDU_CDP_PORT}} > /tmp/yandu-dev-start.log 2>&1 &
 
 pid=""
 for _ in $(seq 1 30); do

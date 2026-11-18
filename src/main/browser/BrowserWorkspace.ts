@@ -3442,11 +3442,14 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     if(state.phase==='ERROR')return result('ERROR',state.errorMessage||'eBay登录失败',state.url)
     if((state.phase==='USERNAME'||state.phase==='PASSWORD'||state.phase==='OFFLINE')&&await this.ebaySessionCookiesAlive(view)){
       try{await view.webContents.loadURL('https://www.ebay.com/sh/ovw')}catch{/* 刷新失败回落原自动填写流程 */}
+      let settledFormStreak=0
       for(let attempt=0;attempt<20;attempt+=1){
         if(!active())return result('OFFLINE','已停止过期的eBay登录任务',view.webContents.getURL())
-        state=await this.inspectEbayLogin(view)
+        try{state=await this.inspectEbayLogin(view)}catch{await this.sleep(500);continue}
         if(state.phase==='ONLINE'){this.reviveStaleEbaySigninTabs(accountId,view);return result('ONLINE','已恢复原有eBay登录会话',state.url)}
         if(state.phase==='VERIFICATION')return result('VERIFICATION_REQUIRED','需要人工完成eBay验证，完成后将自动继续',state.url)
+        // 刷新后连续两次落登录表单＝服务端会话真失效，立即回落自动填写，不再空转满 20 轮
+        if(state.phase==='USERNAME'||state.phase==='PASSWORD'){settledFormStreak+=1;if(settledFormStreak>=2)break}else settledFormStreak=0
         await this.sleep(500)
       }
     }
@@ -3457,7 +3460,8 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     let passwordSubmitted=false
     for(let attempt=0;attempt<40;attempt+=1) {
       if(!active())return result('OFFLINE','已停止过期的eBay登录任务',view.webContents.getURL(),passwordSubmitted)
-      state=await this.inspectEbayLogin(view)
+      // 提交后 eBay 导航会短暂销毁执行上下文，抛错时继续等下一轮，不中断整链
+      try{state=await this.inspectEbayLogin(view)}catch{await this.sleep(500);continue}
       if(state.phase==='ONLINE'){this.reviveStaleEbaySigninTabs(accountId,view);return result('ONLINE',passwordSubmitted?'自动登录成功，已进入eBay店铺':'已恢复原有eBay登录会话',state.url,passwordSubmitted)}
       if(state.phase==='VERIFICATION')return result('VERIFICATION_REQUIRED','凭据已填写，请人工完成验证；完成后将自动继续',state.url,passwordSubmitted)
       if(state.phase==='ERROR')return result('ERROR',state.errorMessage||'eBay登录失败，请检查凭据',state.url,passwordSubmitted)
