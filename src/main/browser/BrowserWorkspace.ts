@@ -3829,7 +3829,8 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
       }
     }
     // 采集工作台/文章采集复用 'web' 罐：IE浏览 迁到独立 'ie' 后不再替它们持有页签，缺页签时自建空白页
-    if (platform === 'web' && ![...this.detailTabs.values()].some(item => item.platform === 'web')) {
+    // 只认无归属页签：仅有 eBay 店铺会话页签时不得顶用别人的会话，自建空白页保采集独立
+    if (platform === 'web' && ![...this.detailTabs.values()].some(item => item.platform === 'web' && !item.scopeId)) {
       await this.newTab('web')
       return
     }
@@ -4459,9 +4460,6 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
       // 带 scopeId 的页签属于它自己的栏目（如 eBay 店铺会话），不带 id 的默认附着不得顶用别人的会话。
       const generic = [...this.detailTabs.values()].find(item => item.platform === platform && !item.scopeId)
       if (generic) return generic.view
-      if (activeTab?.platform === platform) return activeTab.view
-      const tab = [...this.detailTabs.values()].find(item => item.platform === platform)
-      if (tab) return tab.view
       throw new Error('通用网页标签不存在')
     }
     const view = this.views.get(platform)

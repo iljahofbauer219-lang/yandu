@@ -150,11 +150,14 @@ describe('栏目保活后的浏览器页签归属', () => {
     expect(host.newTab).not.toHaveBeenCalled()
   })
 
-  it('只有 eBay 会话页签的场合（无通用页签）仍回到 eBay 页签本身', async () => {
+  it('只有 eBay 会话页签的场合（无通用页签）自建通用空白页，不得附着 eBay 会话', async () => {
     const ebay = makeTab(EBAY_TAB, { scopeId: 'ebay:s1' })
     const host = makeHost([ebay], EBAY_TAB)
     await showMethod.call(host, 'web')
-    expect(host.attached).toBe(ebay.view)
+    expect(host.newTab, '缺无归属通用页签时应自建空白页').toHaveBeenCalledWith('web')
+    expect(host.attached, '不得把别栏的 eBay 会话附着进采集/通用界面').not.toBe(ebay.view)
+    expect(host.detailTabs.has(EBAY_TAB), 'eBay 会话页签不得被销毁').toBe(true)
+    expect(ebay.view.closedTimes).toBe(0)
   })
 
   it('IE 浏览恢复自己上次选中的页签，而不是第一枚', async () => {

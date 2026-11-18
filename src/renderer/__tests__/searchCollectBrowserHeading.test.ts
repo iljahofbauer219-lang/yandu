@@ -42,3 +42,13 @@ describe('搜索采集浏览器 header · 功能不重复守卫', () => {
     }
   })
 })
+
+describe('采集浏览器页签栏 · 容器隔离守卫', () => {
+  it('采集栏只渲染无归属且非 IE 的页签（eBay 店铺会话与 IE浏览 不得窜入）', () => {
+    const stripStart = appSource.indexOf('<div className="tabs"><div className="tab-scroll">')
+    expect(stripStart).toBeGreaterThan(-1)
+    const strip = appSource.slice(stripStart, appSource.indexOf('</div>', stripStart))
+    expect(strip, '采集栏必须按容器归属过滤').toContain("browserTabs.filter(tab=>!tab.scopeId&&tab.platform!=='ie').map(")
+    expect(strip, '不得原样渲染全量 browserTabs').not.toContain('{browserTabs.map(')
+  })
+})
