@@ -37,4 +37,13 @@ describe('进入发布 · 无本地行回落链', () => {
   it('回落打开修改页有中文说明不重复新建', () => {
     expect(seg).toContain('不重复新建')
   })
+  it('回落两分支先附着店铺会话页签再 navigate——不得落通用 web-general 罐被 eBay 当匿名拦验证', () => {
+    expect(seg, '禁未附着就 void navigate').not.toContain("void window.desktop.browser.navigate('web',url)")
+    const shows = seg.match(/await window\.desktop\.browser\.show\('web',ebayOwnTabId\.current\)/g) || []
+    const navs = seg.match(/await window\.desktop\.browser\.navigate\('web',url\)/g) || []
+    expect(shows.length, '两分支各一次附着').toBe(2)
+    expect(navs.length, '两分支各一次 awaited navigate').toBe(2)
+    const chunks = seg.split("await window.desktop.browser.navigate('web',url)")
+    for (const chunk of chunks.slice(0, -1)) expect(chunk, '每次 navigate 前必有 show 附着').toContain("await window.desktop.browser.show('web',ebayOwnTabId.current)")
+  })
 })
