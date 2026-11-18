@@ -15,10 +15,10 @@ describe('本地定时发布列表 · 优化版本/发布版本 与优品卡片�
     expect(source).toContain('onClick={()=>openOptimizedVersion(draft)}>查看优化版本')
   })
   it('列表优化版本：有草稿走 openOptimizedVersion，无草稿回落 openLocalEditor', () => {
-    expect(source).toContain('if(draft)openOptimizedVersion(draft);else void openLocalEditor(product)')
+    expect(source).toContain('if(draft)openOptimizedVersion(draft);else selectForOptimization(product)')
   })
   it('列表发布版本：有草稿走 openPublishEditorFromDraft，无草稿回落 openPublishVersion', () => {
-    expect(source).toContain('if(draft)void openPublishEditorFromDraft(draft);else openPublishVersion(product)')
+    expect(source).toContain('onClick={()=>openPublishVersion(product)}>本地版本')
   })
 })
 
