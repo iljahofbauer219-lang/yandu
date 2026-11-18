@@ -52,6 +52,7 @@ import type { GuardianSkillInput } from '../shared/kbGuardian'
 import type { AmazonDataSourceSearchResult } from '../shared/amazonScraper'
 import { describeOmkarCloudError } from '../shared/omkarCloud'
 import { palletItemToEbayLocalInput } from '../shared/palletToEbayLocal'
+import { buildEbayPremiumLocalSeed } from '../shared/ebayPremiumLocalSeed'
 import { applyServerAssetBatch, isStaleProductPageAsset } from '../shared/ebayProductPageAssets'
 import { ebayImageRuleRows } from '../shared/ebayLocalMedia'
 import { matchPalletCategory } from '../shared/palletCategoryMatch'
@@ -1022,6 +1023,21 @@ function updateEbayLocalProduct(localProductId:string,changes:EbayLocalProductUp
   const sourceMedia=new Map(product.snapshot.media.map(media=>[media.id,media]))
   const media=changes.media.slice(0,24).map((media,index)=>({...(sourceMedia.get(media.id)||media),sortOrder:index}))
   return database.saveEbayLocalProductSnapshot(completeEbayLocalSnapshot({listing,details,media,capturedAt}))
+}
+
+function seedEbayLocalProductFromPremiumDraft(storeId:string,draft:EbayOptimizationDraft,draftId:string):EbayLocalProduct {
+  if(!database)throw new Error('数据库尚未初始化')
+  const store=database.getEbayStores().find(item=>item.id===storeId)
+  if(!store)throw new Error('eBay 店铺不存在')
+  const existing=database.getEbayLocalProducts(storeId).find(item=>item.listingId===draft.listing.listingId)
+  if(existing)return existing
+  const capturedAt=new Date().toISOString()
+  const product=database.saveEbayLocalProductSnapshot(completeEbayLocalSnapshot(buildEbayPremiumLocalSeed(draft,store.marketplaceId||'EBAY_US',capturedAt)))
+  if(draftId){
+    database.setEbayLocalProductPublishRef(product.id,{kind:'draft',id:draftId,at:capturedAt})
+    database.setEbayLocalProductDraftSaved(product.id,capturedAt)
+  }
+  return database.getEbayLocalProducts().find(item=>item.id===product.id)||product
 }
 
 function removeEbayLocalProduct(localProductId:string) {
@@ -3396,6 +3412,7 @@ ipcMain.handle('ebay:local-products:snapshots', (_event, localProductId:string) 
 ipcMain.handle('ebay:local-products:download', (_event, storeId:string, listingId:string) => downloadEbayLocalProduct(storeId,listingId))
 ipcMain.handle('ebay:product:read-url', (_event, storeId:string, url:string) => readEbayProductByUrl(storeId,url))
 ipcMain.handle('ebay:local-products:update', (_event, localProductId:string, changes:EbayLocalProductUpdateInput) => updateEbayLocalProduct(localProductId,changes))
+ipcMain.handle('ebay:local-products:seed-from-premium', (_event, storeId:string, draft:EbayOptimizationDraft, draftId:string) => seedEbayLocalProductFromPremiumDraft(storeId,draft,draftId))
 ipcMain.handle('ebay:local-products:set-category', (_event, localProductId:string, categoryId:string, categoryName:string) => database?.setEbayLocalProductCategory(localProductId, categoryId, categoryName))
 ipcMain.handle('ebay:local-products:set-meta', (_event, localProductId:string, meta:{titleZh?:string;titleZhAt?:string;draftQuantity?:number|null;draftQuantityAt?:string}) => {
   if(!database)throw new Error('数据库尚未初始化')

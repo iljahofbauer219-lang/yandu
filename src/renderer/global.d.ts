@@ -407,6 +407,7 @@ declare global {
         downloadLocalProduct(storeId:string,listingId:string):Promise<EbayLocalProduct>
         readProductByUrl(storeId:string,url:string):Promise<EbayLocalProduct>
         updateLocalProduct(localProductId:string,changes:EbayLocalProductUpdateInput):Promise<EbayLocalProduct>
+        seedLocalProductFromPremium(storeId:string,draft:EbayOptimizationDraft,draftId:string):Promise<EbayLocalProduct>
         localProductMediaData(localProductId:string,mediaId:string):Promise<string>
         addLocalProductMedia(localProductId:string,input:EbayLocalProductMediaUploadInput):Promise<EbayLocalProductMedia>
         downloadLocalProductMedia(localProductId:string,urls:string[]):Promise<{media:EbayLocalProductMedia[];failures:string[]}>
