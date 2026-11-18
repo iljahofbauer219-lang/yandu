@@ -162,6 +162,25 @@ describe('极简编辑器 · App.tsx 接线', () => {
     expect(ui, '子页签带用同一变量定高').toMatch(/\.ebay-business-nav\{[^}]*height:var\(--ebay-band-h\)/)
     expect(ui, '头部带不得再用 min-height 撑高').not.toContain('.ebay-store-bar{min-height:82px')
   })
+  it('优品「进入发布」未匹配本地产品走中文模态（含去本地产品动作），不得静默或仅行内 notice', () => {
+    const source=app()
+    expect(source).toContain('if(!lp){setPublishNoMatchDraft(premium);return}')
+    expect(source).toContain('id="ebay-publish-nomatch-title"')
+    expect(source).toContain('尚未同步为本地产品')
+    expect(source).toContain('>去本地产品</button>')
+    expect(source).not.toContain("setNotice('未找到本地产品，请先在本地产品中同步该商品')")
+  })
+  it('优品「查看优化版本」无本地行时用内存恢复载体兜底工作区，不写库不污染本地列表，离页即清', () => {
+    const source=app()
+    expect(source).toContain('const [premiumRestoreCarrier,setPremiumRestoreCarrier]=useState<EbayLocalProduct|null>(null)')
+    expect(source).toContain('||(premiumRestoreCarrier&&selectedLocalProductId===premiumRestoreCarrier.id?premiumRestoreCarrier:undefined)')
+    expect(source).toContain('const carrierId=`restore-${draft.id}`')
+    expect(source).toContain("downloadStatus:'FAILED' as const")
+    expect(source).toContain("if(activeTab!=='optimize')setPremiumRestoreCarrier(null)")
+    expect(source, '恢复载体跳过按 id 查库的视觉检查 IPC').toContain('if(premiumRestoreCarrier&&selectedLocalProductId===premiumRestoreCarrier.id)return()=>{cancelled=true}')
+    const openFn=source.split('const openOptimizedVersion=')[1]?.split('\n')[0]??''
+    expect(openFn, 'openOptimizedVersion 不得写本地产品列表').not.toContain('setLocalProducts(')
+  })
   it('定时发布行一行布局：时间设置上移表头改全店统一，行内保留自动发布已选态', () => {
     const source=app()
     const block=source.split('<div className="ebay-scheduled-actions">')[1]?.split('</div>')[0] ?? ''
