@@ -13,6 +13,7 @@ const seg = app.split('const openPublishEditorFromDraft=')[1]?.split('\n  const 
 describe('进入发布 · 无本地行回落链', () => {
   it('无本地行先查在线商品/itm id，命中开 ReviseItem 而非模态', () => {
     expect(seg).toContain('const online=listings.find(')
+    expect(seg).toContain('normTitle(item.title)===normTitle(premium.selectedTitle)')
     expect(seg).toContain('mode=ReviseItem&itemId=')
     expect(seg).toContain("setActiveTab('browser')")
     expect(seg.indexOf('mode=ReviseItem&itemId=')).toBeLessThan(seg.indexOf('setPublishNoMatchDraft(premium)'))

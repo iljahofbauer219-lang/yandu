@@ -4448,8 +4448,9 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   const openPublishEditorFromDraft=async(premium:EbayOptimizationDraft)=>{
     const lp=localProducts.find(product=>product.listingId===premium.listing.listingId)
     if(!lp){
-      const online=listings.find(item=>item.listingId===premium.listing.listingId)
-      const itemId=(premium.listing.viewUrl||'').match(/\/itm\/(?:[^/]+\/)?(\d{9,15})/)?.[1]||(/^\d{9,15}$/.test(premium.listing.listingId)?premium.listing.listingId:'')
+      const normTitle=(v:string)=>String(v||'').replace(/\s+/g,' ').trim().toLowerCase()
+      const online=listings.find(item=>item.listingId===premium.listing.listingId)||listings.find(item=>normTitle(item.title)===normTitle(premium.selectedTitle)||normTitle(item.title)===normTitle(premium.listing.title))
+      const itemId=(premium.listing.viewUrl||'').match(/\/itm\/(?:[^/]+\/)?(\d{9,15})/)?.[1]||(/^\d{9,15}$/.test(premium.listing.listingId)?premium.listing.listingId:'')||(online?((online.viewUrl||'').match(/\/itm\/(?:[^/]+\/)?(\d{9,15})/)?.[1]||(/^\d{9,15}$/.test(online.listingId)?online.listingId:'')):'')
       if(online||itemId){
         const url=`https://www.ebay.com/sl/list?mode=ReviseItem&itemId=${encodeURIComponent(itemId||online!.listingId)}`
         setActiveTab('browser')
