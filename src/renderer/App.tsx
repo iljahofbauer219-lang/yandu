@@ -5037,19 +5037,17 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   const optimizeStageIndex=optimizeStageOrder.indexOf(optimizeMode)
   const nextOptimizeMode=optimizeStageOrder[optimizeStageIndex+1]
   const finalImageInspectionPassed=Boolean(imageAdoptionComplete&&finalImageInspection&&!finalImageInspection.blocked&&!finalImageInspection.review)
-  const nextOptimizeReady=optimizeMode==='title'?titleDecisionCurrent:optimizeMode==='content'?Boolean(contentResult&&!staleContentTranslationCount):optimizeMode==='image'?finalImageInspectionPassed:true
+  const nextOptimizeReady=optimizeMode==='title'?titleDecisionCurrent:optimizeMode==='content'?Boolean(contentResult&&!staleContentTranslationCount):true
   const nextOptimizeStatus=optimizeMode==='title'
       ?titleDecisionCurrent?'标题方案已审核确认':'请先完成标题方案审核确认'
       :optimizeMode==='content'
         ?!contentResult?'请先生成并核对详情内容':staleContentTranslationCount?`还有 ${staleContentTranslationCount} 段中文翻译待同步`:'详情内容与中文翻译已同步'
         :optimizeMode==='image'
-          ?!imageAdoptionComplete
-            ?!acceptedImagePurposes.length?'请一键生成四类图片并采纳':!allImagePurposesAccepted?`请采纳四类图片（已采纳 ${acceptedImagePurposes.length}/${ebayImagePurposes.length}）`:'请完成四类图片采纳与最终图集检查'
-            :finalImageChecking||!finalImageInspection
-              ?'正在自动检查最终图集'
-              :finalImageInspection.blocked
-                ?`最终图集中有 ${finalImageInspection.blocked} 张未通过，请重新处理`
-                :'最终图集已确认并通过自动检查'
+          ?!acceptedImagePurposes.length?'尚未采纳多生图片，可进入视频生成（沿用原图）'
+            :!allImagePurposesAccepted?`已采纳 ${acceptedImagePurposes.length}/${ebayImagePurposes.length} 类，四类未齐仅提示，可进入视频生成`
+            :finalImageChecking||!finalImageInspection?'正在自动检查最终图集，可进入视频生成'
+            :finalImageInspection.blocked?`最终图集有 ${finalImageInspection.blocked} 张未通过，建议先处理；仍可进入视频生成`
+            :'最终图集已确认并通过自动检查，可进入视频生成'
           :'视频分镜可继续调整，下一步进行售价核算'
   // 售价设定页的入库前置清单：灰按钮必须说清差哪一步，并给出可点的补救入口，而不是只把按钮禁用
   const pricingImageBlockers=[

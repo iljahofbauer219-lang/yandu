@@ -38,6 +38,11 @@ describe('售价设定四卡 · 美元利润链口径守卫', () => {
     expect(block).toContain('platformFixedFeeCny')
   })
 
+  it('毛利为负时显式负号显示（不得被 ebayDisplayPrice 的非正数兜底藏成 --）', () => {
+    expect(block).toContain('cards.grossProfitUsd>=0?ebayDisplayPrice')
+    expect(block).toContain('USD -${Math.abs(cards.grossProfitUsd).toFixed(2)}')
+  })
+
   it('保本/目标毛利引擎与核算结果带不动（只改四卡）', () => {
     expect(appSource).toContain('const breakEvenSalePrice=')
     expect(appSource).toContain('const targetSalePrice=')
