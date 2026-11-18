@@ -3523,6 +3523,8 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   const [premiumSearch,setPremiumSearch]=useState('')
   const [premiumStatus,setPremiumStatus]=useState<'ALL'|'READY'|'REVIEW'|'INCOMPLETE'>('ALL')
   const [selectedListingId,setSelectedListingId]=useState('')
+  const [premiumRestoreCarrier,setPremiumRestoreCarrier]=useState<EbayLocalProduct|null>(null)
+  const [publishNoMatchDraft,setPublishNoMatchDraft]=useState<EbayOptimizationDraft|null>(null)
   const [selectedLocalProductId,setSelectedLocalProductId]=useState('')
   const [localEditorProductId,setLocalEditorProductId]=useState('')
   const [localEditorDraft,setLocalEditorDraft]=useState<EbayLocalProductUpdateInput|null>(null)
@@ -3923,9 +3925,10 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   const unclassifiedCount=listings.filter(item=>!activeCategoryIds.has(item.categoryId)).length
   const titleIssues=listings.filter(item=>item.title.length<50||item.title.length>80).length
   const imageIssues=listings.filter(item=>!item.imageUrl).length
-  const selectedLocalProduct=localProducts.find(item=>item.id===selectedLocalProductId)
+  const selectedLocalProduct=localProducts.find(item=>item.id===selectedLocalProductId)||(premiumRestoreCarrier&&selectedLocalProductId===premiumRestoreCarrier.id?premiumRestoreCarrier:undefined)
   const localEditorProduct=localProducts.find(item=>item.id===localEditorProductId)
   const selectedListing=selectedLocalProduct?.snapshot.sourceListing
+  useEffect(()=>{if(activeTab!=='optimize')setPremiumRestoreCarrier(null)},[activeTab])
   const selectedTitleVerifiedFacts=[
     ...(selectedListing?.itemSpecifics||[]).flatMap(item=>[item.name,item.value]),
     selectedLocalProduct?.snapshot.details.descriptionText||''
@@ -4440,10 +4443,11 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   // D1：进入发布前把优品草稿的 AI 出图真下载到本地目录再打开编辑器。主进程 updateEbayLocalProduct 只认
   // 「downloadStatus==='DOWNLOADED' 且 localPath 非空」，种子行绝不许声称没落过盘的图已下载；单张失败如实标 FAILED
   // 并点名，编辑器照常打开——建议不得阻断操作，出口是 01 图片与视频的手工上传。
-  const openOptimizedVersion=(draft:EbayOptimizationDraft)=>{setSelectedListingId(draft.listing.id);setSelectedLocalProductId(localProducts.find(product=>product.listingId===draft.listing.listingId)?.id||'');setTitleResult({originalTitle:draft.listing.title,optimizedTitle:draft.selectedTitle,keywords:[],rationale:'已从优品仓库恢复',model:'saved',variants:draft.titleVariants,itemSpecifics:draft.itemSpecifics,description:draft.description,marketDecision:draft.marketDecision});setSelectedTitle(draft.selectedTitle);setImageCandidateReviews({});setAcceptedGeneratedImages({});setContentResult(null);setComplianceReviewed(Boolean(draft.complianceReviewedAt));setOptimizeMode('image');setActiveTab('optimize')}
+  const openOptimizedVersion=(draft:EbayOptimizationDraft)=>{setSelectedListingId(draft.listing.id);const matchedLocal=localProducts.find(product=>product.listingId===draft.listing.listingId)
+    if(matchedLocal){setPremiumRestoreCarrier(null);setSelectedLocalProductId(matchedLocal.id)}else{const carrierId=`restore-${draft.id}`;const nowIso=new Date().toISOString();const carrier:EbayLocalProduct={id:carrierId,storeId:draft.storeId,marketplaceId:'EBAY_US',listingId:draft.listing.listingId,categoryId:'',categoryName:'',coreTermZh:'',coreTermEn:'',title:draft.selectedTitle,status:'READY',versionCount:1,latestSnapshotId:carrierId,downloadedAt:nowIso,updatedAt:nowIso,snapshot:{id:carrierId,localProductId:carrierId,version:1,sourceListing:draft.listing,details:{url:draft.listing.viewUrl||'',itemSpecifics:(draft.itemSpecifics||[]).map(item=>({name:item.name,value:item.value})),condition:'',imageUrls:draft.imageUrls||[],title:draft.selectedTitle,descriptionText:draft.description||'',price:draft.salePrice||draft.listing.price||'0',currency:draft.saleCurrency||draft.listing.currency||'USD'},media:(draft.imageUrls||[]).map((url,i)=>({id:`${carrierId}-m${i}`,mediaType:'IMAGE' as const,sortOrder:i,remoteUrl:url,localPath:'',mimeType:'image/jpeg',width:0,height:0,fileSize:0,sha256:'',downloadStatus:'FAILED' as const})),completeness:0,missingFields:[],contentHash:'',capturedAt:nowIso}};setPremiumRestoreCarrier(carrier);setSelectedLocalProductId(carrierId)};setTitleResult({originalTitle:draft.listing.title,optimizedTitle:draft.selectedTitle,keywords:[],rationale:'已从优品仓库恢复',model:'saved',variants:draft.titleVariants,itemSpecifics:draft.itemSpecifics,description:draft.description,marketDecision:draft.marketDecision});setSelectedTitle(draft.selectedTitle);setImageCandidateReviews({});setAcceptedGeneratedImages({});setContentResult(null);setComplianceReviewed(Boolean(draft.complianceReviewedAt));setOptimizeMode('image');setActiveTab('optimize')}
   const openPublishEditorFromDraft=async(premium:EbayOptimizationDraft)=>{
     const lp=localProducts.find(product=>product.listingId===premium.listing.listingId)
-    if(!lp){setNotice('未找到本地产品，请先在本地产品中同步该商品');return}
+    if(!lp){setPublishNoMatchDraft(premium);return}
     const urls=(premium.imageUrls||[]).filter(Boolean)
     let media=[...lp.snapshot.media].sort((left,right)=>left.sortOrder-right.sortOrder)
     if(urls.length){
@@ -4939,6 +4943,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
     let cancelled=false
     setImageVisualReport(null)
     if(!selectedLocalProductId||!selectedLocalProduct)return()=>{cancelled=true}
+    if(premiumRestoreCarrier&&selectedLocalProductId===premiumRestoreCarrier.id)return()=>{cancelled=true}
     const inspectionKey=`${selectedLocalProductId}:${selectedLocalProduct.latestSnapshotId}`
     void window.desktop.ebay.localProductImageVisualReport(selectedLocalProductId).then(async report=>{
       if(cancelled)return
@@ -5404,6 +5409,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
       </div>}
     </div>
     {localEditorProduct&&localEditorProduct.snapshot.details.semanticFallback&&<div className="ebay-config-notice"><b>来源标记：{localEditorProduct.snapshot.details.semanticFallback.label}</b><span>{localEditorProduct.snapshot.details.semanticFallback.note}（读取时间 {new Date(localEditorProduct.snapshot.details.semanticFallback.at).toLocaleString('zh-CN')}）</span></div>}
+    {publishNoMatchDraft&&<div className="ebay-store-dialog-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setPublishNoMatchDraft(null)}}><div className="ebay-store-dialog" role="dialog" aria-modal="true" aria-labelledby="ebay-publish-nomatch-title"><header><div><h3 id="ebay-publish-nomatch-title">该优品尚未同步为本地产品</h3><p>「进入发布」需要本地产品快照承载图片与字段；该优品草稿对应的商品还没有本地版本，无法直接开发布编辑器。请先去本地产品同步或下载该商品，再回来进入发布。</p></div><button type="button" aria-label="关闭" onClick={()=>setPublishNoMatchDraft(null)}>×</button></header><footer><button type="button" onClick={()=>setPublishNoMatchDraft(null)}>关闭</button><button type="button" className="primary" onClick={()=>{setPublishNoMatchDraft(null);setActiveTab('local')}}>去本地产品</button></footer></div></div>}
     {localEditorProduct&&localEditorDraft&&<EbayLocalListingEditor mode={localEditorMode} nativeChinese={ebayDeliveryCountry==='CN'} product={localEditorProduct} draft={localEditorDraft} saving={busy===`local-save:${localEditorProduct.id}`} uploading={busy===`local-media:${localEditorProduct.id}`} preparing={busy===`local-prepare:${localEditorProduct.id}`} categories={categoryWorkspace.categories} onSetCategory={(categoryId,categoryName)=>void setLocalCategory(categoryId,categoryName)} onAutoClassify={()=>void autoClassifyLocal()} platformCategory={overlayPlatformCategory} onChange={setLocalEditorDraft} onSave={()=>void saveLocalEditor()} onPrepare={()=>void prepareLocalEditorInSellerHub()} onUpload={files=>void uploadLocalEditorMedia(files)} gaps={localEditorDraft?requiredFormGaps([],formValuesFromInput(localEditorDraft),ebayHardRequiredFieldsForRoute(localEditorRouteKind)):[]} routeKind={localEditorRouteKind} businessPolicies={publishEditorPolicies} attributeSection={attributeSlotsByProduct[localEditorProduct.id]?.section} attributeSlotsAt={attributeSlotsByProduct[localEditorProduct.id]?.at||''} suggestedCard={attributeSlotsByProduct[localEditorProduct.id]?.card??null} readingPolicies={busy==='local-read-policies'} onReadPolicies={()=>{void readBusinessPoliciesFor(localEditorProduct??null,'local-read-policies')}} readingSpecifics={busy.startsWith('local-read-specifics')} fillingSpecifics={busy.startsWith('local-fill-specifics')} onReadSpecifics={()=>readSpecificsFor(localEditorProduct,'local')} onFillSpecifics={()=>void fillSpecificsFor(localEditorProduct,localEditorDraft,setLocalEditorDraft,`local-fill-specifics:${localEditorProduct?.id||''}`)} specificsFilledAt={localEditorProduct?specificsFilledAtByProduct[localEditorProduct.id]||'':''} policyCarrierItemId={policyCarrierItemId} onPolicyCarrierItemIdChange={setPolicyCarrierForActiveStore} onClose={()=>{if(!busy.startsWith('local-')){setLocalEditorProductId('');setLocalEditorDraft(null);setLocalEditorMode('core')}}}/>} 
     {directoryProductSyncOpen&&<div className="ebay-store-dialog-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)void closeDirectoryProductSync()}}>
       <div className="ebay-store-dialog ebay-directory-product-dialog" role="dialog" aria-modal="true" aria-labelledby="ebay-directory-product-dialog-title">
