@@ -1,0 +1,25 @@
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { describe, expect, it } from 'vitest'
+
+/**
+ * 售价环节恢复载体豁免（2026-11-18）：图片环节已过（含 restore- 载体）时不得再因
+ * 「图片自动初步检查未完成」卡死存入优品；真实本地产品门禁不变；豁免须文案注明。
+ */
+const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8')
+
+describe('售价环节 · 恢复载体豁免图片初步检查', () => {
+  it('pricingImageBlockers 首项仅对非载体生效', () => {
+    expect(app).toContain("!imageVisualReport&&!premiumRestoreCarrier?'图片自动初步检查未完成':''")
+  })
+  it('saveToPremium 的图片初步检查门禁仅对非载体生效', () => {
+    expect(app).toContain("if(!imageVisualReport&&!premiumRestoreCarrier){setEbayError('图片自动初步检查尚未完成。')")
+  })
+  it('豁免以文案注明（恢复载体沿用草稿已检结果）', () => {
+    expect(app).toContain('恢复载体沿用草稿已检结果')
+  })
+  it('真实本地产品门禁字符串保留', () => {
+    expect(app).toContain('图片自动初步检查未完成')
+    expect(app).toContain('图片自动初步检查尚未完成。')
+  })
+})
