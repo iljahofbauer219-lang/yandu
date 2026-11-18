@@ -357,50 +357,53 @@ button.ebay-market-card-media { width:100%; border:0; cursor:pointer; font:inher
 @media (max-width:1100px) { .ebay-title-save-state { grid-template-columns:30px minmax(0,1fr); }.ebay-title-save-state>em { grid-column:2; justify-self:start; } }
 
 /* eBay selling price and profit estimate */
-.ebay-profit-workbench { display:grid; gap:11px; padding-top:12px; }
-.ebay-profit-workbench>header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:11px 12px; border:1px solid #cfe6e4; border-radius:10px; background:#f1faf9; }
+.ebay-profit-workbench { display:grid; gap:14px; padding-top:14px; }
+.ebay-profit-workbench>header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:14px 16px; border:1px solid #cfe6e4; border-radius:12px; background:#f1faf9; }
 .ebay-profit-workbench>header b,.ebay-profit-workbench>header small { display:block; }
-.ebay-profit-workbench>header b { color:#173d3a; font-size:10px; }
-.ebay-profit-workbench>header small { margin-top:4px; color:#71807e; font-size:6px; }
-.ebay-profit-workbench>header>span { padding:4px 8px; border-radius:10px; font-size:6px; font-weight:750; white-space:nowrap; }
+.ebay-profit-workbench>header b { color:#173d3a; font-size:15px; font-weight:800; }
+.ebay-profit-workbench>header small { margin-top:4px; color:#4c5c5a; font-size:11px; line-height:16px; }
+.ebay-profit-workbench>header>span { padding:6px 11px; border-radius:10px; font-size:11px; font-weight:750; white-space:nowrap; }
 .ebay-profit-workbench>header>span.pending,.ebay-profit-summary article.pending { color:#916217; background:#fff4d8; }
 .ebay-profit-workbench>header>span.positive,.ebay-profit-summary article.positive { color:#08736f; background:#dff6f3; }
 .ebay-profit-workbench>header>span.negative,.ebay-profit-summary article.negative { color:#a33d36; background:#fde8e5; }
-.ebay-profit-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px; }
-.ebay-profit-summary article { min-width:0; padding:10px; border:1px solid #e0e7e7; border-radius:9px; background:#fafcfc; }
+.ebay-profit-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+.ebay-profit-summary article { min-width:0; padding:14px 16px; border:1px solid #e0e7e7; border-radius:12px; background:#fafcfc; }
+.ebay-profit-summary article.positive { border-color:#bfe6e2; box-shadow:inset 0 3px 0 #12b8b0; }
+.ebay-profit-summary article.pending { border-color:#eadfc0; box-shadow:inset 0 3px 0 #d69a23; }
+.ebay-profit-summary article.negative { border-color:#f0c9c5; box-shadow:inset 0 3px 0 #d0544c; }
 .ebay-profit-summary small,.ebay-profit-summary b,.ebay-profit-summary span { display:block; }
-.ebay-profit-summary small { color:#7d8987; font-size:6px; }
-.ebay-profit-summary b { margin-top:5px; overflow:hidden; color:#173d3a; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
-.ebay-profit-summary span { margin-top:4px; color:#84908e; font-size:6px; }
-.ebay-profit-input-groups { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
-.ebay-profit-input-groups>section { min-width:0; overflow:hidden; border:1px solid #e0e6e7; border-radius:10px; background:#fbfcfc; }
-.ebay-profit-input-groups>section>header { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:9px 11px; border-bottom:1px solid #e7ecec; background:#f6f9f9; }
+.ebay-profit-summary small { color:#4c5c5a; font-size:12px; font-weight:650; letter-spacing:.02em; }
+.ebay-profit-summary b { margin-top:6px; overflow:hidden; color:#123c39; font-size:24px; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
+.ebay-profit-summary span { margin-top:6px; color:#556563; font-size:11px; line-height:16px; }
+.ebay-profit-input-groups { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.ebay-profit-input-groups>section { min-width:0; overflow:hidden; border:1px solid #e0e6e7; border-radius:12px; background:#fbfcfc; }
+.ebay-profit-input-groups>section>header { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:12px 14px; border-bottom:1px solid #e7ecec; background:#f6f9f9; }
 .ebay-profit-input-groups>section>header b,.ebay-profit-input-groups>section>header small { display:block; margin:0; }
-.ebay-profit-input-groups>section>header b { color:#284642; font-size:8px; }
-.ebay-profit-input-groups>section>header small { color:#84918f; font-size:5px; line-height:9px; text-align:right; }
+.ebay-profit-input-groups>section>header b { color:#284642; font-size:14px; font-weight:800; }
+.ebay-profit-input-groups>section>header small { color:#556563; font-size:11px; line-height:16px; text-align:right; }
 .ebay-profit-input-groups>section.target { grid-column:1/-1; }
-.ebay-profit-fields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; padding:10px; }
-.ebay-profit-fields label { min-width:0; color:#52615f; font-size:7px; font-weight:700; }
-.ebay-profit-fields input,.ebay-profit-fields select { width:100%; height:34px; margin-top:5px; padding:0 9px; color:#263331; border:1px solid #d9e2e2; border-radius:8px; background:#fff; outline:none; font:inherit; font-size:8px; }
+.ebay-profit-fields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; padding:14px; }
+.ebay-profit-fields label { min-width:0; color:#3c4c4a; font-size:12px; font-weight:700; }
+.ebay-profit-fields input,.ebay-profit-fields select { width:100%; height:40px; margin-top:6px; padding:0 11px; color:#263331; border:1px solid #d9e2e2; border-radius:9px; background:#fff; outline:none; font:inherit; font-size:14px; }
 .ebay-profit-fields input:focus,.ebay-profit-fields select:focus { border-color:var(--yd-content-brand-bright); box-shadow:0 0 0 3px rgba(10,186,181,.1); }
 .ebay-profit-fields input:disabled,.ebay-profit-fields select:disabled { color:#8b9295; background:#f0f2f2; }
-.ebay-profit-fields small { display:block; margin-top:4px; color:#89918f; font-size:5px; font-weight:400; line-height:9px; }
-.ebay-profit-autofill-row { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:9px 11px 0; }
-.ebay-profit-autofill-row small { flex:1; min-width:0; overflow-wrap:anywhere; color:#0b6f6b; font-size:6px; font-weight:400; line-height:10px; }
+.ebay-profit-fields small { display:block; margin-top:5px; color:#5a6a68; font-size:11px; font-weight:400; line-height:16px; }
+.ebay-profit-autofill-row { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:12px 14px 0; }
+.ebay-profit-autofill-row small { flex:1; min-width:0; overflow-wrap:anywhere; color:#0b6f6b; font-size:11px; font-weight:400; line-height:16px; }
 .ebay-profit-autofill-row small.warn { color:#916217; }
 .ebay-profit-autofill-row>span { display:flex; flex:none; gap:6px; }
-.ebay-profit-autofill-row button { padding:5px 9px; color:#0b6f6b; border:1px solid #bcded9; border-radius:8px; background:#f2fbfa; font-size:6px; font-weight:700; cursor:pointer; }
+.ebay-profit-autofill-row button { padding:7px 12px; color:#0b6f6b; border:1px solid #bcded9; border-radius:9px; background:#f2fbfa; font-size:12px; font-weight:700; cursor:pointer; }
 .ebay-profit-autofill-row button:hover:not(:disabled) { border-color:var(--yd-content-brand-bright); background:#e6f7f6; }
 .ebay-profit-autofill-row button:disabled { color:#8b9295; border-color:#dfe6e6; background:#f0f2f2; cursor:default; }
-.ebay-profit-target-price { display:flex; gap:6px; align-items:center; margin-top:5px; }
+.ebay-profit-target-price { display:flex; gap:8px; align-items:center; margin-top:6px; }
 .ebay-profit-target-price input { flex:1; min-width:0; margin-top:0; color:#263331; background:#f0f2f2; }
-.ebay-profit-target-price button { flex:none; padding:5px 9px; color:#0b6f6b; border:1px solid #bcded9; border-radius:8px; background:#f2fbfa; font-size:6px; font-weight:700; cursor:pointer; }
+.ebay-profit-target-price button { flex:none; padding:7px 12px; color:#0b6f6b; border:1px solid #bcded9; border-radius:9px; background:#f2fbfa; font-size:12px; font-weight:700; cursor:pointer; }
 .ebay-profit-target-price button:hover { border-color:var(--yd-content-brand-bright); background:#e6f7f6; }
 .ebay-profit-input-groups>section.target .ebay-profit-fields { grid-template-columns:repeat(4,minmax(0,1fr)); }
-.ebay-profit-formula { display:grid; gap:5px; padding:10px 12px; color:#576765; border:1px solid #bfe6e2; border-radius:9px; background:#ecf9f8; }
-.ebay-profit-formula b { color:var(--yd-content-brand-ink); font-size:8px; }
-.ebay-profit-formula span { overflow-wrap:anywhere; font-size:7px; line-height:11px; }
-.ebay-profit-formula small { color:#7a8986; font-size:6px; }
+.ebay-profit-formula { display:grid; gap:8px; padding:14px 16px; color:#334644; border:1px solid #bfe6e2; border-radius:12px; background:#ecf9f8; }
+.ebay-profit-formula b { color:var(--yd-content-brand-ink); font-size:14px; font-weight:800; }
+.ebay-profit-formula span { overflow-wrap:anywhere; font-size:12px; line-height:19px; }
+.ebay-profit-formula small { color:#556563; font-size:11px; line-height:16px; }
 @media (max-width:1100px) { .ebay-profit-summary { grid-template-columns:1fr 1fr; }.ebay-profit-input-groups { grid-template-columns:1fr; }.ebay-profit-input-groups>section.target { grid-column:auto; }.ebay-profit-fields { grid-template-columns:1fr 1fr; }.ebay-profit-input-groups>section.target .ebay-profit-fields { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 .ebay-generated-images>article.passed { border-color:#9cded7; }
 .ebay-image-purpose-stats { font-size:12px; color:var(--app-text-secondary,#666); margin:4px 0 8px; }
