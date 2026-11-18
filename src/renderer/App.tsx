@@ -4447,6 +4447,17 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
     if(matchedLocal){setPremiumRestoreCarrier(null);setSelectedLocalProductId(matchedLocal.id)}else{const carrierId=`restore-${draft.id}`;const nowIso=new Date().toISOString();const carrier:EbayLocalProduct={id:carrierId,storeId:draft.storeId,marketplaceId:'EBAY_US',listingId:draft.listing.listingId,categoryId:'',categoryName:'',coreTermZh:'',coreTermEn:'',title:draft.selectedTitle,status:'READY',versionCount:1,latestSnapshotId:carrierId,downloadedAt:nowIso,updatedAt:nowIso,snapshot:{id:carrierId,localProductId:carrierId,version:1,sourceListing:draft.listing,details:{url:draft.listing.viewUrl||'',itemSpecifics:(draft.itemSpecifics||[]).map(item=>({name:item.name,value:item.value})),condition:'',imageUrls:draft.imageUrls||[],title:draft.selectedTitle,descriptionText:draft.description||'',price:draft.salePrice||draft.listing.price||'0',currency:draft.saleCurrency||draft.listing.currency||'USD'},media:(draft.imageUrls||[]).map((url,i)=>({id:`${carrierId}-m${i}`,mediaType:'IMAGE' as const,sortOrder:i,remoteUrl:url,localPath:'',mimeType:'image/jpeg',width:0,height:0,fileSize:0,sha256:'',downloadStatus:'FAILED' as const})),completeness:0,missingFields:[],contentHash:'',capturedAt:nowIso}};setPremiumRestoreCarrier(carrier);setSelectedLocalProductId(carrierId)};setTitleResult({originalTitle:draft.listing.title,optimizedTitle:draft.selectedTitle,keywords:[],rationale:'已从优品仓库恢复',model:'saved',variants:draft.titleVariants,itemSpecifics:draft.itemSpecifics,description:draft.description,marketDecision:draft.marketDecision});setSelectedTitle(draft.selectedTitle);setImageCandidateReviews({});setAcceptedGeneratedImages({});setContentResult(null);setComplianceReviewed(Boolean(draft.complianceReviewedAt));setOptimizeMode('image');setActiveTab('optimize')}
   const openPublishEditorFromDraft=async(premium:EbayOptimizationDraft)=>{
     const lp=localProducts.find(product=>product.listingId===premium.listing.listingId)
+    if(!lp){
+      const online=listings.find(item=>item.listingId===premium.listing.listingId)
+      const itemId=(premium.listing.viewUrl||'').match(/\/itm\/(?:[^/]+\/)?(\d{9,15})/)?.[1]||(/^\d{9,15}$/.test(premium.listing.listingId)?premium.listing.listingId:'')
+      if(online||itemId){
+        const url=`https://www.ebay.com/sl/list?mode=ReviseItem&itemId=${encodeURIComponent(itemId||online!.listingId)}`
+        setActiveTab('browser')
+        void window.desktop.browser.navigate('web',url).catch(reason=>setEbayError(readableError(reason,'打开修改页失败')))
+        setNotice('该优品已存在在线商品（全流程后本地行已移除属预期），进入发布改为打开 eBay 修改页（ReviseItem），不重复新建。')
+        return
+      }
+    }
     if(!lp){setPublishNoMatchDraft(premium);return}
     const urls=(premium.imageUrls||[]).filter(Boolean)
     let media=[...lp.snapshot.media].sort((left,right)=>left.sortOrder-right.sortOrder)
