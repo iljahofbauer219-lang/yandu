@@ -22,6 +22,20 @@ describe('本地定时发布列表 · 优化版本/发布版本 与优品卡片�
   })
 })
 
+describe('AI优化成功 · 落优品仓库而非留线上发布', () => {
+  const start = source.indexOf('const saveToPremium=')
+  const body = source.slice(start, source.indexOf('const tabs=', start))
+  it('保存成功后移除同 listingId 本地行并刷新本地列表（优品互斥过滤放行）', () => {
+    expect(start).toBeGreaterThan(-1)
+    expect(body).toContain('localProducts.find(')
+    expect(body).toContain('removeLocalProduct(')
+    expect(body).toContain('window.desktop.ebay.localProducts(')
+  })
+  it('保存成功导航优品仓库', () => {
+    expect(body).toContain("setActiveTab('premium')")
+  })
+})
+
 describe('本地定时发布 · 已存草稿轻量两步（开草稿+刊登，跳重填）', () => {
   it('到点链按 draftSavedAt+draft ref 判 savedDraft，并传 skipFill 与轻量开页', () => {
     expect(source).toContain("const savedDraft=Boolean(product.draftSavedAt&&product.publishRef?.kind==='draft')")
