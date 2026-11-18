@@ -3563,6 +3563,10 @@ ipcMain.handle('ebay:save-current-draft', async (_event, localProductId?:string)
   if(result.status==='SAVED'&&localProductId)database.setEbayLocalProductDraftSaved(localProductId,new Date().toISOString())
   return result
 })
+ipcMain.handle('ebay:find-active-listing-by-title', async (_event, title:string) => {
+  if(!workspace)throw new Error('应用内浏览器尚未初始化')
+  return workspace.findEbayActiveListingIdByTitle(title)
+})
 ipcMain.handle('ebay:read-current-draft-title', async () => {
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
   return workspace.readEbayCurrentTitle()

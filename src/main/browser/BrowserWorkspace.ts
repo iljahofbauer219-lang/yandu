@@ -2223,6 +2223,21 @@ export class BrowserWorkspace {
     return {paymentPolicy:pick('paymentPolicy'),shippingPolicy:pick('shippingPolicy'),returnPolicy:pick('returnPolicy'),itemLocation:location,postalCode:postal}
   }
 
+  async findEbayActiveListingIdByTitle(title:string):Promise<{itemId:string;url:string}> {
+    let tab=this.detailTabs.get(this.activeTabId)
+    const isEbay=(u:string)=>/^https:\/\/([a-z0-9-]+\.)*ebay\.com\//.test(u)
+    if(!tab||!isEbay(tab.view.webContents.getURL()))tab=[...this.detailTabs.values()].find(t=>isEbay(t.view.webContents.getURL()))
+    if(!tab)throw new Error('当前没有可用的 eBay 页签，无法找回在线商品')
+    await tab.view.webContents.loadURL('https://www.ebay.com/sh/lst/active')
+    const norm=(v:string)=>String(v||'').replace(/\s+/g,' ').trim().toLowerCase()
+    const want=norm(title)
+    for(let attempt=0;attempt<10;attempt+=1){
+      await this.sleep(900)
+      const id=await tab.view.webContents.executeJavaScript(`(()=>{const norm=v=>String(v||'').replace(/\\s+/g,' ').trim().toLowerCase();const want=${JSON.stringify(want)};const a=[...document.querySelectorAll('a[href*="/itm/"]')].find(x=>norm(x.textContent).includes(want)||norm(x.getAttribute('title')).includes(want));if(!a)return '';const m=(a.href||'').match(/\\/itm\\/(?:[^/]+\\/)?(\\d{9,15})/);return m?m[1]:''})()`,true) as string
+      if(id)return {itemId:id,url:tab.view.webContents.getURL()}
+    }
+    return {itemId:'',url:tab.view.webContents.getURL()}
+  }
   async readEbayCurrentTitle():Promise<{title:string;url:string}> {
     let tab=this.detailTabs.get(this.activeTabId)
     const isLstng=(u:string)=>/^https:\/\/([a-z0-9-]+\.)*ebay\.com\/lstng\?/.test(u)

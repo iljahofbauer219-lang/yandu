@@ -8,6 +8,9 @@ import { describe, expect, it } from 'vitest'
  * 不误弹「尚未同步为本地产品」；仅真正无源才模态。
  */
 const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8')
+const ws = readFileSync(path.resolve(process.cwd(), 'src/main/browser/BrowserWorkspace.ts'), 'utf8')
+const main = readFileSync(path.resolve(process.cwd(), 'src/main/main.ts'), 'utf8')
+const preload = readFileSync(path.resolve(process.cwd(), 'src/preload/preload.ts'), 'utf8')
 const seg = app.split('const openPublishEditorFromDraft=')[1]?.split('\n  const ')[0] ?? ''
 
 describe('进入发布 · 无本地行回落链', () => {
@@ -21,6 +24,13 @@ describe('进入发布 · 无本地行回落链', () => {
   it('仅真正无源才置模态', () => {
     expect(seg).toContain('if(!lp){')
     expect(seg).toContain('setPublishNoMatchDraft(premium);return')
+  })
+  it('无源时按标题从 eBay 在售列表找回 item id（IPC 全链）', () => {
+    expect(ws).toContain('async findEbayActiveListingIdByTitle(')
+    expect(main).toContain("ipcMain.handle('ebay:find-active-listing-by-title'")
+    expect(preload).toContain('findActiveListingIdByTitle:')
+    expect(app).toContain('findActiveListingIdByTitle(premium.selectedTitle')
+    expect(app).toContain('已按标题从 eBay 在售列表找回商品并打开修改页')
   })
   it('回落打开修改页有中文说明不重复新建', () => {
     expect(seg).toContain('不重复新建')

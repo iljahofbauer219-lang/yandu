@@ -4459,6 +4459,20 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
         return
       }
     }
+    if(!lp){
+      setBusy('publish-recover-item')
+      try{
+        const found=await window.desktop.ebay.findActiveListingIdByTitle(premium.selectedTitle||premium.listing.title||'')
+        if(found.itemId){
+          const url=`https://www.ebay.com/sl/list?mode=ReviseItem&itemId=${encodeURIComponent(found.itemId)}`
+          setActiveTab('browser')
+          void window.desktop.browser.navigate('web',url).catch(reason=>setEbayError(readableError(reason,'打开修改页失败')))
+          setNotice('本地行与线上产品库均无记录，已按标题从 eBay 在售列表找回商品并打开修改页（ReviseItem），不重复新建。')
+          return
+        }
+      }catch(reason){setEbayError(readableError(reason,'从 eBay 在售列表找回商品失败'))}
+      finally{setBusy('')}
+    }
     if(!lp){setPublishNoMatchDraft(premium);return}
     const urls=(premium.imageUrls||[]).filter(Boolean)
     let media=[...lp.snapshot.media].sort((left,right)=>left.sortOrder-right.sortOrder)

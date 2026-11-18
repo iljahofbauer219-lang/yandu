@@ -481,6 +481,7 @@ contextBridge.exposeInMainWorld('desktop', {
     prepareLocalProductRevision: (localProductId:string):Promise<EbayLocalRevisionPreparationResult> => ipcRenderer.invoke('ebay:local-products:prepare-revision',localProductId),
     fillCurrentTab: (localProductId:string, mode:'auto'|'fixed', preset?:unknown):Promise<{url:string;mode:string;filledFields:string[];skippedFields:string[];warnings:string[];inferredFields:string[];filledAt:string}> => ipcRenderer.invoke('ebay:fill-current-tab',localProductId,mode,preset),
     saveCurrentDraft: (localProductId?:string):Promise<{status:'SAVED'|'FAILED';url:string;message:string;savedAt:string}> => ipcRenderer.invoke('ebay:save-current-draft',localProductId),
+    findActiveListingIdByTitle: (title:string):Promise<{itemId:string;url:string}> => ipcRenderer.invoke('ebay:find-active-listing-by-title',title),
     readCurrentDraftTitle: ():Promise<{title:string;url:string}> => ipcRenderer.invoke('ebay:read-current-draft-title'),
     publishCurrentListing: (localProductId?:string):Promise<{status:'PUBLISHED'|'FAILED';url:string;message:string;publishedAt:string;itemId:string}> => ipcRenderer.invoke('ebay:publish-current-listing',localProductId),
     readCurrentEbaySettings: (storeId:string):Promise<{paymentPolicy:{current:string;options:Array<{id:string;text:string}>};shippingPolicy:{current:string;options:Array<{id:string;text:string}>};returnPolicy:{current:string;options:Array<{id:string;text:string}>};itemLocation:string;postalCode:string}> => ipcRenderer.invoke('ebay:read-current-settings',storeId),
