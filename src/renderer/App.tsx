@@ -4925,7 +4925,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   useEffect(()=>{
     let cancelled=false
     setFinalImageInspection(null)
-    if(!imageAdoptionComplete||!finalImageUrls.length)return()=>{cancelled=true}
+    if((!imageAdoptionComplete&&!premiumRestoreCarrier)||!finalImageUrls.length)return()=>{cancelled=true}
     setFinalImageChecking(true)
     const timer=window.setTimeout(()=>{
       void window.desktop.ebay.inspectFinalImages(finalImageUrls).then(report=>{

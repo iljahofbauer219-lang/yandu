@@ -18,6 +18,9 @@ describe('售价环节 · 恢复载体豁免图片初步检查', () => {
   it('豁免以文案注明（恢复载体沿用草稿已检结果）', () => {
     expect(app).toContain('恢复载体沿用草稿已检结果')
   })
+  it('最终图集检查 effect 对载体不早退（按 URL 补检）', () => {
+    expect(app).toContain('if((!imageAdoptionComplete&&!premiumRestoreCarrier)||!finalImageUrls.length)return()=>{cancelled=true}')
+  })
   it('真实本地产品门禁字符串保留', () => {
     expect(app).toContain('图片自动初步检查未完成')
     expect(app).toContain('图片自动初步检查尚未完成。')
