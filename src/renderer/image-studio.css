@@ -373,7 +373,7 @@ button.ebay-market-card-media { width:100%; border:0; cursor:pointer; font:inher
 .ebay-profit-summary article.negative { border-color:#f0c9c5; box-shadow:inset 0 3px 0 #d0544c; }
 .ebay-profit-summary small,.ebay-profit-summary b,.ebay-profit-summary span { display:block; }
 .ebay-profit-summary small { color:#4c5c5a; font-size:12px; font-weight:650; letter-spacing:.02em; }
-.ebay-profit-summary b { margin-top:6px; overflow:hidden; color:#123c39; font-size:24px; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
+.ebay-profit-workbench .ebay-profit-summary b { margin-top:6px; overflow:hidden; color:#123c39; font-size:24px; line-height:30px; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
 .ebay-profit-summary span { margin-top:6px; color:#556563; font-size:11px; line-height:16px; }
 .ebay-profit-input-groups { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .ebay-profit-input-groups>section { min-width:0; overflow:hidden; border:1px solid #e0e6e7; border-radius:12px; background:#fbfcfc; }
@@ -384,9 +384,10 @@ button.ebay-market-card-media { width:100%; border:0; cursor:pointer; font:inher
 .ebay-profit-input-groups>section.target { grid-column:1/-1; }
 .ebay-profit-fields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; padding:14px; }
 .ebay-profit-fields label { min-width:0; color:#3c4c4a; font-size:12px; font-weight:700; }
-.ebay-profit-fields input,.ebay-profit-fields select { width:100%; height:40px; margin-top:6px; padding:0 11px; color:#263331; border:1px solid #d9e2e2; border-radius:9px; background:#fff; outline:none; font:inherit; font-size:14px; }
-.ebay-profit-fields input:focus,.ebay-profit-fields select:focus { border-color:var(--yd-content-brand-bright); box-shadow:0 0 0 3px rgba(10,186,181,.1); }
-.ebay-profit-fields input:disabled,.ebay-profit-fields select:disabled { color:#8b9295; background:#f0f2f2; }
+/* 选择器带 .ebay-profit-workbench 前缀：ui-readability.css 后加载，同权重会盖掉这里的字号 */
+.ebay-profit-workbench .ebay-profit-fields label input,.ebay-profit-workbench .ebay-profit-fields label select { width:100%; height:40px; margin-top:6px; padding:0 11px; color:#263331; border:1px solid #d9e2e2; border-radius:9px; background:#fff; outline:none; font:inherit; font-size:14px; }
+.ebay-profit-workbench .ebay-profit-fields label input:focus,.ebay-profit-workbench .ebay-profit-fields label select:focus { border-color:var(--yd-content-brand-bright); box-shadow:0 0 0 3px rgba(10,186,181,.1); }
+.ebay-profit-workbench .ebay-profit-fields label input:disabled,.ebay-profit-workbench .ebay-profit-fields label select:disabled { color:#8b9295; background:#f0f2f2; }
 .ebay-profit-fields small { display:block; margin-top:5px; color:#5a6a68; font-size:11px; font-weight:400; line-height:16px; }
 .ebay-profit-autofill-row { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:12px 14px 0; }
 .ebay-profit-autofill-row small { flex:1; min-width:0; overflow-wrap:anywhere; color:#0b6f6b; font-size:11px; font-weight:400; line-height:16px; }
@@ -396,7 +397,7 @@ button.ebay-market-card-media { width:100%; border:0; cursor:pointer; font:inher
 .ebay-profit-autofill-row button:hover:not(:disabled) { border-color:var(--yd-content-brand-bright); background:#e6f7f6; }
 .ebay-profit-autofill-row button:disabled { color:#8b9295; border-color:#dfe6e6; background:#f0f2f2; cursor:default; }
 .ebay-profit-target-price { display:flex; gap:8px; align-items:center; margin-top:6px; }
-.ebay-profit-target-price input { flex:1; min-width:0; margin-top:0; color:#263331; background:#f0f2f2; }
+.ebay-profit-workbench .ebay-profit-fields .ebay-profit-target-price input { flex:1; min-width:0; margin-top:0; color:#263331; background:#f0f2f2; }
 .ebay-profit-target-price button { flex:none; padding:7px 12px; color:#0b6f6b; border:1px solid #bcded9; border-radius:9px; background:#f2fbfa; font-size:12px; font-weight:700; cursor:pointer; }
 .ebay-profit-target-price button:hover { border-color:var(--yd-content-brand-bright); background:#e6f7f6; }
 .ebay-profit-input-groups>section.target .ebay-profit-fields { grid-template-columns:repeat(4,minmax(0,1fr)); }
