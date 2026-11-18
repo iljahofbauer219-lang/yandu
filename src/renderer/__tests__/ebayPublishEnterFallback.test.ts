@@ -31,6 +31,8 @@ describe('进入发布 · 无本地行回落链', () => {
     expect(preload).toContain('findActiveListingIdByTitle:')
     expect(app).toContain('findActiveListingIdByTitle(premium.selectedTitle')
     expect(app).toContain('已按标题从 eBay 在售列表找回商品并打开修改页')
+    expect(ws).toContain('sh/lst/drafts')
+    expect(app).toContain('已按标题从 eBay 草稿栏找回该草稿并打开续作页')
   })
   it('回落打开修改页有中文说明不重复新建', () => {
     expect(seg).toContain('不重复新建')

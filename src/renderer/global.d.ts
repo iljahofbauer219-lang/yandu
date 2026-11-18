@@ -421,7 +421,7 @@ declare global {
         prepareLocalProductRevision(localProductId:string):Promise<EbayLocalRevisionPreparationResult>
         fillCurrentTab(localProductId:string, mode:'auto'|'fixed', preset?:unknown):Promise<{url:string;mode:string;filledFields:string[];skippedFields:string[];warnings:string[];inferredFields:string[];filledAt:string}>
         saveCurrentDraft(localProductId?:string):Promise<{status:'SAVED'|'FAILED';url:string;message:string;savedAt:string}>
-        findActiveListingIdByTitle(title:string):Promise<{itemId:string;url:string}>
+        findActiveListingIdByTitle(title:string):Promise<{itemId:string;draftId?:string;url:string}>
         readCurrentDraftTitle():Promise<{title:string;url:string}>
         publishCurrentListing(localProductId?:string):Promise<{status:'PUBLISHED'|'FAILED';url:string;message:string;publishedAt:string;itemId:string}>
         readCurrentEbaySettings(storeId:string):Promise<{paymentPolicy:{current:string;options:Array<{id:string;text:string}>};shippingPolicy:{current:string;options:Array<{id:string;text:string}>};returnPolicy:{current:string;options:Array<{id:string;text:string}>};itemLocation:string;postalCode:string}>
