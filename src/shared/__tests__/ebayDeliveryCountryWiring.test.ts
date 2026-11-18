@@ -193,3 +193,37 @@ describe('收货地二选一 · 渲染端两项菜单沿用工具栏样式', () 
     expect(cssSource).toContain('.ebay-delivery {')
   })
 })
+
+describe('收货地自动生效防闪动 · 渲染端接线', () => {
+  const sync = () => slice(appSource, 'const syncEbayDeliveryLanguage', 'useEffect(()=>{if(!activeStore)return;const stored=')
+  const handler = () => slice(appSource, 'const switchEbayDeliveryCountry', 'const translateEbayPage')
+
+  it('同步入口改用带尝试记忆的判定，并登记在途标记', () => {
+    expect(sync()).toContain('shouldAutoApplyEbayDeliveryNow(')
+    expect(sync()).toContain('ebayDeliveryAutoApplyRef.current')
+    expect(sync()).toContain('inFlight:true')
+  })
+
+  it('抑制分支先于存储写回返回：不得用读回值覆盖用户已存偏好', () => {
+    const body = sync()
+    const suppress = body.indexOf('ebayDeliveryAutoApplyRef.current.storeId===store.id){return}')
+    const write = body.indexOf('localStorage.setItem(ebayDeliveryCountryStorageKey(')
+    expect(suppress).toBeGreaterThan(-1)
+    expect(write).toBeGreaterThan(-1)
+    expect(suppress).toBeLessThan(write)
+  })
+
+  it('读回收敛即清除尝试记忆，恢复后续自动生效资格', () => {
+    expect(sync()).toContain('stored===live){ebayDeliveryAutoApplyRef.current=null}')
+  })
+
+  it('手动切换同样登记在途/已尝试，结束后落为已尝试', () => {
+    expect(handler()).toContain('inFlight:true')
+    expect(handler()).toContain('inFlight:false')
+  })
+
+  it('onState/onTabs 走最新闭包 ref，避免陈旧闭包绕过在途守卫', () => {
+    expect((appSource.match(/syncEbayDeliveryLanguageRef\.current\(\)/g) || []).length).toBeGreaterThanOrEqual(2)
+    expect(appSource).toContain('syncEbayDeliveryLanguageRef.current=')
+  })
+})

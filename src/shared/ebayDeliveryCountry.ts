@@ -91,6 +91,18 @@ export function shouldAutoApplyEbayDelivery(stored: EbayDeliveryCountry | null, 
   return stored !== null && live !== null && stored !== live
 }
 
+export interface EbayDeliveryAutoApplyAttempt {
+  storeId: string
+  country: EbayDeliveryCountry
+  inFlight: boolean
+}
+
+/** 同店同目标的自动生效只允许一次：在途或已尝试未收敛时不再重试，切断 onState→切换→刷新→onState 的闪动死循环 */
+export function shouldAutoApplyEbayDeliveryNow(stored: EbayDeliveryCountry | null, live: EbayDeliveryCountry | null, attempt: EbayDeliveryAutoApplyAttempt | null, storeId: string): boolean {
+  if (!shouldAutoApplyEbayDelivery(stored, live)) return false
+  return !(attempt && attempt.storeId === storeId && attempt.country === stored)
+}
+
 export function ebayDeliveryCountryStorageKey(storeId: string): string {
   return `ebay-delivery-country:${storeId}`
 }

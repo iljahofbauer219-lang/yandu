@@ -15,7 +15,8 @@ import {
   parseStoredEbayDeliveryCountry,
   resolveEbayDeliveryCountry,
   resolvePostalRetention,
-  shouldAutoApplyEbayDelivery
+  shouldAutoApplyEbayDelivery,
+  shouldAutoApplyEbayDeliveryNow
 } from '../ebayDeliveryCountry'
 
 describe('收货地二选一 · 选项与映射', () => {
@@ -386,5 +387,35 @@ describe('收货地二选一 · 语言态来源与重启兜底', () => {
     expect(shouldAutoApplyEbayDelivery(null, 'US')).toBe(false)
     expect(shouldAutoApplyEbayDelivery('CN', null)).toBe(false)
     expect(shouldAutoApplyEbayDelivery(null, null)).toBe(false)
+  })
+})
+
+describe('收货地自动生效防闪动 · 同目标只允许一次', () => {
+  const attempt = { storeId: 's1', country: 'US' as const, inFlight: false }
+
+  it('首次不一致且无尝试记忆：允许自动生效', () => {
+    expect(shouldAutoApplyEbayDeliveryNow('US', 'CN', null, 's1')).toBe(true)
+  })
+
+  it('同店同目标已尝试未收敛：不再自动重试（切断刷新死循环）', () => {
+    expect(shouldAutoApplyEbayDeliveryNow('US', 'CN', attempt, 's1')).toBe(false)
+  })
+
+  it('同店同目标在途：禁止并发重入第二次切换', () => {
+    expect(shouldAutoApplyEbayDeliveryNow('US', 'CN', { ...attempt, inFlight: true }, 's1')).toBe(false)
+  })
+
+  it('尝试记忆属于其它店铺：不影响本店首次自动生效', () => {
+    expect(shouldAutoApplyEbayDeliveryNow('US', 'CN', attempt, 's2')).toBe(true)
+  })
+
+  it('尝试记忆是旧目标：用户改选后允许对新目标自动生效一次', () => {
+    expect(shouldAutoApplyEbayDeliveryNow('CN', 'US', attempt, 's1')).toBe(true)
+  })
+
+  it('读回已收敛或缺任一侧：沿用基础判定不触发', () => {
+    expect(shouldAutoApplyEbayDeliveryNow('US', 'US', attempt, 's1')).toBe(false)
+    expect(shouldAutoApplyEbayDeliveryNow('US', null, null, 's1')).toBe(false)
+    expect(shouldAutoApplyEbayDeliveryNow(null, 'CN', null, 's1')).toBe(false)
   })
 })
