@@ -1036,6 +1036,7 @@ function seedEbayLocalProductFromPremiumDraft(storeId:string,draft:EbayOptimizat
   if(draftId){
     database.setEbayLocalProductPublishRef(product.id,{kind:'draft',id:draftId,at:capturedAt})
     database.setEbayLocalProductDraftSaved(product.id,capturedAt)
+    database.saveEbayOptimizationDraft({...draft,publishRef:{kind:'draft',id:draftId,at:capturedAt},draftSavedAt:capturedAt})
   }
   return database.getEbayLocalProducts().find(item=>item.id===product.id)||product
 }

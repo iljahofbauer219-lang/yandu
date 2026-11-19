@@ -11,6 +11,7 @@ const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'u
 const ws = readFileSync(path.resolve(process.cwd(), 'src/main/browser/BrowserWorkspace.ts'), 'utf8')
 const main = readFileSync(path.resolve(process.cwd(), 'src/main/main.ts'), 'utf8')
 const preload = readFileSync(path.resolve(process.cwd(), 'src/preload/preload.ts'), 'utf8')
+const contracts = readFileSync(path.resolve(process.cwd(), 'src/shared/contracts.ts'), 'utf8')
 const seg = app.split('const openPublishEditorFromDraft=')[1]?.split('\n  const ')[0] ?? ''
 
 describe('进入发布 · 无本地行回落链', () => {
@@ -47,6 +48,31 @@ describe('进入发布 · 无本地行回落链', () => {
   })
   it('回落打开修改页有中文说明不重复新建', () => {
     expect(seg).toContain('不重复新建')
+  })
+  it('编辑器先开：切 publish 页签在下载之前，下载转后台且会话守卫防串写（2026-11-19 进入发布耗时修复）', () => {
+    expect(seg.indexOf("setActiveTab('publish')")).toBeGreaterThan(-1)
+    expect(seg.indexOf('downloadLocalProductMedia(')).toBeGreaterThan(-1)
+    expect(seg.indexOf("setActiveTab('publish')")).toBeLessThan(seg.indexOf('downloadLocalProductMedia('))
+    expect(seg).toContain('publishEditorSession.current===session')
+    expect(seg).toContain('setPublishEditorDraft(current=>current?{...current,media:merged}:current)')
+    expect(seg).not.toContain("setBusy('publish-localize-media')")
+  })
+  it('找回短路：优品 ref/任务 reviseUrl 命中即免 eBay 轮询；未命中才轮询且有进度中文 notice', () => {
+    expect(seg).toContain('resolveEbayPublishRecoveryHint(')
+    expect(seg).toContain('const found=hint||await window.desktop.ebay.findActiveListingIdByTitle(')
+    expect(seg).toContain('正在从 eBay 在售/草稿栏找回该优品的既有刊登')
+    expect(app).toContain("import { resolveEbayPublishRecoveryHint } from '../shared/ebayPublishRecoveryHint'")
+  })
+  it('删行携带 ref 入优品 payload：saveToPremium 先取 movedLocal 再保存，publishRef/draftSavedAt 随入参落库', () => {
+    const saveSeg = app.split('const saveToPremium=')[1]?.split('\n  const ')[0] ?? ''
+    expect(saveSeg.indexOf('const movedLocal=localProducts.find(')).toBeGreaterThan(-1)
+    expect(saveSeg.indexOf('const movedLocal=localProducts.find(')).toBeLessThan(saveSeg.indexOf('saveOptimizationDraft({'))
+    expect(saveSeg).toContain('publishRef:movedLocal?.publishRef||undefined,draftSavedAt:movedLocal?.draftSavedAt||undefined')
+    expect(contracts).toContain('publishRef?:EbayPublishRef|null')
+    expect(contracts).toContain('draftSavedAt?:string|null')
+  })
+  it('seed 重建同时把 draft ref 回写优品 payload：重启/再删行后仍可短路', () => {
+    expect(main).toContain("database.saveEbayOptimizationDraft({...draft,publishRef:{kind:'draft',id:draftId,at:capturedAt},draftSavedAt:capturedAt})")
   })
   it('回落两分支先附着店铺会话页签再 navigate——不得落通用 web-general 罐被 eBay 当匿名拦验证', () => {
     expect(seg, '禁未附着就 void navigate').not.toContain("void window.desktop.browser.navigate('web',url)")

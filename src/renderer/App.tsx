@@ -16,6 +16,7 @@ import { MENU_PERMISSION_TREE, hasMenuAccess } from '../shared/menuPermissionTre
 import type { BrowserState, BrowserTab, BrowserTranslationMode, CandidateCollectionRecord, CandidateCollectionRun, CandidateArea, CollectionMethod, CollectionProtectionMode, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, ComparisonCostSettings, ComparisonDecision, ComparisonRecordView, ComplianceAlertStatus, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementStatus, ComplianceKnowledgeWorkspace, ComplianceProductProfileDraft, ComplianceReviewStatus, ComplianceRiskLevel, ComplianceRule, ComplianceRuleDraft, ComplianceTaskStatus, EbayCategoryWorkspace, EbayConfigurationStatus, EbayContentOptimizationResult, EbayContentTranslationResult, EbayDeliveryCountry, EbayDirectoryProductSyncCheckpoint, EbayDirectoryProductSyncProgress, EbayDirectoryProductSyncResult, EbayImageCandidateReview, EbayImageGenerationPurpose, EbayImageInspectionReport, EbayImageVisualInspectionReport, EbayListing, EbayLocalProduct, EbayLocalProductUpdateInput, EbayLocalRevisionPreparationResult, EbayLoginResult, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayProductSyncRun, EbayPublishTask, EbayStoreBusinessPolicy, EbayStore, EbayTitleOptimizationResult, GigaReturnRateFilter, GigaSellerIndexFilter, ImageModelProfile, ImageReferenceRole, ImportedProductImage, ImportedProductSource, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishStatus, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, Platform, RealShiftProfile, RealShiftResult, SelectionCatalogItem, SelectionDecision, SelectionTask, SelectionTaskDraft, SupplyActivationResult, SupplyPlatformCode, SupplyProductDownload, SupplyWarehouseProduct, TaskProgress, WorkflowCounts } from '../shared/contracts'
 import { evaluateEbayCompliance } from '../shared/ebayComplianceKnowledge'
 import { mergeEbayPublishMedia } from '../shared/ebayLocalMedia'
+import { resolveEbayPublishRecoveryHint } from '../shared/ebayPublishRecoveryHint'
 import { EBAY_DELIVERY_OPTIONS, ebayDeliveryCountryFromLanguage, ebayDeliveryCountryStorageKey, parseStoredEbayDeliveryCountry, shouldAutoApplyEbayDeliveryNow, type EbayDeliveryAutoApplyAttempt } from '../shared/ebayDeliveryCountry'
 import type { EbayItemSpecificsSection, EbaySuggestedSpecificsCard } from '../shared/ebayItemSpecificsModel'
 import { complianceCheckFingerprint } from '../shared/complianceFingerprint'
@@ -4465,7 +4466,9 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
     if(!lp){
       setBusy('publish-recover-item')
       try{
-        const found=await window.desktop.ebay.findActiveListingIdByTitle(premium.selectedTitle||premium.listing.title||'')
+        const hint=resolveEbayPublishRecoveryHint({publishRef:premium.publishRef,tasks:publishTasks,premiumId:premium.id})
+        if(!hint)setNotice('正在从 eBay 在售/草稿栏找回该优品的既有刊登；找回后即刻打开本地产品编辑，图片转后台保存。')
+        const found=hint||await window.desktop.ebay.findActiveListingIdByTitle(premium.selectedTitle||premium.listing.title||'')
         if(found.itemId){
           const url=`https://www.ebay.com/sl/list?mode=ReviseItem&itemId=${encodeURIComponent(found.itemId)}`
           setActiveTab('browser')
@@ -4485,24 +4488,27 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
     }
     if(!lp){setPublishNoMatchDraft(premium);return}
     const urls=(premium.imageUrls||[]).filter(Boolean)
-    let media=[...lp.snapshot.media].sort((left,right)=>left.sortOrder-right.sortOrder)
-    if(urls.length){
-      setBusy('publish-localize-media')
-      setEbayError('')
-      try{
-        const result=await window.desktop.ebay.downloadLocalProductMedia(lp.id,urls)
-        media=mergeEbayPublishMedia(result.media,lp.snapshot.media)
-        if(result.failures.length)setNotice(`${result.failures.length} 张图片未能保存到本地（${result.failures.slice(0,3).join('；')}），编辑器已按现状打开，可在 01 图片与视频手工上传后保存。`)
-      }catch(reason){
-        // 只有「本地产品不存在」这类前置错误才抛到这里；照样开编辑器，种子回落到本地快照里真存在的图。
-        setEbayError(readableError(reason,'AI 图片未能保存到本地，可在 01 图片与视频手工上传'))
-      }finally{setBusy('')}
-    }
+    const media=[...lp.snapshot.media].sort((left,right)=>left.sortOrder-right.sortOrder)
     setPublishEditorDraftId(premium.id)
     publishEditorSession.current=`${premium.id}:${lp.id}`
+    const session=publishEditorSession.current
     setPublishEditorProduct(lp)
     setPublishEditorDraft({...ebayLocalProductFormSeed(lp),title:premium.selectedTitle,descriptionText:premium.description||'',descriptionHtml:'',price:premium.salePrice||premium.listing.price||'0',currency:premium.saleCurrency||premium.listing.currency||'USD',media})
     setActiveTab('publish')
+    if(urls.length){
+      setEbayError('')
+      // 编辑器先开、图片转后台：await 整批下载曾把优品 grid 冻住数十秒；后台完成按会话守卫回写，失败全文提示且编辑器保持可用。
+      void (async()=>{
+        try{
+          const result=await window.desktop.ebay.downloadLocalProductMedia(lp.id,urls)
+          const merged=mergeEbayPublishMedia(result.media,lp.snapshot.media)
+          if(publishEditorSession.current===session)setPublishEditorDraft(current=>current?{...current,media:merged}:current)
+          if(result.failures.length)setNotice(`${result.failures.length} 张图片未能保存到本地（${result.failures.slice(0,3).join('；')}），编辑器已按现状打开，可在 01 图片与视频手工上传后保存。`)
+        }catch(reason){
+          setEbayError(readableError(reason,'AI 图片未能保存到本地，可在 01 图片与视频手工上传'))
+        }
+      })()
+    }
     // D 批：重启/离开平台页后再进发布，05 段直接画上次阅读的镜像形状；没读过才静默自读，失败只点名不阻断。
     void (async()=>{
       const seeded=await seedSpecificsFromStore(lp)
@@ -5014,7 +5020,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   const combinedGateClass=complianceAutoRunning||!complianceIsCurrent?'pending':combinedBlockingIssues?'blocked':combinedReviewIssues?'review_required':combinedRemediationIssues?'remediation_required':visualPendingCount?'visual_pending':pendingAspectConfirmation?'review_required':'passed'
   const scoreBefore=0 // 仅兼容旧草稿数据结构；产品判断已改用合规门禁，不再计算竞争力分数。
   const scoreAfter=0
-  const saveToPremium=async()=>{if(!selectedListing||!activeStore||!titleResult||!selectedTitle||!complianceReport)return;if(!complianceCheck||!complianceIsCurrent){setEbayError('当前内容尚未完成最新合规检查，请等待自动重检完成。');setOptimizeMode('image');return}if(complianceCheck.gateStatus==='BLOCKED'||complianceCheck.gateStatus==='RECHECK_REQUIRED'){setEbayError(`当前合规门禁为 ${complianceCheck.gateStatus}，请整改后重新检查。`);setOptimizeMode('image');return}if(complianceCheck.gateStatus==='REVIEW_REQUIRED'&&!complianceReviewed){setEbayError('合规知识库要求人工复核，完成证据核验后才能继续。');setOptimizeMode('image');return}if(!imageVisualReport&&!premiumRestoreCarrier){setEbayError('图片自动初步检查尚未完成。');setOptimizeMode('image');return}if(!imageAdoptionComplete){setEbayError('请先完成图片自然化处理并确认所有最终图片。');setOptimizeMode('image');return}if(!finalImageInspection||finalImageChecking){setEbayError('最终图片图集仍在自动检查，请稍候。');setOptimizeMode('image');return}if(finalImageInspection.blocked||finalImageInspection.review){setEbayError(`最终图集中仍有 ${finalImageInspection.blocked} 张未通过、${finalImageInspection.review} 张需要人工确认；请处理后再保存。`);setOptimizeMode('image');return}if(!optimizedImage){setEbayError('商品缺少有效主图，请先在线上产品补充主图。');setOptimizeMode('image');return}if(selectedTitle.length>80){setEbayError('所选标题超过80字符，请重新选择或生成标题。');setOptimizeMode('title');return}if(!titleResult.description.trim()){setEbayError('结构化商品描述不能为空，请核对后再保存。');setOptimizeMode('content');return}if(!profitAssumptions.salePriceConfirmed){setEbayError('请先在「05 售价设定」点「采用为核算售价」或「恢复快照售价」确认核算售价。');setOptimizeMode('pricing');return}setBusy('save-premium');setEbayError('');try{const saved=await runWithSessionRetry(token=>window.desktop.ebay.saveOptimizationDraft({storeId:activeStore.id,listingId:selectedListing.listingId,listing:selectedListing,selectedTitle,titleVariants:titleResult.variants,itemSpecifics:titleResult.itemSpecifics,description:titleResult.description,imageUrl:optimizedImage,imageUrls:finalImageUrls,storyboard:contentResult?.storyboard||[],marketDecision:titleResult.marketDecision||marketDecision||undefined,salePrice:effectiveSalePrice.toFixed(2),saleCurrency:selectedSaleCurrency,scoreBefore,scoreAfter,complianceCheckId:complianceCheck.id,complianceGateStatus:complianceCheck.gateStatus,complianceRuleSetVersion:complianceCheck.ruleSetVersion,complianceCheckedAt:complianceCheck.checkedAt,complianceReviewedAt:complianceCheck.reviewedAt,complianceInputFingerprint:complianceCheck.inputFingerprint},token));setOptimizationDrafts(await window.desktop.ebay.optimizationDrafts(activeStore.id));const movedLocal=localProducts.find(item=>item.listingId===selectedListing.listingId);if(movedLocal){await window.desktop.ebay.removeLocalProduct(movedLocal.id);setLocalProducts(await window.desktop.ebay.localProducts(activeStore.id))}setNotice(`已按核算售价 ${ebayDisplayPrice(selectedSaleCurrency,effectiveSalePrice.toFixed(2))} 存入优品仓库；最终图集 ${finalImageUrls.length} 张通过自动检查并转存自有服务器，原 eBay 线上图片与线上售价未被修改。${movedLocal?'该产品已移出线上发布、落入优品仓库。':''}${saved.aiAssetRehostWarnings?.length?` 注意：${saved.aiAssetRehostWarnings.join('；')}`:''}`);setActiveTab('premium')}catch(reason){setEbayError(readableError(reason,'保存优品仓库失败'))}finally{setBusy('')}}
+  const saveToPremium=async()=>{if(!selectedListing||!activeStore||!titleResult||!selectedTitle||!complianceReport)return;if(!complianceCheck||!complianceIsCurrent){setEbayError('当前内容尚未完成最新合规检查，请等待自动重检完成。');setOptimizeMode('image');return}if(complianceCheck.gateStatus==='BLOCKED'||complianceCheck.gateStatus==='RECHECK_REQUIRED'){setEbayError(`当前合规门禁为 ${complianceCheck.gateStatus}，请整改后重新检查。`);setOptimizeMode('image');return}if(complianceCheck.gateStatus==='REVIEW_REQUIRED'&&!complianceReviewed){setEbayError('合规知识库要求人工复核，完成证据核验后才能继续。');setOptimizeMode('image');return}if(!imageVisualReport&&!premiumRestoreCarrier){setEbayError('图片自动初步检查尚未完成。');setOptimizeMode('image');return}if(!imageAdoptionComplete){setEbayError('请先完成图片自然化处理并确认所有最终图片。');setOptimizeMode('image');return}if(!finalImageInspection||finalImageChecking){setEbayError('最终图片图集仍在自动检查，请稍候。');setOptimizeMode('image');return}if(finalImageInspection.blocked||finalImageInspection.review){setEbayError(`最终图集中仍有 ${finalImageInspection.blocked} 张未通过、${finalImageInspection.review} 张需要人工确认；请处理后再保存。`);setOptimizeMode('image');return}if(!optimizedImage){setEbayError('商品缺少有效主图，请先在线上产品补充主图。');setOptimizeMode('image');return}if(selectedTitle.length>80){setEbayError('所选标题超过80字符，请重新选择或生成标题。');setOptimizeMode('title');return}if(!titleResult.description.trim()){setEbayError('结构化商品描述不能为空，请核对后再保存。');setOptimizeMode('content');return}if(!profitAssumptions.salePriceConfirmed){setEbayError('请先在「05 售价设定」点「采用为核算售价」或「恢复快照售价」确认核算售价。');setOptimizeMode('pricing');return}setBusy('save-premium');setEbayError('');const movedLocal=localProducts.find(item=>item.listingId===selectedListing.listingId);try{const saved=await runWithSessionRetry(token=>window.desktop.ebay.saveOptimizationDraft({storeId:activeStore.id,listingId:selectedListing.listingId,listing:selectedListing,selectedTitle,titleVariants:titleResult.variants,itemSpecifics:titleResult.itemSpecifics,description:titleResult.description,imageUrl:optimizedImage,imageUrls:finalImageUrls,storyboard:contentResult?.storyboard||[],marketDecision:titleResult.marketDecision||marketDecision||undefined,salePrice:effectiveSalePrice.toFixed(2),saleCurrency:selectedSaleCurrency,scoreBefore,scoreAfter,complianceCheckId:complianceCheck.id,complianceGateStatus:complianceCheck.gateStatus,complianceRuleSetVersion:complianceCheck.ruleSetVersion,complianceCheckedAt:complianceCheck.checkedAt,complianceReviewedAt:complianceCheck.reviewedAt,complianceInputFingerprint:complianceCheck.inputFingerprint,publishRef:movedLocal?.publishRef||undefined,draftSavedAt:movedLocal?.draftSavedAt||undefined},token));setOptimizationDrafts(await window.desktop.ebay.optimizationDrafts(activeStore.id));if(movedLocal){await window.desktop.ebay.removeLocalProduct(movedLocal.id);setLocalProducts(await window.desktop.ebay.localProducts(activeStore.id))}setNotice(`已按核算售价 ${ebayDisplayPrice(selectedSaleCurrency,effectiveSalePrice.toFixed(2))} 存入优品仓库；最终图集 ${finalImageUrls.length} 张通过自动检查并转存自有服务器，原 eBay 线上图片与线上售价未被修改。${movedLocal?'该产品已移出线上发布、落入优品仓库。':''}${saved.aiAssetRehostWarnings?.length?` 注意：${saved.aiAssetRehostWarnings.join('；')}`:''}`);setActiveTab('premium')}catch(reason){setEbayError(readableError(reason,'保存优品仓库失败'))}finally{setBusy('')}}
   const tabs=EBAY_WORKSPACE_TABS
   const draftPublishIssues=(draft:EbayOptimizationDraft)=>[
     !draft.complianceGateStatus?'缺少合规快照':draft.complianceGateStatus==='BLOCKED'||draft.complianceGateStatus==='RECHECK_REQUIRED'?'合规门禁未通过':draft.complianceGateStatus==='REVIEW_REQUIRED'&&!draft.complianceReviewedAt?'待人工复核':'',

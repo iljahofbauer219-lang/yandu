@@ -1,5 +1,6 @@
 import type { SemanticFallbackMark } from './semanticFallback'
 import type { EbayItemSpecificsSection, EbaySuggestedSpecificsCard } from './ebayItemSpecificsModel'
+import type { EbayPublishRef } from './ebayListingTarget'
 
 export type Platform = 'ozon' | '1688' | 'web' | 'ie'
 export type SelectionMode = 'FORWARD_SUPPLY' | 'REVERSE_MARKET'
@@ -868,6 +869,9 @@ export interface EbayOptimizationDraft {
   complianceInputFingerprint?:string
   /** AI 生成图转存自有服务器时的部分失败警告； successes 已替换为 /ai-assets/ 永久 URL，失败项保留原 URL */
   aiAssetRehostWarnings?:string[]
+  /** 本地行被移除（存入优品）或按草稿重建时携带的 eBay 刊登 ref：进入发布找回短路的事实源，免 eBay 页轮询 */
+  publishRef?:EbayPublishRef|null
+  draftSavedAt?:string|null
   status:'PREMIUM'
   createdAt:string
   updatedAt:string
