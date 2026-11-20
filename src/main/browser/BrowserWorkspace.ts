@@ -1665,8 +1665,9 @@ export class BrowserWorkspace {
       }
     }
     const loadInBackground=(view:WebContentsView)=>{
-      this.splashEbayLoading(view)
-      void loadCredentialUrl(view).catch(error=>{
+      // 新视图初始没有可注入文档：executeJavaScript 会排队到远端首 commit 后才执行，占位将覆盖已加载页。
+      // 先落 about:blank 本地文档、等占位注入完成，再发远端加载
+      void view.webContents.loadURL('about:blank').then(()=>this.splashEbayLoading(view)).then(()=>loadCredentialUrl(view)).catch(error=>{
         this.credentialLoadFailures.set(view,error instanceof Error?error.message:String(error))
         this.emitState('web')
       })
@@ -3397,8 +3398,8 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
   // 真机新建 WebContentsView 初始 getURL() 是空串（CDP 目标却显示 about:blank），守卫必须两者都认
   private splashEbayLoading(view:WebContentsView){
     const url=view.webContents.getURL()
-    if(url!=='about:blank'&&url!=='')return
-    void view.webContents.executeJavaScript(`(()=>{document.body.innerHTML='<div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#ffffff;font:14px/1.6 -apple-system,PingFang SC,sans-serif;color:#5f6b70"><div style="width:34px;height:34px;border:3px solid #d8e6e4;border-top-color:#0f766e;border-radius:50%;animation:ebSpin .9s linear infinite"></div><div>正在打开 eBay 店铺…</div><style>@keyframes ebSpin{to{transform:rotate(360deg)}}</style></div>';return true})()`,true).catch(()=>undefined)
+    if(url!=='about:blank'&&url!=='')return Promise.resolve()
+    return view.webContents.executeJavaScript(`(()=>{document.body.innerHTML='<div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#ffffff;font:14px/1.6 -apple-system,PingFang SC,sans-serif;color:#5f6b70"><div style="width:34px;height:34px;border:3px solid #d8e6e4;border-top-color:#0f766e;border-radius:50%;animation:ebSpin .9s linear infinite"></div><div>正在打开 eBay 店铺…</div><style>@keyframes ebSpin{to{transform:rotate(360deg)}}</style></div>';return true})()`,true).catch(()=>undefined)
   }
 
   private async waitEbayViewReady(view:WebContentsView){

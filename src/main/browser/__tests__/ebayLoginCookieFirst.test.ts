@@ -345,12 +345,27 @@ describe('打开即加载态 · 免二次导航（空白修复）', () => {
     expect(calls[0]).toContain('正在打开 eBay 店铺')
   })
 
+  it('E：占位注入须返回可等待 Promise——加载链等注入完成再发远端加载，防占位落到远端首 commit 后覆盖已加载页', async () => {
+    const calls: string[] = []
+    const view = { webContents: { getURL: () => '', executeJavaScript: (script: string) => { calls.push(script); return Promise.resolve(true) } } }
+    const host = Object.create(prototype) as Record<string, unknown>
+    const pending = (prototype.splashEbayLoading as (v: unknown) => Promise<unknown>).call(host, view)
+    expect(pending).toBeInstanceOf(Promise)
+    await pending
+    expect(calls.length).toBe(1)
+    const loaded = { webContents: { getURL: () => 'https://www.ebay.com/sh/ovw', executeJavaScript: () => { throw new Error('已加载页不得注入占位') } } }
+    await (prototype.splashEbayLoading as (v: unknown) => Promise<unknown>).call(host, loaded)
+  })
+
   it('A/B 源码守卫：占位先于加载注入、加载转后台、加载成功写新鲜窗口', () => {
     const source = readFileSync(path.join(__dirname, '..', 'BrowserWorkspace.ts'), 'utf8')
     const start = source.indexOf('async openCredentialLogin')
     const body = source.slice(start, source.indexOf('async newEbayTab', start))
     expect(body).toContain('splashEbayLoading(view)')
-    expect(body.indexOf('splashEbayLoading(view)')).toBeLessThan(body.indexOf('void loadCredentialUrl(view)'))
+    expect(body).toContain("loadURL('about:blank')")
+    expect(body.indexOf("loadURL('about:blank')")).toBeLessThan(body.indexOf('splashEbayLoading(view)'))
+    expect(body.indexOf('splashEbayLoading(view)')).toBeLessThan(body.indexOf('loadCredentialUrl(view)'))
+    expect(body).toContain('.then(()=>this.splashEbayLoading(view)).then(()=>loadCredentialUrl(view))')
     expect(body).toContain('loadInBackground(previous.view)')
     expect(body).not.toMatch(/await loadCredentialUrl\(/)
     expect(body).toContain('ebayFreshLoadUntil.set(view')
