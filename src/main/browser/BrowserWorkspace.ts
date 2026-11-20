@@ -2,6 +2,7 @@ import { writeFileSync } from 'node:fs'
 import { app, BaseWindow, BrowserWindow, WebContents, WebContentsView, clipboard, type Cookie, type Session } from 'electron'
 import { AMAZON_LISTING_EVIDENCE_SCRIPT, AMAZON_REVIEW_EVIDENCE_SCRIPT, AMAZON_SAMPLES_SCRIPT, type AmazonListingEvidence, type AmazonMarketSample, type AmazonReviewEvidence } from '../../shared/amazonScraper'
 import { matchSellableInventoryText } from '../../shared/sellableInventory'
+import { readEbayPublishedLanding } from '../../shared/ebayListingTarget'
 import { pickSupplyDescriptionText } from '../../shared/supplyDescription'
 import { pickSupplyFees } from '../../shared/supplyFeePick'
 import { pickDropshipShippingFee } from '../../shared/supplyDropshipFee'
@@ -2256,6 +2257,37 @@ export class BrowserWorkspace {
     }
     return {itemId:'',draftId:'',url:tab.view.webContents.getURL()}
   }
+  /** 对账兜底：逐行去在售栏找正向上架证据；店铺页签停在刊登编辑页时跳过本轮、对账后还原对账前地址，不拉走用户开着的页 */
+  async reconcileEbayPublishedDrafts(accountId:string, rows:Array<{id:string;title:string}>):Promise<Array<{localProductId:string;itemId:string}>> {
+    const tabs=[...this.detailTabs.values()].filter(item=>item.scopeId===accountId&&!item.view.webContents.isDestroyed())
+    const tab=tabs.find(item=>item.view===this.attached)||tabs[0]
+    if(!tab)return []
+    const before=tab.view.webContents.getURL()
+    if(/\/(lstng|sl\/list)/i.test(before))return []
+    const out:Array<{localProductId:string;itemId:string}>=[]
+    for(const row of rows){
+      try{const found=await this.findEbayActiveListingIdByTitle(row.title);if(/^\d{6,}$/.test(found.itemId))out.push({localProductId:row.id,itemId:found.itemId})}catch{/* 单行读回失败不阻断其余行，下轮再试 */}
+    }
+    if(before!==tab.view.webContents.getURL())await tab.view.webContents.loadURL(before).catch(()=>undefined)
+    return out
+  }
+  /** 刮在售栏指定 itemId 行字段供转出后落线上产品；页签停在刊登编辑页时跳过、刮完还原地址，不拉走用户开着的页 */
+  async readEbayActiveListingRow(accountId:string, itemId:string):Promise<{title:string;price:string;currency:string;quantity:number;imageUrl:string;viewUrl:string}|null> {
+    const tabs=[...this.detailTabs.values()].filter(item=>item.scopeId===accountId&&!item.view.webContents.isDestroyed())
+    const tab=tabs.find(item=>item.view===this.attached)||tabs[0]
+    if(!tab)return null
+    const before=tab.view.webContents.getURL()
+    if(/\/(lstng|sl\/list)/i.test(before))return null
+    if(!/\/sh\/lst\/active/.test(before))await tab.view.webContents.loadURL('https://www.ebay.com/sh/lst/active').catch(()=>undefined)
+    let row:{title:string;price:string;currency:string;quantity:number;imageUrl:string;viewUrl:string}|null=null
+    for(let attempt=0;attempt<10;attempt+=1){
+      await this.sleep(900)
+      row=await tab.view.webContents.executeJavaScript(`(()=>{const id=${JSON.stringify(itemId)};const a=[...document.querySelectorAll('a[href*="/itm/"]')].find(x=>(x.href||'').includes('/itm/'+id));if(!a)return null;const tr=a.closest('tr,[role=row],li,article')||a.parentElement;const clean=v=>(v||'').replace(/\\s+/g,' ').trim();const img=tr?tr.querySelector('img'):null;const cells=tr?[...tr.querySelectorAll('td')]:[];const priceText=clean((cells.find(c=>/\\$|RMB|￥/.test(c.textContent||''))||{}).textContent||'');const m=priceText.match(/\\$\\s*([0-9][0-9,.]*)/);const qtyCell=cells.find(c=>/^\\d+$/.test(clean(c.textContent)));return {title:clean(a.textContent),price:m?m[1].replace(/,/g,''):((priceText.match(/([0-9][0-9,.]*)/)||[])[1]||''),currency:m?'USD':(/RMB|￥/.test(priceText)?'CNY':'USD'),quantity:qtyCell?parseInt(clean(qtyCell.textContent),10):0,imageUrl:img?(img.src||''):'',viewUrl:'https://www.ebay.com/itm/'+id}})()`,true) as {title:string;price:string;currency:string;quantity:number;imageUrl:string;viewUrl:string}|null
+      if(row)break
+    }
+    if(before!==tab.view.webContents.getURL())await tab.view.webContents.loadURL(before).catch(()=>undefined)
+    return row
+  }
   async readEbayCurrentTitle():Promise<{title:string;url:string}> {
     let tab=this.detailTabs.get(this.activeTabId)
     const isLstng=(u:string)=>/^https:\/\/([a-z0-9-]+\.)*ebay\.com\/lstng\?/.test(u)
@@ -2280,8 +2312,7 @@ export class BrowserWorkspace {
     let url=tab.view.webContents.getURL()
     for(let attempt=0;attempt<15;attempt+=1){await this.sleep(800);url=tab.view.webContents.getURL();if(!isLstng(url))break}
     // 成功须有正向上架证据（卖家列表/Item 页）；仅「离开 lstng」会把验证码/错误页误判成已上架
-    const published=/\/sl\/list|itemId=\d+|\/itm\/\d+/.test(url)&&!/captcha|splashui|\/error/.test(url)
-    const itemId=(/itemId=(\d+)/.exec(url)||/\/itm\/(?:[^/]*\/)?(\d+)/.exec(url)||[])[1]||''
+    const {published,itemId}=readEbayPublishedLanding(url)
     return {status:published?'PUBLISHED':'FAILED',url,message:published?'已点最终「刊登」，商品已真正上架':(isLstng(url)?'已点刊登但页面未离开草稿页，请人工核对是否上架':'已点刊登但落地页非上架成功页（疑似验证码/错误页），未确认上架，请人工核对'),publishedAt:new Date().toISOString(),itemId}
   }
   async saveEbayCurrentDraft():Promise<{status:'SAVED'|'FAILED';url:string;message:string;savedAt:string}> {
@@ -3425,8 +3456,9 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
       const passwordError=/password.{0,30}(incorrect|invalid|doesn't match|wrong)|incorrect password|密码.{0,12}(错误|不正确)|账号或密码/i.test(text);
       const securityPage=Boolean(oneTimeCode||captcha)||(!password&&!username&&/security code|verification code|verify (?:it'?s|your)|验证码|安全验证|短信验证|邮箱验证|确认是您本人|confirm your identity/i.test(text));
       const passkey=!password&&/passkey|安全密钥|通行密钥/i.test(text);
+      const listingForm=!lowerUrl.includes('signin')&&!lowerUrl.includes('login')&&!securityPage&&/\\/(lstng|sl\\/list)/i.test(new URL(url).pathname);
       let phase='UNKNOWN';
-      if(sellerHub||signedInLink)phase='ONLINE';
+      if(sellerHub||signedInLink||listingForm)phase='ONLINE';
       else if(passwordError)phase='ERROR';
       else if(securityPage||passkey)phase='VERIFICATION';
       else if(password)phase='PASSWORD';

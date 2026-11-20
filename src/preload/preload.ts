@@ -488,6 +488,8 @@ contextBridge.exposeInMainWorld('desktop', {
     readCurrentEbaySettings: (storeId:string):Promise<{paymentPolicy:{current:string;options:Array<{id:string;text:string}>};shippingPolicy:{current:string;options:Array<{id:string;text:string}>};returnPolicy:{current:string;options:Array<{id:string;text:string}>};itemLocation:string;postalCode:string}> => ipcRenderer.invoke('ebay:read-current-settings',storeId),
     specificsLlmSuggestions: (input:{title:string;descriptionText:string;slots:Array<{name:string;control:string;options:string[];maxLength:number}>}):Promise<Array<{name:string;value:string}>> => ipcRenderer.invoke('ebay:specifics-llm',input),
     removeLocalProduct: (localProductId:string):Promise<boolean> => ipcRenderer.invoke('ebay:local-products:remove',localProductId),
+    migratePublished: (storeId:string, localProductId:string, itemId:string):Promise<{migrated:boolean;title:string;itemId:string}> => ipcRenderer.invoke('ebay:local-products:migrate-published',storeId,localProductId,itemId),
+    reconcilePublished: (storeId:string,excludeIds?:string[]):Promise<Array<{localProductId:string;title:string;itemId:string}>> => ipcRenderer.invoke('ebay:local-products:reconcile-published',storeId,excludeIds),
     removeLocalListing: (storeId:string,listingId:string):Promise<boolean> => ipcRenderer.invoke('ebay:listings:remove-local',storeId,listingId),
     updateListingCategory: (storeId:string,listingId:string,categoryId:string):Promise<EbayListing> => ipcRenderer.invoke('ebay:listings:category:update',storeId,listingId,categoryId),
     syncListingDetails: (storeId:string,listingId:string):Promise<EbayListing> => ipcRenderer.invoke('ebay:listings:details:sync',storeId,listingId),

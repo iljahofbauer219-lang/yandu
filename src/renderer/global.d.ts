@@ -428,6 +428,8 @@ declare global {
         readCurrentEbaySettings(storeId:string):Promise<{paymentPolicy:{current:string;options:Array<{id:string;text:string}>};shippingPolicy:{current:string;options:Array<{id:string;text:string}>};returnPolicy:{current:string;options:Array<{id:string;text:string}>};itemLocation:string;postalCode:string}>
         specificsLlmSuggestions(input:{title:string;descriptionText:string;slots:Array<{name:string;control:string;options:string[];maxLength:number}>}):Promise<Array<{name:string;value:string}>>
         removeLocalProduct(localProductId:string):Promise<boolean>
+        migratePublished(storeId:string,localProductId:string,itemId:string):Promise<{migrated:boolean;title:string;itemId:string}>
+        reconcilePublished(storeId:string,excludeIds?:string[]):Promise<Array<{localProductId:string;title:string;itemId:string}>>
         removeLocalListing(storeId:string,listingId:string):Promise<boolean>
         updateListingCategory(storeId:string,listingId:string,categoryId:string):Promise<EbayListing>
         syncListingDetails(storeId:string,listingId:string):Promise<EbayListing>

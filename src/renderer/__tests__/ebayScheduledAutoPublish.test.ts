@@ -77,7 +77,7 @@ describe('自动发布 · chip 状态机与 once 到点放行', () => {
   })
   it('刊登成功须正向上架证据，验证码/错误页不得误判 PUBLISHED', () => {
     const pub = ws.split('async publishEbayCurrentListing(')[1]?.split('async saveEbayCurrentDraft(')[0] ?? ''
-    expect(pub, '正向证据判据').toContain("const published=/\\/sl\\/list|itemId=\\d+|\\/itm\\/\\d+/.test(url)&&!/captcha|splashui|\\/error/.test(url)")
+    expect(pub, '正向证据判据改共用 shared 单一真值（逐字用例见 ebayPublishedLanding.test.ts）').toContain('const {published,itemId}=readEbayPublishedLanding(url)')
     expect(pub, '非成功页中文点名').toContain('落地页非上架成功页（疑似验证码/错误页）')
   })
 })

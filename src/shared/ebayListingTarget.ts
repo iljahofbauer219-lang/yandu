@@ -38,9 +38,15 @@ export interface EbayListingTarget {
 }
 
 const RETURN_URL = 'https://www.ebay.com/sh/lst/active'
+const DRAFT_RETURN_URL = 'https://www.ebay.com/sh/lst/drafts'
 const PRELIST_URL = 'https://www.ebay.com/sl/prelist/suggest?sr=shstart'
 // eBay 类目 ID 是纯数字且位数远小于商品编号；上界 12 位同时把误填的商品编号挡在 AddItem 之外。
 const EBAY_CATEGORY_ID = /^\d{2,12}$/
+
+/** 草稿「继续完成草稿」编辑页：ReturnURL 指回草稿栏，缺它时 eBay 落地页会偏离续作界面（2026-11-19 用户真机给定网址）。 */
+export function buildEbayDraftContinueUrl(draftId: string): string {
+  return `https://www.ebay.com/lstng?draftId=${encodeURIComponent(draftId)}&mode=AddItem&ReturnURL=${encodeURIComponent(DRAFT_RETURN_URL)}`
+}
 
 export function resolveEbayListingTarget(input: EbayListingTargetInput): EbayListingTarget {
   const categoryId = (input.categoryId || '').replace(/\s+/g, '')
@@ -57,7 +63,7 @@ export function resolveEbayListingTarget(input: EbayListingTargetInput): EbayLis
     }
     return {
       kind: 'add',
-      url: `https://www.ebay.com/lstng?draftId=${encodeURIComponent(ref.id)}&mode=AddItem`,
+      url: buildEbayDraftContinueUrl(ref.id),
       note: `复用该本地产品已有的 eBay 草稿 ${ref.id}，不重复新建草稿；核对后由您提交。`
     }
   }
@@ -100,4 +106,15 @@ export function ebayPublishRefFromUrl(url: string): EbayPublishRef | null {
   const item = /[?&]itemId=(\d{6,})/.exec(url || '') || /\/itm\/(?:[^/]+\/)?(\d{6,})/.exec(url || '')
   if (item) return { kind: 'listing', id: item[1] }
   return null
+}
+
+/**
+ * 正向上架证据：仅卖家列表/Item 页算已上架；captcha/splashui/error 即使带 itemId 也绝不认，
+ * 否则会把验证墙误判成上架而误删本地行。自动发布链与「已上架转出」实时通道共用此单一真值。
+ */
+export function readEbayPublishedLanding(url: string): { published: boolean; itemId: string } {
+  const target = url || ''
+  const published = /\/sl\/list|itemId=\d+|\/itm\/\d+/.test(target) && !/captcha|splashui|\/error/.test(target)
+  const itemId = published ? (/itemId=(\d+)/.exec(target) || /\/itm\/(?:[^/]*\/)?(\d+)/.exec(target) || [])[1] || '' : ''
+  return { published, itemId }
 }

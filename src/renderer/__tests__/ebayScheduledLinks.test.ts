@@ -42,11 +42,11 @@ describe('本地定时发布 · 已存草稿轻量两步（开草稿+刊登，�
     expect(source).toContain('skipFill:savedDraft')
     expect(source).toContain('prepare:()=>savedDraft?openSavedDraftForRun(product):window.desktop.ebay.prepareLocalProductRevision(id)')
   })
-  it('openSavedDraftForRun 与草稿查看同路由（lstng?draftId&mode=AddItem）＋navigate＋等标题就绪', () => {
+  it('openSavedDraftForRun 与草稿查看同走共享构造器（lstng?draftId&mode=AddItem&ReturnURL）＋navigate＋等标题就绪', () => {
     const start = source.indexOf('const openSavedDraftForRun=')
     expect(start).toBeGreaterThan(-1)
     const body = source.slice(start, start + 1200)
-    expect(body).toContain("mode=AddItem")
+    expect(body).toContain('buildEbayDraftContinueUrl(ref.id)')
     expect(body).toContain("window.desktop.browser.navigate('web',url)")
     expect(body).toContain('readCurrentDraftTitle()')
   })
