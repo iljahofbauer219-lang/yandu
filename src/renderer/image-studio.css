@@ -484,14 +484,12 @@ button.ebay-market-card-media { width:100%; border:0; cursor:pointer; font:inher
 .supply-error-modal-actions button.primary{background:#087a75;border-color:#087a75;color:#fff}
 
 /* 信息框归位左栏槽位（2026-11-14 用户口径）：堆叠在左栏底部，toast 不再 fixed 遮罩内容 */
-.ebay-head-info{margin-left:auto;display:grid;gap:6px;align-content:start;max-width:min(560px,44vw);min-width:0}
-.ebay-head-info .ebay-download-toast{position:static;width:auto;box-shadow:none;grid-template-columns:24px minmax(0,1fr) 20px;padding:8px 10px;font-size:11px;line-height:16px}
-.ebay-head-info .ebay-download-toast>span{width:24px;height:24px;font-size:13px}
-.ebay-head-info .ebay-download-toast b{font-size:11px;line-height:16px}
-.ebay-head-info .ebay-success-notice,.ebay-head-info .ebay-error-notice{align-items:flex-start;font-size:11px;line-height:16px;margin-top:0;white-space:normal}
-.ebay-head-info .ebay-auto-login-banner{margin-top:0}
-.ebay-head-info .ebay-success-notice,.ebay-head-info .ebay-error-notice{position:static;min-height:0}
-.ebay-head-info .ebay-auto-login-banner{margin:0;min-height:0;font-size:11px;line-height:16px;white-space:normal;align-items:flex-start}
+.ebay-workbench-info{display:grid;gap:8px;margin-top:10px;align-content:start}
+.ebay-workbench-info .ebay-download-toast{position:static;width:auto;box-shadow:none;grid-template-columns:24px minmax(0,1fr) 20px;padding:10px 11px;font-size:11px;line-height:16px}
+.ebay-workbench-info .ebay-download-toast>span{width:24px;height:24px;font-size:13px}
+.ebay-workbench-info .ebay-download-toast b{font-size:11px;line-height:16px}
+.ebay-workbench-info .ebay-success-notice,.ebay-workbench-info .ebay-error-notice{align-items:flex-start;font-size:11px;line-height:16px;margin-top:0;white-space:normal;position:static;min-height:0}
+.ebay-workbench-info .ebay-auto-login-banner{margin-top:0;margin-bottom:0;font-size:11px;line-height:16px;white-space:normal;align-items:flex-start;min-height:0}
 
 /* C 现状精修（2026-11-14 用户拍板）：不动布局，修浏览器外壳可读性与一致性。
    字号 7–8px→12px；地址栏控件统一 32px 高；间距 4/8/12/16 scale；补 focus-visible；页签溢出两端渐隐。 */
