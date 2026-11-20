@@ -3393,9 +3393,11 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     return result
   }
 
-  // 挂载后先向 about:blank 注入加载占位，首载期间用户看到的是加载态而非纯白空白
+  // 挂载后先注入加载占位，首载期间用户看到的是加载态而非纯白空白。
+  // 真机新建 WebContentsView 初始 getURL() 是空串（CDP 目标却显示 about:blank），守卫必须两者都认
   private splashEbayLoading(view:WebContentsView){
-    if(view.webContents.getURL()!=='about:blank')return
+    const url=view.webContents.getURL()
+    if(url!=='about:blank'&&url!=='')return
     void view.webContents.executeJavaScript(`(()=>{document.body.innerHTML='<div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#ffffff;font:14px/1.6 -apple-system,PingFang SC,sans-serif;color:#5f6b70"><div style="width:34px;height:34px;border:3px solid #d8e6e4;border-top-color:#0f766e;border-radius:50%;animation:ebSpin .9s linear infinite"></div><div>正在打开 eBay 店铺…</div><style>@keyframes ebSpin{to{transform:rotate(360deg)}}</style></div>';return true})()`,true).catch(()=>undefined)
   }
 

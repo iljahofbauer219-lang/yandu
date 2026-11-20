@@ -335,6 +335,16 @@ describe('打开即加载态 · 免二次导航（空白修复）', () => {
     expect(view.submissions).toEqual([])
   })
 
+  it('D：真机口径新视图初始 URL 为空串：占位仍须注入（守卫不得只认 about:blank）', async () => {
+    const calls: string[] = []
+    const view = { webContents: { getURL: () => '', executeJavaScript: (script: string) => { calls.push(script); return Promise.resolve(true) } } }
+    const host = Object.create(prototype) as Record<string, unknown>
+    ;(prototype.splashEbayLoading as (v: unknown) => void).call(host, view)
+    await new Promise(r => setTimeout(r, 0))
+    expect(calls.length, '空串初始 URL 必须注入占位').toBe(1)
+    expect(calls[0]).toContain('正在打开 eBay 店铺')
+  })
+
   it('A/B 源码守卫：占位先于加载注入、加载转后台、加载成功写新鲜窗口', () => {
     const source = readFileSync(path.join(__dirname, '..', 'BrowserWorkspace.ts'), 'utf8')
     const start = source.indexOf('async openCredentialLogin')
@@ -345,7 +355,7 @@ describe('打开即加载态 · 免二次导航（空白修复）', () => {
     expect(body).not.toMatch(/await loadCredentialUrl\(/)
     expect(body).toContain('ebayFreshLoadUntil.set(view')
     const splash = source.slice(source.indexOf('private splashEbayLoading'), source.indexOf('private async waitEbayViewReady'))
-    expect(splash).toContain("getURL()!=='about:blank'")
+    expect(splash).toContain("url!=='about:blank'&&url!==''")
     expect(splash).toContain('正在打开 eBay 店铺')
   })
 })
