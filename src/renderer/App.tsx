@@ -4133,7 +4133,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   // 过滤掉尺寸过小的图片（最长边<500px），保持与「查看页面」口径一致
   const selectedSourceImages=selectedSourceImagesRaw.filter(url=>{
     const size=remoteUrlToSizeMap.get(url)
-    if(!size)return true // 无尺寸信息则保留（兼容eBay Listing中未在本地快照的图片）
+    if(!size||Math.max(size.width,size.height)<=0)return true // 无尺寸信息或 FAILED 媒体的 0 值尺寸视为未知，保留（0×0 不是「已知过小」）
     return Math.max(size.width,size.height)>=500
   })
   const selectedSourceImagesKey=selectedSourceImages.join('|')
