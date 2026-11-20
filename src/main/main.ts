@@ -1025,6 +1025,13 @@ function updateEbayLocalProduct(localProductId:string,changes:EbayLocalProductUp
   return database.saveEbayLocalProductSnapshot(completeEbayLocalSnapshot({listing,details,media,capturedAt}))
 }
 
+// 环节迁移：上架成功后同源优品草稿写回 listing 态，优品仓库据此让位（记录保留为历史）
+function markEbayDraftPublished(storeId:string,listingId:string,itemId:string){
+  if(!database||!/^\d{6,}$/.test(itemId))return
+  const draft=database.getEbayOptimizationDrafts(storeId).find(item=>item.listingId===listingId)
+  if(!draft||draft.publishRef?.kind==='listing')return
+  database.saveEbayOptimizationDraft({...draft,publishRef:{kind:'listing',id:itemId,at:new Date().toISOString()}})
+}
 function seedEbayLocalProductFromPremiumDraft(storeId:string,draft:EbayOptimizationDraft,draftId:string):EbayLocalProduct {
   if(!database)throw new Error('数据库尚未初始化')
   const store=database.getEbayStores().find(item=>item.id===storeId)
@@ -3594,6 +3601,7 @@ ipcMain.handle('ebay:publish-current-listing', async (_event, localProductId?:st
   const result=await workspace.publishEbayCurrentListing()
   // 发布成功＝环节迁移：写回 listing 态，定时发布列表/调度据此排除，线上产品经同步可见
   if(result.status==='PUBLISHED'&&localProductId&&database)database.setEbayLocalProductPublishRef(localProductId,{kind:'listing',id:result.itemId,at:new Date().toISOString()})
+  if(result.status==='PUBLISHED'&&localProductId&&database){const pubRow=database.getEbayLocalProducts().find(item=>item.id===localProductId);if(pubRow)markEbayDraftPublished(pubRow.storeId,pubRow.listingId,result.itemId)}
   return result
 })
 ipcMain.handle('ebay:read-current-settings', async (_event, storeId:string) => {

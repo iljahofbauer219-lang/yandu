@@ -872,6 +872,8 @@ export interface EbayOptimizationDraft {
   /** 本地行被移除（存入优品）或按草稿重建时携带的 eBay 刊登 ref：进入发布找回短路的事实源，免 eBay 页轮询 */
   publishRef?:EbayPublishRef|null
   draftSavedAt?:string|null
+  /** 打回本地历史标记：置位后双向阶段过滤忽略该草稿（优品视图让位、本地视图接纳重建行），记录保留为历史 */
+  returnedAt?:string|null
   status:'PREMIUM'
   createdAt:string
   updatedAt:string

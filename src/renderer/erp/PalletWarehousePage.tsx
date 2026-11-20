@@ -92,13 +92,15 @@ export function recommendCatalogPath(source: { title?: string; category?: string
 
 const DAY_MS = 86400000
 
-export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'warehouse', onSendToEbay }: {
+export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'warehouse', onSendToEbay, ebaySentIds }: {
   canEdit?: boolean
   onReturn?: (item: PalletWarehouseItem) => Promise<void> | void
   /** warehouse = 总货盘；mine = 我的货盘（个人入选视图，界面与总货盘一致） */
   scope?: 'warehouse' | 'mine'
   /** 我的货盘：送入 eBay 工作台本地产品（成功后由调用方跳转） */
   onSendToEbay?: (warehouseProductId: string) => Promise<void> | void
+  /** 已送入 eBay 工作台的货盘编号集合（本地产品/优品草稿同源），仅用于按钮已送态展示 */
+  ebaySentIds?: ReadonlySet<string>
 }) {
   const catalogPanel = usePanelCollapse('pallet-catalog')
   const [hubTab, setHubTab] = useState<HubTab>('全部产品')
@@ -543,6 +545,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
     // 主图与「查看页面」共用同一下载图文页链路：仅 DOWNLOADED 档案可点开
     const downloadId = item.warehouseProductId && warehouseDownloads[item.warehouseProductId]?.status === 'DOWNLOADED' ? item.warehouseProductId : ''
     const openStoredDownload = () => { if (!downloadId) return; void window.desktop.warehouses.openDownload(downloadId).catch(reason => failInbound(reason, '打开下载图文页')) }
+    const sentToEbay = Boolean(ebaySentIds?.has(item.warehouseProductId))
     return <article className={`product-card candidate-product-card supply-source-card${delisted ? ' delisted-product-card' : ''}`} key={item.id}>
       <div className="candidate-card-tools">{batchMode ? <label title="选择商品"><input type="checkbox" checked={checkedKeys.has(item.id)} onChange={() => toggleKey(item.id)}/></label> : null}</div>
       <button type="button" className="product-image" aria-label={downloadId ? `查看下载图文页：${item.title}` : `查看商品图片：${item.title}`} title={downloadId ? '点击查看下载图文页' : undefined} onClick={downloadId ? () => openStoredDownload() : undefined}>
@@ -580,7 +583,7 @@ export function PalletWarehousePage({ canEdit = false, onReturn, scope = 'wareho
                 ? <button className="my-pallet-added" title="点击移出我的货盘" onClick={() => removeFromMyPallet([item.warehouseProductId])}>已加入</button>
                 : <button onClick={() => addToMyPallet([item.warehouseProductId])}>加入我的货盘</button>
             ) : <>
-              <button className="primary" title="送入 eBay 工作台本地产品" onClick={() => void sendToEbay(item.warehouseProductId)}>送eBay</button>
+              <button className={sentToEbay ? 'pallet-ebay-sent' : 'primary'} title={sentToEbay ? '已送入 eBay 工作台，点击仍可再次送入' : '送入 eBay 工作台本地产品'} onClick={() => void sendToEbay(item.warehouseProductId)}>{sentToEbay ? '已送eBay' : '送eBay'}</button>
               <button className="candidate-delete" onClick={() => removeFromMyPallet([item.warehouseProductId])}>移除</button>
             </>}
             {scope === 'warehouse' && canEdit && <button onClick={() => returnPalletItem(item)}>退回入库处理</button>}

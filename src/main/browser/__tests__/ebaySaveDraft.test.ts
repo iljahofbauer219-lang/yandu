@@ -19,7 +19,7 @@ describe('eBay 保存草稿 · 主进程点击通道', () => {
     expect(main, 'publish IPC 接受本地产品 id').toContain("ipcMain.handle('ebay:publish-current-listing', async (_event, localProductId?:string)")
     expect(main, 'PUBLISHED 写回 listing 态').toContain("kind:'listing'")
     expect(preload, 'preload 透传 id').toContain('publishCurrentListing: (localProductId?:string)')
-    expect(app, '定时候选排除已上架').toContain("const scheduledCandidates=localProducts.filter(product=>product.publishRef?.kind!=='listing')")
+    expect(app, '定时候选排除已上架＋环节互斥（须有未打回同源草稿）').toContain("const scheduledCandidates=localProducts.filter(product=>product.publishRef?.kind!=='listing'&&optimizationDrafts.some(draft=>!draft.returnedAt&&draft.listing.listingId===product.listingId))")
     expect(app, '列表渲染用候选集').toContain('scheduledCandidates.length?scheduledCandidates.map(product=>{')
     expect(app, '到点调度跳过已上架').toContain("if(product.publishRef?.kind==='listing')return")
     expect(app, '自动发布传产品 id').toContain('window.desktop.ebay.publishCurrentListing(product.id)')
