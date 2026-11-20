@@ -60,6 +60,25 @@ const CATEGORY_SHORT_LABELS: Record<EbayImageCategory, string> = {
 /** 默认每类张数：主图与细节图通常需要更多，痛点/场景受事实条数限制 */
 export const DEFAULT_EBAY_IMAGE_CATEGORY_COUNTS: EbayImageCategoryCounts = { HERO: 3, PRODUCT: 3, PAIN_POINT: 2, SCENE: 2 }
 
+/** 简版档新默认：四类全 0（0 代表该类不生成） */
+export const ZERO_EBAY_IMAGE_CATEGORY_COUNTS: EbayImageCategoryCounts = { HERO: 0, PRODUCT: 0, PAIN_POINT: 0, SCENE: 0 }
+
+/** 旧默认签名（模型档＋2/1/1/1）：仅恰等于此值才一次性迁移为简版 */
+export const LEGACY_IMAGE_STAGE_DEFAULT_COUNTS: EbayImageCategoryCounts = { HERO: 2, PRODUCT: 1, PAIN_POINT: 1, SCENE: 1 }
+
+/** 档位默认判据：无持久化/档位缺失交给新默认（简版）；显式简版或恰旧默认→简版（后者标 migrated 供一次性写回）；其余持久化尊重不覆盖 */
+export function migrateEbayImageStageLane(parsed: { lane?: 'simple' | 'model'; counts?: Partial<EbayImageCategoryCounts> | null } | null): { lane: 'simple' | 'model' | undefined; migrated: boolean } {
+  if (!parsed) return { lane: undefined, migrated: false }
+  if (parsed.lane === 'simple') return { lane: 'simple', migrated: false }
+  const c = parsed.counts
+  if (c
+    && c.HERO === LEGACY_IMAGE_STAGE_DEFAULT_COUNTS.HERO
+    && c.PRODUCT === LEGACY_IMAGE_STAGE_DEFAULT_COUNTS.PRODUCT
+    && c.PAIN_POINT === LEGACY_IMAGE_STAGE_DEFAULT_COUNTS.PAIN_POINT
+    && c.SCENE === LEGACY_IMAGE_STAGE_DEFAULT_COUNTS.SCENE) return { lane: 'simple', migrated: true }
+  return { lane: parsed.lane === 'model' ? 'model' : undefined, migrated: false }
+}
+
 export const EBAY_IMAGE_CATEGORY_COUNT_MIN = 1
 export const EBAY_IMAGE_CATEGORY_COUNT_MAX = 4
 

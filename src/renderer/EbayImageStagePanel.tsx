@@ -5,6 +5,7 @@ import {
   EBAY_IMAGE_CATEGORY_COUNT_MAX,
   EBAY_IMAGE_CATEGORY_COUNT_MIN,
   MARKETING_FACTS_VERSION,
+  ZERO_EBAY_IMAGE_CATEGORY_COUNTS,
   buildCategoryGenerationPrompt,
   buildCategoryShotCards,
   buildMarketingFactRows,
@@ -12,6 +13,7 @@ import {
   ebayImageCountsFromLegacyPerCount,
   marketingFactCategoryLabel,
   marketingFactCategoryShortLabel,
+  migrateEbayImageStageLane,
   normalizeEbayImageCategoryCounts,
   selectCategoryReferences,
   withEbayImageCategoryCount,
@@ -139,7 +141,12 @@ function readPersisted(listingId: string): PersistedState | null {
     const counts = parsed.counts && typeof parsed.counts === 'object'
       ? normalizeEbayImageCategoryCounts(parsed.counts)
       : ebayImageCountsFromLegacyPerCount(parsed.perCount)
-    return { mode: parsed.mode === 'TEXT_COMBO' ? 'TEXT_COMBO' : 'PURE', counts, rules: normalizeEbayImageRules(parsed.rules), presence: normalizeEbayImageModelPresence(parsed.presence), facts: parsed.facts || null, generated: Array.isArray(parsed.generated) ? parsed.generated : [], keptByCategory: parsed.keptByCategory || {}, lane: parsed.lane === 'simple' ? 'simple' : 'model', simpleCounts: parsed.simpleCounts && typeof parsed.simpleCounts === 'object' ? normalizeSimpleCategoryCounts(parsed.simpleCounts) : undefined, simpleTriage: parsed.simpleTriage || null, simpleRegen: parsed.simpleRegen && typeof parsed.simpleRegen === 'object' ? parsed.simpleRegen : {}, simpleGenerated: Array.isArray(parsed.simpleGenerated) ? parsed.simpleGenerated : [], simpleOrder: Array.isArray(parsed.simpleOrder) ? parsed.simpleOrder : [], simpleDeleted: Array.isArray(parsed.simpleDeleted) ? parsed.simpleDeleted : [] }
+    const laneDecision = migrateEbayImageStageLane({ lane: parsed.lane === 'simple' || parsed.lane === 'model' ? parsed.lane : undefined, counts })
+    // 旧默认（模型档＋2/1/1/1）一次性迁移为简版：写回防再次触发；写回失败不阻断本次读取
+    if (laneDecision.migrated) {
+      try { localStorage.setItem(`ebay-image-simplified:v1:${listingId}`, JSON.stringify({ ...parsed, lane: 'simple' })) } catch { /* 忽略写回失败 */ }
+    }
+    return { mode: parsed.mode === 'TEXT_COMBO' ? 'TEXT_COMBO' : 'PURE', counts, rules: normalizeEbayImageRules(parsed.rules), presence: normalizeEbayImageModelPresence(parsed.presence), facts: parsed.facts || null, generated: Array.isArray(parsed.generated) ? parsed.generated : [], keptByCategory: parsed.keptByCategory || {}, lane: laneDecision.lane, simpleCounts: parsed.simpleCounts && typeof parsed.simpleCounts === 'object' ? normalizeSimpleCategoryCounts(parsed.simpleCounts) : undefined, simpleTriage: parsed.simpleTriage || null, simpleRegen: parsed.simpleRegen && typeof parsed.simpleRegen === 'object' ? parsed.simpleRegen : {}, simpleGenerated: Array.isArray(parsed.simpleGenerated) ? parsed.simpleGenerated : [], simpleOrder: Array.isArray(parsed.simpleOrder) ? parsed.simpleOrder : [], simpleDeleted: Array.isArray(parsed.simpleDeleted) ? parsed.simpleDeleted : [] }
   } catch {
     return null
   }
@@ -156,11 +163,11 @@ export default function EbayImageStagePanel(props: Props) {
   const [factsBusy, setFactsBusy] = useState(false)
   const [factsError, setFactsError] = useState('')
   const [modelId, setModelId] = useState('')
-  // 优化档位：简版优化（原图优化→多生图片→图片排序）/ 模型优化（事实卡→规则→生成→采纳全链），默认模型优化保持老用户所见不变
-  const [lane, setLane] = useState<'simple' | 'model'>(persisted.current?.lane === 'simple' ? 'simple' : 'model')
+  // 优化档位：简版优化（原图优化→多生图片→图片排序）/ 模型优化（事实卡→规则→生成→采纳全链），默认简版；仅显式持久化模型档才保持模型
+  const [lane, setLane] = useState<'simple' | 'model'>(persisted.current?.lane === 'model' ? 'model' : 'simple')
   const [generated, setGenerated] = useState<GeneratedImage[]>(persisted.current?.generated || [])
   const [keptByCategory, setKeptByCategory] = useState<Partial<Record<EbayImageCategory, string[]>>>(persisted.current?.keptByCategory || {})
-  const [simpleCounts, setSimpleCounts] = useState<EbayImageCategoryCounts>(persisted.current?.simpleCounts || { ...DEFAULT_EBAY_IMAGE_CATEGORY_COUNTS })
+  const [simpleCounts, setSimpleCounts] = useState<EbayImageCategoryCounts>(persisted.current?.simpleCounts || { ...ZERO_EBAY_IMAGE_CATEGORY_COUNTS })
   const [simpleTriage, setSimpleTriage] = useState<EbaySimpleTriage | null>(persisted.current?.simpleTriage || null)
   const [simpleRegen, setSimpleRegen] = useState<Record<string, { url: string; model?: string }>>(persisted.current?.simpleRegen || {})
   const [simpleGenerated, setSimpleGenerated] = useState<GeneratedImage[]>(persisted.current?.simpleGenerated || [])
