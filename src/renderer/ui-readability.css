@@ -142,7 +142,7 @@ form label{font-size:12px;line-height:17px}
 .warehouse-source-tabs small,.warehouse-toolbar span,.warehouse-toolbar input{font-size:12px}
 
 /* eBay platform shell */
-.ebay-store-bar{height:var(--ebay-band-h);min-height:0;gap:12px;padding:0 20px;align-items:center}
+.ebay-store-bar{min-height:var(--ebay-band-h);height:auto;gap:12px;padding:7px 20px;align-items:center}
 .ebay-platform-identity{width:190px;gap:12px}
 .ebay-platform-identity>span{width:32px;height:32px;border-radius:10px;font-size:18px}
 .ebay-platform-identity b{font-size:17px;line-height:23px}
@@ -390,7 +390,7 @@ form label{font-size:12px;line-height:17px}
   .workspace,.publishing-layout,.ebay-library-layout,.ebay-optimize-layout{grid-template-columns:1fr}
   .task-panel{max-height:45vh}
   .warehouse-module-nav{grid-template-columns:1fr 1fr}
-  .ebay-store-bar{align-items:center;flex-wrap:nowrap;overflow-x:auto}
+  .ebay-store-bar{align-items:center;flex-wrap:nowrap;overflow:visible}
   .ebay-platform-identity{width:100%}
   .ebay-business-nav{padding-inline:8px}
   .ebay-business-nav button{min-width:126px;padding-inline:12px}

@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
  */
 const appSource = readFileSync(path.join(__dirname, '..', 'App.tsx'), 'utf8')
 const cssSource = readFileSync(path.join(__dirname, '..', 'image-studio.css'), 'utf8')
+const readabilitySource = readFileSync(path.join(__dirname, '..', 'ui-readability.css'), 'utf8')
 
 describe('信息提示顶栏归位 · 渲染点', () => {
   it('信息 fragment 含登录横幅/notice/error/toast 四者', () => {
@@ -72,5 +73,15 @@ describe('信息提示顶栏归位 · 顶栏槽样式', () => {
   })
   it('store-bar 高度自适应信息堆叠', () => {
     expect(cssSource).toContain('.ebay-store-bar { min-height:64px;')
+  })
+  it('可读层覆盖不再固定栏高/横滚裁切（2026-11-20 绿框裁切修复）', () => {
+    expect(readabilitySource).toContain('.ebay-store-bar{min-height:var(--ebay-band-h);height:auto;gap:12px;padding:7px 20px;align-items:center}')
+    expect(readabilitySource).toContain('.ebay-store-bar{align-items:center;flex-wrap:nowrap;overflow:visible}')
+    expect(readabilitySource).not.toContain('.ebay-store-bar{height:var(--ebay-band-h);min-height:0;')
+    expect(readabilitySource).not.toContain('overflow-x:auto}')
+  })
+  it('槽内通知 static＋去 46px 最小高，横幅完整可读', () => {
+    expect(cssSource).toContain('.ebay-head-info .ebay-success-notice,.ebay-head-info .ebay-error-notice{position:static;min-height:0}')
+    expect(cssSource).toContain('.ebay-head-info .ebay-auto-login-banner{margin:0;min-height:0;font-size:11px;line-height:16px;white-space:normal;align-items:flex-start}')
   })
 })

@@ -489,6 +489,8 @@ button.ebay-market-card-media { width:100%; border:0; cursor:pointer; font:inher
 .ebay-head-info .ebay-download-toast b{font-size:11px;line-height:16px}
 .ebay-head-info .ebay-success-notice,.ebay-head-info .ebay-error-notice{align-items:flex-start;font-size:11px;line-height:16px;margin-top:0;white-space:normal}
 .ebay-head-info .ebay-auto-login-banner{margin-top:0}
+.ebay-head-info .ebay-success-notice,.ebay-head-info .ebay-error-notice{position:static;min-height:0}
+.ebay-head-info .ebay-auto-login-banner{margin:0;min-height:0;font-size:11px;line-height:16px;white-space:normal;align-items:flex-start}
 
 /* C 现状精修（2026-11-14 用户拍板）：不动布局，修浏览器外壳可读性与一致性。
    字号 7–8px→12px；地址栏控件统一 32px 高；间距 4/8/12/16 scale；补 focus-visible；页签溢出两端渐隐。 */

@@ -154,11 +154,11 @@ describe('极简编辑器 · App.tsx 接线', () => {
     expect(source, '副标题要删除').not.toContain('登录身份与浏览会话按店铺独立保存')
     expect(source, '主标题保留').toContain('<h2>ebay工作台</h2>')
   })
-  it('平台头部带与子页签带同高：共用 --ebay-band-h，不再各自 min-height 撑高', () => {
+  it('平台头部带自适应信息堆叠＋子页签带定高：共用 --ebay-band-h（2026-11-20 裁切修复后头部带 min-height）', () => {
     const ui=readFileSync(path.resolve(process.cwd(),'src/renderer/ui-readability.css'),'utf8')
     const base=readFileSync(path.resolve(process.cwd(),'src/renderer/styles.css'),'utf8')
     expect(base, '高度单一来源').toContain('--ebay-band-h:48px')
-    expect(ui, '头部带用同一变量定高').toContain('.ebay-store-bar{height:var(--ebay-band-h)')
+    expect(ui, '头部带用同一变量兜底高＋内容自适应').toContain('.ebay-store-bar{min-height:var(--ebay-band-h);height:auto;')
     expect(ui, '子页签带用同一变量定高').toMatch(/\.ebay-business-nav\{[^}]*height:var\(--ebay-band-h\)/)
     expect(ui, '头部带不得再用 min-height 撑高').not.toContain('.ebay-store-bar{min-height:82px')
   })
