@@ -197,6 +197,8 @@ export class BrowserWorkspace {
   private gigaAutoLoginAttemptedAt = 0
   private gigaLoginInFlight: { version: number; promise: Promise<SupplyActivationResult | null> } | null = null
   private readonly ebayAutoLoginAttemptedAt = new Map<string,number>()
+  private readonly ebayFreshLoadUntil = new Map<WebContentsView,number>()
+  private readonly credentialLoadFailures = new Map<WebContentsView,string>()
   private productLoginWindow: BrowserWindow | null = null
   private readonly pageDiagnostics = new Map<number, PageDiagnostics>()
 
@@ -1651,6 +1653,8 @@ export class BrowserWorkspace {
       try {
         if (ebayAccount) await this.loadEbayWithDirectFallback(view.webContents, target.toString(), '店铺登录页')
         else await view.webContents.loadURL(target.toString())
+        this.credentialLoadFailures.delete(view)
+        if (ebayAccount) this.ebayFreshLoadUntil.set(view, Date.now()+20_000)
       } catch(error) {
         const loadError=error as Error & {code?:string;errno?:number}
         if(view.webContents.isDestroyed())throw error
@@ -1659,6 +1663,13 @@ export class BrowserWorkspace {
         if((loadError.code==='ERR_ABORTED'||loadError.errno===-3)&&redirectedToPlatform)return
         throw error
       }
+    }
+    const loadInBackground=(view:WebContentsView)=>{
+      this.splashEbayLoading(view)
+      void loadCredentialUrl(view).catch(error=>{
+        this.credentialLoadFailures.set(view,error instanceof Error?error.message:String(error))
+        this.emitState('web')
+      })
     }
     // 登录页可能因网络或平台风控长时间处于加载中；先挂载视图，避免界面一直显示空白占位层。
     this.browserVisible = true
@@ -1673,7 +1684,7 @@ export class BrowserWorkspace {
     const previous = this.detailTabs.get(id)
     if (previous) {
       this.active='web';this.activeTabId=id;this.credentialDomains=domains;this.attachView(previous.view);this.emitTabs()
-      if(!allowed(previous.view.webContents.getURL()))await loadCredentialUrl(previous.view)
+      if(!allowed(previous.view.webContents.getURL()))loadInBackground(previous.view)
       return id
     }
     const view = new WebContentsView({ webPreferences:{ partition:`persist:login:${accountId}`,nodeIntegration:false,contextIsolation:true,sandbox:true } })
@@ -1690,7 +1701,7 @@ export class BrowserWorkspace {
     view.webContents.on('did-start-loading',emit)
     view.webContents.on('dom-ready',()=>{if(ebayAccount)void this.injectEbayScrollbars(view).catch(()=>undefined);if(this.builtInCollectorActive)void this.injectBuiltInCollector(view).catch(()=>undefined);if(this.ebayPluginActive)void this.injectEbayPlugin(view).catch(()=>undefined)})
     view.webContents.on('did-stop-loading',()=>{emit();if(ebayAccount)void this.injectEbayScrollbars(view).catch(()=>undefined);if(this.builtInCollectorActive)void this.injectBuiltInCollector(view).catch(()=>undefined);if(this.ebayPluginActive)void this.injectEbayPlugin(view).catch(()=>undefined)})
-    this.active='web';this.activeTabId=id;this.credentialDomains=domains;this.attachView(view);this.emitTabs();await loadCredentialUrl(view);return id
+    this.active='web';this.activeTabId=id;this.credentialDomains=domains;this.attachView(view);this.emitTabs();loadInBackground(view);return id
   }
 
   async newEbayTab(accountId:string,title:string,targetUrl='https://www.ebay.com/') {
@@ -3382,6 +3393,19 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     return result
   }
 
+  // 挂载后先向 about:blank 注入加载占位，首载期间用户看到的是加载态而非纯白空白
+  private splashEbayLoading(view:WebContentsView){
+    if(view.webContents.getURL()!=='about:blank')return
+    void view.webContents.executeJavaScript(`(()=>{document.body.innerHTML='<div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#ffffff;font:14px/1.6 -apple-system,PingFang SC,sans-serif;color:#5f6b70"><div style="width:34px;height:34px;border:3px solid #d8e6e4;border-top-color:#0f766e;border-radius:50%;animation:ebSpin .9s linear infinite"></div><div>正在打开 eBay 店铺…</div><style>@keyframes ebSpin{to{transform:rotate(360deg)}}</style></div>';return true})()`,true).catch(()=>undefined)
+  }
+
+  private async waitEbayViewReady(view:WebContentsView){
+    const failure=this.credentialLoadFailures.get(view)
+    if(failure&&view.webContents.getURL()==='about:blank')return failure
+    for(let attempt=0;attempt<60&&view.webContents.isLoading();attempt+=1)await this.sleep(250)
+    return ''
+  }
+
   private async inspectEbayLogin(view:WebContentsView) {
     return view.webContents.executeJavaScript(`(() => {
       const visible=element=>Boolean(element&&element.getClientRects().length&&!element.disabled);
@@ -3457,11 +3481,17 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     const runVersion=this.activationVersion
     const active=()=>this.browserVisible&&this.attached===view&&runVersion===this.activationVersion
     const result=(status:EbayLoginResult['status'],message:string,url:string,autoLoginAttempted=false):EbayLoginResult=>({status,message,url,autoLoginAttempted})
-    let state=await this.inspectEbayLogin(view)
+    const loadFailure=await this.waitEbayViewReady(view)
+    if(loadFailure)return result('ERROR',`eBay页面打开失败：${loadFailure}。请检查网络后重试`,view.webContents.getURL())
+    const first=await this.inspectEbayLogin(view).catch(()=>null)
+    if(!first)return result('ERROR','eBay页面尚未就绪，请重试',view.webContents.getURL())
+    let state=first
     if(state.phase==='ONLINE'){this.reviveStaleEbaySigninTabs(accountId,view);return result('ONLINE','eBay会话有效，已直接进入店铺',state.url)}
     if(state.phase==='VERIFICATION')return result('VERIFICATION_REQUIRED','需要人工完成eBay验证，完成后将自动继续',state.url)
     if(state.phase==='ERROR')return result('ERROR',state.errorMessage||'eBay登录失败',state.url)
-    if((state.phase==='USERNAME'||state.phase==='PASSWORD'||state.phase==='OFFLINE')&&await this.ebaySessionCookiesAlive(view)){
+    // 首载刚落地＝服务端新鲜判定：signin+cookie 有效也无需再重导航复检，直接回落自动填写
+    const freshLoad=(this.ebayFreshLoadUntil.get(view)||0)>Date.now()
+    if(!freshLoad&&(state.phase==='USERNAME'||state.phase==='PASSWORD'||state.phase==='OFFLINE')&&await this.ebaySessionCookiesAlive(view)){
       try{await view.webContents.loadURL('https://www.ebay.com/sh/ovw')}catch{/* 刷新失败回落原自动填写流程 */}
       let settledFormStreak=0
       for(let attempt=0;attempt<20;attempt+=1){

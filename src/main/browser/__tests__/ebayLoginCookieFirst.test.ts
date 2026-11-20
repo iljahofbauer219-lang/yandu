@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => {
@@ -61,6 +63,7 @@ type FakeView = {
     setUserAgent: () => void
     setWindowOpenHandler: () => void
     executeJavaScript: (script: string) => Promise<unknown>
+    isLoading: () => boolean
     session: { cookies: { get: (filter: { name?: string }) => Promise<FakeCookie[]> } }
   }
 }
@@ -87,6 +90,7 @@ function makeView(page: FakePage, opts: { cookies?: FakeCookie[]; serverAcceptsR
         }
       },
       isDestroyed: () => false,
+      isLoading: () => false,
       close: () => undefined,
       on: () => undefined,
       setUserAgent: () => undefined,
@@ -147,6 +151,8 @@ function makeHost(tabs: FakeTab[], activeTabId: string) {
     browserVisible: true,
     attached: active.view,
     ebayAutoLoginAttemptedAt: new Map<string, number>(),
+    ebayFreshLoadUntil: new Map<unknown, number>(),
+    credentialLoadFailures: new Map<unknown, string>(),
     sleep: async () => undefined
   })
   return host
@@ -290,5 +296,56 @@ describe('登录成功后陈旧 signin 页签自愈（修复 B）', () => {
     expect(result.status).toBe('ONLINE')
     expect(staleSignin.loads.some(url => url.includes('/sh/ovw'))).toBe(true)
     expect(active.loads, '当前 ONLINE 页签自身不被自愈刷新').toEqual([])
+  })
+})
+
+describe('打开即加载态 · 免二次导航（空白修复）', () => {
+  it('C：新鲜加载窗口内 signin+cookie 有效：跳过复检重载直接自动填写', async () => {
+    const view = makeView({ phase: 'USERNAME', url: SIGNIN_URL }, { cookies: aliveCookies, serverAcceptsRefresh: false })
+    const host = makeHost([makeTab(`login-${ACCOUNT}`, view, ACCOUNT)], `login-${ACCOUNT}`)
+    ;(host.ebayFreshLoadUntil as Map<unknown, number>).set(view, Date.now() + 20000)
+    const result = await ensureMethod.call(host, ACCOUNT, 'cnyandu', 'secret', true)
+    expect(result.status).toBe('ONLINE')
+    expect(view.loads, '新鲜窗口内不得二次导航').toEqual([])
+    expect(view.submissions).toEqual(['USERNAME', 'PASSWORD'])
+  })
+
+  it('B：首载在途时复检抛错：等载定再继续，不中断整链', async () => {
+    const view = makeView({ phase: 'USERNAME', url: SIGNIN_URL }, { cookies: [] })
+    let loadingChecks = 0
+    view.webContents.isLoading = () => { loadingChecks += 1; return loadingChecks <= 2 }
+    const original = view.webContents.executeJavaScript
+    view.webContents.executeJavaScript = async (script: string) => {
+      if (script.includes('signedInLink') && view.webContents.isLoading()) throw new Error('Execution context was destroyed.')
+      return original(script)
+    }
+    const host = makeHost([makeTab(`login-${ACCOUNT}`, view, ACCOUNT)], `login-${ACCOUNT}`)
+    const result = await ensureMethod.call(host, ACCOUNT, 'cnyandu', 'secret', true)
+    expect(result.status).toBe('ONLINE')
+    expect(view.submissions).toEqual(['USERNAME', 'PASSWORD'])
+  })
+
+  it('B：后台加载失败且仍 about:blank：回中文错误，不进填写循环', async () => {
+    const view = makeView({ phase: 'OFFLINE', url: 'about:blank' }, { cookies: [] })
+    const host = makeHost([makeTab(`login-${ACCOUNT}`, view, ACCOUNT)], `login-${ACCOUNT}`)
+    ;(host.credentialLoadFailures as Map<unknown, string>).set(view, 'ERR_PROXY_CONNECTION_FAILED')
+    const result = await ensureMethod.call(host, ACCOUNT, 'cnyandu', 'secret', true)
+    expect(result.status).toBe('ERROR')
+    expect(result.message).toContain('打开失败')
+    expect(view.submissions).toEqual([])
+  })
+
+  it('A/B 源码守卫：占位先于加载注入、加载转后台、加载成功写新鲜窗口', () => {
+    const source = readFileSync(path.join(__dirname, '..', 'BrowserWorkspace.ts'), 'utf8')
+    const start = source.indexOf('async openCredentialLogin')
+    const body = source.slice(start, source.indexOf('async newEbayTab', start))
+    expect(body).toContain('splashEbayLoading(view)')
+    expect(body.indexOf('splashEbayLoading(view)')).toBeLessThan(body.indexOf('void loadCredentialUrl(view)'))
+    expect(body).toContain('loadInBackground(previous.view)')
+    expect(body).not.toMatch(/await loadCredentialUrl\(/)
+    expect(body).toContain('ebayFreshLoadUntil.set(view')
+    const splash = source.slice(source.indexOf('private splashEbayLoading'), source.indexOf('private async waitEbayViewReady'))
+    expect(splash).toContain("getURL()!=='about:blank'")
+    expect(splash).toContain('正在打开 eBay 店铺')
   })
 })
