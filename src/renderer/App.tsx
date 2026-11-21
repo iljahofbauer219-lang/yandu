@@ -5199,29 +5199,30 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
         </aside>}
         <section>
           <div className="ebay-toolbar ebay-toolbar-report"><input value={search} onChange={event=>setSearch(event.target.value)} placeholder="搜索标题、SKU、Item ID"/><select><option>在线商品</option></select><button disabled={!activeStore||Boolean(busy)} onClick={()=>activeStore&&void importReport(activeStore)}>{busy===`report:${activeStore?.id}`?'导入中':'导入Listings报表'}</button><button disabled={!activeStore||activeStore.status!=='CONNECTED'||Boolean(busy)} onClick={()=>activeStore&&void syncStore(activeStore)}>{busy===`sync:${activeStore?.id}`?'同步中':'API同步'}</button><div className="ebay-library-sync"><div className="ebay-library-sync-status"><b>{categoryWorkspace.categories.length} 个目录</b><small>上次同步：{categorySyncedAt}</small>{categoryImportantChanges>0&&<em>{categoryImportantChanges} 项变化</em>}</div><div className="ebay-library-sync-actions"><button type="button" title={ebayLogin?.status==='ONLINE'?'同步 eBay 店铺目录':'请先完成店铺登录'} disabled={categorySyncing||ebayLogin?.status!=='ONLINE'} onClick={()=>void syncStoreCategories()}>{categorySyncing?'目录同步中…':'同步目录'}</button><button type="button" className="primary" title={ebayLogin?.status==='ONLINE'?'按店铺目录同步线上产品':'请先完成店铺登录'} disabled={!directoryProductCategories.length||ebayLogin?.status!=='ONLINE'} onClick={()=>void openDirectoryProductSync()}>同步产品</button></div></div></div>
-          {visibleListings.length?<div className="ebay-listing-grid">{visibleListings.map(item=><article className="ebay-market-card" key={item.id}>
-            <div className="ebay-market-card-media">
-              {item.viewUrl?<button type="button" className="ebay-market-card-image-link" title="在店铺采集浏览器新标签打开 eBay 原商品" aria-label={`打开 eBay 原商品：${item.title}`} disabled={busy===`open:${item.id}`} onClick={()=>void openOriginalProduct(item)}>
-                {item.imageUrl?<img src={ebayDisplayImage(item.imageUrl)} alt={item.title} loading="lazy" onError={event=>{if(event.currentTarget.dataset.fallback)return;event.currentTarget.dataset.fallback='1';event.currentTarget.src=item.imageUrl}}/>:<span>无主图</span>}
-                <em>{busy===`open:${item.id}`?'正在打开…':'查看原商品 ↗'}</em>
-              </button>:<div className="ebay-market-card-image-unavailable" title="原商品链接缺失，请重新同步产品">
-                {item.imageUrl?<img src={ebayDisplayImage(item.imageUrl)} alt={item.title} loading="lazy" onError={event=>{if(event.currentTarget.dataset.fallback)return;event.currentTarget.dataset.fallback='1';event.currentTarget.src=item.imageUrl}}/>:<span>无主图</span>}
-                <em>原商品链接缺失</em>
-              </div>}
-            </div>
+          {visibleListings.length?<div className="ebay-listing-grid">{visibleListings.map(item=>{const priceNumber=ebayMoneyNumber(item.price);const currencyCode=(item.currency||'').trim().toUpperCase();const cnyPrice=currencyCode==='CNY'||currencyCode==='RMB'||priceNumber<=0?0:priceNumber*readEbayProfitAssumptions(item.id).exchangeRate;const storeText=item.categoryId&&activeCategoryIds.has(item.categoryId)?storePathText(item.categoryId):'未分类';return <article className="ebay-market-card ebay-online-product-card" key={item.id}>
+            <button type="button" className="ebay-market-card-media" title={item.viewUrl?'在店铺采集浏览器新标签打开 eBay 原商品':'原商品链接缺失，请重新同步产品'} aria-label={`打开 eBay 原商品：${item.title}`} disabled={busy===`open:${item.id}`||!item.viewUrl} onClick={()=>void openOriginalProduct(item)}>
+              {item.imageUrl?<img src={ebayDisplayImage(item.imageUrl)} alt={item.title} loading="lazy" onError={event=>{if(event.currentTarget.dataset.fallback)return;event.currentTarget.dataset.fallback='1';event.currentTarget.src=item.imageUrl}}/>:<span>无主图</span>}
+            </button>
             <div className="ebay-market-card-body">
               <b title={item.title}>{item.title}</b>
-              <strong>{ebayDisplayPrice(item.currency,item.price)}</strong>
-              <small>Item ID {item.listingId}</small>
+              <div className="ebay-local-price-row"><strong>{ebayDisplayPrice(item.currency,item.price)}</strong>{cnyPrice>0&&<em>{ebayDisplayPrice('RMB',cnyPrice.toFixed(2))}</em>}</div>
+              <dl className="candidate-source-facts">
+                <div><dt>Item ID</dt><dd>{item.listingId}</dd></div>
+                <div><dt>可售库存</dt><dd>{item.quantity.toLocaleString('zh-CN')}</dd></div>
+                <div><dt>店铺类目</dt><dd title={storeText}>{storeText}</dd></div>
+                <div><dt>在架状态</dt><dd>{item.status==='ACTIVE'?'在售':'已结束'}</dd></div>
+                <div><dt>更新时间</dt><dd>{(item.updatedAt||'').slice(0,10)||'—'}</dd></div>
+                <div><dt>中文标题</dt><dd title={item.translatedTitle||''}>{item.translatedTitle||'—'}</dd></div>
+              </dl>
               <details className="ebay-card-menu">
                 <summary aria-label={`打开 ${item.title} 的操作菜单`}>⋮</summary>
                 <div>
                   <span className="ebay-card-menu-site">{item.marketplaceId==='EBAY_US'?'🇺🇸 美国站':item.marketplaceId.replace(/^EBAY_/,'eBay ')}</span>
-                  <div className="ebay-card-actions"><button type="button" className="primary" disabled={busy===`download:${item.id}`} onClick={()=>void downloadLocalProduct(item)}>{busy===`download:${item.id}`?'下载中…':localProducts.some(product=>product.listingId===item.listingId)?'更新本地版本':'下载到本地'}</button><button type="button" className="danger" title="从本地线上产品库彻底删除该商品" aria-label={`删除 ${item.title}`} disabled={busy===`remove:${item.id}`} onClick={()=>void removeLocalListing(item)}>{busy===`remove:${item.id}`?'删除中…':'删除'}</button></div>
+                  <div className="ebay-card-actions"><button type="button" disabled={busy===`open:${item.id}`||!item.viewUrl} onClick={()=>void openOriginalProduct(item)}>原商品 ↗</button><button type="button" className="primary" disabled={busy===`download:${item.id}`} onClick={()=>void downloadLocalProduct(item)}>{busy===`download:${item.id}`?'下载中…':localProducts.some(product=>product.listingId===item.listingId)?'更新本地版本':'下载到本地'}</button><button type="button" className="danger" title="从本地线上产品库彻底删除该商品" aria-label={`删除 ${item.title}`} disabled={busy===`remove:${item.id}`} onClick={()=>void removeLocalListing(item)}>{busy===`remove:${item.id}`?'删除中…':'删除'}</button></div>
                 </div>
               </details>
             </div>
-          </article>)}</div>:<EbayEmpty title={selectedCategoryId==='ALL'?'暂无已上架商品':'当前目录暂无商品'} description={activeStore?'可切换其他目录，本页展示已发布到 eBay 的商品。':'请先在顶部添加或选择具体店铺。'}/>} 
+          </article>})}</div>:<EbayEmpty title={selectedCategoryId==='ALL'?'暂无已上架商品':'当前目录暂无商品'} description={activeStore?'可切换其他目录，本页展示已发布到 eBay 的商品。':'请先在顶部添加或选择具体店铺。'}/>} 
         </section>
       </div>}
       {activeTab==='local'&&<div className={`ebay-library-layout ebay-local-products-layout${ebayCatalogPanel.collapsed?' side-collapsed':''}`}>
