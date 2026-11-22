@@ -3768,7 +3768,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
         await window.desktop.ebay.openProduct(activeStore.id,item.viewUrl,item.title)
         if(isCurrent())setNotice('原商品已在当前店铺的 eBay 浏览器新标签中打开。')
       } catch(reason) {
-        if(isCurrent())setEbayError(readableError(reason,'原商品打开失败'))
+        if(isCurrent()){const message=readableError(reason,'原商品打开失败');setEbayError(message);setEbayErrorActionFor(message);setEbayErrorAction({label:'重试',run:()=>{pendingOriginalProduct.current=item;void openPendingOriginalProduct()}})}
       } finally {
         if(isCurrent())setBusy('')
       }

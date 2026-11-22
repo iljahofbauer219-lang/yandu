@@ -394,7 +394,12 @@ async function openEbayProductTab(storeId:string,url:string,title:string) {
   const store=database?.getEbayStores().find(item=>item.id===storeId)
   if(!store)throw new Error('eBay 店铺不存在')
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
-  const open=()=>workspace!.newEbayTab(`ebay:${store.id}`,title.trim().slice(0,60)||'eBay 原商品',url)
+  const open=async()=>{
+    const id=await workspace!.newEbayTab(`ebay:${store.id}`,title.trim().slice(0,60)||'eBay 原商品',url)
+    const landed=await workspace!.ensureEbayProductTabLanded(`ebay:${store.id}`,id)
+    if(!landed.landed&&!landed.verification)throw new Error('eBay 商品页多次刷新仍返回错误页（Something went wrong on our end），请稍后重试或人工刷新。')
+    return id
+  }
   try {
     return await open()
   } catch(error) {
@@ -3630,6 +3635,7 @@ ipcMain.handle('ebay:local-products:migrate-published', async (_event, storeId:s
   const product=database.getEbayLocalProducts().find(item=>item.id===localProductId&&item.storeId===storeId)
   if(!product)return {migrated:false,title:'',itemId}
   database.setEbayLocalProductPublishRef(localProductId,{kind:'listing',id:itemId,at:new Date().toISOString()})
+  markEbayDraftPublished(product.storeId,product.listingId,itemId)
   removeEbayLocalProduct(localProductId)
   await landEbayPublishedListing(storeId,itemId)
   return {migrated:true,title:product.title,itemId}
@@ -3639,11 +3645,21 @@ ipcMain.handle('ebay:local-products:reconcile-published', async (_event, storeId
   if(!database)throw new Error('数据库尚未初始化')
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
   const migrated:Array<{localProductId:string;title:string;itemId:string}>=[]
+  // 存量heal：已进发布流程（draft ref/draftSavedAt）但本地行已不在的优品草稿，
+  // 同步 listings 存在同标题 ACTIVE 即写回 listing 态（幂等，覆盖历史漏写回）
+  const listings=database.getEbayListings(storeId)
+  for(const draft of database.getEbayOptimizationDrafts(storeId)){
+    if(draft.returnedAt||draft.publishRef?.kind==='listing')continue
+    if(!(draft.publishRef?.kind==='draft'||draft.draftSavedAt))continue
+    const hit=listings.find(item=>item.status==='ACTIVE'&&item.title===draft.selectedTitle)
+    if(hit){markEbayDraftPublished(storeId,draft.listingId,hit.listingId);migrated.push({localProductId:'',title:draft.selectedTitle,itemId:hit.listingId})}
+  }
   const rows=database.getEbayLocalProducts().filter(item=>item.storeId===storeId&&(item.publishRef?.kind==='draft'||item.publishRef?.kind==='listing'))
   // listing ref＝本链已确认上架：直接落位＋清理，不再刮标题找回
   for(const row of rows.filter(item=>item.publishRef?.kind==='listing')){
     const itemId=row.publishRef?.id||''
     if(!/^\d{6,}$/.test(itemId))continue
+    markEbayDraftPublished(row.storeId,row.listingId,itemId)
     await landEbayPublishedListing(storeId,itemId)
     removeEbayLocalProduct(row.id)
     migrated.push({localProductId:row.id,title:row.title,itemId})
@@ -3654,6 +3670,7 @@ ipcMain.handle('ebay:local-products:reconcile-published', async (_event, storeId
     const row=draftRows.find(item=>item.id===hit.localProductId)
     if(!row)continue
     database.setEbayLocalProductPublishRef(row.id,{kind:'listing',id:hit.itemId,at:new Date().toISOString()})
+    markEbayDraftPublished(row.storeId,row.listingId,hit.itemId)
     removeEbayLocalProduct(row.id)
     await landEbayPublishedListing(storeId,hit.itemId)
     migrated.push({localProductId:row.id,title:row.title,itemId:hit.itemId})
@@ -3663,6 +3680,7 @@ ipcMain.handle('ebay:local-products:reconcile-published', async (_event, storeId
   const bareRows=database.getEbayLocalProducts().filter(item=>item.storeId===storeId&&!item.publishRef&&activeIds.has(item.listingId)&&!(excludeIds||[]).includes(item.id))
   for(const row of bareRows){
     database.setEbayLocalProductPublishRef(row.id,{kind:'listing',id:row.listingId,at:new Date().toISOString()})
+    markEbayDraftPublished(row.storeId,row.listingId,row.listingId)
     removeEbayLocalProduct(row.id)
     migrated.push({localProductId:row.id,title:row.title,itemId:row.listingId})
   }

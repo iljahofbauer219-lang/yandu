@@ -1734,6 +1734,29 @@ export class BrowserWorkspace {
     await this.loadEbayWithDirectFallback(view.webContents, target.toString(), 'eBay 新标签页')
     return id
   }
+  /** 原商品页落地判断：eBay 瞬时错误页自动有界刷新（3 次退避）直至商品页真特征就绪；验证页不刷新交人工 */
+  async ensureEbayProductTabLanded(accountId:string, tabId:string):Promise<{retried:number;landed:boolean;verification?:boolean}> {
+    const tab=this.detailTabs.get(tabId)
+    if(!tab||tab.scopeId!==accountId||tab.view.webContents.isDestroyed())return {retried:0,landed:false}
+    const view=tab.view
+    const inspect=()=>view.webContents.executeJavaScript(`(()=>{const title=document.title||'';const text=(document.body?.innerText||'').replace(/\\s+/g,' ').slice(0,4000);const error=/Error Page/i.test(title)||/Something went wrong on our end/i.test(text);const verification=/captcha|splashui/i.test(location.href)||/verify it'?s you|security check|验证码|安全验证/i.test(text);const h1=(document.querySelector('h1')?.textContent||'').trim();return {error,verification,ready:!error&&!verification&&h1.length>10}})()`,true) as Promise<{error:boolean;verification:boolean;ready:boolean}>
+    let retried=0
+    for(let attempt=0;attempt<3;attempt+=1){
+      let state:{error:boolean;verification:boolean;ready:boolean}
+      try{state=await inspect()}catch{await this.sleep(1200);continue}
+      if(state.verification)return {retried,landed:false,verification:true}
+      if(state.ready)return {retried,landed:true}
+      if(!state.error)return {retried,landed:true}
+      retried+=1
+      await this.sleep(1200*attempt+800)
+      try{view.webContents.reload()}catch{return {retried,landed:false}}
+      await this.sleep(2500)
+    }
+    let final:{error:boolean;verification:boolean;ready:boolean}
+    try{final=await inspect()}catch{return {retried,landed:false}}
+    if(final.verification)return {retried,landed:false,verification:true}
+    return {retried,landed:final.ready||!final.error}
+  }
 
   async readEbayProductDetails(accountId:string,title:string,targetUrl:string):Promise<EbayProductDetails> {
     const base=this.detailTabs.get(`login-${accountId}`)
