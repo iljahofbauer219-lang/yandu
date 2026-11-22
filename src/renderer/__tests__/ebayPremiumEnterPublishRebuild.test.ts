@@ -33,8 +33,8 @@ describe('既有分支口径不动', () => {
     expect(app).toContain('该优品已存在在线商品（全流程后本地行已移除属预期），进入发布改为打开 eBay 修改页（ReviseItem），不重复新建。')
   })
 
-  it('eBay 草稿命中仍续作既有草稿', () => {
-    expect(app).toContain('本地行已移除，已按优品草稿重建本地版本并打开发布编辑器；续作既有 eBay 草稿，不重复新建。')
+  it('eBay 草稿命中仍续作既有草稿（后台回写 ref）', () => {
+    expect(app).toContain('已后台续作既有 eBay 草稿，不重复新建。')
   })
 
   it('模态保留给重建失败的真无来源场景', () => {

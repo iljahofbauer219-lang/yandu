@@ -1041,9 +1041,17 @@ function seedEbayLocalProductFromPremiumDraft(storeId:string,draft:EbayOptimizat
   if(!database)throw new Error('数据库尚未初始化')
   const store=database.getEbayStores().find(item=>item.id===storeId)
   if(!store)throw new Error('eBay 店铺不存在')
-  const existing=database.getEbayLocalProducts(storeId).find(item=>item.listingId===draft.listing.listingId)
-  if(existing)return existing
   const capturedAt=new Date().toISOString()
+  const existing=database.getEbayLocalProducts(storeId).find(item=>item.listingId===draft.listing.listingId)
+  if(existing){
+    // 后台续作命中既有 eBay 草稿时，存量行也要附 ref（否则续作语义只落在草稿上）
+    if(draftId){
+      database.setEbayLocalProductPublishRef(existing.id,{kind:'draft',id:draftId,at:capturedAt})
+      database.setEbayLocalProductDraftSaved(existing.id,capturedAt)
+      return database.getEbayLocalProducts().find(item=>item.id===existing.id)||existing
+    }
+    return existing
+  }
   const product=database.saveEbayLocalProductSnapshot(completeEbayLocalSnapshot(buildEbayPremiumLocalSeed(draft,store.marketplaceId||'EBAY_US',capturedAt)))
   if(draftId){
     database.setEbayLocalProductPublishRef(product.id,{kind:'draft',id:draftId,at:capturedAt})

@@ -4501,30 +4501,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
       }
     }
     if(!lp){
-      setBusy('publish-recover-item')
-      try{
-        const hint=resolveEbayPublishRecoveryHint({publishRef:premium.publishRef,tasks:publishTasks,premiumId:premium.id})
-        if(!hint)setNotice('正在从 eBay 在售/草稿栏找回该优品的既有刊登；找回后即刻打开本地产品编辑，图片转后台保存。')
-        const found=hint||await window.desktop.ebay.findActiveListingIdByTitle(premium.selectedTitle||premium.listing.title||'')
-        if(found.itemId){
-          const url=`https://www.ebay.com/sl/list?mode=ReviseItem&itemId=${encodeURIComponent(found.itemId)}`
-          setActiveTab('browser')
-          await window.desktop.browser.show('web',ebayOwnTabId.current)
-          await window.desktop.browser.navigate('web',url).catch(reason=>setEbayError(readableError(reason,'打开修改页失败')))
-          setNotice('本地行与线上产品库均无记录，已按标题从 eBay 在售列表找回商品并打开修改页（ReviseItem），不重复新建。')
-          return
-        }
-        if(found.draftId){
-          const seeded=await window.desktop.ebay.seedLocalProductFromPremium(premium.storeId,premium,found.draftId)
-          lp=seeded
-          setLocalProducts(current=>[seeded,...current.filter(item=>item.id!==seeded.id)])
-          setNotice('本地行已移除，已按优品草稿重建本地版本并打开发布编辑器；续作既有 eBay 草稿，不重复新建。')
-        }
-      }catch(reason){setEbayError(readableError(reason,'从 eBay 在售列表找回商品失败'))}
-      finally{setBusy('')}
-    }
-    if(!lp){
-      // 本地流程存优品刻意移除本地行且从未上架/无 eBay 草稿：找回失败或无果都按草稿 payload 直接重建，不得把用户赶回本地产品
+      // 先 seed 先开：本地 DB 毫秒级；eBay 找回刮页（两次整页加载＋最长 20×900ms 串行轮询）不得挡在编辑器前面
       try{
         const seeded=await window.desktop.ebay.seedLocalProductFromPremium(premium.storeId,premium,premium.publishRef?.kind==='draft'?premium.publishRef.id:'')
         lp=seeded
@@ -4563,6 +4540,26 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
         void readBusinessPoliciesFor(lp,'publish-read-policies',{silent:true})
       }
     })()
+    // 后台续作：编辑器已开后才刮 eBay 在售/草稿栏；命中草稿回写 publishRef 续作，命中在线商品记 ref 待下次进入发布开修改页；失败不阻断编辑器
+    if(!premium.publishRef){
+      void (async()=>{
+        try{
+          const hint=resolveEbayPublishRecoveryHint({publishRef:premium.publishRef,tasks:publishTasks,premiumId:premium.id})
+          const found=hint||await window.desktop.ebay.findActiveListingIdByTitle(premium.selectedTitle||premium.listing.title||'')
+          if(found.draftId){
+            const seeded=await window.desktop.ebay.seedLocalProductFromPremium(premium.storeId,premium,found.draftId)
+            setLocalProducts(current=>[seeded,...current.filter(item=>item.id!==seeded.id)])
+            if(publishEditorSession.current===session)setPublishEditorProduct(seeded)
+            setOptimizationDrafts(await window.desktop.ebay.optimizationDrafts(premium.storeId))
+            setNotice('已后台续作既有 eBay 草稿，不重复新建。')
+          }else if(found.itemId){
+            await window.desktop.ebay.saveOptimizationDraft({...premium,publishRef:{kind:'listing',id:found.itemId,at:new Date().toISOString()}})
+            setOptimizationDrafts(await window.desktop.ebay.optimizationDrafts(premium.storeId))
+            setNotice(`已后台找回在线商品 ${found.itemId}；下次进入发布将打开 eBay 修改页，不重复新建。`)
+          }
+        }catch{/* 找回失败不阻断已打开的编辑器 */}
+      })()
+    }
   }
   const uploadPublishEditorMedia=async(files:File[])=>{if(!publishEditorProduct||!publishEditorDraft||!files.length)return;const productId=publishEditorProduct.id;const remaining=Math.max(0,24-publishEditorDraft.media.length);const selected=files.slice(0,remaining);if(!selected.length){setEbayError('eBay 商品图片最多保留 24 张');return}setBusy(`publish-media:${productId}`);setEbayError('');try{const uploaded:EbayLocalProductUpdateInput['media']=[];for(const file of selected){const base64=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||'').split(',')[1]||'');reader.onerror=()=>reject(reader.error||new Error('读取图片失败'));reader.readAsDataURL(file)});uploaded.push(await window.desktop.ebay.addLocalProductMedia(productId,{fileName:file.name,mimeType:file.type||'image/jpeg',base64}))}setPublishEditorDraft(current=>current?({...current,media:[...current.media,...uploaded].slice(0,24).map((media,sortOrder)=>({...media,sortOrder}))}):current);setNotice(`已添加 ${uploaded.length} 张图片，保存新版本后写入本地产品。`)}catch(reason){setEbayError(readableError(reason,'添加本地商品图片失败'))}finally{setBusy('')}}
   // 「保存并准备到 eBay」完成提示的第一句：路由不同，说「Seller Hub 修改页」/「首次刊登页」/「新建刊登首页」不能混用，
