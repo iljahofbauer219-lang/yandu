@@ -4516,6 +4516,15 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
       }catch(reason){setEbayError(readableError(reason,'从 eBay 在售列表找回商品失败'))}
       finally{setBusy('')}
     }
+    if(!lp){
+      // 本地流程存优品刻意移除本地行且从未上架/无 eBay 草稿：找回失败或无果都按草稿 payload 直接重建，不得把用户赶回本地产品
+      try{
+        const seeded=await window.desktop.ebay.seedLocalProductFromPremium(premium.storeId,premium,premium.publishRef?.kind==='draft'?premium.publishRef.id:'')
+        lp=seeded
+        setLocalProducts(current=>[seeded,...current.filter(item=>item.id!==seeded.id)])
+        setNotice('本地行已随存优品移除，已按优品草稿重建本地版本并打开发布编辑器；不重复新建线上商品。')
+      }catch(reason){setEbayError(readableError(reason,'按优品草稿重建本地版本失败'))}
+    }
     if(!lp){setPublishNoMatchDraft(premium);return}
     const urls=(premium.imageUrls||[]).filter(Boolean)
     const media=[...lp.snapshot.media].sort((left,right)=>left.sortOrder-right.sortOrder)
