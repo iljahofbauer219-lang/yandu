@@ -194,6 +194,24 @@ button.ebay-market-card-media { width:100%; border:0; cursor:pointer; font:inher
 .shortlist-group-head b { font-size:13px; }
 .shortlist-group-head span { font-size:11px; color:var(--yd-content-muted,#5c6b67); }
 .shortlist-group .research-table td button { height:26px; padding:0 10px; border:1px solid #efcfcc; background:#fff1f0; color:#923f38; border-radius:7px; font-size:11px; cursor:pointer; }
+/* 关键词热销：左右布局（左关键词列表/右已采集产品），同我的货盘 */
+.kwh-page { flex:1; min-height:0; display:flex; gap:12px; padding:16px; background:#f3f5f6; }
+.kwh-aside { flex:none; width:230px; display:flex; flex-direction:column; gap:6px; background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px; overflow-y:auto; }
+.kwh-aside-head { display:flex; justify-content:space-between; align-items:center; padding:2px 4px 8px; border-bottom:1px solid var(--line); }
+.kwh-aside-head b { font-size:14px; color:var(--yd-content-ink,#22312e); }
+.kwh-aside-head span { font-size:11px; color:var(--yd-content-muted,#5c6b67); }
+.kwh-kw { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:9px 10px; border:1px solid transparent; background:none; border-radius:9px; font-size:12px; color:var(--yd-content-ink,#22312e); cursor:pointer; text-align:left; }
+.kwh-kw:hover { background:#f0fbf9; }
+.kwh-kw.active { background:var(--yd-content-brand-wash,#e6f7f5); border-color:#bde9e5; color:var(--yd-content-brand-ink,#0a6d68); font-weight:650; }
+.kwh-kw em { font-style:normal; font-size:11px; color:var(--yd-content-muted,#5c6b67); background:#f3f5f6; border-radius:6px; padding:1px 7px; }
+.kwh-kw.active em { background:#d9f2ef; color:#0a6d68; }
+.kwh-main { flex:1; min-width:0; overflow-y:auto; background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px; }
+.kwh-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:12px; }
+.kwh-card { border:1px solid var(--line); border-radius:10px; padding:10px; display:flex; flex-direction:column; gap:8px; background:#fff; }
+.kwh-card img { width:100%; height:140px; object-fit:cover; border-radius:8px; }
+.kwh-card b { font-size:12px; line-height:1.4; color:var(--yd-content-ink,#22312e); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.kwh-metrics { display:flex; flex-wrap:wrap; gap:6px; font-size:11px; color:var(--yd-content-muted,#5c6b67); }
+.kwh-metrics span { background:#f3f5f6; border-radius:6px; padding:2px 7px; }
 .ebay-workspace.app-browser-fullscreen .ebay-browser-panel { border:0; border-radius:0; }
 .browser-panel.app-browser-fullscreen { border:0; border-radius:0; }
 .ie-browser-page.app-browser-fullscreen { padding:0; }
