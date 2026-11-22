@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { declaredRemoteImageSize } from '../../shared/ebayImageSourceSize'
 
 // 「02 选择原图」恒 0/0 根因守卫：快照 media 全 FAILED 时 width/height=0，
 // 尺寸过滤把 0×0 误判为「已知过小」剔光全部源图。0 值必须视为无尺寸信息保留。
@@ -14,9 +15,10 @@ function extractFilter(): (url: string) => boolean {
   const body = match![1]
   const factory = new Function(
     'remoteUrlToSizeMap',
+    'declaredRemoteImageSize',
     `return ${body}`
-  ) as (map: Map<string, { width: number; height: number }>) => (url: string) => boolean
-  return factory(sizeMap)
+  ) as (map: Map<string, { width: number; height: number }>, fn: typeof declaredRemoteImageSize) => (url: string) => boolean
+  return factory(sizeMap, declaredRemoteImageSize)
 }
 
 const sizeMap = new Map<string, { width: number; height: number }>()
@@ -61,6 +63,25 @@ describe('selectedSourceImages 尺寸过滤：0 值尺寸不得误判小图', ()
     sizeMap.set('https://example.com/half.jpg', { width: 0, height: 800 })
     const filter = extractFilter()
     expect(filter('https://example.com/half.jpg')).toBe(true)
+  })
+
+  it('URL 声明 368px 的 CDN 缩略图即使尺寸表缺失也剔除（不得溜进最终图集）', () => {
+    sizeMap.clear()
+    const filter = extractFilter()
+    expect(filter('https://b2bfiles1.gigab2b.cn/image/a.png?x-cc=10&x-oss-process=image%2Fresize%2Cw_368%2Ch_368%2Cm_pad')).toBe(false)
+  })
+
+  it('URL 声明达标尺寸（800px）即使尺寸表缺失也保留', () => {
+    sizeMap.clear()
+    const filter = extractFilter()
+    expect(filter('https://cdn.test/a.png?x-oss-process=image%2Fresize%2Cw_800%2Ch_600')).toBe(true)
+  })
+
+  it('尺寸表记原始大尺寸但 URL 声明 368px 时以声明为准剔除（表记的是原图尺寸，URL 决定响应体尺寸）', () => {
+    sizeMap.clear()
+    sizeMap.set('https://b2bfiles1.gigab2b.cn/image/a.png?x-oss-process=image%2Fresize%2Cw_368%2Ch_368%2Cm_pad', { width: 1188, height: 1188 })
+    const filter = extractFilter()
+    expect(filter('https://b2bfiles1.gigab2b.cn/image/a.png?x-oss-process=image%2Fresize%2Cw_368%2Ch_368%2Cm_pad')).toBe(false)
   })
 })
 

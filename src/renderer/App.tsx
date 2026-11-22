@@ -24,6 +24,7 @@ import { buildEbayMarketDecisionReport, confirmedEbayMarketTerms } from '../shar
 import { auditEbayTitle } from '../shared/ebayTitleAudit'
 import { topMarketingSearchTerms } from '../shared/ebayImageCategoryPlan'
 import { buildSourceComplianceChecks } from '../shared/ebayImageSimpleLane'
+import { declaredRemoteImageSize } from '../shared/ebayImageSourceSize'
 import type { EbayTitleDecision } from '../shared/contracts'
 import { badgeFallbackScore } from '../shared/badgeScore'
 import { shouldAutoEnterGigaLogin } from '../shared/supplyAutoEnter'
@@ -4143,9 +4144,9 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
     (selectedLocalProduct?.snapshot.media||[]).map(media=>[media.remoteUrl,{width:media.width,height:media.height}])
   )
   const selectedSourceImagesRaw=selectedListing?[...(selectedListing.imageUrls||[]),selectedListing.imageUrl].filter((value,index,array)=>value&&array.indexOf(value)===index):[]
-  // 过滤掉尺寸过小的图片（最长边<500px），保持与「查看页面」口径一致
+  // 过滤掉尺寸过小的图片（最长边<500px）：URL 声明尺寸优先（尺寸表记的是原图尺寸），保持与「查看页面」口径一致
   const selectedSourceImages=selectedSourceImagesRaw.filter(url=>{
-    const size=remoteUrlToSizeMap.get(url)
+    const size=declaredRemoteImageSize(url)||remoteUrlToSizeMap.get(url)
     if(!size||Math.max(size.width,size.height)<=0)return true // 无尺寸信息或 FAILED 媒体的 0 值尺寸视为未知，保留（0×0 不是「已知过小」）
     return Math.max(size.width,size.height)>=500
   })
@@ -4996,7 +4997,9 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   useEffect(()=>{
     let cancelled=false
     setFinalImageInspection(null)
-    if((!imageAdoptionComplete&&!premiumRestoreCarrier)||!finalImageUrls.length)return()=>{cancelled=true}
+    // 部分/零采纳沿用原图也允许进入后续环节（图片阶段「四类未齐仅提示」口径），
+    // 故只要有最终图集就必须真跑检查；若以采纳齐全为触发条件，定价步会永久停「检查尚未返回」并禁用保存
+    if(!finalImageUrls.length)return()=>{cancelled=true}
     setFinalImageChecking(true)
     const timer=window.setTimeout(()=>{
       void window.desktop.ebay.inspectFinalImages(finalImageUrls).then(report=>{
@@ -5008,7 +5011,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
       })
     },400)
     return()=>{cancelled=true;window.clearTimeout(timer);setFinalImageChecking(false)}
-  },[imageAdoptionComplete,finalImageFingerprint])
+  },[finalImageFingerprint])
   const submitComplianceReview=async()=>{if(!complianceCheck||!complianceIsCurrent||complianceCheck.gateStatus!=='REVIEW_REQUIRED')return;const note=window.prompt('请输入本次人工复核结论，该内容将作为发布门禁留痕保存。','已核对商品事实、安全资料与适用规则。');if(note===null)return;setBusy('compliance-review');setEbayError('');try{const result=await window.desktop.compliance.reviewCheck(complianceCheck.id,'本机用户',note);setComplianceCheck(result);setComplianceReviewed(Boolean(result.reviewedAt));setNotice(`人工复核已留痕：${new Date(result.reviewedAt!).toLocaleString('zh-CN')}`)}catch(reason){setEbayError(readableError(reason,'人工复核保存失败'))}finally{setBusy('')}}
   useEffect(()=>{
     let cancelled=false

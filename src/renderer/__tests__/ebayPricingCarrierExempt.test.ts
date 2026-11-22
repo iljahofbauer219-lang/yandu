@@ -19,7 +19,8 @@ describe('售价环节 · 恢复载体豁免图片初步检查', () => {
     expect(app).toContain('恢复载体沿用草稿已检结果')
   })
   it('最终图集检查 effect 对载体不早退（按 URL 补检）', () => {
-    expect(app).toContain('if((!imageAdoptionComplete&&!premiumRestoreCarrier)||!finalImageUrls.length)return()=>{cancelled=true}')
+    // 2026-11-21 根因修复后触发条件只看最终图集是否为空：载体与部分/零采纳同样真跑检查，载体豁免意图不变
+    expect(app).toContain('if(!finalImageUrls.length)return()=>{cancelled=true}')
   })
   it('真实本地产品门禁字符串保留', () => {
     expect(app).toContain('图片自动初步检查未完成')
