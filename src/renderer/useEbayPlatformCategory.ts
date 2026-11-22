@@ -18,17 +18,19 @@ interface Args {
   onUpdated: (product: EbayLocalProduct) => void
   notify: (message: string) => void
   fail: (message: string) => void
+  /** 本地行核心词为空时的同源回落（与 AI优化核心商品词输入同序：偏好‖标题建议），避免 seed 重建行误报缺核心词 */
+  fallbackCoreTerm?: string
 }
 
 /** 平台类目选择：按核心商品词拉 eBay 已成交类目候选，默认销量最大者；确定后落库 */
-export function useEbayPlatformCategory({ product, onUpdated, notify, fail }: Args): PlatformCategoryController {
+export function useEbayPlatformCategory({ product, onUpdated, notify, fail, fallbackCoreTerm }: Args): PlatformCategoryController {
   const [options, setOptions] = useState<EbayPlatformCategoryOption[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [pick, setPick] = useState('')
   const productId = product?.id || ''
   const storeId = product?.storeId || ''
-  const coreTerm = product ? (product.coreTermEn || product.coreTermZh).trim() : ''
+  const coreTerm = product ? (product.coreTermEn || product.coreTermZh || fallbackCoreTerm || '').trim() : ''
   const savedId = product?.platformCategoryId || ''
   const savedName = product?.platformCategoryName || ''
   const attemptedFor = useRef('')

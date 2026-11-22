@@ -21,7 +21,7 @@ export function buildEbayPremiumLocalSeed(draft: EbayOptimizationDraft, marketpl
   const details = {
     url: draft.listing.viewUrl || '',
     itemSpecifics: (draft.itemSpecifics || []).map(item => ({ name: item.name, value: item.value })),
-    condition: '',
+    condition: draft.listing.condition || '',
     imageUrls,
     title,
     descriptionText: draft.description || '',
