@@ -694,15 +694,21 @@ export default function EbayImageStagePanel(props: Props) {
     persist({ counts: next })
   }
 
-  /** 模型下拉：多生图片区与原图优化区共用同一份选中状态 */
-  const renderModelSelect = () => (
-    <select value={modelId} onChange={event => setModelId(event.target.value)} aria-label="图片生成大模型">
-      <option value="">请选择模型</option>
-      {props.imageModels.map(model => (
-        <option key={model.id} value={model.id}>{model.name}{model.costLabel ? ` · ${model.costLabel}` : ''}</option>
-      ))}
-    </select>
-  )
+  /** 模型下拉：多生图片区与原图优化区共用同一份选中状态；所选模型带场景标注时随行显示 */
+  const renderModelSelect = () => {
+    const selected = props.imageModels.find(model => model.id === modelId)
+    return (
+      <>
+        <select value={modelId} onChange={event => setModelId(event.target.value)} aria-label="图片生成大模型">
+          <option value="">请选择模型</option>
+          {props.imageModels.map(model => (
+            <option key={model.id} value={model.id}>{model.name}{model.costLabel ? ` · ${model.costLabel}` : ''}</option>
+          ))}
+        </select>
+        {selected?.scenario ? <p className="ebay-stage-model-scenario">适用场景：{selected.scenario}</p> : null}
+      </>
+    )
+  }
 
   /** 单条规则勾选：两区共用同一份勾选状态与持久化 */
   const renderRuleItem = (rule: (typeof EBAY_IMAGE_RULES)[number]) => (

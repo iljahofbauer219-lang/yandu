@@ -8,6 +8,7 @@ const supportedModels: Record<string, Omit<ImageModelProfile, 'id'>> = {
     maxReferenceImages: 10,
     provider: 'volc',
     strengths: '商品主图·细节还原·全场景适用',
+    scenario: '主图、细节、痛点、场景全类目出图。',
     costLabel: '¥0.30/张'
   },
   'doubao-seedream-5-0-260128': {
@@ -16,6 +17,7 @@ const supportedModels: Record<string, Omit<ImageModelProfile, 'id'>> = {
     maxReferenceImages: 10,
     provider: 'volc',
     strengths: '高性价比·质量接近Pro·速度快',
+    scenario: '全类目高频次、大批量的出图场景。',
     costLabel: '¥0.22/张'
   }
 }

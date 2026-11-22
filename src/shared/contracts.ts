@@ -1513,6 +1513,8 @@ export interface ImageModelProfile {
   provider?: 'bailian' | 'volc' | 'openai' | 'linduo'
   /** 功能强项描述，如 "商品一致性·细节还原·全场景适用" */
   strengths?: string
+  /** 适用场景一句话（2026-11-20 定稿），独立于 strengths，不参与默认推荐匹配 */
+  scenario?: string
   /** 单张成本标签，如 "¥0.22/张" */
   costLabel?: string
   /** 该模型需通过 IMAGE_PROXY_URL 代理访问 */

@@ -437,6 +437,14 @@
   background: var(--bg-primary, #fff);
 }
 
+.ebay-stage-model-scenario {
+  margin: 0;
+  width: 100%;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary, #64748b);
+}
+
 .ebay-stage-model-recommend {
   display: flex;
   align-items: center;

@@ -2,13 +2,13 @@ import fs from 'node:fs'
 import type { ImageGenerationRequest, ImageGenerationResult, ImageModelConnection, ImageModelProfile } from '../../shared/contracts'
 
 const supportedModels: Record<string, Omit<ImageModelProfile, 'id'>> = {
-  'wan2.7-image-pro': { name: '万相 2.7 Pro', description: '高质量商品图、文字与品牌色控制，参照图上限8张', maxReferenceImages: 8, strengths: '商品主图·细节还原·品牌色控制', costLabel: '¥0.16/张' },
-  'wan2.7-image': { name: '万相 2.7', description: '质量与生成速度平衡，参照图上限8张', maxReferenceImages: 8, strengths: '商品主图·质量速度均衡', costLabel: '¥0.08/张' },
-  'qwen-image-2.0-pro': { name: '千问 Image 2.0 Pro', description: '纯文生图，文字渲染与复杂指令表现更强；不支持参照商品原图', maxReferenceImages: 0, strengths: '文字渲染·复杂指令·纯文生图', costLabel: '¥0.20/张' },
-  'qwen-image-2.0': { name: '千问 Image 2.0', description: '纯文生图，生成速度快；不支持参照商品原图', maxReferenceImages: 0, strengths: '快速生成·纯文生图', costLabel: '¥0.10/张' },
+  'wan2.7-image-pro': { name: '万相 2.7 Pro', description: '高质量商品图、文字与品牌色控制，参照图上限8张', maxReferenceImages: 8, strengths: '商品主图·细节还原·品牌色控制', scenario: '品牌一致性要求高的主图与细节图。', costLabel: '¥0.16/张' },
+  'wan2.7-image': { name: '万相 2.7', description: '质量与生成速度平衡，参照图上限8张', maxReferenceImages: 8, strengths: '商品主图·质量速度均衡', scenario: '主图与细节图的日常批量出图场景。', costLabel: '¥0.08/张' },
+  'qwen-image-2.0-pro': { name: '千问 Image 2.0 Pro', description: '纯文生图，文字渲染与复杂指令表现更强；不支持参照商品原图', maxReferenceImages: 0, strengths: '文字渲染·复杂指令·纯文生图', scenario: '带文字标语的痛点海报与宣传图。', costLabel: '¥0.20/张' },
+  'qwen-image-2.0': { name: '千问 Image 2.0', description: '纯文生图，生成速度快；不支持参照商品原图', maxReferenceImages: 0, strengths: '快速生成·纯文生图', scenario: '痛点与场景概念图的快速批量出图。', costLabel: '¥0.10/张' },
   'qwen-image-edit-plus': { name: '千问 Image Edit Plus', description: '多图参照编辑，适合保持商品结构与材质', maxReferenceImages: 3, strengths: '多图参照·材质结构保持', costLabel: '¥0.12/张' },
   'qwen-image-edit-max': { name: '千问 Image Edit Max', description: '高保真多图编辑，适合复杂商品细节', maxReferenceImages: 3, strengths: '高保真编辑·细节还原', costLabel: '¥0.20/张' },
-  'z-image-turbo': { name: 'Z-Image Turbo', description: '快速低成本，适合写实商品图', maxReferenceImages: 1, strengths: '极速低成本·写实商品主图', costLabel: '¥0.04/张' }
+  'z-image-turbo': { name: 'Z-Image Turbo', description: '快速低成本，适合写实商品图', maxReferenceImages: 1, strengths: '极速低成本·写实商品主图', scenario: '写实风格主图的低成本批量出图场景。', costLabel: '¥0.04/张' }
 }
 
 const NEGATIVE_PROMPT = 'Do not change the referenced PRODUCT identity, structure, proportions, color, material, included accessories, packaging, logo, text, measurement labels, or verified facts. Props, background and non-product elements MAY differ when the prompt requests it. No watermark, promotional badge, border, invented parts, invented claims, distorted geometry, or AI artifacts.'

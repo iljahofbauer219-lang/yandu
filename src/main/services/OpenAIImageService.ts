@@ -9,6 +9,7 @@ const supportedModels: Record<string, Omit<ImageModelProfile, 'id'>> = {
     maxReferenceImages: 0,
     provider: 'openai',
     strengths: '痛点表达·创意构图·英文场景',
+    scenario: '痛点表达图与英文创意场景图。',
     costLabel: '¥0.04-1.5/张',
     requiresProxy: true
   }

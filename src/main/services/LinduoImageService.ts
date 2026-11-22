@@ -32,6 +32,7 @@ const supportedModels: Record<string, Omit<ImageModelProfile, 'id'>> = {
     maxReferenceImages: 0,
     provider: 'linduo',
     strengths: '文字渲染·细节·创意构图',
+    scenario: '带文字的创意构图与细节海报。',
     costLabel: '按量计费'
   },
   'gemini-2.5-flash-image-preview': {
@@ -40,6 +41,7 @@ const supportedModels: Record<string, Omit<ImageModelProfile, 'id'>> = {
     maxReferenceImages: 4,
     provider: 'linduo',
     strengths: '多模态·速度快·参照图',
+    scenario: '带参照图的场景生成与图像编辑。',
     costLabel: '按量计费'
   },
   'imagen-4.0': {
@@ -48,6 +50,7 @@ const supportedModels: Record<string, Omit<ImageModelProfile, 'id'>> = {
     maxReferenceImages: 0,
     provider: 'linduo',
     strengths: '高质量·品牌色·主图',
+    scenario: '品牌色控制要求高的主图出图。',
     costLabel: '按量计费'
   },
   'nano-banana-2': {
@@ -56,6 +59,7 @@ const supportedModels: Record<string, Omit<ImageModelProfile, 'id'>> = {
     maxReferenceImages: 4,
     provider: 'linduo',
     strengths: '商品参照·图像编辑·场景生成',
+    scenario: '带商品参照图的场景生成与图像编辑。',
     costLabel: '$0.03–0.045/张'
   },
   'nano-banana-pro': {
@@ -64,6 +68,7 @@ const supportedModels: Record<string, Omit<ImageModelProfile, 'id'>> = {
     maxReferenceImages: 4,
     provider: 'linduo',
     strengths: '商品参照·精细构图·图像编辑',
+    scenario: '精细构图主图与高要求图像编辑。',
     costLabel: '$0.04–0.05/张'
   }
 }
