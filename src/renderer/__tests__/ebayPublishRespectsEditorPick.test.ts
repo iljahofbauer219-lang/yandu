@@ -31,4 +31,14 @@ describe('发布尊重编辑器已选平台类目', () => {
     expect(hook).toContain('const confirm = useCallback')
     expect(hook).toContain('window.desktop.ebay.setLocalPlatformCategory(product.id, pick, chosen?.name || pick)')
   })
+  it('选值即落库：默认值加载与手动改选静默写库，关编辑器后门禁仍读得到', () => {
+    const hook = readFileSync(path.resolve(process.cwd(), 'src/renderer/useEbayPlatformCategory.ts'), 'utf8')
+    expect(hook).toContain('if (!product || !pick || pick === savedId) return')
+    expect(hook).toContain('const chosen = options.find(option => option.categoryId === pick)')
+    expect(hook).toContain('window.desktop.ebay.setLocalPlatformCategory(product.id, pick, chosen.name || pick).then(updated => {')
+    expect(hook).toContain('}, [productId, pick, savedId, options])')
+    const autoSeg = hook.split('// 选值即落库')[1]?.split('}, [productId, pick, savedId, options])')[0] ?? ''
+    expect(autoSeg).not.toContain('notify(')
+    expect(hook).toContain('notify(`平台类目已保存为『${chosen?.name || pick}』`)')
+  })
 })

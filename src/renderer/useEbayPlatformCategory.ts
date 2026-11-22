@@ -47,6 +47,19 @@ export function useEbayPlatformCategory({ product, onUpdated, notify, fail, fall
     setError('')
   }, [productId, savedId])
 
+  // 选值即落库：默认值加载与手动改选都经既有 IPC 静默写库（不 notify 防刷屏），
+  // 关编辑器后发布/读刊登规则门禁仍读得到 platformCategoryId（21:01 残留误报根因）；「确定」按钮保留为显式重存。
+  useEffect(() => {
+    if (!product || !pick || pick === savedId) return
+    const chosen = options.find(option => option.categoryId === pick)
+    if (!chosen) return
+    let alive = true
+    window.desktop.ebay.setLocalPlatformCategory(product.id, pick, chosen.name || pick).then(updated => {
+      if (alive) onUpdated(updated)
+    }).catch(() => undefined)
+    return () => { alive = false }
+  }, [productId, pick, savedId, options])
+
   const refresh = useCallback(() => {
     if (!product || busy) return
     if (!coreTerm) { setError('缺少核心商品词，无法获取平台类目'); return }
