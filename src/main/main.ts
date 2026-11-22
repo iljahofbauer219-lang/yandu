@@ -39,6 +39,7 @@ import { EBAY_IMAGE_LIMIT } from '../shared/ebayUploadMediaPlan'
 import { applyLlmSpecificAnswers, ebaySpecificsLlmOptions, ebaySpecificsUnfilledRows, inferEbaySpecificsYesNo, planEbaySpecificsFill } from '../shared/ebaySpecificsFillPlan'
 import type { EbayItemSpecificSlot } from '../shared/ebayItemSpecificsModel'
 import { imageHashService, confinedLocalMediaPath, imageContentTypeForPath } from './services/ImageHashService'
+import { mapWithConcurrency } from '../shared/mapWithConcurrency'
 import { parseEbayListingsReport } from './services/EbayReportService'
 import { ServerProcessManager } from './services/ServerProcessManager'
 import { MaxkbKnowledgeService } from './services/MaxkbKnowledgeService'
@@ -1204,7 +1205,8 @@ function imageDimensions(buffer:Buffer,format:string) {
 
 async function inspectEbayImages(urls:string[]):Promise<EbayImageInspectionReport> {
   const unique=[...new Set(urls.filter(Boolean).map(url=>url.replace(/\/s-l\d+(?=\.[a-z0-9]+(?:\?|$))/i,'/s-l1600')))]
-  const images:EbayImageInspection[]=await Promise.all(unique.map(async url=>{
+  const images:EbayImageInspection[]=await mapWithConcurrency(unique,4,async url=>{
+    const attempt=async():Promise<EbayImageInspection>=>{
     const findings:string[]=[]
     try {
       let buffer:Buffer
@@ -1237,7 +1239,12 @@ async function inspectEbayImages(urls:string[]):Promise<EbayImageInspectionRepor
     } catch(error) {
       return {url,reachable:false,format:'unknown',width:0,height:0,longestEdge:0,status:'BLOCKED',findings:[`图片无法读取：${error instanceof Error?error.message:'未知错误'}`]}
     }
-  }))
+    }
+    let outcome=await attempt()
+    // 瞬时网络失败（上游限流超时/中断）重试一次；格式/尺寸/越权等真问题不重试
+    if(!outcome.reachable&&/aborted|timeout|fetch failed/i.test(outcome.findings.join(' ')))outcome=await attempt()
+    return outcome
+  })
   return {checkedAt:new Date().toISOString(),images,passed:images.filter(item=>item.status==='PASSED').length,review:images.filter(item=>item.status==='REVIEW').length,blocked:images.filter(item=>item.status==='BLOCKED').length}
 }
 

@@ -34,6 +34,23 @@ export function localPathForMediaValue(value: string): string | null {
   return null
 }
 
+/** 检查链路读本机媒体：cross-media local/file/裸路径限制在指定根内（与协议 handler 同约束）；越权或网络/data 返回 null */
+export function confinedLocalMediaPath(value: string, root: string): string | null {
+  const local = localPathForMediaValue(value)
+  if (!local) return null
+  const resolved = path.resolve(root, path.isAbsolute(local) ? path.relative(root, local) : local)
+  return resolved.startsWith(`${root}${path.sep}`) ? resolved : null
+}
+
+/** 本地文件扩展名 → MIME；未知扩展给空串，交由格式规则判 BLOCKED */
+export function imageContentTypeForPath(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase()
+  if (ext === '.png') return 'image/png'
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg'
+  if (ext === '.webp') return 'image/webp'
+  return ''
+}
+
 function hashFromBuffer(buffer: Buffer): string | null {
   const image = nativeImage.createFromBuffer(buffer)
   if (image.isEmpty()) return null
