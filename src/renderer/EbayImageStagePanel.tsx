@@ -49,6 +49,7 @@ import {
   type EbaySimpleSourceCheck,
   type EbaySimpleTriage
 } from '../shared/ebayImageSimpleLane'
+import { fillMissingFinalCategories } from '../shared/ebayFinalSetConfirmFill'
 import { getTokens } from './serverApi'
 
 // 简化流程：合规内置 → 原图 → 事实卡自动 → 模型+出图模式 → 生图规则勾选 → 一键生成四类图 → 逐图采纳/单张重生 → 保留回显
@@ -85,6 +86,7 @@ interface PersistedState {
   facts: EbayMarketingFacts | null
   generated: GeneratedImage[]
   keptByCategory: Partial<Record<EbayImageCategory, string[]>>
+  preConfirmKept?: Partial<Record<EbayImageCategory, string[]>> | null
   lane?: 'simple' | 'model'
   simpleCounts?: EbayImageCategoryCounts
   simpleTriage?: EbaySimpleTriage | null
@@ -146,7 +148,7 @@ function readPersisted(listingId: string): PersistedState | null {
     if (laneDecision.migrated) {
       try { localStorage.setItem(`ebay-image-simplified:v1:${listingId}`, JSON.stringify({ ...parsed, lane: 'simple' })) } catch { /* 忽略写回失败 */ }
     }
-    return { mode: parsed.mode === 'TEXT_COMBO' ? 'TEXT_COMBO' : 'PURE', counts, rules: normalizeEbayImageRules(parsed.rules), presence: normalizeEbayImageModelPresence(parsed.presence), facts: parsed.facts || null, generated: Array.isArray(parsed.generated) ? parsed.generated : [], keptByCategory: parsed.keptByCategory || {}, lane: laneDecision.lane, simpleCounts: parsed.simpleCounts && typeof parsed.simpleCounts === 'object' ? normalizeSimpleCategoryCounts(parsed.simpleCounts) : undefined, simpleTriage: parsed.simpleTriage || null, simpleRegen: parsed.simpleRegen && typeof parsed.simpleRegen === 'object' ? parsed.simpleRegen : {}, simpleGenerated: Array.isArray(parsed.simpleGenerated) ? parsed.simpleGenerated : [], simpleOrder: Array.isArray(parsed.simpleOrder) ? parsed.simpleOrder : [], simpleDeleted: Array.isArray(parsed.simpleDeleted) ? parsed.simpleDeleted : [] }
+    return { mode: parsed.mode === 'TEXT_COMBO' ? 'TEXT_COMBO' : 'PURE', counts, rules: normalizeEbayImageRules(parsed.rules), presence: normalizeEbayImageModelPresence(parsed.presence), facts: parsed.facts || null, generated: Array.isArray(parsed.generated) ? parsed.generated : [], keptByCategory: parsed.keptByCategory || {}, preConfirmKept: parsed.preConfirmKept && typeof parsed.preConfirmKept === 'object' ? parsed.preConfirmKept : null, lane: laneDecision.lane, simpleCounts: parsed.simpleCounts && typeof parsed.simpleCounts === 'object' ? normalizeSimpleCategoryCounts(parsed.simpleCounts) : undefined, simpleTriage: parsed.simpleTriage || null, simpleRegen: parsed.simpleRegen && typeof parsed.simpleRegen === 'object' ? parsed.simpleRegen : {}, simpleGenerated: Array.isArray(parsed.simpleGenerated) ? parsed.simpleGenerated : [], simpleOrder: Array.isArray(parsed.simpleOrder) ? parsed.simpleOrder : [], simpleDeleted: Array.isArray(parsed.simpleDeleted) ? parsed.simpleDeleted : [] }
   } catch {
     return null
   }
@@ -167,6 +169,7 @@ export default function EbayImageStagePanel(props: Props) {
   const [lane, setLane] = useState<'simple' | 'model'>(persisted.current?.lane === 'model' ? 'model' : 'simple')
   const [generated, setGenerated] = useState<GeneratedImage[]>(persisted.current?.generated || [])
   const [keptByCategory, setKeptByCategory] = useState<Partial<Record<EbayImageCategory, string[]>>>(persisted.current?.keptByCategory || {})
+  const [preConfirmKept, setPreConfirmKept] = useState<Partial<Record<EbayImageCategory, string[]>> | null>(persisted.current?.preConfirmKept ?? null)
   const [simpleCounts, setSimpleCounts] = useState<EbayImageCategoryCounts>(persisted.current?.simpleCounts || { ...ZERO_EBAY_IMAGE_CATEGORY_COUNTS })
   const [simpleTriage, setSimpleTriage] = useState<EbaySimpleTriage | null>(persisted.current?.simpleTriage || null)
   const [simpleRegen, setSimpleRegen] = useState<Record<string, { url: string; model?: string }>>(persisted.current?.simpleRegen || {})
@@ -223,7 +226,7 @@ export default function EbayImageStagePanel(props: Props) {
   const generatedRef = useRef(generated)
   useEffect(() => { generatedRef.current = generated }, [generated])
 
-  const persist = (next: { mode?: EbayImageOutputMode; counts?: EbayImageCategoryCounts; rules?: EbayImageRuleState; presence?: EbayImageModelPresence; facts?: EbayMarketingFacts | null; generated?: GeneratedImage[]; keptByCategory?: Partial<Record<EbayImageCategory, string[]>>; lane?: 'simple' | 'model'; simpleCounts?: EbayImageCategoryCounts; simpleTriage?: EbaySimpleTriage | null; simpleRegen?: Record<string, { url: string; model?: string }>; simpleGenerated?: GeneratedImage[]; simpleOrder?: string[]; simpleDeleted?: string[] }) => {
+  const persist = (next: { mode?: EbayImageOutputMode; counts?: EbayImageCategoryCounts; rules?: EbayImageRuleState; presence?: EbayImageModelPresence; facts?: EbayMarketingFacts | null; generated?: GeneratedImage[]; keptByCategory?: Partial<Record<EbayImageCategory, string[]>>; preConfirmKept?: Partial<Record<EbayImageCategory, string[]>> | null; lane?: 'simple' | 'model'; simpleCounts?: EbayImageCategoryCounts; simpleTriage?: EbaySimpleTriage | null; simpleRegen?: Record<string, { url: string; model?: string }>; simpleGenerated?: GeneratedImage[]; simpleOrder?: string[]; simpleDeleted?: string[] }) => {
     const state: PersistedState = {
       mode: next.mode ?? mode,
       counts: next.counts ?? counts,
@@ -232,6 +235,7 @@ export default function EbayImageStagePanel(props: Props) {
       facts: next.facts !== undefined ? next.facts : facts,
       generated: next.generated ?? generated,
       keptByCategory: next.keptByCategory ?? keptByCategory,
+      preConfirmKept: next.preConfirmKept ?? null,
       lane: next.lane ?? lane,
       simpleCounts: next.simpleCounts ?? simpleCounts,
       simpleTriage: next.simpleTriage !== undefined ? next.simpleTriage : simpleTriage,
@@ -509,6 +513,32 @@ export default function EbayImageStagePanel(props: Props) {
       emit(next)
       return next
     })
+  }
+
+  /** 「确认所有最终图片」：缺类沿用已选原图/该类生成图补齐为最终图，落采纳态供存优品门禁；preConfirmKept 留确认前快照供撤销 */
+  const confirmAllFinalImages = () => {
+    const generatedByCategory: Partial<Record<EbayImageCategory, string[]>> = {}
+    for (const image of (lane === 'simple' ? simpleGenerated : generated)) {
+      generatedByCategory[image.category] = [...(generatedByCategory[image.category] || []), image.url]
+    }
+    const filled = fillMissingFinalCategories({
+      kept: keptByCategory,
+      sources: props.sourceImages.map((url, index) => ({ url, role: props.sourceRoles[index] || 'DETAIL' })),
+      generated: generatedByCategory
+    })
+    setPreConfirmKept(keptByCategory)
+    setKeptByCategory(filled)
+    persist({ keptByCategory: filled, preConfirmKept: keptByCategory })
+    emit(filled)
+  }
+
+  const undoFinalImagesConfirm = () => {
+    if (!preConfirmKept) return
+    const restore = preConfirmKept
+    setPreConfirmKept(null)
+    setKeptByCategory(restore)
+    persist({ keptByCategory: restore, preConfirmKept: null })
+    emit(restore)
   }
 
   const keptCount = keptUrls.size
@@ -936,6 +966,14 @@ export default function EbayImageStagePanel(props: Props) {
           })}
         </div>
       )}
+      <div className="ebay-stage-final-confirm-row">
+        <small>{preConfirmKept ? '已确认所有最终图片（缺类沿用已选原图补齐）；点击撤销回到确认前采纳态。' : '确认后将把未生成类沿用已选原图补齐为最终图，供「存入优品仓库」门禁使用。'}</small>
+        {preConfirmKept ? (
+          <button type="button" className="yd-button yd-button--secondary" onClick={undoFinalImagesConfirm}>✓ 已确认所有最终图片 · 点击撤销</button>
+        ) : (
+          <button type="button" className="yd-button yd-button--primary" disabled={!simpleOrderEffective.length} onClick={confirmAllFinalImages}>确认所有最终图片</button>
+        )}
+      </div>
       {simpleDeleted.length > 0 && (
         <div className="ebay-stage-order-restore">
           <span>已删除（可恢复）：</span>

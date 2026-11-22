@@ -437,6 +437,19 @@
   background: var(--bg-primary, #fff);
 }
 
+.ebay-stage-final-confirm-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.ebay-stage-final-confirm-row small {
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+}
+
 .ebay-stage-model-scenario {
   margin: 0;
   width: 100%;
