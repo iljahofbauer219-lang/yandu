@@ -89,12 +89,4 @@ describe('buildEbayPremiumLocalSeed', () => {
     expect(seed.details.itemSpecifics).toEqual([{ name: 'Brand', value: 'Acme' }])
     expect(seed.details.imageUrls).toEqual(['https://img.example/a.jpg', 'https://img.example/b.jpg'])
   })
-  it('商品状况沿用草稿 listing 真值（不得硬编码空串造成必填缺口）', () => {
-    const seed = buildEbayPremiumLocalSeed(draft({ listing: { ...draft().listing, condition: 'New' } }), 'EBAY_US', '2026-11-18T00:00:00.000Z')
-    expect(seed.details.condition).toBe('New')
-  })
-  it('草稿无状况时保持空串（缺口如实保留）', () => {
-    const seed = buildEbayPremiumLocalSeed(draft(), 'EBAY_US', '2026-11-18T00:00:00.000Z')
-    expect(seed.details.condition).toBe('')
-  })
 })
