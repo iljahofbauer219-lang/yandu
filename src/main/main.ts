@@ -13,7 +13,6 @@ import { hotFile } from './hotPaths'
 import { decryptSecret, encryptSecret, secretStorageAvailable, tryDecryptSecret, warmSecretStorage } from './secureVault'
 import { BrowserWorkspace, EBAY_STORE_VIEW_REQUIRED } from './browser/BrowserWorkspace'
 import { AppDatabase } from './database/AppDatabase'
-import { queryEbayResearch } from './ebayResearch'
 import { BailianImageService } from './services/BailianImageService'
 import { VolcImageService } from './services/VolcImageService'
 import { OpenAIImageService } from './services/OpenAIImageService'
@@ -39,7 +38,7 @@ import { downloadUrlsToLocalMedia, type LocalMediaDownloadResult } from './ebayL
 import { EBAY_IMAGE_LIMIT } from '../shared/ebayUploadMediaPlan'
 import { applyLlmSpecificAnswers, ebaySpecificsLlmOptions, ebaySpecificsUnfilledRows, inferEbaySpecificsYesNo, planEbaySpecificsFill } from '../shared/ebaySpecificsFillPlan'
 import type { EbayItemSpecificSlot } from '../shared/ebayItemSpecificsModel'
-import { imageHashService } from './services/ImageHashService'
+import { imageHashService, confinedLocalMediaPath, imageContentTypeForPath } from './services/ImageHashService'
 import { parseEbayListingsReport } from './services/EbayReportService'
 import { ServerProcessManager } from './services/ServerProcessManager'
 import { MaxkbKnowledgeService } from './services/MaxkbKnowledgeService'
@@ -1210,7 +1209,12 @@ async function inspectEbayImages(urls:string[]):Promise<EbayImageInspectionRepor
     try {
       let buffer:Buffer
       let contentType:string
-      if(url.startsWith('data:image/')) {
+      const localFile=confinedLocalMediaPath(url,path.join(app.getPath('userData'),'ebay-local-products'))
+      if(localFile){
+        // Node undici fetch 不认 Electron 自定义协议：cross-media 本地图直接读文件，根约束与协议 handler 一致
+        buffer=await fs.promises.readFile(localFile)
+        contentType=imageContentTypeForPath(localFile)
+      } else if(url.startsWith('data:image/')) {
         const match=url.match(/^data:([^;,]+)(;base64)?,(.*)$/s)
         if(!match)throw new Error('图片数据格式无效')
         contentType=match[1].toLowerCase()
@@ -3408,7 +3412,6 @@ ipcMain.handle('ebay:stores:create', (_event, name:string, username:string, pass
   return database?.createEbayStore(name.trim(),username.trim(),encryptedPassword,marketplaceId||'EBAY_US',workspace||'ebay')
 })
 ipcMain.handle('ebay:stores:remove', (_event, storeId:string) => database?.removeEbayStore(storeId) ?? false)
-ipcMain.handle('ebay:research:query', (_event, storeId:string, keyword:string) => queryEbayResearch(`persist:login:ebay:${storeId}`, keyword))
 ipcMain.handle('ebay:shortlist:add', (_event, items:Array<Omit<import('../shared/ebayResearch').EbayShortlistItem,'id'|'addedAt'>>) => database?.addShortlistItems(items) ?? [])
 ipcMain.handle('ebay:shortlist:remove', (_event, id:string) => database?.removeShortlistItem(id) ?? false)
 ipcMain.handle('ebay:shortlist:list', () => database?.listShortlist() ?? [])

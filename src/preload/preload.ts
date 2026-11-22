@@ -3,7 +3,7 @@ import type { BrowserBounds, BrowserState, BrowserTab, BrowserTranslationMode, B
 import type { ComplianceBatchRecheckResult, EbayImageInspectionReport } from '../shared/contracts'
 import type { EbayMarketingFacts } from '../shared/ebayImageCategoryPlan'
 import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
-import type { EbayResearchResult, EbayShortlistItem } from '../shared/ebayResearch'
+import type { EbayShortlistItem } from '../shared/ebayResearch'
 import type { EbayBusinessPolicyKind, EbayLocalListingRequirements, EbayLocalRevisionPreparationResult, EbayStoreBusinessPolicy } from '../shared/contracts'
 import type { EbayItemSpecificsSection } from '../shared/ebayItemSpecificsModel'
 import type { EbayTitleDecision, EbayTitleDecisionInput } from '../shared/contracts'
@@ -438,7 +438,6 @@ contextBridge.exposeInMainWorld('desktop', {
     createStore: (name:string,username:string,password:string,marketplaceId='EBAY_US',workspace='ebay'):Promise<EbayStore> => ipcRenderer.invoke('ebay:stores:create',name,username,password,marketplaceId,workspace),
     removeStore: (storeId:string):Promise<boolean> => ipcRenderer.invoke('ebay:stores:remove',storeId),
     research: {
-      query: (storeId:string, keyword:string):Promise<EbayResearchResult> => ipcRenderer.invoke('ebay:research:query',storeId,keyword),
       collect: (items:Array<Omit<import('../shared/ebayResearch').ResearchCollectedItem,'id'|'collectedAt'>>):Promise<import('../shared/ebayResearch').ResearchCollectedItem[]> => ipcRenderer.invoke('ebay:research:collect',items),
       collectedList: ():Promise<import('../shared/ebayResearch').ResearchCollectedItem[]> => ipcRenderer.invoke('ebay:research:collected:list')
     },

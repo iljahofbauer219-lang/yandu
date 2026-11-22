@@ -6,7 +6,7 @@ import type { EbayImageInspectionReport, EbayImageVisualInspectionReport, EbayIm
 import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
 import type { EbayBusinessPolicyKind, EbayLocalListingRequirements, EbayLocalRevisionPreparationResult, EbayStoreBusinessPolicy } from '../shared/contracts'
 import type { EbayItemSpecificsSection } from '../shared/ebayItemSpecificsModel'
-import type { EbayResearchResult, EbayShortlistItem } from '../shared/ebayResearch'
+import type { EbayShortlistItem } from '../shared/ebayResearch'
 import type { EbayTitleDecision, EbayTitleDecisionInput, EbayImageStage, EbayStageFactCard, EbayStageGroundingRequest, EbayStageModelRecommendation, EbayStageStoryboardCard, EbayStageStoryboardRequest } from '../shared/contracts'
 import type { AdvisorDesktopApi } from '../shared/advisor'
 import type { AiEmployeeAskRequest, AiEmployeeChatModelProfile, AiEmployeePickResult } from '../shared/aiEmployee'
@@ -378,7 +378,6 @@ declare global {
         createStore(name:string,username:string,password:string,marketplaceId?:string,workspace?:string):Promise<EbayStore>
         removeStore(storeId:string):Promise<boolean>
         research: {
-          query(storeId:string, keyword:string):Promise<EbayResearchResult>
           collect(items:Array<Omit<import('../shared/ebayResearch').ResearchCollectedItem,'id'|'collectedAt'>>):Promise<import('../shared/ebayResearch').ResearchCollectedItem[]>
           collectedList():Promise<import('../shared/ebayResearch').ResearchCollectedItem[]>
         }
