@@ -9,7 +9,7 @@ import { mergeCandidateFacts } from '../../shared/candidateFactsMerge'
 import { badgeFallbackScore } from '../../shared/badgeScore'
 import { EBAY_COMPLIANCE_KNOWLEDGE_VERSION } from '../../shared/ebayComplianceKnowledge'
 import { normalizeEnglishDescription } from '../../shared/ebaySpecificsEnglish'
-import { reorderDescriptionSections, reorderDescriptionText } from '../../shared/ebayDescriptionSections'
+import { buildOverviewParagraph, reorderDescriptionSections, reorderDescriptionText } from '../../shared/ebayDescriptionSections'
 
 function isUsableCandidateImage(value: string) {
   return /^https?:\/\//i.test(value) && !/(?:product_base|placeholder|default[-_]?image|loading|lazyload|blank|transparent|no[-_]?image)/i.test(value)
@@ -1756,7 +1756,9 @@ export class AppDatabase {
     const record=JSON.parse(row.payload) as EbayContentOptimizationRecord
     const result=record.result
     const normalizedSections=(result.sections||[]).map(section=>({...section,content:normalizeEnglishDescription(section.content)}))
-    const sections=reorderDescriptionSections(normalizedSections)
+    // 旧记录概览单行曾混入中文事实被整行丢弃成空串：读取层按标题+非中文FEATURE确定性重建，手改非空内容不覆盖
+    const repairedSections=normalizedSections.map(section=>section.id==='SUMMARY'&&!section.content.trim()?{...section,content:buildOverviewParagraph(record.selectedTitle,result.sourceFacts||[])}:section)
+    const sections=reorderDescriptionSections(repairedSections)
     const assemble=(items:typeof normalizedSections)=>items.map(section=>`${section.title.toUpperCase()}\n${section.content}`).join('\n\n').trim()
     const storedDescription=normalizeEnglishDescription(result.englishDescription||'')
     // englishDescription 可能被用户手改过：仅当落库文本与规范化 sections 的拼装结果完全同源时才按重排顺序重建，避免覆盖手改

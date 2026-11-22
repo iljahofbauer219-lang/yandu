@@ -2,7 +2,7 @@ import type { EbayContentBenefit, EbayContentFactKind, EbayContentOptimizationRe
 import { buildEbayMarketDecisionReport } from '../../shared/ebayMarketDecision'
 import { parseCategoryClassifyReply } from '../../shared/palletCategoryMatch'
 import { containsCjk, englishSpecificLabel, normalizeEnglishDescription } from '../../shared/ebaySpecificsEnglish'
-import { reorderDescriptionSections } from '../../shared/ebayDescriptionSections'
+import { buildOverviewParagraph, reorderDescriptionSections } from '../../shared/ebayDescriptionSections'
 import { describeLlmHttpStatus, describeLlmTransportFailure, type LlmTransportFailure } from '../../shared/llmTransportError'
 import { buildSemanticExtractionMessages, parseSemanticExtractionReply } from '../../shared/semanticFallback'
 import type { SemanticExtractionResult, SemanticField } from '../../shared/semanticFallback'
@@ -242,12 +242,6 @@ function factSections(facts:EbayContentSourceFact[]):EbayContentSection[] {
   return definitions.flatMap(([kind,id,title])=>{const rows=facts.filter(fact=>fact.kind===kind);return rows.length?[{id,title,content:rows.map(fact=>`- ${fact.text}`).join('\n')}]:[]})
 }
 
-function verifiedOverview(request:EbayContentOptimizationRequest,facts:EbayContentSourceFact[]) {
-  const features=facts.filter(fact=>fact.kind==='FEATURE').slice(0,5).map(fact=>fact.text)
-  const summary=[request.selectedTitle.trim(),...features].filter(Boolean).join('. ').replace(/\.{2,}/g,'.')
-  return summary.endsWith('.')?summary:`${summary}.`
-}
-
 function numericFacts(facts:EbayContentSourceFact[]) {
   return [...new Set(facts.flatMap(fact=>fact.text.match(/\b\d+(?:\.\d+)?(?:\s*["']|\s*x\s*\d+(?:\.\d+)?)?/gi)||[]).map(item=>item.replace(/\s+/g,' ').trim()))]
 }
@@ -427,7 +421,7 @@ export class EbayOptimizationService {
     }
     if(!parsed||!conversion)throw new Error(`${lastError||'AI 详情内容不完整'}，系统自动重试后仍未达到完整度要求`)
     const {benefits,scenarios,unsupportedClaimCount}=conversion
-    const overview=verifiedOverview(request,verifiedFacts)
+    const overview=buildOverviewParagraph(request.selectedTitle,verifiedFacts)
     const rawSections:EbayContentSection[]=[
       {id:'SUMMARY',title:'Product Overview',content:overview},
       {id:'PROBLEMS',title:'Customer Problems & Solutions',content:benefits.map((item,index)=>`${index+1}. ${item.painPoint}\nHow it helps: ${item.solution}\nCustomer benefit: ${item.customerBenefit}`).join('\n\n')},

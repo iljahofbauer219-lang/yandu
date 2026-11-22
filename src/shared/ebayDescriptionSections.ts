@@ -1,9 +1,18 @@
 // eBay 描述优化详情页的固定区块顺序与「详细规格 / 包装内容」分区规则：
 // 详细规格不得包含包装类行；规格行与包装行出现同一组尺寸/重量数值时只在包装内容保留一份。
+import { containsCjk } from './ebaySpecificsEnglish'
+
 export interface EbayDescriptionSectionLike {
   id: string
   title: string
   content: string
+}
+
+/** 概览段＝标题＋至多5条非中文 FEATURE 事实拼成单行；中文事实若入行会被 normalizeEnglishDescription 整行丢弃致概览清空 */
+export function buildOverviewParagraph(selectedTitle: string, facts: ReadonlyArray<{ kind: string; text: string }>): string {
+  const features = facts.filter(fact => fact.kind === 'FEATURE' && !containsCjk(fact.text)).slice(0, 5).map(fact => fact.text)
+  const summary = [selectedTitle.trim(), ...features].filter(Boolean).join('. ').replace(/\.{2,}/g, '.')
+  return summary.endsWith('.') ? summary : `${summary}.`
 }
 
 const DESCRIPTION_SECTION_ORDER: ReadonlyArray<{ id: string; title: string }> = [
