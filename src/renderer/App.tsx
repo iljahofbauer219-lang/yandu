@@ -4474,7 +4474,9 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   const inlinePlatformCategory=useEbayPlatformCategory({product:publishEditorProduct,onUpdated:refreshLocalProduct,notify:setNotice,fail:message=>setEbayError(message),fallbackCoreTerm:platformFallbackFor(publishEditorProduct)})
   // 发布尊重编辑器已选类目：下拉选值（pick）未点「确定」不落库，路由只认 platformCategoryId 会误报无类目；
   // 发布入口在开页前把合法 pick 经既有 IPC 落库再路由，不改「确定」语义、不下拉即自动写。
-  const ensurePlatformCategoryBeforePublish=async(product:EbayLocalProduct)=>{const controller=product.id===publishEditorProduct?.id?inlinePlatformCategory:product.id===localEditorProduct?.id?overlayPlatformCategory:null;if(!controller||!controller.pick||(product.platformCategoryId||'').trim())return product;const chosen=controller.options.find(option=>option.categoryId===controller.pick);if(!chosen)return product;const updated=await window.desktop.ebay.setLocalPlatformCategory(product.id,controller.pick,chosen.name||controller.pick);refreshLocalProduct(updated);return updated}
+  const ensurePlatformCategoryBeforePublish=async(product:EbayLocalProduct)=>{if((product.platformCategoryId||'').trim())return product;const controller=product.id===publishEditorProduct?.id?inlinePlatformCategory:product.id===localEditorProduct?.id?overlayPlatformCategory:null;const chosen=controller?.options.find(option=>option.categoryId===controller.pick);if(controller&&controller.pick&&chosen){const updated=await window.desktop.ebay.setLocalPlatformCategory(product.id,controller.pick,chosen.name||controller.pick);refreshLocalProduct(updated);return updated}
+    // 编辑器关闭（含并行 reconcile/seed 重建行）时自愈：同源核心词拉候选、取默认销量最大者落库，门禁不再误报缺类目
+    const item=product.snapshot.sourceListing;const preference=activeStore?readEbayResearchQueryPreference(activeStore.id,item.listingId):undefined;const snap=await window.desktop.ebay.marketResearch(product.storeId,item.listingId).catch(()=>undefined);const coreTerm=(platformFallbackByProduct[product.id]||preference?.query||snap?.query||ebayResearchQuerySuggestion(item).query||'').trim();if(!coreTerm)return product;try{const list=await window.desktop.ebay.platformCategories(product.storeId,coreTerm);const first=list[0];if(!first)return product;const updated=await window.desktop.ebay.setLocalPlatformCategory(product.id,first.categoryId,first.name||first.categoryId);refreshLocalProduct(updated);return updated}catch{return product}}
   // 两个编辑器开的是哪一页由本地产品本身决定（有没有在架编号、平台类目可不可用），与主进程 prepare 用同一个纯函数判定，
   // 按钮文案、缺口集合和完成提示才不会跟引擎实际打开的页面各说各话。
   const localEditorRouteKind=resolveEbayListingTargetForProduct(localEditorProduct??{}).kind
@@ -4604,6 +4606,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   const setPolicyCarrierForActiveStore=(value:string)=>{setPolicyCarrierItemId(value);writePolicyCarrierItemId(activeStore?.id||'',value)}
   const readBusinessPoliciesFor=async(product:EbayLocalProduct|null,busyKey:string,options:{silent?:boolean}={})=>{
     if(!product||!activeStore)return
+    product=await ensurePlatformCategoryBeforePublish(product)
     // 评审 Important-3（其二，读取本身也要抗竞态）：店铺 id 与载体编号在入口钉死——抓取只针对点按钮那一刻的
     // 那家店、那个载体；每次 await 之后核对 activeStoreIdRef，店已切走就丢弃结果、不写任何政策状态。
     const storeId=activeStore.id

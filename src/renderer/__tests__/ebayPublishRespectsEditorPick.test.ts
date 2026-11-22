@@ -12,17 +12,21 @@ import { describe, expect, it } from 'vitest'
 const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8')
 
 describe('发布尊重编辑器已选平台类目', () => {
-  it('helper：编辑器匹配＋pick 合法＋产品类目空才落库', () => {
+  it('helper：编辑器匹配＋pick 合法才用选值；类目空且编辑器关闭时同源自愈拉候选落库', () => {
     const seg = app.split('const ensurePlatformCategoryBeforePublish=async(product:EbayLocalProduct)=>{')[1]?.split('\n  const localEditorRouteKind')[0] ?? ''
+    expect(seg).toContain("if((product.platformCategoryId||'').trim())return product")
     expect(seg).toContain('product.id===publishEditorProduct?.id?inlinePlatformCategory:product.id===localEditorProduct?.id?overlayPlatformCategory:null')
-    expect(seg).toContain("if(!controller||!controller.pick||(product.platformCategoryId||'').trim())return product")
-    expect(seg).toContain('const chosen=controller.options.find(option=>option.categoryId===controller.pick);if(!chosen)return product')
-    expect(seg).toContain('window.desktop.ebay.setLocalPlatformCategory(product.id,controller.pick,chosen.name||controller.pick)')
-    expect(seg).toContain('refreshLocalProduct(updated);return updated')
+    expect(seg).toContain('const chosen=controller?.options.find(option=>option.categoryId===controller.pick)')
+    expect(seg).toContain('const coreTerm=(platformFallbackByProduct[product.id]||preference?.query||snap?.query||ebayResearchQuerySuggestion(item).query||\'\').trim()')
+    expect(seg).toContain('const snap=await window.desktop.ebay.marketResearch(product.storeId,item.listingId).catch(()=>undefined)')
+    expect(seg).toContain('const list=await window.desktop.ebay.platformCategories(product.storeId,coreTerm);const first=list[0]')
+    expect(seg).toContain('window.desktop.ebay.setLocalPlatformCategory(product.id,first.categoryId,first.name||first.categoryId)')
+    expect(seg).toContain('catch{return product}')
   })
-  it('手动发布与本地编辑器准备两入口开页前接线', () => {
+  it('手动发布/本地准备/读刊登规则三入口开页前接线', () => {
     expect(app).toContain('const manualPublishLocal=async(product:EbayLocalProduct,alsoSaveDraft=false)=>{product=await ensurePlatformCategoryBeforePublish(product);')
     expect(app).toContain('let product=await window.desktop.ebay.updateLocalProduct(productId,localEditorDraft);product=await ensurePlatformCategoryBeforePublish(product);')
+    expect(app).toContain('const readBusinessPoliciesFor=async(product:EbayLocalProduct|null,busyKey:string,options:{silent?:boolean}={})=>{\n    if(!product||!activeStore)return\n    product=await ensurePlatformCategoryBeforePublish(product)')
   })
   it('路由纯函数与确定按钮语义不动', () => {
     const shared = readFileSync(path.resolve(process.cwd(), 'src/shared/ebayListingTarget.ts'), 'utf8')
