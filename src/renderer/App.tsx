@@ -3768,7 +3768,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
     if(!active)return
     const launchVersion=++ebayBrowserLaunchVersion.current
     if(lockTitleMode){if(!titleBrowserUrl){void window.desktop.browser.hide();return}return()=>void window.desktop.browser.hide()}
-    if(activeTab!=='browser'||!activeStore||storeFormOpen||!showBrowser){void window.desktop.browser.hide();const off=window.desktop.browser.onState(()=>{void window.desktop.browser.hide()});return()=>{off()}}
+    if(activeTab!=='browser'||!activeStore||storeFormOpen||!showBrowser){void window.desktop.browser.hide();const reclaim=()=>{void window.desktop.browser.hide()};const offState=window.desktop.browser.onState(reclaim);const offTabs=window.desktop.browser.onTabs(reclaim);return()=>{offState();offTabs()}}
     let cancelled=false
     const isCurrent=()=>!cancelled&&ebayBrowserLaunchVersion.current===launchVersion
     const openPendingOriginalProduct=async()=>{

@@ -171,6 +171,8 @@ export class BrowserWorkspace {
   private attached: WebContentsView | null = null
   private ebayDeliveryPostalSnapshots=new Map<Session,{postal:string;cookie:Cookie}>()
   private browserVisible = false
+  // renderer 页签权限位：非店铺浏览页签时 renderer hide 置 false，主进程内部 show/attach 不得越权附着（重叠乱态根因）
+  private rendererAllowsBrowser = true
   private activationVersion = 0
   // 大健云仓会话是否在线：未在线时 openTab 的深链一律改落首页，避免站点弹「Page expired」原生框
   private gigaLoginOk = false
@@ -3987,11 +3989,16 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
 
   hide() {
     this.browserVisible = false
+    this.rendererAllowsBrowser = false
     this.activationVersion += 1
     if (this.attached) {
       this.window.contentView.removeChildView(this.attached)
       this.attached = null
     }
+  }
+
+  allowRendererBrowser() {
+    this.rendererAllowsBrowser = true
   }
 
   setBounds(bounds: BrowserBounds) {
@@ -4570,7 +4577,7 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
   }
 
   private attachView(view: WebContentsView) {
-    if (!this.browserVisible) return
+    if (!this.browserVisible || !this.rendererAllowsBrowser) return
     if (this.attached === view) {
       view.setBounds(this.bounds)
       return

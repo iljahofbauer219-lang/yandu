@@ -104,6 +104,7 @@ function makeHost(tabs: FakeTab[], activeTabId: string) {
     supplyViews: new Map<string, FakeView>(),
     builtInCollectorProducts: new Map<string, unknown>(),
     activationVersion: 0,
+    rendererAllowsBrowser: true,
     supplyPlatformCode: '',
     browserVisible: true,
     attached: null,
