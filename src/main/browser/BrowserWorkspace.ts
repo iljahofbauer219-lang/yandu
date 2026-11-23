@@ -4554,7 +4554,11 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
 
   private emitState(platform: Platform) {
     if (platform !== this.active) return
-    this.shellContents.send('browser:state', this.getState(platform))
+    // 容忍通用页签缺失：后台加载（凭据登录等）可能在通用页签建立前发射状态，
+    // getState 抛错会经 webContents 事件冒泡成主进程未捕获异常弹框；缺失即跳过本次发射。
+    let state: BrowserState
+    try { state = this.getState(platform) } catch { return }
+    this.shellContents.send('browser:state', state)
   }
 
   private emitTabs() {
