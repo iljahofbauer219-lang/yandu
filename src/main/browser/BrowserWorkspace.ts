@@ -3143,20 +3143,8 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
 
   /** 平台类目候选：加载 eBay prelist「Find a match」页，解析推荐类目完整路径（多级面包屑），按 Best match 优先返回 */
   /** 库存读回：店铺已打开页签真值——草稿/刊登页读 quantity 输入；草稿栏读「库存数量」列（按 draftId/标题定位行） */
-  async readEbayActiveTabQuantity(accountId:string, listingId='', title=''):Promise<{quantity:number|null;at:string;url:string}> {
-    const tabs=[...this.detailTabs.values()].filter(item=>item.scopeId===accountId&&!item.view.webContents.isDestroyed())
-    const tab=tabs.find(item=>item.view===this.attached)||tabs[0]
-    const at=new Date().toISOString()
-    if(!tab)return {quantity:null,at,url:''}
-    const url=tab.view.webContents.getURL()
-    const atDrafts=/ebay\.com\/sh\/lst\/drafts/.test(url)
-    const atEdit=/ebay\.com\/(lstng|sl\/list)/.test(url)
-    if(!atDrafts&&!atEdit)return {quantity:null,at,url}
-    const script=atEdit?String.raw`(() => {
-      const clean=v=>(v||'').replace(/\s+/g,' ').trim();
-      const field=document.querySelector('input[name="quantity"]')||[...document.querySelectorAll('input')].find(el=>/quantity|库存数量|数量/i.test((el.getAttribute('aria-label')||'')+(el.name||'')+(el.id||'')));
-      return field?clean(field.value):'';
-    })()`:String.raw`(() => {
+  private ebayDraftsQuantityScript(listingId:string,title:string):string {
+    return String.raw`(() => {
       const ID=${JSON.stringify(listingId)};const TITLE=${JSON.stringify(title)};
       const clean=v=>(v||'').replace(/\s+/g,' ').trim();
       const compact=v=>(v||'').replace(/\s+/g,'');
@@ -3198,11 +3186,51 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
       }
       return quantity===null?'':String(quantity);
     })()`
+  }
+  async readEbayActiveTabQuantity(accountId:string, listingId='', title=''):Promise<{quantity:number|null;at:string;url:string}> {
+    const tabs=[...this.detailTabs.values()].filter(item=>item.scopeId===accountId&&!item.view.webContents.isDestroyed())
+    const tab=tabs.find(item=>item.view===this.attached)||tabs[0]
+    const at=new Date().toISOString()
+    if(!tab)return {quantity:null,at,url:''}
+    const url=tab.view.webContents.getURL()
+    const atDrafts=/ebay\.com\/sh\/lst\/drafts/.test(url)
+    const atEdit=/ebay\.com\/(lstng|sl\/list)/.test(url)
+    if(!atDrafts&&!atEdit)return {quantity:null,at,url}
+    const script=atEdit?String.raw`(() => {
+      const clean=v=>(v||'').replace(/\s+/g,' ').trim();
+      const field=document.querySelector('input[name="quantity"]')||[...document.querySelectorAll('input')].find(el=>/quantity|库存数量|数量/i.test((el.getAttribute('aria-label')||'')+(el.name||'')+(el.id||'')));
+      return field?clean(field.value):'';
+    })()`:this.ebayDraftsQuantityScript(listingId,title)
     const value=await tab.view.webContents.executeJavaScript(script,true) as string
     const n=parseInt(String(value).replace(/[^0-9]/g,''),10)
     return {quantity:Number.isFinite(n)?n:null,at,url}
   }
 
+  /** 后台库存读回：隐藏视图刮草稿栏「库存数量」列，不附着不拉走用户页签；用完即关 */
+  async readEbayDraftQuantityBackground(accountId:string, listingId='', title=''):Promise<{quantity:number|null;at:string;url:string}> {
+    const base=this.detailTabs.get(`login-${accountId}`)
+    const at=new Date().toISOString()
+    if(!base||base.view.webContents.isDestroyed())return {quantity:null,at,url:''}
+    const view=new WebContentsView({webPreferences:{partition:`persist:login:${accountId}`,nodeIntegration:false,contextIsolation:true,sandbox:true}})
+    view.setBackgroundColor('#ffffff')
+    view.webContents.setUserAgent(base.view.webContents.getUserAgent())
+    const url='https://www.ebay.com/sh/lst/drafts'
+    try{
+      await view.webContents.loadURL(url)
+      let value=''
+      for(let attempt=0;attempt<8;attempt+=1){
+        await this.sleep(900)
+        value=await view.webContents.executeJavaScript(this.ebayDraftsQuantityScript(listingId,title),true) as string
+        if(value)break
+      }
+      const n=parseInt(String(value).replace(/[^0-9]/g,''),10)
+      return {quantity:Number.isFinite(n)?n:null,at,url}
+    }catch{
+      return {quantity:null,at,url}
+    }finally{
+      if(!view.webContents.isDestroyed())view.webContents.close()
+    }
+  }
   async readEbayPlatformCategories(accountId:string,query:string):Promise<EbayPlatformCategoryOption[]> {
     const base=this.detailTabs.get(`login-${accountId}`)
     if(!base||base.view.webContents.isDestroyed())throw new Error('请先在「店铺采集」打开当前 eBay 店铺并完成登录，再获取平台类目')

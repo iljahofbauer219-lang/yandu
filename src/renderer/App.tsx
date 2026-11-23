@@ -3622,14 +3622,15 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
     void run()
     return ()=>{cancelled=true}
   },[activeTab,localProducts])
-  // 蓝位库存：线上发布可见期间每 15s 从店铺当前页签（草稿栏「库存数量」列/草稿页「数量」输入）读真值刷新；仅相关页才落库
+  // 蓝位库存：线上发布可见期间每 15s 读真值刷新；相关页直读，否则 draft ref 行 60s 节流走隐藏视图后台读回（不扰用户页签）
+  const qtyBackgroundAt=useRef<Map<string,number>>(new Map())
   useEffect(()=>{
     if(activeTab!=='publish')return
     let cancelled=false
     const run=async()=>{
       for(const p of localProducts){
         if(cancelled)return
-        if(!p.draftSavedAt||scheduledMetaBusy.current.has(`qty:${p.id}`))continue
+        if(scheduledMetaBusy.current.has(`qty:${p.id}`))continue
         scheduledMetaBusy.current.add(`qty:${p.id}`)
         try{
           const res=await window.desktop.ebay.readDraftQuantity(p.storeId,p.publishRef?.id||p.listingId,p.title)
@@ -3637,6 +3638,16 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
           if(!cancelled&&relevant&&(res.quantity!==p.draftQuantity||!p.draftQuantityAt)){
             const updated=await window.desktop.ebay.setLocalProductMeta(p.id,{draftQuantity:res.quantity,draftQuantityAt:res.at})
             setLocalProducts(cur=>cur.map(it=>it.id===p.id?updated:it))
+          }else if(!cancelled&&p.publishRef?.kind==='draft'&&(res.quantity===null||!relevant)){
+            const last=qtyBackgroundAt.current.get(p.id)||0
+            if(Date.now()-last>=60000){
+              qtyBackgroundAt.current.set(p.id,Date.now())
+              const bg=await window.desktop.ebay.draftQuantityBackground(p.storeId,p.publishRef.id,p.title)
+              if(!cancelled&&bg.quantity!==null){
+                const updated=await window.desktop.ebay.setLocalProductMeta(p.id,{draftQuantity:bg.quantity,draftQuantityAt:bg.at})
+                setLocalProducts(cur=>cur.map(it=>it.id===p.id?updated:it))
+              }
+            }
           }
         }catch{/* 读回失败保留原值，不造假 */}
         finally{scheduledMetaBusy.current.delete(`qty:${p.id}`)}
@@ -3757,7 +3768,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
     if(!active)return
     const launchVersion=++ebayBrowserLaunchVersion.current
     if(lockTitleMode){if(!titleBrowserUrl){void window.desktop.browser.hide();return}return()=>void window.desktop.browser.hide()}
-    if(activeTab!=='browser'||!activeStore||storeFormOpen||!showBrowser){void window.desktop.browser.hide();return}
+    if(activeTab!=='browser'||!activeStore||storeFormOpen||!showBrowser){void window.desktop.browser.hide();const off=window.desktop.browser.onState(()=>{void window.desktop.browser.hide()});return()=>{off()}}
     let cancelled=false
     const isCurrent=()=>!cancelled&&ebayBrowserLaunchVersion.current===launchVersion
     const openPendingOriginalProduct=async()=>{
@@ -5493,11 +5504,11 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
         {publishEditorDraftId&&publishEditorProduct&&publishEditorDraft?<EbayLocalListingEditor inline mode="core" nativeChinese={ebayDeliveryCountry==='CN'} product={publishEditorProduct} draft={publishEditorDraft} saving={false} uploading={busy===`publish-media:${publishEditorProduct?.id}`} preparing={busy===`publish-prepare:${publishEditorProduct?.id}`} categories={categoryWorkspace.categories} platformCategory={inlinePlatformCategory} onChange={setPublishEditorDraft} onSave={async()=>{if(!publishEditorProduct)return;try{const updated=await window.desktop.ebay.updateLocalProduct(publishEditorProduct.id,publishEditorDraft);setLocalProducts(current=>[updated,...current.filter(item=>item.id!==updated.id)]);setNotice('本地版本已保存');publishEditorSession.current='';setPublishEditorDraftId('');setPublishEditorProduct(null);setPublishEditorDraft(null)}catch(reason){setEbayError(readableError(reason,'保存本地版本失败'))}}} onClose={()=>{publishEditorSession.current='';setPublishEditorDraftId('');setPublishEditorProduct(null);setPublishEditorDraft(null)}} onUpload={files=>void uploadPublishEditorMedia(files)} onPrepare={()=>{void preparePublishEditorInSellerHub()}} onSetCategory={(categoryId,categoryName)=>void setLocalCategory(categoryId,categoryName,publishEditorProduct?.id)} onAutoClassify={()=>void autoClassifyLocal(publishEditorProduct?.id)} gaps={publishEditorDraft?requiredFormGaps([],formValuesFromInput(publishEditorDraft),ebayHardRequiredFieldsForRoute(publishEditorRouteKind)):[]} routeKind={publishEditorRouteKind} businessPolicies={publishEditorPolicies} attributeSection={attributeSlotsByProduct[publishEditorProduct.id]?.section} attributeSlotsAt={attributeSlotsByProduct[publishEditorProduct.id]?.at||''} suggestedCard={attributeSlotsByProduct[publishEditorProduct.id]?.card??null} readingPolicies={busy==='publish-read-policies'} onReadPolicies={()=>{void readBusinessPoliciesFor(publishEditorProduct,'publish-read-policies')}} readingSpecifics={busy.startsWith('publish-read-specifics')} fillingSpecifics={busy.startsWith('publish-fill-specifics')} onReadSpecifics={()=>readSpecificsFor(publishEditorProduct,'publish')} onFillSpecifics={()=>void fillSpecificsFor(publishEditorProduct,publishEditorDraft,setPublishEditorDraft,`publish-fill-specifics:${publishEditorProduct?.id||''}`)} specificsFilledAt={publishEditorProduct?specificsFilledAtByProduct[publishEditorProduct.id]||'':''} policyCarrierItemId={policyCarrierItemId} onPolicyCarrierItemIdChange={setPolicyCarrierForActiveStore}/>:<>
         <section className="ebay-scheduled-publish">
           <header><b>本地定时发布</b><small>产品图 · 英中标题 · 重新优化 · 本地版本 · 手动发布 · 自动发布 · 发布时间</small><div className="ebay-scheduled-head-actions"><button type="button" className={scheduledCandidates.length&&scheduledCandidates.every(p=>scheduledPublish[p.id]?.enabled)?'primary':''} onClick={()=>{const now=new Date().toISOString();const applied=applyScheduleConfigToAll(scheduledPublish,scheduledCandidates.map(p=>p.id),{mode:'daily'},now);writeScheduledPublish(scheduledCandidates.reduce((m,p)=>toggleScheduledPublish(m,p.id,true,m[p.id]?.at||'',now),applied))}}>全选自动发布</button><button type="button" onClick={()=>{setSchedulePlanError('');setSchedulePlanDraft({rows:schedulePlan.rows.map(r=>({...r}))})}}>时间设置</button></div></header>
-          {scheduledCandidates.length?scheduledCandidates.map(product=>{const sch=scheduledPublish[product.id]||{enabled:false,at:''};const m=product.snapshot.media.find(item=>item.mediaType==='IMAGE');const img=m?(m.localPath?`cross-media://local/${encodeURIComponent(m.localPath)}`:m.remoteUrl):'';return (
+          {scheduledCandidates.length?scheduledCandidates.map(product=>{const sch=scheduledPublish[product.id]||{enabled:false,at:''};const m=product.snapshot.media.find(item=>item.mediaType==='IMAGE');const img=m?(m.localPath?`cross-media://local/${encodeURIComponent(m.localPath)}`:m.remoteUrl):'';const onlineQty=listings.find(l=>l.listingId===product.listingId&&l.status==='ACTIVE')?.quantity;return (
             <article key={product.id} className="ebay-scheduled-row">
               {img?<img src={img} alt=""/>:<span className="ebay-scheduled-noimg">无图</span>}
               <div className="ebay-scheduled-title"><b title={product.title}>{product.title}</b><small className="ebay-scheduled-coreline"><span className="ebay-scheduled-coreterm">{product.coreTermZh||'—'}</span><span className="ebay-scheduled-coreterm-en">{product.coreTermEn||'—'}</span>{'  '}<span className="ebay-scheduled-titlezh">{product.titleZh||'全译生成中…'}</span></small></div>
-              <div className="ebay-scheduled-metrics"><span className="ebay-scheduled-price" title="产品价格（美元）">{`售价 ${scheduledUsdPrice(product)}`}</span><span className="ebay-scheduled-qty" title={product.draftQuantityAt?`eBay 草稿库存读回 ${new Date(product.draftQuantityAt).toLocaleString('zh-CN')}`:'尚未读回 eBay 草稿库存'}>{`库存 ${product.draftQuantity===undefined||product.draftQuantity===null?'—':product.draftQuantity}`}</span></div>
+              <div className="ebay-scheduled-metrics"><span className="ebay-scheduled-price" title="产品价格（美元）">{`售价 ${scheduledUsdPrice(product)}`}</span><span className="ebay-scheduled-qty" title={product.draftQuantityAt?`eBay 草稿库存读回 ${new Date(product.draftQuantityAt).toLocaleString('zh-CN')}`:onlineQty!==undefined?`eBay 在架库存（listings 同步）${onlineQty}`:'尚未读回 eBay 库存'}>{`库存 ${product.draftQuantity===undefined||product.draftQuantity===null?(onlineQty!==undefined?onlineQty:'—'):product.draftQuantity}`}</span></div>
               <div className="ebay-scheduled-actions">
               <button type="button" disabled={busy===`sched-back-premium:${product.id}`} onClick={()=>void sendBackToPremium(product)}>{busy===`sched-back-premium:${product.id}`?'打回中…':'打回优品'}</button>
               <button type="button" onClick={()=>{const draft=optimizationDrafts.find(item=>!item.returnedAt&&item.listing.listingId===product.listingId);if(draft)openOptimizedVersion(draft);else selectForOptimization(product)}}>重新优化</button>

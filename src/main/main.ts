@@ -3459,6 +3459,10 @@ ipcMain.handle('ebay:local-products:draft-quantity', async (_event, storeId:stri
   if(!workspace)throw new Error('浏览器工作区尚未就绪，请稍后重试')
   return workspace.readEbayActiveTabQuantity(`ebay:${storeId}`,listingId||'',title||'')
 })
+ipcMain.handle('ebay:local-products:draft-quantity-background', async (_event, storeId:string, listingId?:string, title?:string) => {
+  if(!workspace)throw new Error('浏览器工作区尚未就绪，请稍后重试')
+  return workspace.readEbayDraftQuantityBackground(`ebay:${storeId}`,listingId||'',title||'')
+})
 ipcMain.handle('ebay:local-products:set-platform-category', (_event, localProductId:string, categoryId:string, categoryName:string) => database?.setEbayLocalProductPlatformCategory(localProductId, categoryId, categoryName))
 ipcMain.handle('ebay:local-products:platform-categories', async (_event, storeId:string, query:string) => {
   if(!workspace)throw new Error('浏览器工作区尚未就绪，请稍后重试')

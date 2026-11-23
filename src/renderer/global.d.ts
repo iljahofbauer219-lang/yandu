@@ -397,6 +397,7 @@ declare global {
         setLocalCategory(localProductId:string, categoryId:string, categoryName:string):Promise<EbayLocalProduct>
         setLocalProductMeta(localProductId:string, meta:{titleZh?:string;titleZhAt?:string;draftQuantity?:number|null;draftQuantityAt?:string}):Promise<EbayLocalProduct>
         readDraftQuantity(storeId:string, listingId?:string, title?:string):Promise<{quantity:number|null;at:string;url:string}>
+        draftQuantityBackground(storeId:string, listingId?:string, title?:string):Promise<{quantity:number|null;at:string;url:string}>
         setLocalPlatformCategory(localProductId:string, categoryId:string, categoryName:string):Promise<EbayLocalProduct>
         platformCategories(storeId:string, query:string):Promise<EbayPlatformCategoryOption[]>
         autoClassifyLocal(localProductId:string):Promise<{product:EbayLocalProduct;engine:'rule'|'llm'|'none';categoryId:string|null;categoryName:string;reason:string}>
