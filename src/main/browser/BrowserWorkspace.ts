@@ -21,7 +21,7 @@ import { resolveEbayListingTarget, resolveEbayListingTargetForProduct, ebayPubli
 import { planEbayUploadMedia, classifyMediaInputAccept, planEbayMediaSync, type EbayUploadMediaPlanRow } from '../../shared/ebayUploadMediaPlan'
 import { EBAY_POLICY_MODEL_FIELDS, parseEbayPolicyModel, parseEbayPolicyModelChoices, type EbayPolicyModelChoices, type EbayPolicyModelField } from '../../shared/ebayPolicyModel'
 import { parseEbayItemSpecificsSection, parseEbayItemSpecificsCard, type EbayItemSpecificsCardRaw, type EbayItemSpecificsRaw, type EbayItemSpecificsSection, type EbayItemSpecificSlot } from '../../shared/ebayItemSpecificsModel'
-import { EBAY_LOCAL_FILL_TARGETS, ebayLocalFillPayload, ebayPolicyFillPlan, ebayFixedFillPageTargets } from './ebayLocalFill'
+import { EBAY_LOCAL_FILL_TARGETS, ebayLocalFillPayload, ebayPolicyFillPlan, ebayStoreCategoryFillPlan, ebayFixedFillPageTargets } from './ebayLocalFill'
 import { ebayFixedFillPlan, normalizeEbayFixedFillPreset, type EbayFixedFillPreset } from '../../shared/ebayAutoFillPlan'
 import { pickGigaMainImage } from '../../shared/gigaImageResolve'
 import type { BrowserBounds, BrowserState, BrowserTab, BuiltInCollectorState, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, EbayBrowserPluginState, EbayCategorySpecificRequirement, EbayCollectedProduct, EbayDeliveryCountry, EbayDeliveryCountryResult, EbayDirectoryProductScanCategory, EbayLoginResult, EbayMarketResearchFilter, EbayMarketResearchMetric, EbayMarketResearchSample, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayPlatformCategoryOption, EbayProductDetails, EbaySellerHubAcceptanceSnapshot, EbayStoreCategory, MarketplacePlatformCode, NetworkStrategy, Platform, SelectionTask, SupplyActivationResult } from '../../shared/contracts'
@@ -2380,7 +2380,8 @@ export class BrowserWorkspace {
       const payload={...ebayLocalFillPayload(details,{title:listing.title,price:listing.price}),localImageCount:product.snapshot.media.filter(item=>item.downloadStatus==='DOWNLOADED'&&item.localPath).length}
       const targets=EBAY_LOCAL_FILL_TARGETS.map(target=>({...target,patterns:target.patterns.map(pattern=>pattern.source)}))
       const policyPlan=ebayPolicyFillPlan(details,policyModels)
-      const script=this.buildRevisionFillScript(payload,targets,policyPlan)
+      const storePlan=ebayStoreCategoryFillPlan(product)
+      const script=this.buildRevisionFillScript(payload,targets,policyPlan,storePlan)
       const result=await tab.view.webContents.executeJavaScript(script,true) as {login:boolean;verification:boolean;errorPage:{detected:boolean;reason:string};ready:boolean;filledFields:string[];skippedFields:string[];policyPending:string[];warnings:string[]}
       if(result.login)throw new Error('eBay 登录会话已失效，请先完成登录')
       if(result.verification)throw new Error('eBay 要求安全验证，请人工完成后重试')
@@ -2664,11 +2665,12 @@ export class BrowserWorkspace {
     })()`
   }
 
-  private buildRevisionFillScript(payload:Record<string,unknown>,targets:unknown[],policyPlan:unknown[]):string{
+  private buildRevisionFillScript(payload:Record<string,unknown>,targets:unknown[],policyPlan:unknown[],storePlan:unknown=null):string{
     return String.raw`(async () => {
       const desired=${JSON.stringify(payload)};
       const targets=${JSON.stringify(targets)};
       const policyPlan=${JSON.stringify(policyPlan)};
+      const storePlan=${JSON.stringify(storePlan)};
       const clean=value=>(value||'').replace(/\s+/g,' ').trim();
       const wait=ms=>new Promise(resolve=>setTimeout(()=>resolve(),ms));
       const namesOf=list=>{const unique=[...new Set(list)];return unique.length?unique.join('、'):'无'};
@@ -2712,6 +2714,29 @@ export class BrowserWorkspace {
         // 命中的是勾选框一律算「跳过」绝不点击：eBay 的「按现状出售 / 同意条款」类复选框标签可能正撞中 数量/所在地/自定义编号 的模式，而计划只授权写文本与下拉值，改动页面勾选态属未经授权的变更（重试 20 次还会把勾上去的框永远留在页面上）。
         if(field&&field.type==='checkbox'){skippedFields.push(target.label);continue}
         fill(target.label,field,desired[target.key]);
+      }
+      // 店铺类别：值按钮开 #dialog-sidepane 弹窗，radio 组按本地类目ID唯一命中才点，点「完成」后回读值按钮落定才算填；
+      // 命不中/回读不落定一律关闭弹窗保留原值并点名跳过（2026-11-24 隔离克隆现网取证：radio value=类目ID、label=类目名）。
+      if(storePlan){
+        const band=document.querySelector('button[name="primaryStoreCategoryId"]');
+        if(!band)skippedFields.push('店铺类别（本页没有店铺类别控件）');
+        else if(clean(band.textContent)===clean(storePlan.categoryName))filledFields.push('店铺类别');
+        else{
+          band.click();await wait(700);
+          let dialog=document.getElementById('dialog-sidepane');
+          if(!dialog||dialog.getAttribute('aria-hidden')!=='false'){await wait(700);dialog=document.getElementById('dialog-sidepane')}
+          const open=dialog&&dialog.getAttribute('aria-hidden')==='false'?dialog:null;
+          const radio=open?[...open.querySelectorAll('input[type="radio"][name="primaryStoreCategoryId"]')].find(node=>clean(node.value)===clean(storePlan.categoryId)):null;
+          if(!radio){open?.querySelector('button.lightbox-dialog__close')?.click();skippedFields.push('店铺类别（本页选项没有类目ID '+storePlan.categoryId+'，保留原值）')}
+          else{
+            radio.click();await wait(350);
+            const done=[...open.querySelectorAll('button')].find(node=>clean(node.textContent)==='完成'||clean(node.textContent)==='Done');
+            done?.click();await wait(700);
+            const bandNow=document.querySelector('button[name="primaryStoreCategoryId"]');
+            if(bandNow&&clean(bandNow.textContent)===clean(storePlan.categoryName))filledFields.push('店铺类别');
+            else{document.getElementById('dialog-sidepane')?.querySelector('button.lightbox-dialog__close')?.click();skippedFields.push('店铺类别（已点选但回读未落定，按未填处理）')}
+          }
+        }
       }
       const submitButtonDetected=[...document.querySelectorAll('button,input[type="submit"],a[role="button"]')].filter(visible).some(node=>/^(submit|publish|list it|revise it|update listing|save changes|modify|提交|发布|修改|确认修改|更新刊登)/i.test(clean(node.textContent||node.value||node.getAttribute('aria-label'))));
       if(desired.localImageCount)warnings.push('本地已保存 '+desired.localImageCount+' 张图片；为防止误覆盖线上媒体，图片仍需在本页人工核对。');
@@ -2786,7 +2811,8 @@ export class BrowserWorkspace {
     }
     // 目标表序列化：RegExp 过不去 executeJavaScript，只带 .source 源串，页内再用 new RegExp(source,'i') 重建（标志位丢了就是真页面静默不命中）
     const targets=EBAY_LOCAL_FILL_TARGETS.map(target=>({...target,patterns:target.patterns.map(pattern=>pattern.source)}))
-    const script=this.buildRevisionFillScript(payload,targets,policyPlan)
+    const storePlan=ebayStoreCategoryFillPlan(product)
+    const script=this.buildRevisionFillScript(payload,targets,policyPlan,storePlan)
 
     let result:{url:string;login:boolean;verification:boolean;errorPage:{detected:boolean;reason:string};ready:boolean;filledFields:string[];skippedFields:string[];policyPending:string[];warnings:string[];submitButtonDetected:boolean}={url:target.url,login:false,verification:false,errorPage:{detected:false,reason:''},ready:false,filledFields:[],skippedFields:[],policyPending:[],warnings:[],submitButtonDetected:false}
     // 政策点了没落定（policyPending 非空）时把同一段脚本再跑一遍：越晚的页面越不会再被重渲染刷回去，这是 A2 真机取证到的失效窗口。

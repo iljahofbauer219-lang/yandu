@@ -67,6 +67,23 @@ export function ebayLocalFillPayload(details:EbayProductDetails,fallbacks:{title
   return payload
 }
 
+export interface EbayStoreCategoryFillPlanEntry {
+  categoryId:string
+  categoryName:string
+}
+
+/**
+ * 店铺类别在 lstng 页是「fake-link 值按钮 → #dialog-sidepane 弹窗 radio 组」，没有可直接灌值的 input/select。
+ * 与政策 byPolicyId 同口径：只按本地类目ID（纯数字）命中弹窗 radio 的 value，绝不按名称猜；
+ * 没记ID或ID非数字=不出计划，页面保留 eBay 原值（默认 Other 也不谎报已填）。
+ */
+export function ebayStoreCategoryFillPlan(category:{categoryId?:string;categoryName?:string}):EbayStoreCategoryFillPlanEntry|null {
+  const categoryId=String(category.categoryId||'').trim()
+  const categoryName=String(category.categoryName||'').trim()
+  if(!/^\d+$/.test(categoryId)||!categoryName)return null
+  return {categoryId,categoryName}
+}
+
 export interface EbayPolicyFillPlanEntry {
   key:EbayPolicyModelField
   label:string

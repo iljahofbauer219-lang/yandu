@@ -322,15 +322,18 @@ describe('Seller Hub 灌字段脚本 · 循环语义守卫', () => {
     expect(guard).toBeLessThan(script.indexOf('fill(target.label,'))
   })
 
-  it('全脚本只有两处点击：复选框分支与政策选项分支；没有第三条点击路径，也没有任何 form 提交', async () => {
+  it('点击路径限三条授权链：复选框分支、政策选项分支、店铺类别弹窗链；没有任何 form 提交', async () => {
     const { script } = await runPrepare()
-    expect(script.match(/\.click\(/g)).toHaveLength(2)
+    expect(script.match(/\.click\(/g)).toHaveLength(7)
     const clickLines = script.split('\n').filter(line => line.includes('.click()'))
-    expect(clickLines).toHaveLength(2)
+    expect(clickLines).toHaveLength(7)
     expect(clickLines.some(line => line.includes("if(field.type==='checkbox')"))).toBe(true)
-    // 第二条只许点在 [role=option] 节点上（政策选项），绝不允许指向提交/保存类按钮
+    // 政策支只许点在 [role=option] 节点上（政策选项），绝不允许指向提交/发布类按钮
     expect(clickLines.some(line => /\[role="option"\]|option\b/i.test(line))).toBe(true)
-    expect(clickLines.some(line => /button|submit|form/i.test(line))).toBe(false)
+    // 店铺类别弹窗链五处：值按钮开弹窗、按ID点radio、点完成、命不中/未落定关闭弹窗（2026-11-24 决策）
+    const storeLines = clickLines.filter(line => /band\.click|radio\.click|done\?\.click|lightbox-dialog__close/.test(line))
+    expect(storeLines).toHaveLength(5)
+    expect(clickLines.some(line => /submit|publish|list it|revise it/i.test(line))).toBe(false)
   })
 
   it('零提交底线：不新增 .submit( 调用，type="submit" 只允许留在既有的按钮探测里', async () => {
