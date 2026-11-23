@@ -3443,7 +3443,13 @@ ipcMain.handle('ebay:local-products:snapshots', (_event, localProductId:string) 
 ipcMain.handle('ebay:local-products:download', (_event, storeId:string, listingId:string) => downloadEbayLocalProduct(storeId,listingId))
 ipcMain.handle('ebay:product:read-url', (_event, storeId:string, url:string) => readEbayProductByUrl(storeId,url))
 ipcMain.handle('ebay:local-products:update', (_event, localProductId:string, changes:EbayLocalProductUpdateInput) => updateEbayLocalProduct(localProductId,changes))
-ipcMain.handle('ebay:local-products:seed-from-premium', (_event, storeId:string, draft:EbayOptimizationDraft, draftId:string) => seedEbayLocalProductFromPremiumDraft(storeId,draft,draftId))
+ipcMain.handle('ebay:local-products:seed-from-premium', async (_event, storeId:string, draft:EbayOptimizationDraft, draftId:string) => {
+  const seeded=seedEbayLocalProductFromPremiumDraft(storeId,draft,draftId)
+  if(seeded.coreTermZh||seeded.coreTermEn)return seeded
+  const fetched=await fetchLocalCoreTerms(seeded.title)
+  if(!fetched.terms)return seeded
+  return database!.setEbayLocalProductCoreTerms(seeded.id,fetched.terms.zh,fetched.terms.en)
+})
 ipcMain.handle('ebay:local-products:set-category', (_event, localProductId:string, categoryId:string, categoryName:string) => database?.setEbayLocalProductCategory(localProductId, categoryId, categoryName))
 ipcMain.handle('ebay:local-products:set-meta', (_event, localProductId:string, meta:{titleZh?:string;titleZhAt?:string;draftQuantity?:number|null;draftQuantityAt?:string}) => {
   if(!database)throw new Error('数据库尚未初始化')

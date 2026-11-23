@@ -21,7 +21,7 @@ describe('平台类目核心词同源回落', () => {
     expect(app).toContain("const platformCategoryFallback=(product:EbayLocalProduct|null)=>{if(!product)return '';const item=product.snapshot.sourceListing;const preference=activeStore?readEbayResearchQueryPreference(activeStore.id,item.listingId):undefined;return (preference?.query||ebayResearchQuerySuggestion(item).query||'').trim()}")
     expect(app).toContain("const platformFallbackFor=(product:EbayLocalProduct|null)=>product?(platformFallbackByProduct[product.id]||platformCategoryFallback(product)):''")
     expect(app).toContain("void window.desktop.ebay.marketResearch(activeStore.id,product.snapshot.sourceListing.listingId).then(snapshot=>{if(alive&&snapshot?.query)setPlatformFallbackByProduct(cur=>({...cur,[product.id]:snapshot.query}))})")
-    expect(app).toContain("setResearchQuery(preference?.query||suggestion.query)")
+    expect(app).toContain("setResearchQuery(preference?.query||product.coreTermEn||suggestion.query)")
     expect(app).toContain("setMarketResearch(snapshot);setMarketResearchHistory(current=>[snapshot,...current.filter(item=>item.id!==snapshot.id)].slice(0,30));setResearchQuery(snapshot.query)")
   })
   it('两个编辑器 hook 调用点均接回落', () => {

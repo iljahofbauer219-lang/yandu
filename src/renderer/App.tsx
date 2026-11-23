@@ -4272,7 +4272,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
     let cancelled=false
     const preference=activeStore&&selectedListing?readEbayResearchQueryPreference(activeStore.id,selectedListing.listingId):undefined
     const suggestion=selectedListing?ebayResearchQuerySuggestion(selectedListing):{query:'',source:'CATEGORY' as const}
-    setResearchQuery(preference?.query||suggestion.query)
+    setResearchQuery(preference?.query||localProductsRef.current.find(p=>p.listingId===selectedListing?.listingId)?.coreTermEn||suggestion.query)
     if(!preference&&selectedListing&&activeStore){
       const listingId=selectedListing.listingId
       const storeId=activeStore.id
@@ -4343,7 +4343,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
     if(!raw)return
     void openTitleBrowser(/^https?:\/\//i.test(raw)?raw:`https://${raw}`)
   }
-  const selectForOptimization=async(product:EbayLocalProduct)=>{const item=product.snapshot.sourceListing;const suggestion=ebayResearchQuerySuggestion(item);const preference=activeStore?readEbayResearchQueryPreference(activeStore.id,item.listingId):undefined;setSelectedLocalProductId(product.id);setSelectedListingId(item.id);setTitleResult(null);setSelectedTitle('');setTitleDecision(null);setMarketResearch(null);setMarketResearchHistory([]);setResearchQuery(preference?.query||suggestion.query);setImageCandidateReviews({});setAcceptedGeneratedImages({});setManuallyAcceptedShots({});setFinalImageInspection(null);setContentResult(null);setContentResultTitle('');setComplianceReviewed(false);setOptimizeMode('title');setActiveTab('optimize')}
+  const selectForOptimization=async(product:EbayLocalProduct)=>{const item=product.snapshot.sourceListing;const suggestion=ebayResearchQuerySuggestion(item);const preference=activeStore?readEbayResearchQueryPreference(activeStore.id,item.listingId):undefined;setSelectedLocalProductId(product.id);setSelectedListingId(item.id);setTitleResult(null);setSelectedTitle('');setTitleDecision(null);setMarketResearch(null);setMarketResearchHistory([]);setResearchQuery(preference?.query||product.coreTermEn||suggestion.query);setImageCandidateReviews({});setAcceptedGeneratedImages({});setManuallyAcceptedShots({});setFinalImageInspection(null);setContentResult(null);setContentResultTitle('');setComplianceReviewed(false);setOptimizeMode('title');setActiveTab('optimize')}
   const openOriginalProduct=(item:EbayListing)=>{if(!activeStore||!item.viewUrl)return;pendingOriginalProduct.current=item;setBusy(`open:${item.id}`);setEbayError('');setActiveTab('browser')}
   const downloadLocalProduct=async(item:EbayListing)=>{
     if(!activeStore)return
@@ -4464,6 +4464,9 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   const migratePublishedRowRef=useRef(migratePublishedRow);migratePublishedRowRef.current=migratePublishedRow
   const runPublishedReconcile=async(store:EbayStore,excludeIds?:string[])=>{try{const migrated=await window.desktop.ebay.reconcilePublished(store.id,excludeIds);if(!migrated.length)return;setLocalProducts(await window.desktop.ebay.localProducts(store.id));setListings(await window.desktop.ebay.listings(store.id));setOptimizationDrafts(await window.desktop.ebay.optimizationDrafts(store.id));await syncStoreCategories(store,true).catch(()=>undefined);setNotice(`检测到 ${migrated.length} 个产品已在 eBay 上架（${migrated.map(m=>`「${m.title.slice(0,30)}」Item ${m.itemId}`).join('；')}），已移出线上发布并同步到线上产品·产品目录。`)}catch(reason){const message=readableError(reason,'已上架对账失败');setEbayError(message);setEbayErrorActionFor(message);setEbayErrorAction({label:'重试',run:()=>{if(activeStore)void runPublishedReconcileRef.current(activeStore)}})}}
   const runPublishedReconcileRef=useRef(runPublishedReconcile);runPublishedReconcileRef.current=runPublishedReconcile
+  // 核心词存量补取：seed/历史路径留下的空 coreTerm 行在 publish/local 可见时按行补一次，失败保留原值不静默改数
+  const coreTermHealAttempted=useRef<Set<string>>(new Set())
+  useEffect(()=>{if(!active||(activeTab!=='publish'&&activeTab!=='local')||!activeStore)return;const missing=localProducts.filter(p=>!p.coreTermZh&&!p.coreTermEn&&!coreTermHealAttempted.current.has(p.id));if(!missing.length)return;missing.forEach(p=>coreTermHealAttempted.current.add(p.id));void (async()=>{let failed=0;for(const p of missing){try{const res=await window.desktop.ebay.localCoreTerms(p.id);if(res.product.coreTermZh||res.product.coreTermEn)setLocalProducts(cur=>cur.map(it=>it.id===p.id?res.product:it));else failed+=1}catch{failed+=1}}if(failed)setNotice(`核心商品词补取失败 ${failed} 个（千问未返回或网络异常），保留原值；可在本地产品卡点「自动分类」重试。`)})()},[active,activeTab,activeStore?.id,localProducts])
   useEffect(()=>{if(!active||(activeTab!=='publish'&&activeTab!=='local'&&activeTab!=='library'&&activeTab!=='premium')||!activeStore)return;void runPublishedReconcileRef.current(activeStore,[selectedLocalProductId].filter(Boolean));const timer=window.setInterval(()=>{void runPublishedReconcileRef.current(activeStore,[selectedLocalProductId].filter(Boolean))},60000);return()=>window.clearInterval(timer)},[active,activeTab,activeStore?.id,selectedLocalProductId])
   const refreshLocalProduct=(updated:EbayLocalProduct)=>setLocalProducts(current=>[updated,...current.filter(item=>item.id!==updated.id)])
   const [platformFallbackByProduct,setPlatformFallbackByProduct]=useState<Record<string,string>>({})
