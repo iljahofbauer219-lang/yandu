@@ -68,10 +68,12 @@ export function PanelCollapseButton({ panel }: { panel: PanelCollapseControl }) 
 }
 
 // 收起后显示的展开轨：占据 32px 轨道（左面板=首子节点，右面板=末子节点）
-export function PanelExpandRail({ panel, label }: { panel: PanelCollapseControl; label: string }) {
+// infoCount：折叠不渲染汇报信息口径下（11-20 拍板）的未读可达性补充——有 notice/error/toast 时轨上亮计数泡，点击展开查看
+export function PanelExpandRail({ panel, label, infoCount=0 }: { panel: PanelCollapseControl; label: string; infoCount?: number }) {
   const right = panel.side === 'right'
   return <button type="button" className={`panel-expand-rail${right ? ' right' : ''}`} title={`展开${label}`} aria-label={`展开${label}`} onClick={panel.toggle}>
     <svg viewBox="0 0 24 24" aria-hidden="true">{right ? <><path d="m11 6-3 6 3 6"/><path d="m16 6-3 6 3 6"/></> : <><path d="m8 6 3 6-3 6"/><path d="m13 6 3 6-3 6"/></>}</svg>
+    {infoCount>0&&<em className="rail-info-badge" aria-label={`${infoCount} 条未读汇报`}>{infoCount}</em>}
   </button>
 }
 

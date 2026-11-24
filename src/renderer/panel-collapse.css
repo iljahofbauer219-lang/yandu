@@ -21,12 +21,14 @@
 /* 展开轨：收起后占据 32px 轨道，撑满容器高度 */
 .panel-expand-rail {
   display: flex; align-items: flex-start; justify-content: center;
+  position:relative;
   width: 32px; min-height: 0; padding: 10px 0;
   border: 1px solid var(--line); border-radius: 12px;
   background: var(--panel); color: var(--text-muted);
   cursor: pointer; box-shadow: var(--shadow-card);
   transition: background .18s, color .18s, border-color .18s;
 }
+.panel-expand-rail .rail-info-badge{position:absolute;top:4px;right:3px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;background:#b45309;color:#fff;font-size:10px;line-height:14px;font-style:normal;text-align:center}
 .panel-expand-rail:hover { color: var(--accent-contrast); background: var(--accent-soft); border-color: #a7deda; }
 .panel-expand-rail svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
