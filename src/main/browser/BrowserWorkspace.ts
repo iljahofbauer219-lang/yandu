@@ -1702,9 +1702,9 @@ export class BrowserWorkspace {
     const emit=()=>{this.emitState('web');this.emitTabs()}
     view.webContents.on('did-navigate',emit)
     view.webContents.on('did-navigate-in-page',()=>{emit();if(this.builtInCollectorActive)void this.injectBuiltInCollector(view).catch(()=>undefined);if(this.ebayPluginActive)void this.injectEbayPlugin(view).catch(()=>undefined)})
-    view.webContents.on('did-start-loading',emit)
+    this.bindLoadingSignal(view,emit)
     view.webContents.on('dom-ready',()=>{if(ebayAccount)void this.injectEbayScrollbars(view).catch(()=>undefined);if(this.builtInCollectorActive)void this.injectBuiltInCollector(view).catch(()=>undefined);if(this.ebayPluginActive)void this.injectEbayPlugin(view).catch(()=>undefined)})
-    view.webContents.on('did-stop-loading',()=>{emit();if(ebayAccount)void this.injectEbayScrollbars(view).catch(()=>undefined);if(this.builtInCollectorActive)void this.injectBuiltInCollector(view).catch(()=>undefined);if(this.ebayPluginActive)void this.injectEbayPlugin(view).catch(()=>undefined)})
+    view.webContents.on('did-stop-loading',()=>{if(ebayAccount)void this.injectEbayScrollbars(view).catch(()=>undefined);if(this.builtInCollectorActive)void this.injectBuiltInCollector(view).catch(()=>undefined);if(this.ebayPluginActive)void this.injectEbayPlugin(view).catch(()=>undefined)})
     this.active='web';this.activeTabId=id;this.credentialDomains=domains;this.attachView(view);this.emitTabs();loadInBackground(view);return id
   }
 
@@ -1728,9 +1728,9 @@ export class BrowserWorkspace {
     const emit=()=>{this.emitState('web');this.emitTabs()}
     view.webContents.on('did-navigate',()=>{emit();const url=view.webContents.getURL();if(url){try{tab.title=new URL(url).hostname.replace(/^www\./,'')||tab.title}catch{/* 保留标题 */}}this.emitTabs();if(this.ebayPluginActive)void this.injectEbayPlugin(view).catch(()=>undefined)})
     view.webContents.on('did-navigate-in-page',()=>{emit();if(this.ebayPluginActive)void this.injectEbayPlugin(view).catch(()=>undefined)})
-    view.webContents.on('did-start-loading',emit)
+    this.bindLoadingSignal(view,emit)
     view.webContents.on('dom-ready',()=>{void this.injectEbayScrollbars(view).catch(()=>undefined);if(this.ebayPluginActive)void this.injectEbayPlugin(view).catch(()=>undefined)})
-    view.webContents.on('did-stop-loading',()=>{emit();void this.injectEbayScrollbars(view).catch(()=>undefined);if(this.ebayPluginActive)void this.injectEbayPlugin(view).catch(()=>undefined)})
+    view.webContents.on('did-stop-loading',()=>{void this.injectEbayScrollbars(view).catch(()=>undefined);if(this.ebayPluginActive)void this.injectEbayPlugin(view).catch(()=>undefined)})
     view.webContents.on('page-title-updated',(_event,pageTitle)=>{tab.title=pageTitle||title||tab.title;this.emitTabs()})
     this.browserVisible=true;this.active='web';this.activeTabId=id;this.credentialDomains=domains;this.attachView(view);this.emitTabs()
     await this.loadEbayWithDirectFallback(view.webContents, target.toString(), 'eBay 新标签页')
@@ -4571,13 +4571,26 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     return products
   }
 
+  private readonly viewLoading=new WeakMap<object,boolean>()
+
+  // 加载芯片信号：isLoading() 会被挂起的子框架/子资源拖成长真（现网取证：内容已可见、readyState complete 仍转圈整天）。
+  // 改为主框架生命周期口径：start 置真，dom-ready/finish/stop/fail 清假并立即发射，页面可用即灭芯片。
+  private bindLoadingSignal(view:WebContentsView,emit:()=>void){
+    const wc=view.webContents
+    wc.on('did-start-loading',()=>{this.viewLoading.set(wc,true);emit()})
+    wc.on('dom-ready',()=>{this.viewLoading.set(wc,false);emit()})
+    wc.on('did-finish-load',()=>{this.viewLoading.set(wc,false);emit()})
+    wc.on('did-stop-loading',()=>{this.viewLoading.set(wc,false);emit()})
+    wc.on('did-fail-load',()=>{this.viewLoading.set(wc,false);emit()})
+  }
+
   getState(platform: Platform): BrowserState {
     const contents = this.getCurrentView(platform).webContents
     return {
       platform,
       url: contents.getURL(),
       title: contents.getTitle(),
-      loading: contents.isLoading(),
+      loading: this.viewLoading.get(contents) ?? contents.isLoading(),
       canGoBack: contents.navigationHistory.canGoBack(),
       canGoForward: contents.navigationHistory.canGoForward()
     }
