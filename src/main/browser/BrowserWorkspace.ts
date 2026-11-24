@@ -2819,6 +2819,11 @@ export class BrowserWorkspace {
     // 上限 6 轮（约 4 秒）后按「未填」收单并如实点名，绝不为等一个控件把「准备发布」拖成无限轮询，也绝不因为点过就当已填。
     const POLICY_SETTLE_MAX_ATTEMPTS=6
     for(let attempt=0;attempt<20;attempt+=1){result=await tab.view.webContents.executeJavaScript(script,true) as typeof result;if(result.login)throw new Error('eBay 登录会话已失效，请先完成登录');if(result.verification)throw new Error('eBay 要求安全验证，请人工完成后重试');if(result.errorPage.detected){if(product.publishRef)return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledFields:[],skippedFields:[],warnings:[],submitButtonDetected:false,preparedAt:new Date().toISOString(),publishRef:null,reusedRef:true,refDeleted:true};throw new Error(`eBay 把这次打开拒成了错误页（${result.errorPage.reason||'原因未给出'}），未写入任何字段。${target.note}`);}if(result.ready&&result.submitButtonDetected&&(!result.policyPending.length||attempt+1>=POLICY_SETTLE_MAX_ATTEMPTS))break;await this.sleep(750)}
+    // 草稿在 eBay 侧被删除后 continue URL 会重定向到在售/草稿列表/概览页（非错误页），旧探测只认错误页漏判→
+    // 二次点击「草稿发布」停在列表页不重发。列表页落地＋复用 draft ref 即判 refDeleted，交 main 清引用后重建新草稿。
+    if(!result.ready && product.publishRef?.kind==='draft' && /\/sh\/lst\/(?:active|drafts|unsold)|\/sh\/ovw/.test(result.url)) {
+      return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledFields:[],skippedFields:[],warnings:['eBay 侧草稿已删除（落地为列表页），清引用后重建新草稿'],submitButtonDetected:false,preparedAt:new Date().toISOString(),publishRef:null,reusedRef:true,refDeleted:true}
+    }
     if(!result.ready)throw new Error(target.kind==='revise'?'Seller Hub 修改页尚未加载出标题字段，请确认商品仍在线后重试':`eBay 首次刊登页尚未加载出标题字段，请稍后重试或在页面人工填写。${target.note}`)
     const policyPendingWarnings=result.policyPending.length?[`${result.policyPending.join('、')}：已在页面点选该政策，但回读时控件又回到了草稿原值（eBay 在页面加载完成时重渲染了政策控件），已按未填处理、未计入已填，请在页面人工核对后重做`] : []
     // E 批其一：本地媒体写进 PHOTOS & VIDEO 上传控件（与视频链路同款的 debugger 选文件通道，零新 API）。
