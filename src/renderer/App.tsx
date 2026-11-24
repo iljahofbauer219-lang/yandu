@@ -4780,6 +4780,8 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   }
   const localCategoryBackfillAttempted=useRef<Set<string>>(new Set())
   const storePathText=(categoryId:string)=>{const chain:string[]=[];let current=categoryWorkspace.categories.find(item=>item.categoryId===categoryId);while(current){chain.unshift(current.name);current=categoryWorkspace.categories.find(item=>item.categoryId===current!.parentCategoryId)}return chain.join(' / ')}
+  // 自动分类双 miss 的统一回落类目：按名查当前店铺类目树，不硬编码 ID；缺节点时点名保留未分类
+  const otherToolsFallbackCategory=()=>categoryWorkspace.categories.find(item=>item.name.trim().toLowerCase()==='other tools')||null
   const assignLocalCategoryFromTree=(categoryId:string)=>{
     if(localManualPick){setLocalManualPick(prev=>(prev?{...prev,categoryId}:prev));return}
     setSelectedCategoryId(categoryId)
@@ -4789,7 +4791,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
   const enterLocalManualPick=(product:EbayLocalProduct)=>{setLocalManualPick({id:product.id,categoryId:product.categoryId&&categoryWorkspace.categories.some(item=>item.categoryId===product.categoryId)?product.categoryId:''});setEbayError('')}
   const exitLocalManualPick=()=>setLocalManualPick(null)
   const confirmLocalManualPick=(product:EbayLocalProduct)=>{if(!localManualPick||localManualPick.id!==product.id)return;const categoryId=localManualPick.categoryId;const node=categoryWorkspace.categories.find(item=>item.categoryId===categoryId);if(!node)return;setLocalManualPick(null);const pathText=storePathText(categoryId);void window.desktop.ebay.setLocalCategory(product.id,categoryId,node.name).then(updated=>{setLocalProducts(current=>[updated,...current.filter(item=>item.id!==updated.id)]);setNotice(`已按手动选择归位类目：${pathText}`)}).catch(reason=>setEbayError(readableError(reason,'更新本地产品类目失败')))}
-  const autoClassifyLocalCard=(productId:string)=>{setEbayError('');setBusy(`local-classify:${productId}`);window.desktop.ebay.autoClassifyLocal(productId).then(result=>{const suggestedId=result.categoryId||'';if(suggestedId){setLocalAutoSuggestions(current=>({...current,[productId]:{categoryId:suggestedId,categoryName:result.categoryName}}));setNotice(`自动分类建议：${storePathText(suggestedId)}，点「采纳建议」归入`)}else{setEbayError(result.reason||'未匹配到合适类目，请点「手动分类」在左侧目录点选。')}}).catch(reason=>setEbayError(readableError(reason,'自动分类失败'))).finally(()=>setBusy(''))}
+  const autoClassifyLocalCard=(productId:string)=>{setEbayError('');setBusy(`local-classify:${productId}`);window.desktop.ebay.autoClassifyLocal(productId).then(result=>{const suggestedId=result.categoryId||'';if(suggestedId){setLocalAutoSuggestions(current=>({...current,[productId]:{categoryId:suggestedId,categoryName:result.categoryName}}));setNotice(`自动分类建议：${storePathText(suggestedId)}，点「采纳建议」归入`)}else{const fallback=otherToolsFallbackCategory();if(fallback){void window.desktop.ebay.setLocalCategory(productId,fallback.categoryId,fallback.name).then(updated=>{setLocalProducts(current=>[updated,...current.filter(item=>item.id!==updated.id)]);setNotice(`未匹配到合适类目，已统一归入 ${storePathText(fallback.categoryId)}。${result.reason||''}`)}).catch(reason=>setEbayError(readableError(reason,'归入 Other tools 失败')))}else{setEbayError(`${result.reason||'未匹配到合适类目'}；当前店铺类目树缺少 Other tools，请点「手动分类」点选或先补类目。`)}}}).catch(reason=>setEbayError(readableError(reason,'自动分类失败'))).finally(()=>setBusy(''))}
   useEffect(()=>{
     if(activeTab!=='local'||!activeStore)return
     if(localCategoryBackfillAttempted.current.has(activeStore.id))return
@@ -4800,12 +4802,22 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
     localCategoryBackfillAttempted.current.add(activeStore.id)
     void (async()=>{
       let hit=0
+      let fallbackHit=0
       const reasons:string[]=[]
       for(const target of classifyTargets){
         try{
           const result=await window.desktop.ebay.autoClassifyLocal(target.id)
           if(result.categoryId){hit+=1;setLocalProducts(current=>[result.product,...current.filter(item=>item.id!==result.product.id)])}
-          else if(result.reason)reasons.push(result.reason)
+          else{
+            const fallback=otherToolsFallbackCategory()
+            if(fallback){
+              try{
+                const updated=await window.desktop.ebay.setLocalCategory(target.id,fallback.categoryId,fallback.name)
+                hit+=1;fallbackHit+=1
+                setLocalProducts(current=>[updated,...current.filter(item=>item.id!==updated.id)])
+              }catch(reason){reasons.push(readableError(reason,'归入 Other tools 失败'))}
+            }else if(result.reason)reasons.push(result.reason)
+          }
         }catch(reason){reasons.push(readableError(reason,'自动分类失败'))}
       }
       let termReason=''
@@ -4818,7 +4830,7 @@ function EbayPlatformWorkspace({active,browserFullscreen,onBrowserSurface,initia
       }
       const miss=classifyTargets.length-hit
       const parts:string[]=[]
-      if(classifyTargets.length)parts.push(`自动分类完成：${hit} 个产品已归入类目树${miss?`，${miss} 个无合适类目（可在本地详情手工选择）`:''}${reasons.length?`；${reasons[0]}`:''}`)
+      if(classifyTargets.length)parts.push(`自动分类完成：${hit} 个产品已归入类目树${fallbackHit?`（含 ${fallbackHit} 个无合适类目统一归入 Other tools）`:''}${miss?`，${miss} 个无合适类目（可在本地详情手工选择）`:''}${reasons.length?`；${reasons[0]}`:''}`)
       if(termReason)parts.push(`核心商品词提取未完成：${termReason}`)
       if(parts.length)setNotice(parts.join('；'))
     })()
