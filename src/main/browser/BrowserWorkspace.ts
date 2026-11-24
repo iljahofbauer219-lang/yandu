@@ -4574,10 +4574,10 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
   private readonly viewLoading=new WeakMap<object,boolean>()
 
   // 加载芯片信号：isLoading() 会被挂起的子框架/子资源拖成长真（现网取证：内容已可见、readyState complete 仍转圈整天）。
-  // 改为主框架生命周期口径：start 置真，dom-ready/finish/stop/fail 清假并立即发射，页面可用即灭芯片。
+  // 改为主框架生命周期口径：仅主框架非原地导航置真（did-start-loading 含子框架启动噪声会复置），dom-ready/finish/stop/fail 清假并立即发射。
   private bindLoadingSignal(view:WebContentsView,emit:()=>void){
     const wc=view.webContents
-    wc.on('did-start-loading',()=>{this.viewLoading.set(wc,true);emit()})
+    wc.on('did-start-navigation',(_event,_url,isInPlace,isMainFrame)=>{if(isMainFrame&&!isInPlace){this.viewLoading.set(wc,true);emit()}})
     wc.on('dom-ready',()=>{this.viewLoading.set(wc,false);emit()})
     wc.on('did-finish-load',()=>{this.viewLoading.set(wc,false);emit()})
     wc.on('did-stop-loading',()=>{this.viewLoading.set(wc,false);emit()})

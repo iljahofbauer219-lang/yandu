@@ -8,11 +8,12 @@ describe('加载芯片信号改主框架 DOM 就绪口径源码守卫', () => {
   it('getState 的 loading 读标志表，未绑定的视图回落 isLoading', () => {
     expect(src).toContain('loading: this.viewLoading.get(contents) ?? contents.isLoading()')
   })
-  it('bindLoadingSignal：start 置真、dom-ready/finish/stop/fail 清假且都发射状态', () => {
+  it('bindLoadingSignal：主框架非原地导航置真、dom-ready/finish/stop/fail 清假且都发射状态', () => {
     const start = src.indexOf('private bindLoadingSignal')
     expect(start).toBeGreaterThan(-1)
     const body = src.slice(start, src.indexOf('private emitState'))
-    expect(body).toContain("wc.on('did-start-loading'")
+    expect(body).toContain("wc.on('did-start-navigation'")
+    expect(body).toContain('isMainFrame&&!isInPlace')
     expect(body).toContain('this.viewLoading.set(wc,true)')
     expect(body).toContain("wc.on('dom-ready'")
     expect(body).toContain("wc.on('did-finish-load'")
