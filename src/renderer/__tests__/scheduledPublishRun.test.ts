@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { runScheduledPublishChain, SCHEDULED_RUN_TIMEOUT_MS, type ScheduledRunDeps } from '../scheduledPublishRun'
+import { runScheduledPublishChain, SCHEDULED_RUN_TIMEOUT_MS, type ScheduledRunDeps } from '../../shared/scheduledPublishRun'
 
 /**
  * 到点执行链挂起修复（2026-11-17）：scheduledRunning 复位只在 IPC 链落定后到达，

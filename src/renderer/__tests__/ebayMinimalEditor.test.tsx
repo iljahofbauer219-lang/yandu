@@ -130,7 +130,7 @@ describe('极简编辑器 · App.tsx 接线', () => {
     expect(sched, '失败写回纯函数').toContain('export const markScheduleFailure')
     expect(sched, '成功清除纯函数').toContain('export const clearScheduleFailure')
     expect(sched, 'normalize 保留失败态').toContain('next.lastFailedAt = entry.lastFailedAt')
-    expect(source, '调度失败写回').toContain('markScheduleFailure(')
+    expect(readFileSync(path.resolve(process.cwd(),'src/main/main.ts'),'utf8'), '调度失败写回（主进程调度）').toContain('markScheduleFailure(')
     expect(source, '调度成功清除').toContain('clearScheduleFailure(')
   })
   it('eBay 左栏与货盘目录左栏同宽同款：共享宽度/内边距/阴影变量，滚动观感一致', () => {

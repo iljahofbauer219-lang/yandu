@@ -2,7 +2,7 @@ import { writeFileSync } from 'node:fs'
 import { app, BaseWindow, BrowserWindow, WebContents, WebContentsView, clipboard, type Cookie, type Session } from 'electron'
 import { AMAZON_LISTING_EVIDENCE_SCRIPT, AMAZON_REVIEW_EVIDENCE_SCRIPT, AMAZON_SAMPLES_SCRIPT, type AmazonListingEvidence, type AmazonMarketSample, type AmazonReviewEvidence } from '../../shared/amazonScraper'
 import { matchSellableInventoryText } from '../../shared/sellableInventory'
-import { readEbayPublishedLanding } from '../../shared/ebayListingTarget'
+import { buildEbayDraftContinueUrl, readEbayPublishedLanding } from '../../shared/ebayListingTarget'
 import { pickSupplyDescriptionText } from '../../shared/supplyDescription'
 import { pickSupplyFees } from '../../shared/supplyFeePick'
 import { pickDropshipShippingFee } from '../../shared/supplyDropshipFee'
@@ -2312,6 +2312,26 @@ export class BrowserWorkspace {
     }
     if(before!==tab.view.webContents.getURL())await tab.view.webContents.loadURL(before).catch(()=>undefined)
     return row
+  }
+  /** 后台调度/读回用视图保尺寸：未附着视图默认 0×0 会让 eBay 页不渲染字段；只设尺寸不附着 */
+  ensureEbayScopeViewBounds(accountId:string){
+    for(const tab of this.detailTabs.values()){
+      if(tab.scopeId!==accountId||tab.view.webContents.isDestroyed())continue
+      const b=tab.view.getBounds()
+      if(b.width<320||b.height<240)tab.view.setBounds({x:0,y:0,width:1280,height:900})
+    }
+  }
+  /** 后台调度开既有草稿：不附着视图（不扰用户当前页），loadURL 续作页＋等标题就绪 */
+  async openEbaySavedDraftForRun(accountId:string, draftId:string):Promise<void> {
+    const tabs=[...this.detailTabs.values()].filter(item=>item.scopeId===accountId&&!item.view.webContents.isDestroyed())
+    const tab=tabs.find(item=>item.view===this.attached)||tabs[0]
+    if(!tab)throw new Error('请先打开当前 eBay 店铺浏览器')
+    await tab.view.webContents.loadURL(buildEbayDraftContinueUrl(draftId))
+    for(let attempt=0;attempt<20;attempt+=1){
+      try{const ready=await this.readEbayCurrentTitle();if(ready.title)return}catch{/* 草稿页尚未就绪 */}
+      await this.sleep(750)
+    }
+    throw new Error('eBay 草稿页尚未加载出标题，轻量自动发布中止，请人工核对草稿')
   }
   async readEbayCurrentTitle():Promise<{title:string;url:string}> {
     let tab=this.detailTabs.get(this.activeTabId)

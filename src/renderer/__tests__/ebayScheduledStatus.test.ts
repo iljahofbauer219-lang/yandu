@@ -37,10 +37,11 @@ describe('状态位渲染与成功转环节', () => {
     expect(css).toContain('.ebay-scheduled-wait{')
   })
   it('到点上架成功后产品移除本地行并转线上产品（刷新 listings/同步）', () => {
-    const seg = app.split('dueScheduledPublish(scheduledPublishRef.current')[1]?.split('},15000)')[0] ?? ''
-    expect(seg).toContain('removeLocalProduct(id)')
+    const mainSrc = readFileSync(path.resolve(process.cwd(), 'src/main/main.ts'), 'utf8')
+    const seg = mainSrc.slice(mainSrc.indexOf('function startEbayBackgroundScheduler()'), mainSrc.indexOf('function startEbayBackgroundScheduler()') + 6000)
+    expect(seg).toContain('removeEbayLocalProduct(id)')
     expect(seg).toContain('线上产品')
-    expect(seg).toContain('window.desktop.ebay.listings(product.storeId)')
+    expect(seg).toContain('emitSchedulerProductsChanged(cfg.storeId)')
   })
   it('历史失败残留一次性清除（status-v2 标记）', () => {
     expect(app).toContain('ebay-sched-status-v2')

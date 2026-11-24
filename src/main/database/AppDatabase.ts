@@ -487,6 +487,13 @@ export class AppDatabase {
         PRIMARY KEY (store_id, listing_id),
         FOREIGN KEY (store_id) REFERENCES ebay_stores(id) ON DELETE CASCADE
       );
+      CREATE TABLE IF NOT EXISTS ebay_scheduler_config (
+        store_id TEXT PRIMARY KEY,
+        publish_map TEXT NOT NULL DEFAULT '{}',
+        plan TEXT NOT NULL DEFAULT '',
+        fixed_preset TEXT NOT NULL DEFAULT '',
+        updated_at TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS ebay_store_url_history (
         id TEXT PRIMARY KEY,
         store_id TEXT NOT NULL,
@@ -2586,6 +2593,16 @@ export class AppDatabase {
     return this.getEbayLocalProducts().find(item => item.id === localProductId)!
   }
 
+  getEbaySchedulerConfig(storeId: string): { publishMap: string; plan: string; fixedPreset: string } | null {
+    const row = this.database.prepare('SELECT publish_map, plan, fixed_preset FROM ebay_scheduler_config WHERE store_id=?').get(storeId) as { publish_map: string; plan: string; fixed_preset: string } | undefined
+    return row ? { publishMap: row.publish_map, plan: row.plan, fixedPreset: row.fixed_preset } : null
+  }
+  setEbaySchedulerConfig(storeId: string, publishMap: string, plan: string, fixedPreset: string): void {
+    this.database.prepare('INSERT INTO ebay_scheduler_config (store_id, publish_map, plan, fixed_preset, updated_at) VALUES (?,?,?,?,?) ON CONFLICT(store_id) DO UPDATE SET publish_map=excluded.publish_map, plan=excluded.plan, fixed_preset=excluded.fixed_preset, updated_at=excluded.updated_at').run(storeId, publishMap, plan, fixedPreset, new Date().toISOString())
+  }
+  allEbaySchedulerConfigs(): Array<{ storeId: string; publishMap: string; plan: string; fixedPreset: string }> {
+    return (this.database.prepare('SELECT store_id, publish_map, plan, fixed_preset FROM ebay_scheduler_config').all() as Array<{ store_id: string; publish_map: string; plan: string; fixed_preset: string }>).map(row => ({ storeId: row.store_id, publishMap: row.publish_map, plan: row.plan, fixedPreset: row.fixed_preset }))
+  }
   setEbayLocalProductCoreTerms(localProductId: string, coreTermZh: string, coreTermEn: string): EbayLocalProduct {
     const exists = this.database.prepare(`SELECT id FROM ebay_local_products WHERE id=?`).get(localProductId) as { id: string } | undefined
     if (!exists) throw new Error('本地产品不存在')

@@ -15,9 +15,10 @@ describe('线上发布环节互斥 · 候选与调度', () => {
     expect(app).toContain("const scheduledCandidates=localProducts.filter(product=>product.publishRef?.kind!=='listing'&&optimizationDrafts.some(draft=>!draft.returnedAt&&draft.listing.listingId===product.listingId))")
   })
   it('due effect 成员守卫：无未打回同源草稿不到点执行', () => {
-    const seg = app.split('dueScheduledPublish(scheduledPublishRef.current')[1]?.split('},15000)')[0] ?? ''
-    expect(seg).toContain("if(!optimizationDrafts.some(draft=>!draft.returnedAt&&draft.listing.listingId===product.listingId))return;")
-    expect(app).toContain('},[localProducts,optimizationDrafts])')
+    const mainSrc = readFileSync(path.resolve(process.cwd(), 'src/main/main.ts'), 'utf8')
+    const seg = mainSrc.split('dueScheduledPublish(map,')[1]?.split('},15000)')[0] ?? ''
+    expect(seg).toContain("if(!database.getEbayOptimizationDrafts(product.storeId).some(draft=>!draft.returnedAt&&draft.listing.listingId===product.listingId))continue")
+    expect(mainSrc).toContain('startEbayBackgroundScheduler()')
   })
   it('离阶段残留 enabled 清理 effect（批次分配不被幽灵条目占用）', () => {
     expect(app).toContain('const stale=Object.keys(cur).filter(id=>cur[id]?.enabled&&!ids.has(id))')

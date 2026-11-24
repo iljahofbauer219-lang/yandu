@@ -21,8 +21,8 @@ describe('eBay 保存草稿 · 主进程点击通道', () => {
     expect(preload, 'preload 透传 id').toContain('publishCurrentListing: (localProductId?:string)')
     expect(app, '定时候选排除已上架＋环节互斥（须有未打回同源草稿）').toContain("const scheduledCandidates=localProducts.filter(product=>product.publishRef?.kind!=='listing'&&optimizationDrafts.some(draft=>!draft.returnedAt&&draft.listing.listingId===product.listingId))")
     expect(app, '列表渲染用候选集').toContain('scheduledCandidates.length?scheduledCandidates.map(product=>{')
-    expect(app, '到点调度跳过已上架').toContain("if(product.publishRef?.kind==='listing')return")
-    expect(app, '自动发布传产品 id').toContain('window.desktop.ebay.publishCurrentListing(product.id)')
+    expect(main, '到点调度跳过已上架（主进程）').toContain("if(product.publishRef?.kind==='listing')continue")
+    expect(main, '自动发布传产品 id（主进程内部函数）').toContain('publishCurrentListingInternal(id)')
     expect(app, '成功后同步目录与产品').toContain('void syncStoreCategories(activeStore,true)')
   })
   it('数量等 text-name 写入须 focus→写→input/change/focusout→blur，回读不一致重试一次', () => {

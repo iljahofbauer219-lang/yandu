@@ -458,6 +458,18 @@ contextBridge.exposeInMainWorld('desktop', {
     setLocalProductMeta: (localProductId:string, meta:{titleZh?:string;titleZhAt?:string;draftQuantity?:number|null;draftQuantityAt?:string}):Promise<EbayLocalProduct> => ipcRenderer.invoke('ebay:local-products:set-meta',localProductId,meta),
     readDraftQuantity: (storeId:string, listingId?:string, title?:string):Promise<{quantity:number|null;at:string;url:string}> => ipcRenderer.invoke('ebay:local-products:draft-quantity',storeId,listingId,title),
     draftQuantityBackground: (storeId:string, listingId?:string, title?:string):Promise<{quantity:number|null;at:string;url:string}> => ipcRenderer.invoke('ebay:local-products:draft-quantity-background',storeId,listingId,title),
+    schedulerPutConfig: (storeId:string, publishMap:unknown, plan:unknown, fixedPreset:unknown):Promise<boolean> => ipcRenderer.invoke('ebay:scheduler:put-config',storeId,publishMap,plan,fixedPreset),
+    schedulerGetConfig: (storeId:string):Promise<{publishMap:string;plan:string;fixedPreset:string}|null> => ipcRenderer.invoke('ebay:scheduler:get-config',storeId),
+    onSchedulerChanged: (callback:(payload:{storeId:string;map:Record<string,unknown>})=>void) => {
+      const listener=(_event:Electron.IpcRendererEvent,payload:{storeId:string;map:Record<string,unknown>})=>callback(payload)
+      ipcRenderer.on('ebay:scheduler:changed',listener)
+      return ()=>ipcRenderer.removeListener('ebay:scheduler:changed',listener)
+    },
+    onSchedulerProductsChanged: (callback:(payload:{storeId:string})=>void) => {
+      const listener=(_event:Electron.IpcRendererEvent,payload:{storeId:string})=>callback(payload)
+      ipcRenderer.on('ebay:scheduler:products-changed',listener)
+      return ()=>ipcRenderer.removeListener('ebay:scheduler:products-changed',listener)
+    },
     setLocalPlatformCategory: (localProductId:string, categoryId:string, categoryName:string):Promise<EbayLocalProduct> => ipcRenderer.invoke('ebay:local-products:set-platform-category',localProductId,categoryId,categoryName),
     platformCategories: (storeId:string, query:string):Promise<EbayPlatformCategoryOption[]> => ipcRenderer.invoke('ebay:local-products:platform-categories',storeId,query),
     autoClassifyLocal: (localProductId:string):Promise<{product:EbayLocalProduct;engine:'rule'|'llm'|'none';categoryId:string|null;categoryName:string;reason:string}> => ipcRenderer.invoke('ebay:local-products:auto-classify',localProductId),

@@ -37,21 +37,26 @@ describe('AI优化成功 · 落优品仓库而非留线上发布', () => {
 })
 
 describe('本地定时发布 · 已存草稿轻量两步（开草稿+刊登，跳重填）', () => {
-  it('到点链按 draftSavedAt+draft ref 判 savedDraft，并传 skipFill 与轻量开页', () => {
-    expect(source).toContain("const savedDraft=Boolean(product.draftSavedAt&&product.publishRef?.kind==='draft')")
-    expect(source).toContain('skipFill:savedDraft')
-    expect(source).toContain('prepare:()=>savedDraft?openSavedDraftForRun(product):window.desktop.ebay.prepareLocalProductRevision(id)')
+  it('到点链改主进程调度：savedDraft 判定＋skipFill＋轻量开页走 workspace 不附着法', () => {
+    const main = readFileSync(path.resolve(process.cwd(), 'src/main/main.ts'), 'utf8')
+    expect(main).toContain("const savedDraft=Boolean(product.draftSavedAt&&product.publishRef?.kind==='draft')")
+    expect(main).toContain('skipFill:savedDraft')
+    expect(main).toContain('prepare:()=>savedDraft?workspace!.openEbaySavedDraftForRun(')
+    expect(main).toContain('startEbayBackgroundScheduler()')
+    expect(source).not.toContain('const due=dueScheduledPublish(')
   })
-  it('openSavedDraftForRun 与草稿查看同走共享构造器（lstng?draftId&mode=AddItem&ReturnURL）＋navigate＋等标题就绪', () => {
-    const start = source.indexOf('const openSavedDraftForRun=')
+  it('openEbaySavedDraftForRun 与草稿查看同走共享构造器＋loadURL 不附着＋等标题就绪', () => {
+    const ws = readFileSync(path.resolve(process.cwd(), 'src/main/browser/BrowserWorkspace.ts'), 'utf8')
+    const start = ws.indexOf('async openEbaySavedDraftForRun(')
     expect(start).toBeGreaterThan(-1)
-    const body = source.slice(start, start + 1200)
-    expect(body).toContain('buildEbayDraftContinueUrl(ref.id)')
-    expect(body).toContain("window.desktop.browser.navigate('web',url)")
-    expect(body).toContain('readCurrentDraftTitle()')
+    const body = ws.slice(start, start + 1200)
+    expect(body).toContain('buildEbayDraftContinueUrl(draftId)')
+    expect(body).toContain('tab.view.webContents.loadURL(')
+    expect(body).not.toContain('this.show(')
+    expect(body).toContain('readEbayCurrentTitle()')
   })
   it('执行链 skipFill 时跳过 fillAuto/fillFixed（模块层守卫）', () => {
-    const run = readFileSync(path.resolve(process.cwd(), 'src/renderer/scheduledPublishRun.ts'), 'utf8')
+    const run = readFileSync(path.resolve(process.cwd(), 'src/shared/scheduledPublishRun.ts'), 'utf8')
     expect(run).toContain('if(!deps.skipFill){await deps.fillAuto();guard();await deps.fillFixed();guard()}')
   })
 })
@@ -95,13 +100,14 @@ describe('本地产品环节排除已进优品仓库的产品', () => {
 })
 
 describe('自动发布调度 · 已存 eBay 草稿跳过重复执行', () => {
-  const line = source.split('\n').find(l => l.includes('dueScheduledPublish(scheduledPublishRef.current')) || ''
+  const mainSrc = readFileSync(path.resolve(process.cwd(), 'src/main/main.ts'), 'utf8')
+  const line = mainSrc.split('dueScheduledPublish(map,')[1]?.split('},15000)')[0] ?? ''
   it('跳过分支置于 prepare 之前：非 once 且 draftSavedAt 有值直接记完成态+中文 notice，不走执行链', () => {
-    expect(line).toContain("if(product.draftSavedAt&&scheduledPublishRef.current[id]?.mode!=='once'){")
-    expect(line.indexOf("if(product.draftSavedAt&&scheduledPublishRef.current[id]?.mode!=='once'){")).toBeLessThan(line.indexOf('prepareLocalProductRevision(id)'))
+    expect(line).toContain("if(product.draftSavedAt&&entry?.mode!=='once'){")
+    expect(line.indexOf("if(product.draftSavedAt&&entry?.mode!=='once'){")).toBeLessThan(line.indexOf('prepare:()=>savedDraft?'))
     expect(line).toContain('已在 eBay 草稿栏，跳过重复自动发布')
-    expect(line).toContain('clearScheduleFailure(base0,id)')
-    expect(line).toContain("entry0?.mode==='daily'?{...entry0,lastRunAt:new Date().toISOString(),lastSkippedAt:new Date().toISOString()}:{enabled:false,at:entry0?.at||'',lastSkippedAt:new Date().toISOString()}")
+    expect(line).toContain('clearScheduleFailure(base,id)')
+    expect(line).toContain("entry?.mode==='daily'?{...entry,lastRunAt:new Date().toISOString(),lastSkippedAt:new Date().toISOString()}:{enabled:false,at:entry?.at||'',lastSkippedAt:new Date().toISOString()}")
   })
   it('跳过态行内可见：scheduleStatus=skipped 渲染「已在草稿·跳过」chip（publish 页签无左栏槽位）', () => {
     expect(source).toContain("st==='skipped'?<span className=\"ebay-scheduled-skip\"")

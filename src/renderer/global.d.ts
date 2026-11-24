@@ -6,6 +6,7 @@ import type { EbayImageInspectionReport, EbayImageVisualInspectionReport, EbayIm
 import type { EbayVideoCapabilityVerificationRequest } from '../shared/contracts'
 import type { EbayBusinessPolicyKind, EbayLocalListingRequirements, EbayLocalRevisionPreparationResult, EbayStoreBusinessPolicy } from '../shared/contracts'
 import type { EbayItemSpecificsSection } from '../shared/ebayItemSpecificsModel'
+import type { EbayScheduledPublishMap } from '../shared/ebayScheduledPublish'
 import type { EbayShortlistItem } from '../shared/ebayResearch'
 import type { EbayTitleDecision, EbayTitleDecisionInput, EbayImageStage, EbayStageFactCard, EbayStageGroundingRequest, EbayStageModelRecommendation, EbayStageStoryboardCard, EbayStageStoryboardRequest } from '../shared/contracts'
 import type { AdvisorDesktopApi } from '../shared/advisor'
@@ -398,6 +399,10 @@ declare global {
         setLocalProductMeta(localProductId:string, meta:{titleZh?:string;titleZhAt?:string;draftQuantity?:number|null;draftQuantityAt?:string}):Promise<EbayLocalProduct>
         readDraftQuantity(storeId:string, listingId?:string, title?:string):Promise<{quantity:number|null;at:string;url:string}>
         draftQuantityBackground(storeId:string, listingId?:string, title?:string):Promise<{quantity:number|null;at:string;url:string}>
+        schedulerPutConfig(storeId:string, publishMap:unknown, plan:unknown, fixedPreset:unknown):Promise<boolean>
+        schedulerGetConfig(storeId:string):Promise<{publishMap:string;plan:string;fixedPreset:string}|null>
+        onSchedulerChanged(callback:(payload:{storeId:string;map:EbayScheduledPublishMap})=>void):()=>void
+        onSchedulerProductsChanged(callback:(payload:{storeId:string})=>void):()=>void
         setLocalPlatformCategory(localProductId:string, categoryId:string, categoryName:string):Promise<EbayLocalProduct>
         platformCategories(storeId:string, query:string):Promise<EbayPlatformCategoryOption[]>
         autoClassifyLocal(localProductId:string):Promise<{product:EbayLocalProduct;engine:'rule'|'llm'|'none';categoryId:string|null;categoryName:string;reason:string}>

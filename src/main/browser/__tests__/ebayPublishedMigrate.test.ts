@@ -51,7 +51,7 @@ describe('reconcileEbayPublishedDrafts · 不拉走用户开着的刊登页', ()
 
 describe('自动发布链共用正向证据单一真值', () => {
   it('publishEbayCurrentListing 改调 shared 函数，旧内联判定删除', () => {
-    expect(ws).toContain("import { readEbayPublishedLanding } from '../../shared/ebayListingTarget'")
+    expect(ws).toContain("import { buildEbayDraftContinueUrl, readEbayPublishedLanding } from '../../shared/ebayListingTarget'")
     expect(ws).toContain('const {published,itemId}=readEbayPublishedLanding(url)')
     expect(ws).not.toContain('const published=/')
   })

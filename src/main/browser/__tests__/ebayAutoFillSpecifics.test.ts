@@ -84,7 +84,7 @@ describe('S 批接线守卫 · 单一写页来源与 shared 计划复用', () =>
   })
 
   it('main auto 档复用 shared 计划与真候选，清单取产品行/类目缓存', () => {
-    const start = mainSource.indexOf("ipcMain.handle('ebay:fill-current-tab'")
+    const start = mainSource.indexOf('async function fillCurrentTabInternal(')
     expect(start).toBeGreaterThan(-1)
     const handler = mainSource.slice(start, mainSource.indexOf("ipcMain.handle('ebay:specifics-llm'", start))
     expect(handler).toContain('planEbaySpecificsFill(')
@@ -120,7 +120,7 @@ describe('S 批接线守卫 · 单一写页来源与 shared 计划复用', () =>
   })
 
   it('V：main auto 档接 YESNO 证据推断与无源人工点名', () => {
-    const start = mainSource.indexOf("ipcMain.handle('ebay:fill-current-tab'")
+    const start = mainSource.indexOf('async function fillCurrentTabInternal(')
     const handler = mainSource.slice(start, mainSource.indexOf("ipcMain.handle('ebay:specifics-llm'", start))
     expect(handler).toContain('inferEbaySpecificsYesNo(')
     expect(handler).toContain('ebaySpecificsUnfilledRows(')

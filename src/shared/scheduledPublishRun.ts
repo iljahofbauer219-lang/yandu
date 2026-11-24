@@ -1,4 +1,4 @@
-import { raceTimeout } from '../shared/raceTimeout'
+import { raceTimeout } from './raceTimeout'
 
 /**
  * 到点自动发布执行链（从 App.tsx 抽离，行为零变化）＋挂起修复：

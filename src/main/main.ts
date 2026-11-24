@@ -37,6 +37,8 @@ import { importProductUrl } from './services/ImageSourceService'
 import { downloadUrlsToLocalMedia, type LocalMediaDownloadResult } from './ebayLocalMediaFiles'
 import { EBAY_IMAGE_LIMIT } from '../shared/ebayUploadMediaPlan'
 import { applyLlmSpecificAnswers, ebaySpecificsLlmOptions, ebaySpecificsUnfilledRows, inferEbaySpecificsYesNo, planEbaySpecificsFill } from '../shared/ebaySpecificsFillPlan'
+import { DEFAULT_SCHEDULE_PLAN, clearScheduleFailure, dueScheduledPublish, markScheduleFailure, normalizeSchedulePlan, normalizeScheduledPublish, type EbaySchedulePlan, type EbayScheduledPublishMap } from '../shared/ebayScheduledPublish'
+import { runScheduledPublishChain } from '../shared/scheduledPublishRun'
 import type { EbayItemSpecificSlot } from '../shared/ebayItemSpecificsModel'
 import { imageHashService, confinedLocalMediaPath, imageContentTypeForPath } from './services/ImageHashService'
 import { mapWithConcurrency } from '../shared/mapWithConcurrency'
@@ -2142,6 +2144,7 @@ function createWindow() {
   mainWindow.on('unmaximize', () => shellWebContents?.send('window:maximized', false))
 
   workspace = new BrowserWorkspace(mainWindow, shell.webContents)
+  startEbayBackgroundScheduler()
   workspace.setCollectedUrlProvider(kind => kind === 'ebay' ? (database?.listResearchCollected().map(item => item.url) ?? []) : (database?.listCollectedCandidateUrls('GIGACLOUD') ?? []))
   // #6 语义兜底走既有 DeepSeek 服务；Key 缺失或调用失败时服务侧返回拒收结果，读取行为退回 C4 口径的原文案
   workspace.setSemanticFallbackRunner((digest, fields) => ebayOptimizationService.extractSemanticFallback(digest, fields))
@@ -3549,7 +3552,7 @@ ipcMain.handle('ebay:local-products:requirements', async (_event, storeId:string
   return requirements
 })
 ipcMain.handle('ebay:business-policies:list', (_event, storeId:string, kind?:EbayBusinessPolicyKind) => database?.getEbayBusinessPolicies(storeId,kind)||[])
-ipcMain.handle('ebay:local-products:prepare-revision', async (_event, localProductId:string) => {
+async function prepareLocalProductRevisionInternal(localProductId:string) {
   if(!database)throw new Error('数据库尚未初始化')
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
   const product=database.getEbayLocalProducts().find(item=>item.id===localProductId)
@@ -3569,8 +3572,9 @@ ipcMain.handle('ebay:local-products:prepare-revision', async (_event, localProdu
   }
   if(result.publishRef)database.setEbayLocalProductPublishRef(product.id,{...result.publishRef,at:new Date().toISOString()})
   return result
-})
-ipcMain.handle('ebay:fill-current-tab', async (_event, localProductId:string, mode:'auto'|'fixed', preset?:unknown) => {
+}
+ipcMain.handle('ebay:local-products:prepare-revision', async (_event, localProductId:string) => prepareLocalProductRevisionInternal(localProductId))
+async function fillCurrentTabInternal(localProductId:string, mode:'auto'|'fixed', preset?:unknown) {
   if(!database)throw new Error('数据库尚未初始化')
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
   const product=database.getEbayLocalProducts().find(item=>item.id===localProductId)
@@ -3613,7 +3617,8 @@ ipcMain.handle('ebay:fill-current-tab', async (_event, localProductId:string, mo
     }
   }
   return workspace.fillCurrentEbayTab(`ebay:${product.storeId}`,product,mode,preset as Parameters<typeof workspace.fillCurrentEbayTab>[3],specificsRows,specificsManual)
-})
+}
+ipcMain.handle('ebay:fill-current-tab', async (_event, localProductId:string, mode:'auto'|'fixed', preset?:unknown) => fillCurrentTabInternal(localProductId,mode,preset))
 ipcMain.handle('ebay:save-current-draft', async (_event, localProductId?:string) => {
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
   if(!database)throw new Error('数据库尚未初始化')
@@ -3629,14 +3634,105 @@ ipcMain.handle('ebay:read-current-draft-title', async () => {
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
   return workspace.readEbayCurrentTitle()
 })
-ipcMain.handle('ebay:publish-current-listing', async (_event, localProductId?:string) => {
+async function publishCurrentListingInternal(localProductId?:string) {
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
   const result=await workspace.publishEbayCurrentListing()
   // 发布成功＝环节迁移：写回 listing 态，定时发布列表/调度据此排除，线上产品经同步可见
   if(result.status==='PUBLISHED'&&localProductId&&database)database.setEbayLocalProductPublishRef(localProductId,{kind:'listing',id:result.itemId,at:new Date().toISOString()})
   if(result.status==='PUBLISHED'&&localProductId&&database){const pubRow=database.getEbayLocalProducts().find(item=>item.id===localProductId);if(pubRow)markEbayDraftPublished(pubRow.storeId,pubRow.listingId,result.itemId)}
   return result
+}
+ipcMain.handle('ebay:publish-current-listing', async (_event, localProductId?:string) => publishCurrentListingInternal(localProductId))
+// 后台调度配置：渲染器 localStorage 双写到此（DB），主进程 tick 读 DB，App 运行即到点执行（不依赖页签挂载/窗口前台）
+ipcMain.handle('ebay:scheduler:put-config', (_event, storeId:string, publishMap:EbayScheduledPublishMap, plan:EbaySchedulePlan, fixedPreset:unknown) => {
+  if(!database)throw new Error('数据库尚未初始化')
+  database.setEbaySchedulerConfig(storeId,JSON.stringify(publishMap||{}),JSON.stringify(plan||DEFAULT_SCHEDULE_PLAN),JSON.stringify(fixedPreset??null))
+  return true
 })
+ipcMain.handle('ebay:scheduler:get-config', (_event, storeId:string) => {
+  if(!database)throw new Error('数据库尚未初始化')
+  return database.getEbaySchedulerConfig(storeId)
+})
+const scheduledRunningMain=new Map<string,boolean>()
+function emitSchedulerChanged(storeId:string,map:EbayScheduledPublishMap){shellWebContents?.send('ebay:scheduler:changed',{storeId,map})}
+function emitSchedulerProductsChanged(storeId:string){shellWebContents?.send('ebay:scheduler:products-changed',{storeId})}
+function writeSchedulerMap(storeId:string,map:EbayScheduledPublishMap){
+  const cfg=database!.getEbaySchedulerConfig(storeId)
+  database!.setEbaySchedulerConfig(storeId,JSON.stringify(map),cfg?.plan||JSON.stringify(DEFAULT_SCHEDULE_PLAN),cfg?.fixedPreset||'null')
+  emitSchedulerChanged(storeId,map)
+}
+function startEbayBackgroundScheduler(){
+  const timer=setInterval(()=>{void (async()=>{
+    if(!database||!workspace)return
+    for(const cfg of database.allEbaySchedulerConfigs()){
+      let map:EbayScheduledPublishMap
+      let plan:EbaySchedulePlan
+      try{map=normalizeScheduledPublish(JSON.parse(cfg.publishMap||'{}'))}catch{continue}
+      try{plan=cfg.plan?normalizeSchedulePlan(JSON.parse(cfg.plan)):DEFAULT_SCHEDULE_PLAN}catch{plan=DEFAULT_SCHEDULE_PLAN}
+      const due=dueScheduledPublish(map,new Date().toISOString(),plan)
+      for(const id of due){
+        if(scheduledRunningMain.get(id))continue
+        const product=database.getEbayLocalProducts().find(item=>item.id===id)
+        if(!product)continue
+        if(product.publishRef?.kind==='listing')continue
+        if(!database.getEbayOptimizationDrafts(product.storeId).some(draft=>!draft.returnedAt&&draft.listing.listingId===product.listingId))continue
+        const entry=map[id]
+        if(product.draftSavedAt&&entry?.mode!=='once'){
+          const base={...map,[id]:entry?.mode==='daily'?{...entry,lastRunAt:new Date().toISOString(),lastSkippedAt:new Date().toISOString()}:{enabled:false,at:entry?.at||'',lastSkippedAt:new Date().toISOString()}}
+          writeSchedulerMap(cfg.storeId,clearScheduleFailure(base,id))
+          console.log('[ebay-scheduler] 已在 eBay 草稿栏，跳过重复自动发布：',product.title.slice(0,40))
+          continue
+        }
+        await openEbaySellerHub(cfg.storeId).catch(()=>undefined)
+        workspace!.ensureEbayScopeViewBounds(`ebay:${cfg.storeId}`)
+        const activeHit=await workspace.findEbayActiveListingIdByTitle(product.title).catch(()=>null)
+        if(activeHit&&activeHit.itemId){
+          markEbayDraftPublished(cfg.storeId,product.listingId,activeHit.itemId)
+          database.setEbayLocalProductPublishRef(id,{kind:'listing',id:activeHit.itemId,at:new Date().toISOString()})
+          await landEbayPublishedListing(cfg.storeId,activeHit.itemId).catch(()=>undefined)
+          removeEbayLocalProduct(id)
+          const m2={...map};delete m2[id]
+          writeSchedulerMap(cfg.storeId,m2)
+          emitSchedulerProductsChanged(cfg.storeId)
+          console.log('[ebay-scheduler] 检测到已在架，转出本地环节：',product.title.slice(0,40),activeHit.itemId)
+          continue
+        }
+        scheduledRunningMain.set(id,true)
+        const savedDraft=Boolean(product.draftSavedAt&&product.publishRef?.kind==='draft')
+        let preset:unknown=null
+        try{preset=cfg.fixedPreset?JSON.parse(cfg.fixedPreset):null}catch{preset=null}
+        console.log('[ebay-scheduler] 到点执行自动发布：',product.title.slice(0,40),savedDraft?'开既有草稿+最终刊登':'prepare+自动填写+固定填写+最终刊登')
+        void (async()=>{
+          try{
+            await openEbaySellerHub(cfg.storeId).catch(()=>undefined)
+            workspace!.ensureEbayScopeViewBounds(`ebay:${cfg.storeId}`)
+            await runScheduledPublishChain({title:product.title,skipFill:savedDraft,
+              prepare:()=>savedDraft?workspace!.openEbaySavedDraftForRun(`ebay:${cfg.storeId}`,product.publishRef!.id).then(()=>({})):prepareLocalProductRevisionInternal(id),
+              readDraftTitle:()=>workspace!.readEbayCurrentTitle(),
+              fillAuto:()=>fillCurrentTabInternal(id,'auto',undefined),
+              fillFixed:()=>fillCurrentTabInternal(id,'fixed',preset),
+              publish:()=>publishCurrentListingInternal(id),
+              refreshLocal:async()=>{emitSchedulerProductsChanged(cfg.storeId)},
+              removeLocal:async()=>{removeEbayLocalProduct(id);return true},
+              refreshListings:async()=>{emitSchedulerProductsChanged(cfg.storeId)},
+              afterPublished:()=>{if(product.publishRef?.kind==='draft')markEbayDraftPublished(cfg.storeId,product.listingId,product.publishRef.id);void landEbayPublishedListing(cfg.storeId,product.publishRef?.kind==='draft'?product.publishRef.id:product.listingId).catch(()=>undefined);emitSchedulerProductsChanged(cfg.storeId)}
+            })
+            const m={...map};delete m[id]
+            writeSchedulerMap(cfg.storeId,m)
+            console.log('[ebay-scheduler] 自动发布已上架并转入线上产品：',product.title.slice(0,40))
+          }catch(reason){
+            const lastError=reason instanceof Error?reason.message:String(reason)
+            console.warn('[ebay-scheduler] 自动发布执行失败：',lastError)
+            const entry2=map[id]
+            const base={...map,[id]:entry2?.mode==='daily'?{...entry2,lastRunAt:new Date().toISOString(),lastSkippedAt:''}:{enabled:false,at:entry2?.at||'',lastSkippedAt:''}}
+            writeSchedulerMap(cfg.storeId,markScheduleFailure(base,id,new Date().toISOString(),lastError))
+          }finally{scheduledRunningMain.set(id,false)}
+        })()
+      }
+    }
+  })()},15000)
+  timer.unref()
+}
 ipcMain.handle('ebay:read-current-settings', async (_event, storeId:string) => {
   if(!workspace)throw new Error('应用内浏览器尚未初始化')
   return workspace.readCurrentEbaySettings(`ebay:${storeId}`)
