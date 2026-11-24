@@ -810,7 +810,9 @@ export default function EbayImageStagePanel(props: Props) {
     </div>
   )
 
-  return <div className="ebay-stage-panel">
+  const [lightboxUrl,setLightboxUrl]=useState<string|null>(null)
+  useEffect(()=>{if(!lightboxUrl)return;const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')setLightboxUrl(null)};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)},[lightboxUrl])
+  return <div className="ebay-stage-panel" onClick={event=>{const target=event.target as HTMLElement;if(target.tagName==='IMG'){const img=target as HTMLImageElement;const src=img.currentSrc||img.src;if(src)setLightboxUrl(src)}}}>
     <div className="ebay-stage-header" style={{ borderLeftColor: '#1abc9c' }}>
       <b>图片优化 · 简化流程</b>
       <small>合规规则内置于生图提示词 → 读取产品原图 → 事实卡自动 → 选模型与出图模式 → 勾选生图规则与模特 → 一键生成 → 同类雷同自动换参照重出 → 逐图采纳/单张重生 → 保留回显</small>
@@ -1063,5 +1065,9 @@ export default function EbayImageStagePanel(props: Props) {
       </section>
     )}
     </>}
+    {lightboxUrl&&<div className="ebay-image-lightbox" role="dialog" aria-label="原大图片查看" onClick={()=>setLightboxUrl(null)}>
+      <img src={lightboxUrl} alt="原大图片" onClick={event=>event.stopPropagation()}/>
+      <button type="button" className="ebay-image-lightbox-close" aria-label="关闭原大图片" onClick={()=>setLightboxUrl(null)}>×</button>
+    </div>}
   </div>
 }
