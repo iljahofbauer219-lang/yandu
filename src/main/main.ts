@@ -40,6 +40,7 @@ import { applyLlmSpecificAnswers, ebaySpecificsLlmOptions, ebaySpecificsUnfilled
 import { DEFAULT_SCHEDULE_PLAN, clearScheduleFailure, dueScheduledPublish, markScheduleFailure, normalizeSchedulePlan, normalizeScheduledPublish, type EbaySchedulePlan, type EbayScheduledPublishMap } from '../shared/ebayScheduledPublish'
 import { runScheduledPublishChain } from '../shared/scheduledPublishRun'
 import type { EbayItemSpecificSlot } from '../shared/ebayItemSpecificsModel'
+import { PUBLIC_IP_PROBE_TIMEOUT_MS, PUBLIC_IP_PROBE_URL, PUBLIC_IP_TRANSPORTS, parsePublicIpBody, type PublicIpInfo } from '../shared/publicIpProbe'
 import { imageHashService, confinedLocalMediaPath, imageContentTypeForPath } from './services/ImageHashService'
 import { mapWithConcurrency } from '../shared/mapWithConcurrency'
 import { parseEbayListingsReport } from './services/EbayReportService'
@@ -4460,39 +4461,53 @@ ipcMain.handle('app:open-download', () => {
 })
 
 // 顶栏 IP chip：查询出口公网 IP 与所在国家（主进程侧，避免渲染器 CORS）
-let publicIpCache: { ip: string; country: string; org: string; isVpn: boolean; fetchedAt: number } | null = null
+let publicIpCache: (PublicIpInfo & { fetchedAt: number }) | null = null
 const PUBLIC_IP_CACHE_TTL_MS = 5 * 60 * 1000
 
-function fetchPublicIp(): Promise<{ ip: string; country: string; org: string; isVpn: boolean } | null> {
+// Chromium 网络栈跟随系统代理，代理环境下这条才通
+function probePublicIpViaChromium(): Promise<PublicIpInfo | null> {
   return new Promise((resolve) => {
-    const req = https.get('https://myip.ipip.net/', { timeout: 4000, family: 4 }, (res) => {
+    const request = net.request({ url: PUBLIC_IP_PROBE_URL, method: 'GET' })
+    let settled = false
+    const timer = setTimeout(() => { request.abort(); finish(null) }, PUBLIC_IP_PROBE_TIMEOUT_MS.chromium)
+    function finish(info: PublicIpInfo | null) {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve(info)
+    }
+    request.on('response', (response) => {
+      if (response.statusCode !== 200) { finish(null); return }
+      let body = ''
+      response.on('data', (chunk) => { body += chunk.toString() })
+      response.on('end', () => finish(parsePublicIpBody(body)))
+      response.on('error', () => finish(null))
+    })
+    request.on('error', () => finish(null))
+    request.end()
+  })
+}
+
+// Node https 只走直连，留作代理不可用时的回落
+function probePublicIpDirect(): Promise<PublicIpInfo | null> {
+  return new Promise((resolve) => {
+    const req = https.get(PUBLIC_IP_PROBE_URL, { timeout: PUBLIC_IP_PROBE_TIMEOUT_MS.direct, family: 4 }, (res) => {
       let body = ''
       res.on('data', (chunk) => { body += chunk })
-      res.on('end', () => {
-        try {
-          // 响应格式："当前 IP：1.2.3.4  来自于：中国 广东 深圳  电信"
-          const match = body.match(/当前 IP[：:]\s*(\S+)\s*来自于[：:]\s*(\S+)(?:\s+\S+)*\s+(\S+)/)
-          if (match) {
-            const ip = match[1]
-            const country = match[2]
-            const isp = match[3]
-            resolve({
-              ip,
-              country,
-              org: isp,
-              isVpn: /vpn|proxy|hosting|datacenter|机房|数据中心/i.test(isp)
-            })
-          } else {
-            resolve(null)
-          }
-        } catch {
-          resolve(null)
-        }
-      })
+      res.on('end', () => resolve(parsePublicIpBody(body)))
     })
     req.on('error', () => resolve(null))
     req.on('timeout', () => { req.destroy(); resolve(null) })
   })
+}
+
+async function fetchPublicIp(): Promise<PublicIpInfo | null> {
+  for (const transport of PUBLIC_IP_TRANSPORTS) {
+    const info = transport === 'chromium' ? await probePublicIpViaChromium() : await probePublicIpDirect()
+    console.log(`[ip-probe] ${transport} ${info ? '命中' : '未取到'}`)
+    if (info) return info
+  }
+  return null
 }
 
 ipcMain.handle('app:public-ip', async () => {
