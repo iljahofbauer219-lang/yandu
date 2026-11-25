@@ -11,26 +11,11 @@ import { LinduoExceptionModal } from './LinduoExceptionModal'
 import { fetchAllLinduoChatModels, fetchLinduoMemberTier } from './serverApi'
 import { useSession } from './SessionGate'
 import { Button, EmptyState, LoadingState, Notice, StatusBadge } from './ui/primitives'
-import { MENU_PERM_GROUPS, MENU_PERMISSION_TREE, checkedLevel1Codes, expandMenuSelection, menuCheckState } from '../shared/menuPermissionTree'
+import { ALL_LEVEL1_MENU_CODES, MENU_PERM_GROUPS, MENU_PERMISSION_TREE, checkedLevel1Codes, expandMenuSelection, level1Permissions } from '../shared/menuPermissionTree'
 import type { MenuPermNode } from '../shared/menuPermissionTree'
 import { mergePermissionsForSubmit } from './memberPermissionMerge'
 
 type AdminTab = 'members' | 'review' | 'crawler' | 'org'
-
-interface PermSummaryPart { label: string; cards: string[] }
-
-/** 结构化权限摘要：供 chips 渲染（收起态取前 3 个一级，展开态全量） */
-function permSummaryParts(selected: string[]): PermSummaryPart[] {
-  const set = new Set(selected)
-  const parts: PermSummaryPart[] = []
-  for (const node of MENU_PERMISSION_TREE) {
-    const state = menuCheckState(selected, node)
-    if (state === 'none') continue
-    if (state === 'all') { parts.push({ label: node.label, cards: [] }); continue }
-    parts.push({ label: node.label, cards: node.cards.filter(c => set.has(c.code)).map(c => c.label) })
-  }
-  return parts
-}
 
 /**
  * 使用权限勾选：只暴露一级栏目勾选框（按侧边栏 / 栏目内入口两组分列）。
@@ -58,22 +43,15 @@ function MenuPermTree(props: { selected: string[]; onChange: (next: string[]) =>
   </div>
 }
 
-/** 「使用权限」列展示：收起态前 3 个一级 chip +「+N」；点击展开全量 chips */
+/**
+ * 「使用权限」列展示：只按一级目录出 chip（侧边栏栏青、栏目内入口栏蓝）。
+ * 二级码由所属一级归并，不再罗列卡片名——141 张货盘卡名会把整行撑爆。
+ */
 function PermSummaryChips({ selected }: { selected: string[] }) {
-  const [expanded, setExpanded] = useState(false)
-  const parts = useMemo(() => permSummaryParts(selected), [selected])
-  if (parts.length === 0) return <>—</>
-  const visible = expanded ? parts : parts.slice(0, 3)
-  const hiddenCount = parts.length - visible.length
-  return <div className={`perm-summary${expanded ? ' expanded' : ''}`}>
-    <span className="perm-summary-chips">
-      {visible.map((part, i) => <span className="perm-summary-chip" key={i}>
-        {part.label}
-        {part.cards.length > 0 && <em>{part.cards.join('/')}</em>}
-      </span>)}
-      {hiddenCount > 0 && <button type="button" className="perm-summary-more" onClick={() => setExpanded(true)}>+{hiddenCount}</button>}
-    </span>
-    {expanded && parts.length > 3 && <button type="button" className="perm-summary-collapse" onClick={() => setExpanded(false)}>收起</button>}
+  const items = useMemo(() => level1Permissions(selected), [selected])
+  if (items.length === 0) return <>—</>
+  return <div className="perm-summary">
+    {items.map(item => <span className={`perm-summary-chip ${item.group}`} key={item.code}>{item.label}</span>)}
   </div>
 }
 
@@ -161,8 +139,8 @@ function MemberRow(props: {
     return role ? role.permissions : []
   }).filter((v, i, a) => a.indexOf(v) === i)
 
-  // UI 仅展示 menu.* 权限点（勾选树的可选集合）
-  const modulePerms = allPerms.filter(p => p.startsWith('menu.'))
+  // UI 仅展示 menu.* 权限点；主帐号全栏可达，展示按一级全列（角色码历史缺项不造成失真）
+  const modulePerms = member.isOwner ? ALL_LEVEL1_MENU_CODES : allPerms.filter(p => p.startsWith('menu.'))
 
   const startEdit = () => {
     setEditing(true)

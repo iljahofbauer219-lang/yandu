@@ -347,16 +347,18 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .sysadmin-primary:disabled { opacity:.5; cursor:default; }
 .sysadmin-error { color:#c0392b; background:#fdecea; border:1px solid #f5c6c0; border-radius:8px; padding:8px 12px; font-size:12px; }
 .sysadmin-table { width:100%; border-collapse:collapse; font-size:12px; }
-.sysadmin-table th { text-align:left; padding:8px 10px; color:#67736e; font-size:11px; border-bottom:1px solid #e6e6e8; }
+.sysadmin-table th { text-align:left; padding:8px 10px; color:var(--yd-text-secondary); font-size:11px; border-bottom:1px solid #e6e6e8; }
 .sysadmin-table td { padding:9px 10px; border-bottom:1px solid #f0f0f2; vertical-align:middle; }
 .sysadmin-table .mono { font-family:ui-monospace,monospace; letter-spacing:.02em; }
+.sysadmin-members-table { table-layout:fixed; }
 .sysadmin-members-table th:nth-child(1) { width:10%; }
 .sysadmin-members-table th:nth-child(2) { width:12%; }
 .sysadmin-members-table th:nth-child(3) { width:11%; }
-.sysadmin-members-table th:nth-child(4) { width:22%; }
+.sysadmin-members-table th:nth-child(4) { width:24%; }
 .sysadmin-members-table th:nth-child(5) { width:7%; }
-.sysadmin-members-table th:nth-child(6) { width:9%; }
-.sysadmin-members-table th:nth-child(7) { width:15%; }
+.sysadmin-members-table th:nth-child(6) { width:10%; }
+.sysadmin-members-table th:nth-child(7) { width:26%; }
+.sysadmin-members-table td { overflow-wrap:break-word; }
 .sysadmin-actions { white-space:nowrap; }
 .sysadmin-member-row.disabled td { opacity:.55; }
 .owner-badge { display:inline-block; margin-left:6px; padding:1px 6px; border-radius:5px; background:#dff6f4; color:var(--yd-content-brand-ink); font-size:9px; font-style:normal; font-weight:700; }
@@ -365,7 +367,7 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .status-dot.ok { background:#2ecc71; }
 .status-dot.off { background:#bbb; }
 .member-actions-cell { display:flex; flex-direction:column; gap:6px; align-items:flex-start; }
-.member-actions-row { display:flex; align-items:center; gap:5px; }
+.member-actions-row { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
 .member-actions-row:last-child > *:last-child { margin-right:0; }
 .sysadmin-actions button { margin-right:5px; padding:4px 9px; border:1px solid #dce2de; border-radius:6px; background:#fff; color:#4a5a52; font-size:10px; cursor:pointer; }
 .sysadmin-actions button:hover { border-color:var(--yd-content-brand-bright); color:var(--yd-content-brand-ink); }
@@ -402,13 +404,10 @@ form label { margin-top:10px; color:#676b70; font-size:10px; } input,.platform-s
 .menu-perm-level1-list { display:flex; flex-wrap:wrap; gap:6px 20px; padding:2px 0 4px; }
 .menu-perm-level1 { font-size:12px; white-space:nowrap; margin-right:0; }
 .menu-perm-level1 b { font-weight:600; white-space:nowrap; }
-.perm-summary { display:flex; align-items:flex-start; gap:6px; }
-.perm-summary-chips { display:inline-flex; flex-wrap:wrap; gap:4px; max-width:420px; }
-.perm-summary-chip { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:999px; background:#eef1ef; color:#3d4a44; font-size:10px; line-height:16px; }
-.perm-summary-chip em { font-style:normal; color:#8a948c; }
-.perm-summary-more,.perm-summary-collapse { border:none; background:transparent; color:var(--yd-content-brand-ink); font-size:10px; font-weight:700; cursor:pointer; padding:2px 6px; line-height:16px; border-radius:999px; }
-.perm-summary-more { background:#dff6f4; }
-.perm-summary-more:hover,.perm-summary-collapse:hover { background:#c8efec; }
+.perm-summary { display:flex; flex-wrap:wrap; gap:4px; min-width:0; }
+.perm-summary-chip { display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:11px; line-height:17px; white-space:nowrap; }
+.perm-summary-chip.sidebar { background:var(--yd-brand-soft); color:var(--yd-brand-contrast); }
+.perm-summary-chip.entry { background:var(--yd-info-soft); color:var(--yd-info); }
 .sysadmin-msg { margin:6px 0 0; font-size:11px; color:var(--yd-content-brand-ink); }
 .sysadmin-msg.error { color:#c0392b; }
 .sysadmin-msg-cell { padding:2px 10px 8px!important; border-bottom:1px solid #f0f0f2; }

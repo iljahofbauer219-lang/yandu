@@ -194,21 +194,34 @@ export const MENU_PERMISSION_TREE: MenuPermNode[] = [
   { code: 'menu.tasks', label: 'AI任务', group: 'entry', cards: [] }
 ]
 
-export type MenuCheckState = 'none' | 'some' | 'all'
-
-/** 一级勾选三态：无二级的一级叶子按一级码；有二级时按二级勾选数量（持有一级码但无二级视为半选） */
-export function menuCheckState(selected: string[], node: MenuPermNode): MenuCheckState {
-  const set = new Set(selected)
-  if (node.cards.length === 0) return set.has(node.code) ? 'all' : 'none'
-  const count = node.cards.filter(card => set.has(card.code)).length
-  if (count === node.cards.length) return 'all'
-  if (count > 0 || set.has(node.code)) return 'some'
-  return 'none'
-}
-
 /** 一级菜单访问判断：持有一级码或任一下属二级码 */
 export function hasMenuAccess(hasPerm: (code: string) => boolean, node: MenuPermNode): boolean {
   return hasPerm(node.code) || node.cards.some(card => hasPerm(card.code))
+}
+
+/** 主帐号绕过逐项校验、全栏可达；展示口径按一级全列，不受 DB 角色码历史缺项影响 */
+export const ALL_LEVEL1_MENU_CODES: string[] = MENU_PERMISSION_TREE.map(node => node.code)
+
+export interface Level1Permission {
+  code: string
+  label: string
+  group: MenuPermGroup
+}
+
+/**
+ * 使用权限的一级目录口径（勾选回显与列表展示共用）：持有该栏目一级码或任一二码即算该栏目。
+ * 只输出一级信息，二级码不单独成项——展示层若带出二级名称即为本口径被绕过。
+ */
+export function level1Permissions(codes: readonly string[]): Level1Permission[] {
+  const set = new Set(codes)
+  return MENU_PERMISSION_TREE
+    .filter(node => hasMenuAccess(code => set.has(code), node))
+    .map(node => ({ code: node.code, label: node.label, group: node.group }))
+}
+
+/** 成员现有权限码 → 一级勾选回显 */
+export function checkedLevel1Codes(codes: readonly string[]): string[] {
+  return level1Permissions(codes).map(item => item.code)
 }
 
 /**
@@ -223,27 +236,4 @@ export function expandMenuSelection(level1Codes: readonly string[]): string[] {
     codes.push(node.code, ...node.cards.map(card => card.code))
   }
   return [...new Set(codes)]
-}
-
-/** 成员现有权限码 → 一级勾选回显：持有一级码或任一二级码即视为该栏目已勾选 */
-export function checkedLevel1Codes(codes: readonly string[]): string[] {
-  const set = new Set(codes)
-  return MENU_PERMISSION_TREE.filter(node => hasMenuAccess(code => set.has(code), node)).map(node => node.code)
-}
-
-/** 成员使用权限摘要：一级名顿号分隔，部分二级时如「AI美工（AI生图）」 */
-export function summarizeMenuPermissions(selected: string[]): string {
-  const set = new Set(selected)
-  const parts: string[] = []
-  for (const node of MENU_PERMISSION_TREE) {
-    const state = menuCheckState(selected, node)
-    if (state === 'none') continue
-    if (state === 'all') {
-      parts.push(node.label)
-      continue
-    }
-    const cardLabels = node.cards.filter(card => set.has(card.code)).map(card => card.label)
-    parts.push(cardLabels.length > 0 ? `${node.label}（${cardLabels.join('/')}）` : node.label)
-  }
-  return parts.join('、')
 }

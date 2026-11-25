@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MENU_PERM_GROUPS, MENU_PERMISSION_TREE, checkedLevel1Codes, expandMenuSelection, hasMenuAccess, menuCheckState, summarizeMenuPermissions } from '../menuPermissionTree'
+import { ALL_LEVEL1_MENU_CODES, MENU_PERM_GROUPS, MENU_PERMISSION_TREE, checkedLevel1Codes, expandMenuSelection, hasMenuAccess, level1Permissions } from '../menuPermissionTree'
 // 纯函数跨包 import 沿用本目录 memberPermissionMerge.test.ts 先例（server rootDir 禁跨包，测试落 shared 侧）
 import { mergePermissionsForSubmit } from '../../../src/renderer/memberPermissionMerge.js'
 
@@ -80,10 +80,31 @@ describe('使用权限树与侧边栏分类同步', () => {
     expect(submitted).toHaveLength(3 + 1 + collect.cards.length + 1)
   })
 
-  it('摘要与三态仍按实际持有码呈现', () => {
-    const warehouse = nodeOf('menu.warehouse')
-    expect(menuCheckState(['menu.warehouse'], warehouse)).toBe('some')
-    expect(menuCheckState(expandMenuSelection(['menu.warehouse']), warehouse)).toBe('all')
-    expect(summarizeMenuPermissions(['menu.collect'])).toBe('货盘采集')
+  it('展示口径只按一级目录归并，持有任何二级码即算该栏目', () => {
+    const items = level1Permissions(['menu.collect.1688', 'menu.planet.compliance', 'menu.employee', 'erp.collect', 'ai.use'])
+    expect(items.map(item => item.label)).toEqual(['货盘采集', 'AI员工', 'AI总部'])
+    expect(items.map(item => item.code)).toEqual(['menu.collect', 'menu.employee', 'menu.hq'])
+    expect(level1Permissions([])).toEqual([])
+    // 与勾选回显同一口径，避免两套归并逻辑漂移
+    expect(level1Permissions(['menu.cb-news']).map(item => item.code)).toEqual(checkedLevel1Codes(['menu.cb-news']))
+  })
+
+  it('全量授权也只 12 个一级 chip：不输出任何二级卡片名（防「大健云仓/1688/…」长串回归）', () => {
+    const allCodes = MENU_PERMISSION_TREE.flatMap(node => [node.code, ...node.cards.map(card => card.code)])
+    const items = level1Permissions(allCodes)
+    expect(items).toHaveLength(12)
+    expect(items.map(item => item.label)).toEqual(MENU_PERMISSION_TREE.map(node => node.label))
+    expect(items.map(item => item.label)).not.toContain('大健云仓')
+    expect(items.map(item => item.label)).not.toContain('AI生图')
+  })
+
+  it('chip 分组随一级栏目：侧边栏与栏目内入口各归各组', () => {
+    expect(level1Permissions(expandMenuSelection(['menu.art', 'menu.hq'])).map(item => item.group)).toEqual(['sidebar', 'entry'])
+  })
+
+  it('主帐号展示码覆盖全部 12 栏，且按该码集归并仍是 12 个一级（不多不少）', () => {
+    expect(ALL_LEVEL1_MENU_CODES).toHaveLength(12)
+    expect(ALL_LEVEL1_MENU_CODES).toEqual(MENU_PERMISSION_TREE.map(node => node.code))
+    expect(level1Permissions(ALL_LEVEL1_MENU_CODES).map(item => item.code)).toEqual(ALL_LEVEL1_MENU_CODES)
   })
 })

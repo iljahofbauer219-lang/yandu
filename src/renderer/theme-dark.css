@@ -203,11 +203,6 @@
 [data-theme-mode="dark"] .edit-panel-perms legend { color:var(--text-tertiary); }
 [data-theme-mode="dark"] .edit-panel-footer { border-top-color:var(--border-soft); }
 [data-theme-mode="dark"] .edit-panel-footer button:not(.primary) { background:transparent; border-color:var(--border-soft); color:var(--text-muted); }
-[data-theme-mode="dark"] .perm-summary-chip { background:rgba(255,255,255,.08); color:var(--text-secondary); }
-[data-theme-mode="dark"] .perm-summary-chip em { color:var(--text-muted); }
-[data-theme-mode="dark"] .perm-summary-more { background:var(--accent-soft); color:var(--accent-contrast); }
-[data-theme-mode="dark"] .perm-summary-more:hover,[data-theme-mode="dark"] .perm-summary-collapse:hover { background:rgba(0,224,138,.2); }
-[data-theme-mode="dark"] .perm-summary-collapse { color:var(--accent-contrast); }
 [data-theme-mode="dark"] .role-check { color:var(--text-secondary); }
 [data-theme-mode="dark"] .menu-perm-section-head { border-bottom-color:var(--border-soft); }
 [data-theme-mode="dark"] .menu-perm-section-head b { color:var(--text-primary); }
