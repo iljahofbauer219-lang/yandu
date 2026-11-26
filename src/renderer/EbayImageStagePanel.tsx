@@ -823,7 +823,7 @@ export default function EbayImageStagePanel(props: Props) {
       <div className="ebay-stage-source-grid">
         {props.sourceImages.slice(0, 12).map((url, index) => (
           <div className="ebay-stage-source-item selected" key={url}>
-            <img src={url} alt={`原图 ${index + 1}`} />
+            <button type="button" className="ebay-stage-thumb" aria-label={`查看原大 原图 ${index + 1}`} onClick={event=>{event.stopPropagation();setLightboxUrl(url)}}><img src={url} alt={`原图 ${index + 1}`} /></button>
             <span>{props.sourceLabels[index] || `原图 ${index + 1}`}</span>
           </div>
         ))}
@@ -876,7 +876,7 @@ export default function EbayImageStagePanel(props: Props) {
                 const check = props.sourceChecks.find(item => item.url === url)
                 return (
                   <div className={`ebay-stage-source-item${replaced || !regenItem ? ' selected' : ''}`} key={url}>
-                    <img src={replaced ? replaced.url : url} alt={`原图 ${index + 1}`} />
+                    <button type="button" className="ebay-stage-thumb" aria-label={`查看原大 原图 ${index + 1}`} onClick={event=>{event.stopPropagation();setLightboxUrl(replaced ? replaced.url : url)}}><img src={replaced ? replaced.url : url} alt={`原图 ${index + 1}`} /></button>
                     <span>{props.sourceLabels[index] || `原图 ${index + 1}`}</span>
                     {check?.extraToPage && <em className="ebay-stage-simple-chip warn" title="该图不在产品下载图文页图集中">非图文页图集</em>}
                     {replaced ? <em className="ebay-stage-simple-chip regen">已重生成</em>
@@ -917,7 +917,7 @@ export default function EbayImageStagePanel(props: Props) {
         <div className="ebay-stage-simple-gen-grid">
           {simpleGenerated.map(image => (
             <div className="ebay-stage-simple-gen-cell" key={image.url}>
-              <img src={image.url} alt={`${marketingFactCategoryLabel(image.category)}生成图`} />
+              <button type="button" className="ebay-stage-thumb" aria-label={`查看原大 ${marketingFactCategoryLabel(image.category)}生成图`} onClick={event=>{event.stopPropagation();setLightboxUrl(image.url)}}><img src={image.url} alt={`${marketingFactCategoryLabel(image.category)}生成图`} /></button>
               <em className="ebay-stage-simple-chip gen">{marketingFactCategoryLabel(image.category)}</em>
               {image.model && <span className="ebay-stage-simple-gen-model">{modelLabel(image.model)}</span>}
               <button type="button" className="ebay-stage-simple-regen-btn" disabled={busy || regenBusyUrl === image.url || !modelId} onClick={() => regenSimpleGenerated(image)} title={regenBusyUrl === image.url ? '生成中…' : '用原提示词重新生成这张'}>
@@ -951,7 +951,7 @@ export default function EbayImageStagePanel(props: Props) {
             return (
               <div className="ebay-stage-order-row" key={url}>
                 <span className="ebay-stage-order-index">{position + 1}</span>
-                <img src={url} alt={`排序第 ${position + 1} 张`} />
+                <button type="button" className="ebay-stage-thumb" aria-label={`查看原大 排序第 ${position + 1} 张`} onClick={event=>{event.stopPropagation();setLightboxUrl(url)}}><img src={url} alt={`排序第 ${position + 1} 张`} /></button>
                 <span className="ebay-stage-order-tags">
                   <em className={member.kind === 'GENERATED' ? 'gen' : member.kind === 'REGENERATED' ? 'regen' : 'keep'}>
                     {member.kind === 'GENERATED' ? '多生图片' : member.kind === 'REGENERATED' ? '已重生成' : '沿用原图'}
@@ -1036,7 +1036,7 @@ export default function EbayImageStagePanel(props: Props) {
             {images.map((image, index) => (
               <div key={image.url} className="ebay-stage-gen-cell">
                 <button type="button" className={`ebay-stage-gen-item ${keptUrls.has(image.url) ? 'selected' : ''}`} onClick={() => toggleKept(image)}>
-                  <img src={image.url} alt={`${image.title} ${index + 1}`} />
+                  <button type="button" className="ebay-stage-thumb" aria-label={`查看原大 ${image.title} ${index + 1}`} onClick={event=>{event.stopPropagation();setLightboxUrl(image.url)}}><img src={image.url} alt={`${image.title} ${index + 1}`} /></button>
                   <em className="ebay-stage-gen-card-tag">{image.cardId} · {image.title}</em>
                   {image.dupeOf && <em className="ebay-stage-gen-dupe-tag">与「{image.dupeOf}」雷同，建议换参照重出</em>}
                   <span>{keptUrls.has(image.url) ? '✓ 已采纳' : '点击采纳'}</span>
@@ -1057,7 +1057,7 @@ export default function EbayImageStagePanel(props: Props) {
         <div className="ebay-stage-confirmed-grid">
           {CATEGORIES.flatMap(category => (keptByCategory[category] || []).map(url => (
             <div className="ebay-stage-gen-cell" key={url}>
-              <img src={url} alt={`已保留 ${marketingFactCategoryLabel(category)}`} />
+              <button type="button" className="ebay-stage-thumb" aria-label={`查看原大 已保留 ${marketingFactCategoryLabel(category)}`} onClick={event=>{event.stopPropagation();setLightboxUrl(url)}}><img src={url} alt={`已保留 ${marketingFactCategoryLabel(category)}`} /></button>
               <button type="button" onClick={() => unkeep(category, url)}>移除</button>
             </div>
           )))}

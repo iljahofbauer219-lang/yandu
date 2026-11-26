@@ -23,11 +23,15 @@ describe('草稿查看直链继续完成草稿 · 渲染端接线', () => {
     expect(body).toContain('setLocalProductMeta(')
   })
 
-  it('openSavedDraftForRun 与草稿查看同构造器＋navigate＋等标题就绪', () => {
-    const body = slice(appSource, 'const openSavedDraftForRun=', 'const refreshLocalProduct=')
-    expect(body).toContain('const url=buildEbayDraftContinueUrl(ref.id)')
-    expect(body).toContain("window.desktop.browser.navigate('web',url)")
-    expect(body).toContain('readCurrentDraftTitle()')
+  it('后台轻量开草稿与草稿查看同构造器＋loadURL 不附着＋等标题就绪（主进程 workspace）', () => {
+    const ws = readFileSync(path.join(__dirname, '..', '..', 'main', 'browser', 'BrowserWorkspace.ts'), 'utf8')
+    const start = ws.indexOf('async openEbaySavedDraftForRun(')
+    expect(start).toBeGreaterThan(-1)
+    const body = ws.slice(start, start + 1200)
+    expect(body).toContain('buildEbayDraftContinueUrl(draftId)')
+    expect(body).toContain('tab.view.webContents.loadURL(')
+    expect(body).not.toContain('this.show(')
+    expect(body).toContain('readEbayCurrentTitle()')
   })
 
   it('viewPublishDraft 先附着店铺会话页签再 navigate（防落通用罐被 splashui 当匿名拦）', () => {
@@ -39,13 +43,12 @@ describe('草稿查看直链继续完成草稿 · 渲染端接线', () => {
     expect(showAt).toBeLessThan(navAt)
   })
 
-  it('openSavedDraftForRun 先附着店铺会话页签再 navigate（定时轻量链同口径）', () => {
-    const body = slice(appSource, 'const openSavedDraftForRun=', 'const refreshLocalProduct=')
-    const showAt = body.indexOf("await window.desktop.browser.show('web',ebayOwnTabId.current)")
-    const navAt = body.indexOf("window.desktop.browser.navigate('web',url)")
-    expect(showAt, 'openSavedDraftForRun 必须先 show 附着店铺页签').toBeGreaterThan(-1)
-    expect(navAt).toBeGreaterThan(-1)
-    expect(showAt).toBeLessThan(navAt)
+  it('后台轻量开草稿不附着视图（主进程调度不扰用户当前页）＋loadURL 续作页', () => {
+    const ws = readFileSync(path.join(__dirname, '..', '..', 'main', 'browser', 'BrowserWorkspace.ts'), 'utf8')
+    const body = ws.slice(ws.indexOf('async openEbaySavedDraftForRun('), ws.indexOf('async openEbaySavedDraftForRun(') + 1200)
+    expect(body).toContain('tab.view.webContents.loadURL(buildEbayDraftContinueUrl(draftId))')
+    expect(body).not.toContain('this.show(')
+    expect(body).not.toContain('attachView')
   })
 
   it('App.tsx 不再留内联 lstng?draftId 模板，路由单一真值', () => {

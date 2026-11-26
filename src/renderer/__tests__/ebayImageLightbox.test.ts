@@ -21,6 +21,14 @@ describe('缩略图点击看原大', () => {
     expect(panel).toContain('className="ebay-image-lightbox-close"')
     expect(panel).toContain("if(event.key==='Escape')setLightboxUrl(null)")
   })
+  it('六缩略图点包可点按钮（键盘可达＋stopPropagation 不扰既有按钮）', () => {
+    expect(panel.split('className="ebay-stage-thumb"').length - 1).toBe(6)
+    expect(panel).toContain('onClick={event=>{event.stopPropagation();setLightboxUrl(url)}}')
+    expect(panel).toContain('onClick={event=>{event.stopPropagation();setLightboxUrl(replaced ? replaced.url : url)}}')
+    expect(panel).toContain('onClick={event=>{event.stopPropagation();setLightboxUrl(image.url)}}')
+    expect(css).toContain('.ebay-stage-thumb{display:block;width:100%;padding:0;border:0;background:none;cursor:zoom-in}')
+    expect(css).toContain('.ebay-stage-thumb:focus-visible{outline:2px solid #18aaa2;')
+  })
   it('CSS：zoom-in 提示＋fixed 遮罩＋90vw/90vh 等比', () => {
     expect(css).toContain('.ebay-stage-panel img{cursor:zoom-in}')
     expect(css).toContain('.ebay-image-lightbox{position:fixed;inset:0;z-index:120;display:grid;place-items:center;')
