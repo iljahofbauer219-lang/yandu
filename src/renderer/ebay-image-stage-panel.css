@@ -76,7 +76,7 @@
 
 .ebay-stage-step:focus-visible,
 .ebay-stage-source-item:focus-visible,
-.ebay-stage-gen-item:focus-visible,
+.ebay-stage-gen-adopt:focus-visible,
 .ebay-stage-advanced summary:focus-visible {
   outline: 2px solid var(--yd-brand);
   outline-offset: 2px;
@@ -492,7 +492,6 @@
   border: 2px solid transparent;
   border-radius: 10px;
   overflow: hidden;
-  cursor: pointer;
   padding: 0;
   background: var(--bg-secondary, #f1f5f9);
   transition: all 0.15s;
@@ -514,6 +513,15 @@
   object-fit: contain;
   display: block;
   background: #fff;
+}
+
+.ebay-stage-gen-adopt {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
 }
 
 .ebay-stage-gen-item span {

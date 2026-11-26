@@ -1035,12 +1035,12 @@ export default function EbayImageStagePanel(props: Props) {
             <p className="ebay-stage-gen-hint" style={{ color: CATEGORY_COLORS[category], fontWeight: 600 }}>{marketingFactCategoryLabel(category)} · {images.length} 张{counts[category] > images.length ? `（设定 ${counts[category]}，受事实卡条数限制）` : ''}{fallbackName ? ` · 实际模型：${fallbackName}` : ''}</p>
             {images.map((image, index) => (
               <div key={image.url} className="ebay-stage-gen-cell">
-                <button type="button" className={`ebay-stage-gen-item ${keptUrls.has(image.url) ? 'selected' : ''}`} onClick={() => toggleKept(image)}>
+                <div className={`ebay-stage-gen-item ${keptUrls.has(image.url) ? 'selected' : ''}`}>
                   <button type="button" className="ebay-stage-thumb" aria-label={`查看原大 ${image.title} ${index + 1}`} onClick={event=>{event.stopPropagation();setLightboxUrl(image.url)}}><img src={image.url} alt={`${image.title} ${index + 1}`} /></button>
                   <em className="ebay-stage-gen-card-tag">{image.cardId} · {image.title}</em>
                   {image.dupeOf && <em className="ebay-stage-gen-dupe-tag">与「{image.dupeOf}」雷同，建议换参照重出</em>}
-                  <span>{keptUrls.has(image.url) ? '✓ 已采纳' : '点击采纳'}</span>
-                </button>
+                  <button type="button" className="ebay-stage-gen-adopt" onClick={() => toggleKept(image)}><span>{keptUrls.has(image.url) ? '✓ 已采纳' : '点击采纳'}</span></button>
+                </div>
                 <button type="button" className="ebay-stage-gen-regen" disabled={busy || regeneratingCardId === image.cardId} onClick={() => regenerateCard(image.cardId)}>
                   {regeneratingCardId === image.cardId ? '生成中…' : '↻ 重新生成'}
                 </button>
