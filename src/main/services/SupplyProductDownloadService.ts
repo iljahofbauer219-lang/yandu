@@ -10,6 +10,22 @@ import type { AppDatabase } from '../database/AppDatabase'
 import type { BrowserWorkspace } from '../browser/BrowserWorkspace'
 import { readServerUrl } from '../serverConfig'
 
+/** 建页响应容错解析：200 非 JSON body（网关/代理拦截页、空响应）不得抛 undici raw 英文串；
+ *  解析失败或缺 pageId/url 抛中文全文（含 HTTP 状态与重试指引）。 */
+export function parseSupplyPageCreationBody(raw: string, status: number): { pageId: string; url: string } {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    throw new Error(`服务器建页响应不是有效 JSON（HTTP ${status}，内容疑似网关/代理拦截页或空响应），请重试；若持续出现请检查中央服务器状态`)
+  }
+  const result = parsed as { pageId?: string; url?: string } | null
+  if (!result || typeof result.pageId !== 'string' || !result.pageId || typeof result.url !== 'string' || !result.url) {
+    throw new Error(`服务器建页响应缺少 pageId/url（HTTP ${status}），请重试或检查中央服务器状态`)
+  }
+  return { pageId: result.pageId, url: result.url }
+}
+
 const EXTENSION_BY_MIME: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/jpg': 'jpg',
@@ -200,7 +216,7 @@ export class SupplyProductDownloadService {
       const data = await response.json().catch(() => null) as { message?: string } | null
       throw new Error(data?.message || `服务器建页失败（HTTP ${response.status}）`)
     }
-    const result = await response.json() as { pageId: string; url: string }
+    const result = parseSupplyPageCreationBody(await response.text(), response.status)
 
     const record: SupplyProductDownload = {
       warehouseProductId,
