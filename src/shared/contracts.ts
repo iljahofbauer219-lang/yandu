@@ -1451,6 +1451,8 @@ export interface CollectorPluginImportResult {
   total: number
   blocked: number
   duplicates: CollectorDuplicateProduct[]
+  /** 映射后的组织级采集入参（渲染层据此回写服务端候选池，全员共享已采集标记） */
+  mapped?: CollectedSupplyProduct[]
 }
 
 export type CollectorDuplicateStage = 'CANDIDATE' | 'SELECTION' | 'WAREHOUSE' | 'HISTORY' | 'ELIMINATED'

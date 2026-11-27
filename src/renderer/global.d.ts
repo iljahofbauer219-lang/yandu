@@ -239,6 +239,7 @@ declare global {
         translate(mode: BrowserTranslationMode): Promise<BrowserTranslationStatus>
         restoreTranslation(): Promise<void>
         startCollector(): Promise<BuiltInCollectorState>
+        syncServerCollected(urls: string[]): Promise<void>
         collectorState(): Promise<BuiltInCollectorState>
         removeCollectorProduct(url: string): Promise<BuiltInCollectorState>
         cancelCollector(): Promise<void>

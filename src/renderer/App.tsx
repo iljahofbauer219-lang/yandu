@@ -8,7 +8,7 @@ import { BrowserFullscreenToggle, useBrowserFullscreenBounds, useBrowserSurfaceR
 import { activeTabIdOf, createKeepAliveRegistry, ebayBrowserLaunchKey } from './pageKeepAlive'
 import { addressAfterPush } from './addressDraft'
 import { PageFrame, PagePortal } from './PageFrame'
-import { getTokens, hasPermission, getServerBaseUrl } from './serverApi'
+import { getTokens, hasPermission, getServerBaseUrl, apiFetch } from './serverApi'
 import { LinduoAssignmentModal } from './LinduoAssignmentModal'
 import { LinduoPreferenceModal } from './LinduoPreferenceModal'
 import { MENU_PERMISSION_TREE, hasMenuAccess } from '../shared/menuPermissionTree'
@@ -2285,6 +2285,20 @@ export function App() {
     setBuiltInCollectorRecognized(state.recognizedCount)
   }
 
+  // 已采集红勾全员统一：从服务端组织级候选池拉 GIGACLOUD sourceUrl 集回推注入器；服务端失败保留现有标记，不得误报未采集
+  const refreshServerCollectedMarks=async()=>{
+    try{
+      const workspace=await apiFetch<{ supplyProducts:Array<{ url:string; platformCode:string }> }>('/api/collection/candidates')
+      const urls=(workspace.supplyProducts||[]).filter(item=>item.platformCode==='GIGACLOUD'&&item.url).map(item=>item.url)
+      await window.desktop.browser.syncServerCollected(urls)
+    }catch{/* 服务端失败保留现有标记 */}
+  }
+  useEffect(()=>{
+    if(!builtInCollectorActive)return
+    void refreshServerCollectedMarks()
+    const timer=setInterval(()=>{ void refreshServerCollectedMarks() },60_000)
+    return()=>clearInterval(timer)
+  },[builtInCollectorActive])
   const confirmBuiltInCollector = async () => {
     if (!builtInCollectorProducts.length || builtInCollectorConfirming) return
     setBuiltInCollectorConfirming(true)
@@ -2303,6 +2317,15 @@ export function App() {
       setBuiltInCollectorRecognized(collectorState.recognizedCount)
       const duplicateDetail=result.duplicates.slice(0,6).map(item=>`${item.productId||'无ID'}：${item.message}`).join('；')
       setBuiltInCollectorMessage(`采集完成：新增 ${result.imported} 个，阻止重复 ${result.blocked} 个；候选总数 ${result.total} 个${duplicateDetail?`。${duplicateDetail}`:''}`)
+      // 组织级共享：本地落库后回写服务端候选池（幂等去重），再刷新全员标记；服务端失败点名但不阻断本地结果
+      try{
+        if(result.mapped?.length){
+          const latest=await apiFetch<{ task?: SelectionTask } | SelectionTask>('/api/collection/tasks/latest')
+          const serverTask=(latest as { task?: SelectionTask }).task ?? (latest as SelectionTask)
+          if(serverTask?.id) await apiFetch('/api/collection/tasks/import-plugin-candidates',{ method:'POST', body:{ task:serverTask, products:result.mapped } })
+        }
+      }catch(reason){ setBuiltInCollectorMessage(current=>`${current} 服务端共享标记未写入：${reason instanceof Error?reason.message:'未知错误'}`) }
+      await refreshServerCollectedMarks()
       await window.desktop.workflow.counts().then(setWorkflowCounts)
     } catch (reason) { setError(reason instanceof Error ? reason.message : '确认采集失败') }
     finally { setBuiltInCollectorConfirming(false) }

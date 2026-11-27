@@ -284,6 +284,7 @@ contextBridge.exposeInMainWorld('desktop', {
     translate: (mode: BrowserTranslationMode): Promise<BrowserTranslationStatus> => ipcRenderer.invoke('browser:translate', mode),
     restoreTranslation: (): Promise<void> => ipcRenderer.invoke('browser:translation:restore'),
     startCollector: (): Promise<BuiltInCollectorState> => ipcRenderer.invoke('browser:collector:start'),
+    syncServerCollected: (urls: string[]): Promise<void> => ipcRenderer.invoke('browser:collector:sync-server-collected', urls),
     collectorState: (): Promise<BuiltInCollectorState> => ipcRenderer.invoke('browser:collector:list'),
     removeCollectorProduct: (url: string): Promise<BuiltInCollectorState> => ipcRenderer.invoke('browser:collector:remove', url),
     cancelCollector: (): Promise<void> => ipcRenderer.invoke('browser:collector:cancel'),
