@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { parseSupplyPageCreationBody } from '../SupplyProductDownloadService'
+import { parseSupplyPageCreationBody, supplyPageCreationFailureMessage } from '../SupplyProductDownloadService'
 
 /**
  * 用户口径（2026-11-27 截图 SKU 1091290）：下载图文报 raw 英文
@@ -37,5 +37,16 @@ describe('建页响应容错解析', () => {
     const source = readFileSync(path.resolve(process.cwd(), 'src/main/services/SupplyProductDownloadService.ts'), 'utf8')
     expect(source).toContain('const result = parseSupplyPageCreationBody(await response.text(), response.status)')
     expect(source).not.toContain('const result = await response.json() as { pageId: string; url: string }')
+    expect(source).toContain('throw new Error(supplyPageCreationFailureMessage(response.status, String(data?.message || \'\')))')
+  })
+  it('400 relay 的 raw undici 串转中文全文＋验证/重试指引（11-28 插桩根因）', () => {
+    const raw = "Body is not valid JSON but content-type is set to 'application/json'"
+    const message = supplyPageCreationFailureMessage(400, raw)
+    expect(message).toContain('服务器建页失败（HTTP 400）')
+    expect(message).toContain('上游响应不是有效 JSON')
+    expect(message).toContain('安全验证')
+    expect(message).not.toContain('Body is not valid JSON')
+    expect(supplyPageCreationFailureMessage(502, '')).toBe('服务器建页失败（HTTP 502）')
+    expect(supplyPageCreationFailureMessage(400, '类目缺失')).toBe('类目缺失')
   })
 })

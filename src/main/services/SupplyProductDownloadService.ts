@@ -10,6 +10,16 @@ import type { AppDatabase } from '../database/AppDatabase'
 import type { BrowserWorkspace } from '../browser/BrowserWorkspace'
 import { readServerUrl } from '../serverConfig'
 
+/** 建页失败消息中文化：中央服务器会把上游 undici raw 串（Body is not valid JSON…）原样 relay 进 400 message，
+ *  直显即 raw 英文入卡片 notice（用户 11-28 截图 SKU 1601724 插桩证实）；识别 raw 串转中文全文＋验证/重试指引，
+ *  服务器中文 message 原样保留。 */
+export function supplyPageCreationFailureMessage(status: number, serverMessage: string): string {
+  if (/Body is not valid JSON|content-type is set to/i.test(serverMessage)) {
+    return `服务器建页失败（HTTP ${status}）：中央服务器处理请求时上游响应不是有效 JSON（疑似供应商反爬拦截页或网关异常），请稍后重试；若持续出现请在店铺采集浏览器完成安全验证后重试`
+  }
+  return serverMessage || `服务器建页失败（HTTP ${status}）`
+}
+
 /** 建页响应容错解析：200 非 JSON body（网关/代理拦截页、空响应）不得抛 undici raw 英文串；
  *  解析失败或缺 pageId/url 抛中文全文（含 HTTP 状态与重试指引）。 */
 export function parseSupplyPageCreationBody(raw: string, status: number): { pageId: string; url: string } {
@@ -214,7 +224,7 @@ export class SupplyProductDownloadService {
     }
     if (!response.ok) {
       const data = await response.json().catch(() => null) as { message?: string } | null
-      throw new Error(data?.message || `服务器建页失败（HTTP ${response.status}）`)
+      throw new Error(supplyPageCreationFailureMessage(response.status, String(data?.message || '')))
     }
     const result = parseSupplyPageCreationBody(await response.text(), response.status)
 
