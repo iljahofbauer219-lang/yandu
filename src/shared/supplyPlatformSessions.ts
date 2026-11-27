@@ -31,3 +31,23 @@ export function supplyPartitionForGroup(group: string): string {
   const home = PALLET_HOME_URLS[group]
   return (home && supplySessionPartitionForUrl(home)) || 'persist:web-general'
 }
+
+const EXTRA_PLATFORM_DOMAINS: Record<string, string[]> = {
+  GIGACLOUD: ['gigab2b.com'],
+  '1688': ['1688.com'],
+  PINDUODUO: ['pinduoduo.com', 'yangkeduo.com'],
+  YIWUGO: ['yiwugo.com', 'yiwugou.com', 'yiwugocn.com']
+}
+
+/** 采集/凭据域名闸口径：当前货盘平台自身登记域（区域变体同域），未登记平台返回空 */
+export function platformDomainsForCode(code: string): string[] {
+  const extra = EXTRA_PLATFORM_DOMAINS[code]
+  if (extra) return extra
+  const home = PALLET_HOME_URLS[code]
+  if (!home) return []
+  try { return [registrableDomain(new URL(home).hostname)] } catch { return [] }
+}
+
+export function hostAllowedForDomains(host: string, domains: string[]): boolean {
+  return domains.some(domain => host === domain || host.endsWith(`.${domain}`))
+}

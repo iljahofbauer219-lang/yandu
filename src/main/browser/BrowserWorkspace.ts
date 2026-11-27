@@ -2,7 +2,7 @@ import { writeFileSync } from 'node:fs'
 import { app, BaseWindow, BrowserWindow, WebContents, WebContentsView, clipboard, type Cookie, type Session } from 'electron'
 import { AMAZON_LISTING_EVIDENCE_SCRIPT, AMAZON_REVIEW_EVIDENCE_SCRIPT, AMAZON_SAMPLES_SCRIPT, type AmazonListingEvidence, type AmazonMarketSample, type AmazonReviewEvidence } from '../../shared/amazonScraper'
 import { matchSellableInventoryText } from '../../shared/sellableInventory'
-import { supplySessionPartitionForUrl, supplyPartitionForGroup } from '../../shared/supplyPlatformSessions'
+import { supplySessionPartitionForUrl, supplyPartitionForGroup, platformDomainsForCode, hostAllowedForDomains } from '../../shared/supplyPlatformSessions'
 import { buildEbayDraftContinueUrl, readEbayPublishedLanding } from '../../shared/ebayListingTarget'
 import { pickSupplyDescriptionText } from '../../shared/supplyDescription'
 import { pickSupplyFees } from '../../shared/supplyFeePick'
@@ -196,6 +196,7 @@ export class BrowserWorkspace {
   private ebayPluginActive = false
   private ebayCollectedUrls: string[] = []
   private supplyCollectedUrls: string[] = []
+  private serverSupplyCollectedUrls: string[] = []
   private collectedUrlProvider?: (kind: 'ebay' | 'supply') => string[]
   setCollectedUrlProvider(fn: (kind: 'ebay' | 'supply') => string[]) { this.collectedUrlProvider = fn }
   private readonly ebayPluginProducts = new Map<string,EbayCollectedProduct>()
@@ -1184,7 +1185,11 @@ export class BrowserWorkspace {
 
   async startBuiltInCollector(): Promise<BuiltInCollectorState> {
     const view = this.attached
-    if (!view || !this.isGigaCloudView(view)) throw new Error('请先在右侧打开大健云仓商品列表或详情页')
+    if (!view || !this.isCollectorAllowedView(view)) {
+      const group = view ? [...this.detailTabs.values()].find(entry => entry.view === view)?.group || '' : ''
+      const domains = view ? this.viewPlatformDomains(view) : []
+      throw new Error(group ? `请先在右侧打开当前货盘平台（${group}，仅允许 ${domains.join('、')||'未登记域名'}）商品列表或详情页` : '请先在右侧打开大健云仓商品列表或详情页')
+    }
     if (!this.builtInCollectorActive) this.builtInCollectorProducts.clear()
     this.builtInCollectorActive = true
     this.supplyCollectedUrls = this.collectedUrlProvider?.('supply') || []
@@ -1336,6 +1341,15 @@ export class BrowserWorkspace {
     return { active: true, supplierId: this.erpCollectorSupplier.id, items }
   }
 
+  /** 组织级已采集标记（服务端 /api/erp/products 记录）推送：缓存＋增量下发所有 GIGA 视图，全员同页同标记 */
+  syncServerSupplyCollectedUrls(urls: string[]) {
+    this.serverSupplyCollectedUrls = [...new Set(urls.filter(Boolean))]
+    for (const view of this.getGigaCloudViews()) {
+      if (view.webContents.isDestroyed()) continue
+      void view.webContents.executeJavaScript(`window.__crossBorderCollector?.syncCollected?.(${JSON.stringify(this.serverSupplyCollectedUrls)})`).catch(() => undefined)
+    }
+  }
+
   /** 采集结果回写注入 UI（已采集/已更新/失败），按 sourceProductId 标记状态 */
   async syncErpCollectorStates(states: Array<{ id: string; state: string }>): Promise<void> {
     for (const entry of states) this.erpCollectedStates.set(entry.id, entry.state)
@@ -1464,6 +1478,19 @@ export class BrowserWorkspace {
     } catch { return false }
   }
 
+  /** 采集/凭据域名闸口径：大健云仓沿用既有域，其余 web 页签按货盘组取自身登记域 */
+  private viewPlatformDomains(view: WebContentsView): string[] {
+    if (this.isGigaCloudView(view)) return ['gigab2b.com']
+    const tab = [...this.detailTabs.values()].find(entry => entry.view === view)
+    return tab?.group ? platformDomainsForCode(tab.group) : []
+  }
+
+  private isCollectorAllowedView(view: WebContentsView): boolean {
+    const domains = this.viewPlatformDomains(view)
+    if (!domains.length) return false
+    try { return hostAllowedForDomains(new URL(view.webContents.getURL()).hostname, domains) } catch { return false }
+  }
+
   private getGigaCloudViews() {
     return [...new Set([...this.views.values(), ...[...this.detailTabs.values()].map(tab => tab.view)])]
       .filter(view => this.isGigaCloudView(view))
@@ -1482,7 +1509,7 @@ export class BrowserWorkspace {
   }
 
   private async injectBuiltInCollector(view: WebContentsView) {
-    if (!this.isGigaCloudView(view)) return
+    if (!this.isCollectorAllowedView(view)) return
     const seeded = [...this.builtInCollectorProducts.values()]
     await view.webContents.executeJavaScript(String.raw`(() => {
       const previousSnapshot = window.__crossBorderCollector?.snapshot?.() || {products:[],changes:[]};
@@ -1490,7 +1517,7 @@ export class BrowserWorkspace {
       const changes = previousSnapshot.changes || [];
       window.__crossBorderCollector?.stop?.();
       const selected = new Map([...${JSON.stringify(seeded)},...previousSelected].map(item => [item.url, item]));
-      const collected = new Set(${JSON.stringify(this.supplyCollectedUrls)});
+      const collected = new Set([...${JSON.stringify(this.supplyCollectedUrls)}, ...${JSON.stringify(this.serverSupplyCollectedUrls)}]);
       const knownCategoryPaths=${JSON.stringify(GIGA_CATEGORY_PATHS)};
       const buttonClass = 'cross-border-collector-select';
       const textOf = node => (node?.innerText || node?.textContent || '').replace(/\s+/g,' ').trim();
@@ -1611,6 +1638,7 @@ export class BrowserWorkspace {
       window.__crossBorderCollector={
         snapshot:()=>({products:[...selected.values()],visibleUrls:[...entries.keys()],changes:changes.splice(0)}),
         sync:products=>{selected.clear();products.forEach(product=>selected.set(product.url,product));entries.forEach(update)},
+        syncCollected: urls => { (urls||[]).forEach(u=>collected.add(u)); entries.forEach(update); },
         remove:url=>{selected.delete(url);const entry=entries.get(url);if(entry)update(entry)},
         stop:()=>{observer.disconnect();clearTimeout(timer);clearInterval(scanInterval);cancelAnimationFrame(frame);document.removeEventListener('scroll',schedulePosition,true);removeEventListener('resize',schedulePosition);[...entries.values()].forEach(removeEntry);overlay.remove();document.querySelector('#cross-border-collector-style')?.remove();delete window.__crossBorderCollector}
       };
@@ -3483,14 +3511,16 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     })()`,true)
   }
 
-  async fillActiveLogin(username: string, password: string, submit = false) {
-    const view = this.attached
+  async fillActiveLogin(username: string, password: string, submit = false, targetView?: WebContentsView) {
+    const view = targetView || this.attached
     if (!view) throw new Error('当前没有可用的平台浏览器')
     const currentUrl = new URL(view.webContents.getURL())
     if (currentUrl.protocol !== 'https:') throw new Error('仅允许在HTTPS平台页面填充凭据')
-    const allowedDomains = this.active === '1688' ? (this.supplyPlatformCode==='GIGACLOUD'?['gigab2b.com']:['1688.com']) : this.active === 'web' ? this.credentialDomains : this.marketplaceDomains
-    const allowed = allowedDomains.some(domain=>currentUrl.hostname===domain||currentUrl.hostname.endsWith(`.${domain}`))
-    if (!allowed) throw new Error('当前页面不是已允许的平台域名')
+    const attachedGroup = [...this.detailTabs.values()].find(entry => entry.view === view)?.group || ''
+    const viewDomains = this.viewPlatformDomains(view)
+    const allowedDomains = this.active === '1688' ? (this.supplyPlatformCode==='GIGACLOUD'?['gigab2b.com']:['1688.com']) : viewDomains.length ? viewDomains : this.active === 'web' ? this.credentialDomains : this.marketplaceDomains
+    const allowed = hostAllowedForDomains(currentUrl.hostname, allowedDomains)
+    if (!allowed) throw new Error(`当前页面不是已允许的平台域名：${attachedGroup?`当前货盘平台 ${attachedGroup} `:''}仅允许 ${allowedDomains.join('、')||'（无）'}，请先打开对应平台页面`)
     // 登录页门卫：刊登/草稿页与登录页同域，username 兜底 input[type=text] 会命中标题框把用户名写进标题
     // （现网取证：草稿标题被覆盖成店铺用户名）。非登录页一律拒绝填充，绝不把凭据写进刊登/草稿表单。
     const isLoginPage = await view.webContents.executeJavaScript(`(()=>Boolean(document.querySelector('#userid,#pass,input[type="password"]'))||/\\/signin|\\/login|\\/reg/i.test(location.pathname))()`, true) as boolean
@@ -3966,7 +3996,7 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     const hasPasswordInput=await view.webContents.executeJavaScript(`Boolean(document.querySelector('input[type="password"]'))`) as boolean
     if(!hasPasswordInput)await view.webContents.loadURL(loginUrl)
     if(!this.isActivationCurrent(activationVersion,'GIGACLOUD'))return null
-    const filled=await this.fillActiveLogin(username,password,true)
+    const filled=await this.fillActiveLogin(username,password,true,view)
     if(filled.verificationRequired)return{platformCode:'GIGACLOUD',loginStatus:'VERIFICATION_REQUIRED',message:'已填写凭据，当前需要人工完成安全验证',url:view.webContents.getURL(),autoLoginAttempted:true}
     if(!filled.usernameFilled||!filled.passwordFilled)return{platformCode:'GIGACLOUD',loginStatus:'UNKNOWN',message:'登录页面已打开，但未识别到完整账号密码输入框',url:view.webContents.getURL(),autoLoginAttempted:true}
     for(let attempt=0;attempt<8;attempt+=1) {
