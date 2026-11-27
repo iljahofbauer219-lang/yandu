@@ -2,7 +2,8 @@ import { writeFileSync } from 'node:fs'
 import { app, BaseWindow, BrowserWindow, WebContents, WebContentsView, clipboard, type Cookie, type Session } from 'electron'
 import { AMAZON_LISTING_EVIDENCE_SCRIPT, AMAZON_REVIEW_EVIDENCE_SCRIPT, AMAZON_SAMPLES_SCRIPT, type AmazonListingEvidence, type AmazonMarketSample, type AmazonReviewEvidence } from '../../shared/amazonScraper'
 import { matchSellableInventoryText } from '../../shared/sellableInventory'
-import { supplySessionPartitionForUrl, supplyPartitionForGroup, platformDomainsForCode, hostAllowedForDomains } from '../../shared/supplyPlatformSessions'
+import { supplySessionPartitionForUrl, supplyPartitionForGroup, platformDomainsForCode, hostAllowedForDomains, PALLET_HOME_URLS } from '../../shared/supplyPlatformSessions'
+import { adapterForHost, adapterForCode, buildCollectorScript, buildRegistryExtractScript } from '../../shared/collectorAdapters'
 import { buildEbayDraftContinueUrl, readEbayPublishedLanding } from '../../shared/ebayListingTarget'
 import { pickSupplyDescriptionText } from '../../shared/supplyDescription'
 import { pickSupplyFees } from '../../shared/supplyFeePick'
@@ -1224,13 +1225,13 @@ export class BrowserWorkspace {
     if (!this.builtInCollectorActive) this.builtInCollectorProducts.clear()
     this.builtInCollectorActive = true
     this.supplyCollectedUrls = this.collectedUrlProvider?.('supply') || []
-    await Promise.all(this.getGigaCloudViews().map(item => this.injectBuiltInCollector(item).catch(() => undefined)))
+    await Promise.all(this.getCollectorViews().map(item => this.injectBuiltInCollector(item).catch(error => console.info('[collector-inject] 注入失败：', error instanceof Error ? error.message : String(error)))))
     return this.getBuiltInCollectorState()
   }
 
   async getBuiltInCollectorState(): Promise<BuiltInCollectorState> {
     if (!this.builtInCollectorActive) return { active: false, platformCode: 'GIGACLOUD', recognizedCount: 0, products: [] }
-    const views = this.getGigaCloudViews()
+    const views = this.getCollectorViews()
     let recognizedCount = 0
     for (const view of views) {
       const result = await this.readBuiltInCollectorSnapshot(view)
@@ -1242,13 +1243,14 @@ export class BrowserWorkspace {
     }
     const products = [...this.builtInCollectorProducts.values()]
     await Promise.all(views.map(view => this.syncBuiltInCollectorSelection(view, products)))
-    return { active: true, platformCode: 'GIGACLOUD', recognizedCount, products }
+    const platformCode = this.detailTabs.get(this.activeTabId)?.group || 'GIGACLOUD'
+    return { active: true, platformCode, recognizedCount, products }
   }
 
   async removeBuiltInCollectorProduct(url: string): Promise<BuiltInCollectorState> {
     this.builtInCollectorProducts.delete(url)
     if (this.builtInCollectorActive) {
-      await Promise.all(this.getGigaCloudViews().map(async view => {
+      await Promise.all(this.getCollectorViews().map(async view => {
         try { await view.webContents.executeJavaScript(`window.__crossBorderCollector?.remove?.(${JSON.stringify(url)})`) } catch { /* 页面切换时由下一次同步更新 */ }
       }))
     }
@@ -1258,7 +1260,7 @@ export class BrowserWorkspace {
   async stopBuiltInCollector() {
     this.builtInCollectorActive = false
     this.builtInCollectorProducts.clear()
-    await Promise.all(this.getGigaCloudViews().map(async view => {
+    await Promise.all(this.getCollectorViews().map(async view => {
       try { await view.webContents.executeJavaScript(`window.__crossBorderCollector?.stop?.()`) } catch { /* 页面已经离开 */ }
     }))
   }
@@ -1527,6 +1529,12 @@ export class BrowserWorkspace {
       .filter(view => this.isGigaCloudView(view))
   }
 
+  /** 采集器视图集：大健云仓＋已接入适配器的名录货盘页（按域名闸判定） */
+  private getCollectorViews() {
+    return [...new Set([...this.views.values(), ...[...this.detailTabs.values()].map(tab => tab.view)])]
+      .filter(view => this.isCollectorAllowedView(view))
+  }
+
   private async readBuiltInCollectorSnapshot(view: WebContentsView): Promise<BuiltInCollectorSnapshot> {
     if (view.webContents.isDestroyed()) return { products: [], visibleUrls: [] }
     try {
@@ -1542,6 +1550,14 @@ export class BrowserWorkspace {
   private async injectBuiltInCollector(view: WebContentsView) {
     if (!this.isCollectorAllowedView(view)) return
     const seeded = [...this.builtInCollectorProducts.values()]
+    let adapterHost = ''
+    try { adapterHost = new URL(view.webContents.getURL()).hostname } catch { /* 保留空串走 gigab2b 分支 */ }
+    const adapter = adapterForHost(adapterHost)
+    if (adapter) {
+      const group = [...this.detailTabs.values()].find(entry => entry.view === view)?.group || adapter.family
+      await view.webContents.executeJavaScript(buildCollectorScript(adapter, group, seeded, [...this.supplyCollectedUrls, ...this.serverSupplyCollectedUrls]))
+      return
+    }
     await view.webContents.executeJavaScript(String.raw`(() => {
       const previousSnapshot = window.__crossBorderCollector?.snapshot?.() || {products:[],changes:[]};
       const previousSelected = previousSnapshot.products || [];
@@ -4579,6 +4595,50 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
       return { platformCode: '1688' as const, productId: raw.productId, url: raw.url, title: raw.title, imageUrl: raw.imageUrl, priceText: raw.priceText, salesText: raw.salesText, supplierName: raw.supplierName, supplierBadges, categoryTopRank, returnRate, networkSalesCount: sales || null, serviceRating, serviceDetails, dataCompleteness, score, grade, dimensionScores, recommendation: selected ? strengths.join('、') || '达到当前入选要求' : rejectionReason, riskFlags, selected }
     }).sort((a, b) => b.score - a.score)
     onProgress(`已解析${products.length}个商品，AI优选入选${products.filter(item => item.selected).length}个`, products.length)
+    return products
+  }
+
+  /** 名录货盘平台当前页采集：适配器按各平台页面结构提取商品卡，走既有候选入链 */
+  async collectRegistryList(task: SelectionTask, onProgress: (message: string, collected: number) => void): Promise<CollectedSupplyProduct[]> {
+    const code = task.supplyPlatforms[0]
+    const adapter = adapterForCode(code)
+    if (!adapter) throw new Error(`当前供应链平台（${code}）仅完成浏览器接入，商品采集器尚未接入`)
+    let view = this.attached || null
+    let attachedHost = ''
+    try { attachedHost = view ? new URL(view.webContents.getURL()).hostname : '' } catch { attachedHost = '' }
+    if (!view || adapterForHost(attachedHost)?.family !== adapter.family) {
+      const id = await this.openTab('web', PALLET_HOME_URLS[code] || `https://${adapter.domains[0]}/`, code, code)
+      view = this.detailTabs.get(id)?.view || null
+    }
+    if (!view) throw new Error('货盘浏览器尚未初始化')
+    this.show('web')
+    onProgress(`正在打开 ${code} 商品页面`, 0)
+    const startedAt = Date.now()
+    const scrollRounds = Math.max(2, Math.min(task.maxPages || 4, 8))
+    for (let index = 0; index < scrollRounds; index += 1) {
+      await this.protectCollectionStep(view, task, index, onProgress, startedAt)
+      await view.webContents.executeJavaScript('window.scrollBy(0, Math.max(700, window.innerHeight * 0.8))')
+      onProgress(`正在加载 ${code} 商品（${index + 1}/${scrollRounds}）`, 0)
+    }
+    const raw = await view.webContents.executeJavaScript(buildRegistryExtractScript(adapter, code)) as CollectedSupplyProduct[]
+    const products = (Array.isArray(raw) ? raw : []).filter(item => item && item.url && item.title).map(item => ({
+      ...item,
+      selected: false,
+      score: 0,
+      grade: 'C' as const,
+      dataCompleteness: 0,
+      dimensionScores: {},
+      recommendation: '',
+      riskFlags: item.priceText ? [] : ['价格待补采'],
+      supplierBadges: [],
+      categoryTopRank: null,
+      returnRate: null,
+      networkSalesCount: null,
+      serviceRating: null,
+      serviceDetails: {}
+    }))
+    if (!products.length) throw new Error(`${code} 页面已打开，但没有解析到商品卡片。请确认商品列表已加载后重试`)
+    onProgress(`已解析 ${products.length} 个 ${code} 商品`, products.length)
     return products
   }
 

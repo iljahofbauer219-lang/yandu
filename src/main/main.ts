@@ -39,6 +39,7 @@ import { EBAY_IMAGE_LIMIT } from '../shared/ebayUploadMediaPlan'
 import { applyLlmSpecificAnswers, ebaySpecificsLlmOptions, ebaySpecificsUnfilledRows, inferEbaySpecificsYesNo, planEbaySpecificsFill } from '../shared/ebaySpecificsFillPlan'
 import { DEFAULT_SCHEDULE_PLAN, clearScheduleFailure, dueScheduledPublish, markScheduleFailure, normalizeSchedulePlan, normalizeScheduledPublish, type EbaySchedulePlan, type EbayScheduledPublishMap } from '../shared/ebayScheduledPublish'
 import { runScheduledPublishChain } from '../shared/scheduledPublishRun'
+import { adapterForCode } from '../shared/collectorAdapters'
 import type { EbayItemSpecificSlot } from '../shared/ebayItemSpecificsModel'
 import { PUBLIC_IP_PROBE_TIMEOUT_MS, PUBLIC_IP_PROBE_URL, PUBLIC_IP_TRANSPORTS, parsePublicIpBody, type PublicIpInfo } from '../shared/publicIpProbe'
 import { UPDATE_POLL_INTERVAL_MS, UPDATE_RETRY_DELAY_MS } from '../shared/appUpdatePolicy'
@@ -211,7 +212,7 @@ function importCollectorProducts(products: CollectorPluginProduct[]) {
         selected: false, sourceCategory: item.sourceCategory
       }
     })
-    const result = database.importPluginSupplyCandidates(createCollectorTask(platformCode), mapped)
+    const result = database.importPluginSupplyCandidates(createCollectorTask(platformCode as SupplyPlatformCode), mapped)
     mappedAll.push(...mapped)
     imported += result.imported
     updated += result.updated
@@ -2170,7 +2171,7 @@ function prepareTask(task: SelectionTask) {
   task.collectionAutoPause ??= true
   if (task.marketplacePlatform !== 'OZON') throw new Error('当前平台浏览器和账号隔离已接入，自动采集器正在接入中')
   // 名录新平台先于落库拦截：selection_tasks 外键只认已接入采集器的平台，避免裸 FOREIGN KEY 英文报错
-  if (task.selectionMode === 'FORWARD_SUPPLY' && !['1688','GIGACLOUD'].includes(task.supplyPlatforms[0])) throw new Error(`当前供应链平台（${task.supplyPlatforms[0]}）仅完成浏览器接入，商品采集器尚未接入`)
+  if (task.selectionMode === 'FORWARD_SUPPLY' && !['1688','GIGACLOUD'].includes(task.supplyPlatforms[0]) && !adapterForCode(task.supplyPlatforms[0])) throw new Error(`当前供应链平台（${task.supplyPlatforms[0]}）仅完成浏览器接入，商品采集器尚未接入`)
   if (!task.keyword.trim() && task.collectionMethod === 'KEYWORD') throw new Error('请先填写搜索关键词')
   if (!workspace) throw new Error('浏览器尚未初始化')
 }
@@ -2179,12 +2180,14 @@ async function collectTaskItems(task: SelectionTask, onProgress: (message: strin
   if (!workspace) throw new Error('浏览器尚未初始化')
   if (task.selectionMode === 'FORWARD_SUPPLY') {
     const supplyPlatform = task.supplyPlatforms[0]
-    if (!['1688','GIGACLOUD'].includes(supplyPlatform)) throw new Error(`当前供应链平台（${supplyPlatform}）仅完成浏览器接入，商品采集器尚未接入`)
+    if (!['1688','GIGACLOUD'].includes(supplyPlatform) && !adapterForCode(supplyPlatform)) throw new Error(`当前供应链平台（${supplyPlatform}）仅完成浏览器接入，商品采集器尚未接入`)
     if (supplyPlatform === '1688' && task.collectionMethod !== 'KEYWORD') throw new Error('1688单链接和类目页采集暂未接入，请先使用关键词采集')
     const supplyProducts = supplyPlatform === 'GIGACLOUD'
       ? await workspace.collectGigaList(task.sourceUrl || 'https://www.gigab2b.com/index.php?route=common/home', task, onProgress)
-      : await workspace.collect1688List(create1688SearchUrl(task.keyword), task, onProgress)
-    if (!supplyProducts.length) throw new Error(`${supplyPlatform === 'GIGACLOUD' ? '大健云仓' : '1688'}页面已打开，但没有解析到商品卡片。请确认商品列表已加载后重试`)
+      : supplyPlatform === '1688'
+        ? await workspace.collect1688List(create1688SearchUrl(task.keyword), task, onProgress)
+        : await workspace.collectRegistryList(task, onProgress)
+    if (!supplyProducts.length) throw new Error(`${supplyPlatform === 'GIGACLOUD' ? '大健云仓' : supplyPlatform === '1688' ? '1688' : supplyPlatform}页面已打开，但没有解析到商品卡片。请确认商品列表已加载后重试`)
     return { products: [], supplyProducts }
   }
   return { products: await workspace.collectOzonList(task.keyword, task.maxProducts, task, onProgress), supplyProducts: [] }
@@ -3185,7 +3188,7 @@ ipcMain.handle('task:create', (_event, draft: SelectionTaskDraft) => {
     stage: 'OZON_LIST_PENDING',
     createdAt: new Date().toISOString()
   }
-  if (task.selectionMode === 'FORWARD_SUPPLY' && !['1688','GIGACLOUD'].includes(task.supplyPlatforms[0])) throw new Error(`当前供应链平台（${task.supplyPlatforms[0]}）仅完成浏览器接入，商品采集器尚未接入`)
+  if (task.selectionMode === 'FORWARD_SUPPLY' && !['1688','GIGACLOUD'].includes(task.supplyPlatforms[0]) && !adapterForCode(task.supplyPlatforms[0])) throw new Error(`当前供应链平台（${task.supplyPlatforms[0]}）仅完成浏览器接入，商品采集器尚未接入`)
   tasks.set(task.id, task)
   database?.saveTask(task)
   return task

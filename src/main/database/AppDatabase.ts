@@ -5,6 +5,8 @@ import type { CandidateCollectionRecord, CandidateCollectionRun, CandidateUpdate
 import type { EbayItemSpecificsSection } from '../../shared/ebayItemSpecificsModel'
 import type { EbayShortlistItem, ResearchCollectedItem } from '../../shared/ebayResearch'
 import { complianceCheckFingerprint } from '../../shared/complianceFingerprint'
+import { PALLET_HOME_URLS } from '../../shared/supplyPlatformSessions'
+import { adapterForCode } from '../../shared/collectorAdapters'
 import { mergeCandidateFacts } from '../../shared/candidateFactsMerge'
 import { badgeFallbackScore } from '../../shared/badgeScore'
 import { EBAY_COMPLIANCE_KNOWLEDGE_VERSION } from '../../shared/ebayComplianceKnowledge'
@@ -1441,6 +1443,12 @@ export class AppDatabase {
     ensureColumn('ebay_local_products', 'draft_saved_at', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_warehouse_products', 'collected_at', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_warehouse_products', 'collected_by', "TEXT NOT NULL DEFAULT ''")
+    // 名录货盘平台登记：selection_records/collection_task_platforms 外键引用 supply_platforms，
+    // 不登记则新平台采集落候选必抛裸 FOREIGN KEY 英文错
+    for (const [index, code] of Object.keys(PALLET_HOME_URLS).entries()) {
+      this.database.prepare(`INSERT OR IGNORE INTO supply_platforms (code, name, connector_status, sort_order) VALUES (?, ?, ?, ?)`)
+        .run(code, code, adapterForCode(code) ? 'BROWSER_READY' : 'PLANNED', 100 + index)
+    }
     ensureColumn('inbound_processing_items', 'region', "TEXT NOT NULL DEFAULT ''")
     ensureColumn('supply_candidates', 'added_at', 'TEXT')
     this.database.exec(`UPDATE supply_candidates SET added_at = (SELECT created_at FROM selection_tasks WHERE id = task_id) WHERE added_at IS NULL AND task_id IN (SELECT id FROM selection_tasks)`)

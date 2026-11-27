@@ -1419,6 +1419,8 @@ export function App() {
   const [previewSelectedUrls, setPreviewSelectedUrls] = useState<Set<string>>(new Set())
   const [previewQuery, setPreviewQuery] = useState('')
   const [previewOnlySelected, setPreviewOnlySelected] = useState(false)
+  // 切换货盘平台即清空上一平台预采集列表：旧列表会占住确认按钮，使新平台永远无法提交预采集
+  useEffect(()=>{setPreviewProducts([]);setPreviewSupplyProducts([]);setPreviewSelectedUrls(new Set());setPreviewQuery('')},[task.supplyPlatforms[0]])
   const [products, setProducts] = useState<CollectedOzonProduct[]>([])
   const [supplyProducts, setSupplyProducts] = useState<CollectedSupplyProduct[]>([])
   const candidateViewSession = readCandidateViewSession(key => { try { return sessionStorage.getItem(key) } catch { return null } })

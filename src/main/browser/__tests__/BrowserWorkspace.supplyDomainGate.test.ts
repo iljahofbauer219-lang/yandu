@@ -43,6 +43,7 @@ function makeHost(url: string, group?: string) {
     collectedUrlProvider: () => [],
     getBuiltInCollectorState: async () => ({ active: true, platformCode: 'GIGACLOUD', recognizedCount: 0, products: [] }),
     getGigaCloudViews: () => [],
+    getCollectorViews: () => [view],
     injectBuiltInCollector: async () => undefined
   }
   return { host, view }

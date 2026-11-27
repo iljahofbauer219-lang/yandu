@@ -1372,7 +1372,7 @@ export interface CollectedOzonProduct {
 }
 
 export interface CollectedSupplyProduct {
-  platformCode: SupplyPlatformCode
+  platformCode: string
   productId: string
   url: string
   title: string
@@ -1424,7 +1424,7 @@ export interface SupplySourceCategory {
 }
 
 export interface CollectorPluginProduct {
-  platformCode: 'GIGACLOUD' | '1688'
+  platformCode: string
   productId: string
   url: string
   title: string
@@ -1502,7 +1502,7 @@ export interface CollectorDuplicateProduct {
 
 export interface BuiltInCollectorState {
   active: boolean
-  platformCode: 'GIGACLOUD'
+  platformCode: string
   recognizedCount: number
   products: CollectorPluginProduct[]
 }
