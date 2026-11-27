@@ -235,7 +235,7 @@ export class SupplyProductDownloadService {
       imageCount: uploadedGallery.length,
       failedCount,
       status: 'DOWNLOADED',
-      error: failedCount ? `部分图片失败：${failures.slice(0, 3).join('；')}` : '',
+      error: failedCount ? `部分图片失败：${failures.slice(0, 3).join('；')}` : (snapshot.scrapeNote || ''),
       estimatedTotal: extracted.estimatedTotal ?? '',
       downloadedAt: capturedAt,
       imageAssets: uploadedGallery.map(item => item.file),

@@ -114,6 +114,8 @@ interface BuiltInCollectorSnapshot {
 /** 后台静默抓取供应商品详情页的结构化结果（正式入库「下载产品」落盘前数据） */
 export interface SupplyProductPageSnapshot {
   html: string
+  /** 隐藏窗 0 图时借用可见供应页签复抓的中文说明（供下载档案 notice 展示） */
+  scrapeNote?: string
   extracted: {
     title: string
     price: string
@@ -495,7 +497,7 @@ export class BrowserWorkspace {
           throw gateError
         }
       }
-      const html = await window.webContents.executeJavaScript('document.documentElement.outerHTML') as string
+      let html = await window.webContents.executeJavaScript('document.documentElement.outerHTML') as string
       // 主图视频要点开「Play Video」才注入播放器，且真实播放器经 XHR/弹窗/MSE 取地址（DOM 常无 .mp4 字面量）：
       // 全通道捕获 = CDP Network（请求+响应 mime）+ 弹窗隐藏窗 DOM + 主窗 DOM/outerHTML 扫描；
       // 诊断写 /tmp/yandu-video-probe.log（与开发同机），debugger/弹窗handler 探完即还原
@@ -607,7 +609,7 @@ export class BrowserWorkspace {
         await window.webContents.loadURL(parsed.toString())
         await this.sleep(2000)
       }
-      const extracted = await window.webContents.executeJavaScript(String.raw`(() => {
+      let extracted = await window.webContents.executeJavaScript(String.raw`(() => {
         const bodyText = document.body?.innerText || ''
         const hostScore = (u) => (/b2bfiles|gigab2b\.cn|gigab2b\.com|alicdn|cbu\d*|1688/i.test(u) ? 1 : 0)
         const entries = []
@@ -836,7 +838,36 @@ export class BrowserWorkspace {
         return { title, price, specs, images, descriptionText, finalUrl: location.href, category, itemCode, firstStockAt, returnRate, sellableInventory, unitPrice, packingFee, freightFee, shippingFee, estimatedTotal, dropshipLeadTime, gigaIndex, gigaIndexText, materialPackUrl, materialPackDownloads, videos, files, features, descriptionImages, descriptionFlow: descriptionFlow.slice(0, 200), loginWall }
       })()`) as SupplyProductPageSnapshot['extracted']
       if (extracted?.loginWall) throw new Error(`${name}的价格/库存区需登录后查看（供应会话已过期），请先在 IE浏览 中重新登录${name}后重试`)
-      if (!extracted?.images?.length) throw new Error('原商品页没有识别到可下载图片，请确认商品页正常显示后重试')
+      let scrapeNote = ''
+      if (!extracted?.images?.length) {
+        // 隐藏窗 0 图回落：原址同通道可见供应页签复抓（用户实证原址渲染正常、隐藏窗识别不到）
+        try {
+          await this.openSupplyUrl(warehouseCode, parsed.toString())
+          const liveView = this.supplyViews.get(warehouseCode)
+          const liveWc = liveView && !liveView.webContents.isDestroyed() ? liveView.webContents : null
+          if (liveWc) {
+            await this.sleep(4000)
+            for (let index = 0; index < 8; index += 1) {
+              await liveWc.executeJavaScript('window.scrollBy(0, Math.max(900, window.innerHeight * 1.2))')
+              await this.sleep(400)
+            }
+            const visibleImages = await liveWc.executeJavaScript(String.raw`(() => {
+              const urls = new Set()
+              for (const img of document.querySelectorAll('img')) {
+                const src = img.currentSrc || img.src || img.getAttribute('data-src') || ''
+                if (/^https?:/.test(src) && !/placeholder|logo|icon|avatar/i.test(src)) urls.add(src)
+              }
+              return [...urls]
+            })()`) as string[]
+            if (visibleImages.length) {
+              extracted = { ...extracted, images: visibleImages }
+              html = await liveWc.executeJavaScript('document.documentElement.outerHTML') as string
+              scrapeNote = '隐藏窗未识别到图片，已借用可见供应页签（原址同通道）复抓成功'
+            }
+          }
+        } catch { /* 回落失败保留原中文报错 */ }
+        if (!extracted?.images?.length) throw new Error('原商品页没有识别到可下载图片，请确认商品页正常显示后重试')
+      }
       // 文件/素材包签名链接发现（登录态）：站点「获取文件链接」实测只把签名地址放进 XHR JSON/剪贴板/弹窗，
       // 无下载事件也无新锚点 → 四通道并收：will-download / CDP 读 API 响应体 / 全页 x-oss-signature 扫描 / 剪贴板；
       // 签名链接仅内存瞬时供下载服务立即取字节，绝不落 meta（数小时即过期）；诊断写 /tmp/yandu-file-probe.log
@@ -952,7 +983,7 @@ export class BrowserWorkspace {
       try {
         writeFileSync('/tmp/yandu-file-probe.log', JSON.stringify({ at: new Date().toISOString(), entries: probeLog, files: (extracted.files ?? []).map(f => ({ name: f.name, url: !!f.url })), pack: !!extracted.materialPackUrl }, null, 2))
       } catch { /* 诊断落盘失败不影响采集 */ }
-      return { html, extracted }
+      return { html, extracted, scrapeNote }
     } finally {
       if (!window.isDestroyed()) window.destroy()
     }
