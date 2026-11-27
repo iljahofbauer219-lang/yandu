@@ -23,6 +23,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { bumpSemver, renderDownloadPage, verifySha256, winBuildArgs } from './releaseKit.mjs'
 
 // electron-builder 会 spawn `pnpm` 收集依赖；本机 pnpm 不在 PATH（仅有 ~/Library/pnpm/pnpm11 别名），
 // 这里做临时 shim 目录注入 PATH，避免 spawn ENOENT（2026-09-29 实测）。
@@ -52,6 +53,16 @@ if (!['mac', 'win', 'all'].includes(platform)) {
   process.exit(1)
 }
 
+const bumpKind = (process.argv.find(arg => arg.startsWith('--bump=')) ?? '').split('=')[1]
+if (bumpKind) {
+  const pkgPath = path.join(ROOT, 'package.json')
+  const raw = fs.readFileSync(pkgPath, 'utf8')
+  const current = JSON.parse(raw).version
+  const next = bumpSemver(current, bumpKind)
+  fs.writeFileSync(pkgPath, raw.replace(`"version": "${current}"`, `"version": "${next}"`))
+  console.log(`[bump] package.json ${current} → ${next}`)
+}
+
 const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version
 const rel = path.join(ROOT, 'release')
 
@@ -64,6 +75,28 @@ function artifactsFor(target) {
 
 function feedFileFor(target) {
   return target === 'mac' ? 'latest-mac.yml' : 'latest.yml'
+}
+
+const WIN_RUNTIME_DIR = path.join(ROOT, '.cache', 'electron-win32-x64')
+// yml 的 electronDist 指向 mac 运行时，win 目标必须另备一份真 win 运行时；缺失即取镜像包并校验 SHA256
+function ensureWinRuntime() {
+  if (fs.existsSync(path.join(WIN_RUNTIME_DIR, 'electron.exe'))) return
+  const electronVersion = JSON.parse(fs.readFileSync(path.join(ROOT, 'node_modules', 'electron', 'package.json'), 'utf8')).version
+  const base = `https://cdn.npmmirror.com/binaries/electron/v${electronVersion}/`
+  const zipName = `electron-v${electronVersion}-win32-x64.zip`
+  const zipPath = path.join(ROOT, '.cache', zipName)
+  fs.mkdirSync(path.join(ROOT, '.cache'), { recursive: true })
+  console.log(`[win-runtime] 下载 ${zipName} …`)
+  execFileSync('curl', ['-sL', '-o', zipPath, base + zipName], { stdio: 'inherit' })
+  const sums = execFileSync('curl', ['-sL', base + 'SHASUMS256.txt'], { encoding: 'utf8' })
+  const expected = sums.split('\n').find(line => line.trim().endsWith(zipName))?.trim().split(/\s+/)[0] ?? ''
+  const actual = crypto.createHash('sha256').update(fs.readFileSync(zipPath)).digest('hex')
+  if (!verifySha256(expected, actual)) {
+    console.error(`ABORT: win 运行时 SHA256 不匹配（期望 ${expected}，实得 ${actual}）。`)
+    process.exit(1)
+  }
+  execFileSync('unzip', ['-q', zipPath, '-d', WIN_RUNTIME_DIR], { stdio: 'inherit' })
+  console.log('[win-runtime] 就位，SHA256 校验通过')
 }
 
 const targets = platform === 'all' ? ['mac', 'win'] : [platform]
@@ -105,19 +138,9 @@ const targets = platform === 'all' ? ['mac', 'win'] : [platform]
     }
     if (targets.includes('win')) {
       console.log('[build] win nsis …')
-      // macOS 交叉构建 win 在本机历史性地失败（electron.exe 重命名 ENOENT，1.0.11/1.0.14 的 exe 均产自 Windows 机器）；
-      // 失败时降级为只发 mac 并显式告警，不让 win 阻断 mac 的更新分发
-      try {
-        execFileSync('npx', ['electron-builder', '--win', '--publish', 'never'], { cwd: ROOT, stdio: 'inherit' })
-      } catch (error) {
-        const idx = targets.indexOf('win')
-        if (idx >= 0) targets.splice(idx, 1)
-        console.error(`[warn] win 构建失败，本次仅发布 mac：${error instanceof Error ? error.message : error}`)
-        if (targets.length === 0) {
-          console.error('ABORT: 所有平台构建均失败。')
-          process.exit(1)
-        }
-      }
+      // 交叉构建失败即中止：静默降级只发 mac 会让两平台版本长期不齐，同事拿到的是落后包
+      ensureWinRuntime()
+      execFileSync('npx', ['electron-builder', ...winBuildArgs(ROOT)], { cwd: ROOT, stdio: 'inherit' })
     }
   }
 
@@ -207,6 +230,35 @@ const targets = platform === 'all' ? ['mac', 'win'] : [platform]
     }
     console.log(`[verify] ${feed} = v${live} ✓`)
   }
+
+  // ── 6. 下载页同步 ──────────────────────────────────────────
+  // 版本取各平台线上 feed 回读值：只发一个平台时，另一平台如实显示它自己的线上版本，不谎报齐平
+  const liveVersions = {}
+  for (const target of ['mac', 'win']) {
+    const feed = feedFileFor(target)
+    const response = await fetch(FEED + feed, { signal: AbortSignal.timeout(15000) })
+    const text = response.ok ? await response.text() : ''
+    const live = text.match(/^version:\s*(\S+)/m)?.[1]
+    if (!live) {
+      console.error(`ABORT: 读不到 ${feed} 线上版本，下载页不予更新。`)
+      process.exit(1)
+    }
+    liveVersions[target] = live
+  }
+  const template = fs.readFileSync(path.join(ROOT, 'tools', 'download-page.template.html'), 'utf8')
+  const pagePath = path.join(rel, 'download-index.html')
+  fs.writeFileSync(pagePath, renderDownloadPage(template, { win: liveVersions.win, mac: liveVersions.mac }))
+  execFileSync('scp', ['-o', 'BatchMode=yes', pagePath, 'root@114.55.149.192:/tmp/download-index.html'], { stdio: 'inherit' })
+  execFileSync(SSH[0], [...SSH.slice(1), 'cp -f /opt/yandu/download/index.html /root/download-index.html.bak-$(date +%Y%m%d%H%M%S) && cp -f /tmp/download-index.html /opt/yandu/download/index.html'], { stdio: 'inherit' })
+  const pageResponse = await fetch('http://114.55.149.192/download/', { signal: AbortSignal.timeout(15000) })
+  const livePage = pageResponse.ok ? await pageResponse.text() : ''
+  for (const target of ['mac', 'win']) {
+    if (!livePage.includes(`v${liveVersions[target]}`)) {
+      console.error(`ABORT: 下载页回读缺少 ${target} 版本 v${liveVersions[target]}。`)
+      process.exit(1)
+    }
+  }
+  console.log(`[verify] 下载页 win=v${liveVersions.win} mac=v${liveVersions.mac} ✓`)
   console.log(`[done] v${version} 发布完成（${targets.join('+')}）。`)
 })().catch(error => {
   console.error('[publish-release] 失败：', error instanceof Error ? error.message : error)

@@ -41,6 +41,7 @@ import { DEFAULT_SCHEDULE_PLAN, clearScheduleFailure, dueScheduledPublish, markS
 import { runScheduledPublishChain } from '../shared/scheduledPublishRun'
 import type { EbayItemSpecificSlot } from '../shared/ebayItemSpecificsModel'
 import { PUBLIC_IP_PROBE_TIMEOUT_MS, PUBLIC_IP_PROBE_URL, PUBLIC_IP_TRANSPORTS, parsePublicIpBody, type PublicIpInfo } from '../shared/publicIpProbe'
+import { UPDATE_POLL_INTERVAL_MS, UPDATE_RETRY_DELAY_MS } from '../shared/appUpdatePolicy'
 import { imageHashService, confinedLocalMediaPath, imageContentTypeForPath } from './services/ImageHashService'
 import { mapWithConcurrency } from '../shared/mapWithConcurrency'
 import { parseEbayListingsReport } from './services/EbayReportService'
@@ -4655,12 +4656,12 @@ function initAutoUpdate() {
     console.error('[updater] 自动更新失败：', message)
     sendUpdateStatus({ phase: 'error', version: pendingVersion || app.getVersion(), message })
   })
-  // 启动即查；失败（断网/源抖动）5 分钟后自动补查一次，避免「静默错过本轮更新窗口」（根治项 C）
+  // 启动即查；失败（断网/源抖动）后自动补查一次，避免「静默错过本轮更新窗口」（根治项 C）
   const scheduleRetry = (delayMs: number) => setTimeout(() => { void autoUpdater.checkForUpdates().catch(() => undefined) }, delayMs)
   void autoUpdater.checkForUpdates().then(result => {
-    if (!result || !result.updateInfo) scheduleRetry(5 * 60 * 1000)
-  }).catch(() => scheduleRetry(5 * 60 * 1000))
-  setInterval(() => { void autoUpdater.checkForUpdates().catch(() => undefined) }, 4 * 60 * 60 * 1000)
+    if (!result || !result.updateInfo) scheduleRetry(UPDATE_RETRY_DELAY_MS)
+  }).catch(() => scheduleRetry(UPDATE_RETRY_DELAY_MS))
+  setInterval(() => { void autoUpdater.checkForUpdates().catch(() => undefined) }, UPDATE_POLL_INTERVAL_MS)
 }
 // 渲染层悬浮提示/登录门禁点「重启安装」时触发（与弹窗的「立即重启安装」等价）
 ipcMain.handle('app:install-update', () => {
