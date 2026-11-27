@@ -229,10 +229,10 @@ declare global {
         /** AI采集挂载自愈：视图缺失才重激活，随后按已存凭据模拟手工登录 */
         ensureSupplyLogin(): Promise<SupplyActivationResult>
         openSupply(platformCode: '1688' | 'GIGACLOUD', url: string): Promise<string>
-        openTab(platform: Platform, url: string, title?: string): Promise<string>
+        openTab(platform: Platform, url: string, title?: string, group?: string): Promise<string>
         /** IE 浏览挂载自愈：无通用 web tab 则建默认 nav 站点，已有则补推 tab 快照；返回 tab id 或 null */
         ensureDefaultNav(): Promise<string | null>
-        newTab(platform?: 'ie' | 'web'): Promise<string>
+        newTab(platform?: 'ie' | 'web', group?: string): Promise<string>
         switchTab(tabId: string): Promise<void>
         closeTab(tabId: string): Promise<void>
         create1688SearchUrl(keyword: string): Promise<string>
@@ -506,7 +506,7 @@ declare global {
         credentialStatus(accountId: string): Promise<MarketplaceCredentialStatus>
         saveCredential(input: MarketplaceCredentialInput): Promise<MarketplaceCredentialStatus>
         deleteCredential(accountId: string): Promise<MarketplaceCredentialStatus>
-        openCredentialLogin(accountId: string, platformCode: string): Promise<string>
+        openCredentialLogin(accountId: string, platformCode: string, loginUrl?: string): Promise<string>
         fillCredential(accountId: string, submit?: boolean): Promise<{ usernameFilled:boolean; passwordFilled:boolean; submitted:boolean; verificationRequired:boolean; url:string }>
       }
       articleCrawler: {

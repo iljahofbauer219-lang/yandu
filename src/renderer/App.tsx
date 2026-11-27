@@ -12,6 +12,7 @@ import { getTokens, hasPermission, getServerBaseUrl } from './serverApi'
 import { LinduoAssignmentModal } from './LinduoAssignmentModal'
 import { LinduoPreferenceModal } from './LinduoPreferenceModal'
 import { MENU_PERMISSION_TREE, hasMenuAccess } from '../shared/menuPermissionTree'
+import { PALLET_HOME_URLS } from '../shared/supplyPlatformSessions'
 import type { BrowserState, BrowserTab, BrowserTranslationMode, CandidateCollectionRecord, CandidateCollectionRun, CandidateArea, CollectionMethod, CollectionProtectionMode, CollectedOzonProduct, CollectedSupplyProduct, CollectorPluginProduct, ComparisonCostSettings, ComparisonDecision, ComparisonRecordView, ComplianceAlertStatus, ComplianceCategoryTemplateDraft, ComplianceCheckRequest, ComplianceCheckResult, ComplianceDocumentDraft, ComplianceDocumentRecord, ComplianceEnforcementStatus, ComplianceKnowledgeWorkspace, ComplianceProductProfileDraft, ComplianceReviewStatus, ComplianceRiskLevel, ComplianceRule, ComplianceRuleDraft, ComplianceTaskStatus, EbayCategoryWorkspace, EbayConfigurationStatus, EbayContentOptimizationResult, EbayContentTranslationResult, EbayDeliveryCountry, EbayDirectoryProductSyncCheckpoint, EbayDirectoryProductSyncProgress, EbayDirectoryProductSyncResult, EbayImageCandidateReview, EbayImageGenerationPurpose, EbayImageInspectionReport, EbayImageVisualInspectionReport, EbayListing, EbayLocalProduct, EbayLocalProductUpdateInput, EbayLocalRevisionPreparationResult, EbayLoginResult, EbayMarketResearchSnapshot, EbayOptimizationDraft, EbayProductSyncRun, EbayPublishTask, EbayStoreBusinessPolicy, EbayStore, EbayTitleOptimizationResult, GigaReturnRateFilter, GigaSellerIndexFilter, ImageModelProfile, ImageReferenceRole, ImportedProductImage, ImportedProductSource, MarketplaceAccountProfile, MarketplaceMediaAsset, MarketplacePlatformCode, MarketplacePlatformProfile, MarketplacePublishAudit, MarketplacePublishDraft, MarketplacePublishStatus, MarketplaceSelectionProduct, NetworkStrategy, PalletWarehouseItem, Platform, RealShiftProfile, RealShiftResult, SelectionCatalogItem, SelectionDecision, SelectionTask, SelectionTaskDraft, SupplyActivationResult, SupplyPlatformCode, SupplyProductDownload, SupplyWarehouseProduct, TaskProgress, WorkflowCounts } from '../shared/contracts'
 import { evaluateEbayCompliance } from '../shared/ebayComplianceKnowledge'
 import { mergeEbayPublishMedia } from '../shared/ebayLocalMedia'
@@ -616,7 +617,7 @@ const productWarehouses: Array<{code:ProductWarehouseCode;name:string;kind:'SUPP
   {code:'POPFASHION',name:'POP趋势',kind:'SUPPLY',region:'DOMESTIC',description:'中国仓'},
   {code:'YUNCHEPIN',name:'云车品',kind:'SUPPLY',region:'DOMESTIC',description:'中国仓'}
 ]
-const palletHomeUrls: Partial<Record<ProductWarehouseCode,string>> = {QUFENXIAO:'https://www.qufenxiao.com/',KJDS:'https://www.kjds.com/',KJDS_EU:'https://www.kjds.com/',KJDS_AU:'https://www.kjds.com/sells/homes/search?country_id=16506',KJDS_CN:'https://www.kjds.com/sells/homes/search?country_id=13227',BIGBUY:'https://www.bigbuy.eu/en/',SALEYEE_NA:'https://global.saleyee.com/',SALEYEE_EU:'https://global.saleyee.com/',SALEYEE_AS:'https://global.saleyee.com/',SALEYEE_OCE:'https://global.saleyee.com/',SALEYEE_LATAM:'https://global.saleyee.com/',SALEYEE_ME:'https://global.saleyee.com/',YIMAI:'https://dcmshop.easyseller.com/',HAIBEI:'https://www.haibeigoods.com/',HAIBEI_NA:'https://www.haibeigoods.com/',HAIBEI_EU:'https://www.haibeigoods.com/',XIZHIYUE_NA:'https://westmonth.com/',XIZHIYUE_AU:'https://westmonth.com/',XIZHIYUE_EU:'https://westmonth.com/',XIZHIYUE_LATAM:'https://westmonth.com/',XIZHIYUE_AS:'https://westmonth.com/',XIZHIYUE_CN:'https://westmonth.com/',CJDROP_NA:'https://www.cjdropshipping.com/',CJDROP_EU:'https://www.cjdropshipping.com/',CJDROP_AU:'https://www.cjdropshipping.com/',CJDROP_LATAM:'https://www.cjdropshipping.com/',CJDROP_CN:'https://www.cjdropshipping.com/',FAIRE:'https://www.faire.com/',JOYB2B:'https://joyb2b.com/',SYNCEE_NA:'https://syncee.com/',SYNCEE_EU:'https://syncee.com/',SYNCEE_AU:'https://syncee.com/',DSERS:'https://www.dsers.com/',VANTA_LATAM:'https://vantadist.com/',VANTA_AFRICA:'https://vantadist.com/',VANTA_AS:'https://vantadist.com/',BOTACLOUD:'https://www.botacloud.com/',FORTUNE_NA:'https://www.fortune-onestop.com/',FORTUNE_EU:'https://www.fortune-onestop.com/',FORTUNE_LATAM:'https://www.fortune-onestop.com/',FORTUNE_AFRICA:'https://www.fortune-onestop.com/',FORTUNE_AS:'https://www.fortune-onestop.com/',FORTUNE_CN:'https://www.fortune-onestop.com/','4SUPPLY':'https://www.4supply.com/',DROPSHIP:'https://www.eggracks.com/',XUNFENG:'https://www.xffbb.com/',ALIBABA_US:'https://sale.alibaba.com/p/d6dcdevhb/index.html',ALIDROP_NA:'https://www.alibaba.com/dropshipping/products',ALIDROP_EU:'https://www.alibaba.com/dropshipping/products',ALIDROP_AS:'https://www.alibaba.com/dropshipping/products',ALIDROP_CN:'https://www.alibaba.com/dropshipping/products',HICUSTOM:'https://www.hicustom.com/',ARKSWIFT:'https://www.arkswift.com/',HERTWILL:'https://hertwill.com/',MATTERHORN:'https://matterhorn.pl/',APPSCENIC:'https://appscenic.com/',STOCKETIK:'https://www.stocketik.eu/',DROPXL:'https://www.dropxl.com/',DOBA:'https://www.doba.com/',TOPDAWG:'https://topdawg.com/',SPOCKET:'https://www.spocket.co/',ZENDROP:'https://www.zendrop.com/',WHOLESALE2B:'https://www.wholesale2b.com/',SODALEMONS:'https://sodalemons.com/',EBOXMAN:'https://eboxman.com/',AUTODS:'https://www.autods.com/',USDIRECT:'https://gousdirect.com/',WHOLESALECENTRAL:'https://www.wholesalecentral.com/',DROPCOMMERCE:'https://www.dropcommerce.com/',OBERLO:'https://www.oberlo.com/',MODALYST:'https://www.modalyst.co/',GREENDROPSHIP:'https://greendropship.com/',SALEHOO:'https://www.salehoo.com/',WORLDWIDEBRANDS:'https://worldwidebrands.com/',MISSIONIMPRINTABLES:'https://www.missionimprintables.com/',INVENTORYSOURCE:'https://www.inventorysource.com/',SHIPSTATION:'https://www.shipstation.com/',DSMTOOL:'https://www.dsmtool.com/',DIECASTDROPSHIPPER:'https://www.diecastdropshipper.com/',RITHUM:'https://www.rithum.com/',SHOPIFY:'https://www.shopify.com/collective',BRANDSGATEWAY:'https://brandsgateway.com/',BDROPPY:'https://www.bdroppy.com/',BRANDSDISTRIBUTION:'https://www.brandsdistribution.com/',WAVEGO:'https://www.wavego.eu/',M5AZN:'https://m5azn.com/',DROPSHIPSA:'https://dropship.sa/',EMIRATEFULFIL:'https://www.emiratefulfil.com/',CODPARTNER:'https://codpartner.com/',TRADELING:'https://www.tradeling.com/',TEJARAA:'https://tejaraa.com/',KSADROP:'https://ksadrop.com/',SMMD:'https://www.saudidropshipping.com/',YALLAHSELL:'https://yallahsell.com/',ATSUM:'https://www.myatsum.com/',DROPI:'https://dropi.co/',DROPLATAM:'https://home.droplatam.com.br/',DEPDROP:'https://depdrop.com.br/',DROPPING:'https://dropping.com.br/',DROPI_BR:'https://dropi.com.br/',NOCNOC:'https://nocnocstore.com/',CARPARTS:'https://www.carparts.com/',MADEINCHINA:'https://www.made-in-china.com/',YIWUGO:'https://www.yiwugo.com/',VIDAXL:'https://corporate.vidaxl.com/',DUBLAA:'https://dublaa.com/',SAAZ:'https://saazautospareparts.ae/',TRIPLEA:'https://triple-a-trading.com/',EMEX:'https://emexdwc.ae/','1688GLOBAL':'https://global.1688.com/',TOYBABA:'https://www.toybaba.com/',ICHUNT:'https://www.ichunt.com/',HQEW:'https://www.hqew.com/',BOQII:'https://www.boqii.com/',POPFASHION:'https://www.pop-fashion.com/',YUNCHEPIN:'https://www.yunchepin.cn/'}
+const palletHomeUrls: Partial<Record<ProductWarehouseCode,string>> = PALLET_HOME_URLS
 
 // AI采集模块四个货源平台的图标与主题色
 const aiCollectPlatformThemes: Record<ProductWarehouseCode,{color:string;icon:ReactNode}> = {
@@ -1935,15 +1936,17 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [supplyErrorModal])
 
+  const [supplyGroup,setSupplyGroup]=useState('')
   const activateBrowserTab = (tab: BrowserTab) => {
     setPlatform(tab.platform)
+    if(tab.group)setSupplyGroup(tab.group)
     void window.desktop.browser.switchTab(tab.id)
   }
 
   const createBrowserTab = async () => {
     setError('')
     try {
-      await window.desktop.browser.newTab()
+      await window.desktop.browser.newTab('web',supplyGroup||undefined)
       setPlatform('web')
       window.setTimeout(() => {
         setAddress('')
@@ -1976,6 +1979,7 @@ export function App() {
     setPage('tasks')
     setError('')
     if (code === '1688' || code === 'GIGACLOUD') {
+      setSupplyGroup(code)
       setPlatform('1688')
       void window.desktop.browser.activateSupply(code).then(result => {
         if (supplyActivationRequest.current === requestId) setSupplyActivation(result)
@@ -1984,13 +1988,13 @@ export function App() {
       })
       return
     }
+    setSupplyGroup(code)
     const existing = browserTabs.find(tab => tab.generic && tab.title.includes(name))
     if (existing) {
-      setPlatform('web')
-      void window.desktop.browser.switchTab(existing.id)
+      activateBrowserTab(existing)
       return
     }
-    setTimeout(() => void window.desktop.browser.openTab('web', supplyPlatformUrls[code], `${name}采购`).then(()=>setPlatform('web')).catch(reason => {
+    setTimeout(() => void window.desktop.browser.openTab('web', supplyPlatformUrls[code], `${name}采购`, code).then(()=>setPlatform('web')).catch(reason => {
       setError(reason instanceof Error ? reason.message : `${name} 网站打开失败`)
     }), 80)
   }
@@ -2020,7 +2024,7 @@ export function App() {
 
   const activeMarketplace = marketplacePlatforms.find(item => item.code === task.marketplacePlatform)
   const visibleMarketplaceAccounts = marketplaceAccounts.filter(item => item.platformCode === task.marketplacePlatform)
-  const activeSupplyPlatform = supplyPlatformOptions.find(item => item.code === task.supplyPlatforms[0]) || supplyPlatformOptions[0]
+  const activeSupplyPlatform = supplyPlatformOptions.find(item => item.code === task.supplyPlatforms[0]) || (()=>{const meta=productWarehouses.find(item=>item.code===task.supplyPlatforms[0]);return meta?{code:meta.code,name:meta.name,ready:false}:undefined})() || supplyPlatformOptions[0]
   const isGigaCloudCollector = task.selectionMode === 'FORWARD_SUPPLY' && task.supplyPlatforms[0] === 'GIGACLOUD' && task.collectionMethod === 'KEYWORD'
   const activeFilterCount = task.selectionMode === 'FORWARD_SUPPLY'
     ? task.supplyPlatforms[0] === 'GIGACLOUD'
@@ -2204,8 +2208,11 @@ export function App() {
     const homeUrl=palletHomeUrls[code]
     if(homeUrl){
       const homeName=productWarehouses.find(item=>item.code===code)?.name??code
-      setPage('tasks'); setPlatform('web')
-      setTimeout(() => void window.desktop.browser.openTab('web',homeUrl,homeName).catch(reason => {
+      setPage('tasks'); setPlatform('web'); setSupplyGroup(code); setActiveWarehouse(code)
+      setTask(current=>({ ...current, ...protectionSettingsFor(code), selectionMode:'FORWARD_SUPPLY', supplyPlatforms:[code as unknown as SupplyPlatformCode], name:`${homeName} 供应链采集任务`, selectionDimensions:(platformSelectionDimensions[code]||[]).map(item=>item.code) }))
+      const existing=browserTabs.find(tab=>tab.group===code)
+      if(existing){ activateBrowserTab(existing); return }
+      setTimeout(() => void window.desktop.browser.openTab('web',homeUrl,homeName,code).catch(reason => {
         setError(reason instanceof Error ? reason.message : `${homeName}打开失败`)
       }), 80)
       return
@@ -2555,7 +2562,7 @@ export function App() {
 
         <section className={`browser-panel${browserSurface==='collector'&&browserFullscreen?' app-browser-fullscreen':''}`}>
           <div className="browser-workspace-heading"><div><small>WORKSPACE BROWSER</small><b>采集浏览器</b></div><div className="browser-heading-actions">{task.supplyPlatforms[0]==='GIGACLOUD'&&<button title={builtInCollectorActive?'采集插件已自动安装；点击可重新加载':'点击启用内置采集插件'} className={`built-in-collector-trigger${builtInCollectorActive?' active':''}`} onClick={()=>void startBuiltInCollector()}>{builtInCollectorActive?`🤖 采集插件 · 已开启 · 已选 ${builtInCollectorProducts.length} / 当前页识别 ${builtInCollectorRecognized}`:'🤖 启用采集插件'}</button>}<div className="browser-translation"><button className={`translation-trigger ${translationActive?'active':''}`} disabled={translating} onClick={()=>translationActive?setTranslationMenuOpen(open=>!open):void translateBrowserPage('BILINGUAL')}><span>{translating?'翻译中…':translationActive?`中文 ✓${translationCount?` · ${translationCount}`:''}`:'译 · 中文'}</span><i>{translationMenuOpen?'⌃':'⌄'}</i></button>{translationMenuOpen&&<div className="translation-menu"><b>网页翻译</b><small>Qwen-MT Flash · 自动识别语种</small><button className={translationMode==='BILINGUAL'?'active':''} onClick={()=>{setTranslationMenuOpen(false);void translateBrowserPage('BILINGUAL')}}><span>原文 + 中文</span><em>推荐</em></button><button className={translationMode==='CHINESE'?'active':''} onClick={()=>{setTranslationMenuOpen(false);void translateBrowserPage('CHINESE')}}><span>仅显示中文</span></button><button onClick={()=>void translateBrowserPage(translationMode)}><span>翻译新增内容</span></button><button className="restore" onClick={()=>void restoreBrowserTranslation()}><span>恢复原网页</span></button><p>滚动加载的新内容每5秒自动翻译；品牌、型号、SKU和数字将尽量保留。</p></div>}</div></div></div>
-          <div className="tabs"><div className="tab-scroll">{browserTabs.filter(tab=>!tab.scopeId&&tab.platform!=='ie').map(tab=><button key={tab.id} className={tab.active?'active':''} onClick={()=>activateBrowserTab(tab)}><span>{tab.generic?'◎':tab.platform === 'ozon' ? '◉' : '淘'}</span><b>{tab.title}</b>{tab.closable && <i onClick={event=>{event.stopPropagation();void window.desktop.browser.closeTab(tab.id)}}>×</i>}</button>)}</div><button className="new-browser-tab" title="新建浏览页" aria-label="新建浏览页" onClick={()=>void createBrowserTab()}>＋</button>{state?.loading&&<span className="run-state loading"><i/>页面加载中</span>}</div>
+          <div className="tabs"><div className="tab-scroll">{browserTabs.filter(tab=>!tab.scopeId&&tab.platform!=='ie'&&(tab.platform==='web'?(tab.group||'')===supplyGroup:tab.id==='home-1688'?(supplyGroup===''||supplyGroup==='1688'||supplyGroup==='GIGACLOUD'):true)).map(tab=><button key={tab.id} className={tab.active?'active':''} onClick={()=>activateBrowserTab(tab)}><span>{tab.generic?'◎':tab.platform === 'ozon' ? '◉' : '淘'}</span><b>{tab.title}</b>{tab.closable && <i onClick={event=>{event.stopPropagation();void window.desktop.browser.closeTab(tab.id)}}>×</i>}</button>)}</div><button className="new-browser-tab" title="新建浏览页" aria-label="新建浏览页" onClick={()=>void createBrowserTab()}>＋</button>{state?.loading&&<span className="run-state loading"><i/>页面加载中</span>}</div>
           <form className="address-bar" onSubmit={navigate}><button type="button" title="后退" disabled={!state?.canGoBack} onClick={()=>window.desktop.browser.back(platform)}>←</button><button type="button" title="前进" disabled={!state?.canGoForward} onClick={()=>window.desktop.browser.forward(platform)}>→</button><button type="button" title="刷新" onClick={()=>window.desktop.browser.reload(platform)}>↻</button><input ref={addressInput} aria-label="网页地址" placeholder="输入网址并访问" value={address} onChange={e=>setAddress(e.target.value)} /><button className="address-go" type="submit">打开 <span>↗</span></button></form>
           {error && <div className="error">{error}{navRetry&&<button type="button" style={{marginLeft:8}} onClick={()=>void retryNavigate()}>重试</button>}{translationKeyMissing&&<button type="button" style={{marginLeft:8}} onClick={()=>{setError('');setTranslationKeyMissing(false);setPage('llm-keys')}}>去配置 →</button>}</div>}
           <div className="browser-slot" ref={browserSlot}><div className="browser-placeholder">正在准备 {platform === 'ozon' ? 'Ozon' : platform === 'web' ? '网页' : '1688'} 浏览器…</div></div>
@@ -2626,15 +2633,17 @@ function CredentialPanel({ accountId, platformCode, onStatusChange }: { accountI
   const [autoFill,setAutoFill] = useState(false)
   const [message,setMessage] = useState('')
   const [vaultBlocked,setVaultBlocked] = useState(false)
+  const [loginUrlOverride,setLoginUrlOverride] = useState('')
+  useEffect(()=>{setLoginUrlOverride(localStorage.getItem(`supply-login-url:${accountId}`)||'')},[accountId])
   const passwordRef = useRef<HTMLInputElement>(null)
   const failWith = (reason: unknown, fallback: string) => { const text = unwrapIpcError(reason instanceof Error ? reason.message : fallback); setVaultBlocked(/钥匙串|解密/.test(text)); setMessage(text || fallback) }
   useEffect(()=>{let active=true;void window.desktop.marketplace.credentialStatus(accountId).then(status=>{if(!active)return;setUsername(status.username);setPasswordSaved(status.passwordSaved);setAutoFill(status.mode==='AUTO_FILL')}).catch(()=>undefined);return()=>{active=false}},[accountId])
   const save = async()=>{try{const status=await window.desktop.marketplace.saveCredential({accountId,platformCode,username,password:password||undefined,mode:autoFill?'AUTO_FILL':'SESSION_ONLY'});setPasswordSaved(status.passwordSaved);setPassword('');setVaultBlocked(false);await onStatusChange?.();window.dispatchEvent(new CustomEvent('credential-status-change',{detail:{accountId}}));setMessage('凭据已使用系统安全存储保存')}catch(reason){failWith(reason,'凭据保存失败')}}
-  const openLogin = async()=>{try{await window.desktop.marketplace.openCredentialLogin(accountId,platformCode);setMessage('已打开平台专用登录页，等页面加载后可填写或登录')}catch(reason){failWith(reason,'登录页打开失败')}}
+  const openLogin = async()=>{try{await window.desktop.marketplace.openCredentialLogin(accountId,platformCode,loginUrl);setMessage('已打开平台专用登录页，等页面加载后可填写或登录')}catch(reason){failWith(reason,'登录页打开失败')}}
   const fill = async(submit=false)=>{try{const result=await window.desktop.marketplace.fillCredential(accountId,submit);setVaultBlocked(false);setMessage(result.verificationRequired?'已提交，当前需要验证码/邮箱/短信人工验证':result.submitted?'已填写并点击登录，请等待页面返回结果':result.usernameFilled||result.passwordFilled?'已安全填入，请人工确认后提交':'当前页未找到可用的登录输入框')}catch(reason){failWith(reason,'自动填充失败')}}
   const clear = async()=>{if(!window.confirm('确定删除当前账号已保存的登录凭据？'))return;await window.desktop.marketplace.deleteCredential(accountId);setUsername('');setPassword('');setPasswordSaved(false);setAutoFill(false);await onStatusChange?.();window.dispatchEvent(new CustomEvent('credential-status-change',{detail:{accountId}}));setMessage('凭据已删除')}
-  const loginUrl=platformCode==='GIGACLOUD'?'https://www.gigab2b.com/index.php?route=account/login':platformCode==='1688'?'https://login.1688.com/':platformCode==='EBAY'?'https://www.ebay.com/signin/':'当前平台尚未预置'
-  return <div className="credential-panel"><button type="button" className="credential-toggle" onClick={()=>setOpen(!open)}><span><b>登录凭据</b><small>{passwordSaved?'密码已安全保存':'未配置密码'}</small></span><em>{open?'⌃':'⌄'}</em></button>{open&&<div className="credential-body"><label>登录页地址<input value={loginUrl} readOnly/></label><label>登录账号<input value={username} onChange={event=>setUsername(event.target.value)} autoComplete="off" placeholder="邮箱、手机号或用户名"/></label><label>登录密码<input ref={passwordRef} type="password" value={password} onChange={event=>setPassword(event.target.value)} autoComplete="new-password" placeholder={passwordSaved?'已保存，留空表示不修改':'输入密码'}/></label><label className="credential-check"><input type="checkbox" checked={autoFill} onChange={event=>setAutoFill(event.target.checked)}/><span>会话失效时允许安全自动填写</span></label><div className="credential-actions"><button type="button" onClick={()=>void openLogin()}>打开登录页</button><button type="button" className="primary" disabled={!username.trim()||(!password&& !passwordSaved)} onClick={()=>void save()}>保存凭据</button><button type="button" disabled={!passwordSaved} onClick={()=>void fill(false)}>仅填写</button><button type="button" className="primary" disabled={!passwordSaved} onClick={()=>void fill(true)}>填写并登录</button><button type="button" className="danger" disabled={!passwordSaved} onClick={()=>void clear()}>清除</button></div>{message&&<p className={vaultBlocked?'credential-error':''}>{message}{vaultBlocked&&<button type="button" onClick={()=>{setVaultBlocked(false);setPassword('');setMessage('请重新输入密码后点击『保存凭据』，系统将用当前钥匙串重新加密保存');window.setTimeout(()=>passwordRef.current?.focus(),0)}}>重存密码</button>}</p>}<small className="credential-note">验证码、短信、扫码和风控验证需人工完成；系统不会自动绕过。</small></div>}</div>
+  const loginUrl=loginUrlOverride||(platformCode==='GIGACLOUD'?'https://www.gigab2b.com/index.php?route=account/login':platformCode==='1688'?'https://login.1688.com/':platformCode==='EBAY'?'https://www.ebay.com/signin/':palletHomeUrls[platformCode as ProductWarehouseCode]||'')
+  return <div className="credential-panel"><button type="button" className="credential-toggle" onClick={()=>setOpen(!open)}><span><b>登录凭据</b><small>{passwordSaved?'密码已安全保存':'未配置密码'}</small></span><em>{open?'⌃':'⌄'}</em></button>{open&&<div className="credential-body"><label>登录页地址<input value={loginUrl} onChange={event=>{setLoginUrlOverride(event.target.value);try{localStorage.setItem(`supply-login-url:${accountId}`,event.target.value)}catch{ /* 使用当前会话配置 */ }}} placeholder="平台登录页网址，可手填并记忆"/></label><label>登录账号<input value={username} onChange={event=>setUsername(event.target.value)} autoComplete="off" placeholder="邮箱、手机号或用户名"/></label><label>登录密码<input ref={passwordRef} type="password" value={password} onChange={event=>setPassword(event.target.value)} autoComplete="new-password" placeholder={passwordSaved?'已保存，留空表示不修改':'输入密码'}/></label><label className="credential-check"><input type="checkbox" checked={autoFill} onChange={event=>setAutoFill(event.target.checked)}/><span>会话失效时允许安全自动填写</span></label><div className="credential-actions"><button type="button" onClick={()=>void openLogin()}>打开登录页</button><button type="button" className="primary" disabled={!username.trim()||(!password&& !passwordSaved)} onClick={()=>void save()}>保存凭据</button><button type="button" disabled={!passwordSaved} onClick={()=>void fill(false)}>仅填写</button><button type="button" className="primary" disabled={!passwordSaved} onClick={()=>void fill(true)}>填写并登录</button><button type="button" className="danger" disabled={!passwordSaved} onClick={()=>void clear()}>清除</button></div>{message&&<p className={vaultBlocked?'credential-error':''}>{message}{vaultBlocked&&<button type="button" onClick={()=>{setVaultBlocked(false);setPassword('');setMessage('请重新输入密码后点击『保存凭据』，系统将用当前钥匙串重新加密保存');window.setTimeout(()=>passwordRef.current?.focus(),0)}}>重存密码</button>}</p>}<small className="credential-note">验证码、短信、扫码和风控验证需人工完成；系统不会自动绕过。</small></div>}</div>
 }
 
 function PublishingWorkspace({ products, onInventory, onCreateImage }: { products: SupplyWarehouseProduct[]; onInventory: () => void; onCreateImage:(product:SupplyWarehouseProduct,selection:MarketplaceSelectionProduct)=>void }) {

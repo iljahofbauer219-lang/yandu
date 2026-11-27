@@ -2,6 +2,7 @@ import { writeFileSync } from 'node:fs'
 import { app, BaseWindow, BrowserWindow, WebContents, WebContentsView, clipboard, type Cookie, type Session } from 'electron'
 import { AMAZON_LISTING_EVIDENCE_SCRIPT, AMAZON_REVIEW_EVIDENCE_SCRIPT, AMAZON_SAMPLES_SCRIPT, type AmazonListingEvidence, type AmazonMarketSample, type AmazonReviewEvidence } from '../../shared/amazonScraper'
 import { matchSellableInventoryText } from '../../shared/sellableInventory'
+import { supplySessionPartitionForUrl, supplyPartitionForGroup } from '../../shared/supplyPlatformSessions'
 import { buildEbayDraftContinueUrl, readEbayPublishedLanding } from '../../shared/ebayListingTarget'
 import { pickSupplyDescriptionText } from '../../shared/supplyDescription'
 import { pickSupplyFees } from '../../shared/supplyFeePick'
@@ -101,6 +102,7 @@ interface DetailTab {
   closable?: boolean
   scopeId?: string
   domains?: string[]
+  group?: string
 }
 
 interface BuiltInCollectorSnapshot {
@@ -4107,17 +4109,14 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     // IE浏览 独立 cookie 罐：与 AI跨境 店铺会话(persist:login:*)、采集通用罐(persist:web-general)互不相通
     if (platform === 'ie') return 'persist:ie-browser:default'
     if (platform === 'web') {
-      try {
-        const host = new URL(url).hostname
-        if (host === 'gigab2b.com' || host.endsWith('.gigab2b.com')) return 'persist:supply:GIGACLOUD:default'
-        if (host === '1688.com' || host.endsWith('.1688.com')) return 'persist:supply:1688:default'
-      } catch { /* 解析失败回落通用罐 */ }
+      const supplyPartition = supplySessionPartitionForUrl(url)
+      if (supplyPartition) return supplyPartition
       return 'persist:web-general'
     }
     return `persist:${platform}`
   }
 
-  async openTab(platform: Platform, url: string, initialTitle?: string) {
+  async openTab(platform: Platform, url: string, initialTitle?: string, group?: string) {
     this.assertTabCapacity(platform)
     if (!this.isAllowedUrl(platform, url)) throw new Error('链接不属于当前平台，已阻止打开')
     let targetUrl = url
@@ -4149,7 +4148,7 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
       view.webContents.setUserAgent(cleanUserAgent)
     }
 
-    const tab: DetailTab = { id, platform, title: initialTitle || (platform === 'ozon' ? 'Ozon 详情' : platform === 'web' || platform === 'ie' ? '新标签页' : '1688 搜款'), view, generic: platform === 'web' || platform === 'ie' }
+    const tab: DetailTab = { id, platform, title: initialTitle || (platform === 'ozon' ? 'Ozon 详情' : platform === 'web' || platform === 'ie' ? '新标签页' : '1688 搜款'), view, generic: platform === 'web' || platform === 'ie', group }
     this.detailTabs.set(id, tab)
     view.webContents.setWindowOpenHandler(({ url: nextUrl }) => {
       if (this.isAllowedUrl(platform, nextUrl)) void this.openTab(platform, nextUrl)
@@ -4218,13 +4217,13 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     }
   }
 
-  async newTab(platform: 'web' | 'ie' = 'web') {
+  async newTab(platform: 'web' | 'ie' = 'web', group?: string) {
     this.assertTabCapacity(platform)
     const id = crypto.randomUUID()
-    const view = new WebContentsView({ webPreferences: { partition: platform === 'ie' ? 'persist:ie-browser:default' : 'persist:web-general', nodeIntegration: false, contextIsolation: true, sandbox: true } })
+    const view = new WebContentsView({ webPreferences: { partition: platform === 'ie' ? 'persist:ie-browser:default' : group ? supplyPartitionForGroup(group) : 'persist:web-general', nodeIntegration: false, contextIsolation: true, sandbox: true } })
     view.setBackgroundColor('#ffffff')
     view.webContents.setUserAgent(view.webContents.getUserAgent().replace(/\sElectron\/[^\s]+/g, '').replace(/\scross-border-sourcing-desktop\/[^\s]+/g, ''))
-    const tab: DetailTab = { id, platform, title: '新标签页', view, generic: true }
+    const tab: DetailTab = { id, platform, title: '新标签页', view, generic: true, group }
     this.detailTabs.set(id, tab)
     view.webContents.setWindowOpenHandler(({ url: nextUrl }) => {
       if (this.isAllowedUrl(platform, nextUrl)) void this.openTab(platform, nextUrl)
@@ -4638,7 +4637,8 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
         closable: tab.closable ?? true,
         active: this.activeTabId === tab.id,
         generic: tab.generic,
-        scopeId: tab.scopeId
+        scopeId: tab.scopeId,
+        group: tab.group
       }))
     ]
     this.shellContents.send('browser:tabs', tabs)

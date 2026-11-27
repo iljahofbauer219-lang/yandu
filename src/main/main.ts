@@ -2279,7 +2279,7 @@ ipcMain.handle('browser:supply:activate', async (_event, platformCode: '1688' | 
   return (await workspace.ensureGigaCloudLogin(row?.username||'',password,allowAutoLogin,activationVersion))
     ?? { platformCode, loginStatus:'UNKNOWN', message:'已取消过期的大健云仓登录检查', url:'', autoLoginAttempted:false }
 })
-ipcMain.handle('browser:open-tab', (_event, platform: Platform, url: string, title?: string) => workspace?.openTab(platform, url, title))
+ipcMain.handle('browser:open-tab', (_event, platform: Platform, url: string, title?: string, group?: string) => workspace?.openTab(platform, url, title, group))
 // AI采集工作台挂载自愈：视图缺失才重激活，随后按已存凭据模拟手工登录（会话有效则直接返回）
 ipcMain.handle('browser:supply:ensure-login', async () => {
   if (!workspace) throw new Error('采集浏览器尚未初始化')
@@ -2502,7 +2502,7 @@ ipcMain.handle('window:maximize-toggle', () => {
 })
 ipcMain.handle('window:close', () => { mainWindow?.close() })
 ipcMain.handle('window:is-maximized', () => mainWindow?.isMaximized() ?? false)
-ipcMain.handle('browser:new-tab', (_event, platform?: 'ie' | 'web') => workspace?.newTab(platform === 'ie' ? 'ie' : 'web'))
+ipcMain.handle('browser:new-tab', (_event, platform?: 'ie' | 'web', group?: string) => workspace?.newTab(platform === 'ie' ? 'ie' : 'web', group))
 ipcMain.handle('browser:switch-tab', (_event, tabId: string) => workspace?.switchTab(tabId))
 ipcMain.handle('browser:close-tab', (_event, tabId: string) => workspace?.closeTab(tabId))
 ipcMain.handle('browser:1688-search-url', (_event, keyword: string) => {
@@ -4224,15 +4224,18 @@ ipcMain.handle('marketplace:credential:save', (_event, input: MarketplaceCredent
   return { accountId:input.accountId, username:row?.username || '', passwordSaved:Boolean(row?.encrypted_password), mode:row?.automation_mode || 'SESSION_ONLY', updatedAt:row?.updated_at }
 })
 ipcMain.handle('marketplace:credential:delete', (_event, accountId: string) => { database?.deleteMarketplaceCredential(accountId); return { accountId, username:'', passwordSaved:false, mode:'SESSION_ONLY' } })
-ipcMain.handle('marketplace:credential:open-login', (_event, accountId: string, platformCode: string) => {
+ipcMain.handle('marketplace:credential:open-login', (_event, accountId: string, platformCode: string, loginUrl?: string) => {
   const profiles: Record<string,{title:string;url:string;domains:string[]}> = {
     GIGACLOUD:{title:'大健云仓登录',url:'https://www.gigab2b.com/index.php?route=account/login',domains:['gigab2b.com']},
     '1688':{title:'1688登录',url:'https://login.1688.com/',domains:['1688.com']},
     EBAY:{title:'eBay登录',url:'https://www.ebay.com/signin/',domains:['ebay.com']}
   }
-  const profile=profiles[platformCode]
-  if(!profile) throw new Error('当前平台尚未配置专用登录地址')
-  return workspace?.openCredentialLogin(accountId,profile.title,profile.url,profile.domains)
+  const preset=profiles[platformCode]
+  const url=(loginUrl||'').trim()||preset?.url||''
+  if(!url) throw new Error('当前平台尚未配置专用登录地址：请先在『登录凭据』填写登录页地址')
+  let domains=preset?.domains||[]
+  try { domains=[new URL(url).hostname] } catch { throw new Error('登录页地址不是有效网址：请检查后重试') }
+  return workspace?.openCredentialLogin(accountId,preset?.title||`${platformCode}登录`,url,domains)
 })
 ipcMain.handle('marketplace:credential:fill', async (_event, accountId: string, submit = false) => {
   const row = database?.getMarketplaceCredential(accountId)

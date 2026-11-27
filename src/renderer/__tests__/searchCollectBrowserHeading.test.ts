@@ -48,7 +48,7 @@ describe('采集浏览器页签栏 · 容器隔离守卫', () => {
     const stripStart = appSource.indexOf('<div className="tabs"><div className="tab-scroll">')
     expect(stripStart).toBeGreaterThan(-1)
     const strip = appSource.slice(stripStart, appSource.indexOf('</div>', stripStart))
-    expect(strip, '采集栏必须按容器归属过滤').toContain("browserTabs.filter(tab=>!tab.scopeId&&tab.platform!=='ie').map(")
+    expect(strip, '采集栏必须按容器归属过滤').toContain("browserTabs.filter(tab=>!tab.scopeId&&tab.platform!=='ie'&&(tab.platform==='web'?(tab.group||'')===supplyGroup:tab.id==='home-1688'?(supplyGroup===''||supplyGroup==='1688'||supplyGroup==='GIGACLOUD'):true)).map(")
     expect(strip, '不得原样渲染全量 browserTabs').not.toContain('{browserTabs.map(')
   })
 })

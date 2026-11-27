@@ -275,9 +275,9 @@ contextBridge.exposeInMainWorld('desktop', {
     activateSupply: (platformCode: '1688' | 'GIGACLOUD'): Promise<SupplyActivationResult> => ipcRenderer.invoke('browser:supply:activate', platformCode),
     ensureSupplyLogin: (): Promise<SupplyActivationResult> => ipcRenderer.invoke('browser:supply:ensure-login'),
     openSupply: (platformCode: '1688' | 'GIGACLOUD', url: string): Promise<string> => ipcRenderer.invoke('browser:supply:open', platformCode, url),
-    openTab: (platform: Platform, url: string, title?: string) => ipcRenderer.invoke('browser:open-tab', platform, url, title),
+    openTab: (platform: Platform, url: string, title?: string, group?: string) => ipcRenderer.invoke('browser:open-tab', platform, url, title, group),
     ensureDefaultNav: () => ipcRenderer.invoke('browser:ensure-default-nav'),
-    newTab: (platform?: 'ie' | 'web') => ipcRenderer.invoke('browser:new-tab', platform),
+    newTab: (platform?: 'ie' | 'web', group?: string) => ipcRenderer.invoke('browser:new-tab', platform, group),
     switchTab: (tabId: string) => ipcRenderer.invoke('browser:switch-tab', tabId),
     closeTab: (tabId: string) => ipcRenderer.invoke('browser:close-tab', tabId),
     create1688SearchUrl: (keyword: string): Promise<string> => ipcRenderer.invoke('browser:1688-search-url', keyword),
@@ -614,7 +614,7 @@ contextBridge.exposeInMainWorld('desktop', {
     credentialStatus: (accountId: string): Promise<MarketplaceCredentialStatus> => ipcRenderer.invoke('marketplace:credential:status', accountId),
     saveCredential: (input: MarketplaceCredentialInput): Promise<MarketplaceCredentialStatus> => ipcRenderer.invoke('marketplace:credential:save', input),
     deleteCredential: (accountId: string): Promise<MarketplaceCredentialStatus> => ipcRenderer.invoke('marketplace:credential:delete', accountId),
-    openCredentialLogin: (accountId: string, platformCode: string): Promise<string> => ipcRenderer.invoke('marketplace:credential:open-login', accountId, platformCode),
+    openCredentialLogin: (accountId: string, platformCode: string, loginUrl?: string): Promise<string> => ipcRenderer.invoke('marketplace:credential:open-login', accountId, platformCode, loginUrl),
     fillCredential: (accountId: string, submit = false): Promise<{ usernameFilled:boolean; passwordFilled:boolean; submitted:boolean; verificationRequired:boolean; url:string }> => ipcRenderer.invoke('marketplace:credential:fill', accountId, submit)
   },
   articleCrawler: {

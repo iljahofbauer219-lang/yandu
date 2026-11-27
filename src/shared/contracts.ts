@@ -1117,6 +1117,8 @@ export interface BrowserTab {
   active: boolean
   generic?: boolean
   scopeId?: string
+  /** 货盘平台页签组：同组页签同会话罐，跨组不串显 */
+  group?: string
 }
 
 export type BrowserTranslationMode = 'BILINGUAL' | 'CHINESE'
