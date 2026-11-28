@@ -12,6 +12,15 @@ export interface CollectorAdapter {
   priceSelector: string
   imageSelector: string
   productIdPattern: string
+  /** 卡片自身属性即产品相对链接（海贝 data-href） */
+  cardUrlAttr?: string
+  /** 无锚点卡片：以曝光属性 id 套路由模板合成产品页（西之月 /products/:id，路由表取自站点 chunk） */
+  urlTemplate?: string
+  idAttr?: string
+  /** 采集默认列表页（首页无商品卡时使用） */
+  listUrl?: string
+  /** 卡片曝光属性里的商品名兜底（西之月懒加载标题空时） */
+  nameAttr?: string
 }
 
 export const COLLECTOR_ADAPTERS: CollectorAdapter[] = [
@@ -47,6 +56,35 @@ export const COLLECTOR_ADAPTERS: CollectorAdapter[] = [
     priceSelector: '.product-price',
     imageSelector: '.product-image img',
     productIdPattern: '-p-(\\d+)\\.html$'
+  },
+  {
+    // 渲染态 DOM 取证（CDP dump 2026-11-28）：SPA 壳，卡片无锚点，产品页路由 /products/:id 取自站点路由表
+    family: 'XIZHIYUE',
+    domains: ['westmonth.com'],
+    cardSelector: '.all-product-card',
+    linkSelector: '',
+    productUrlPattern: '/products/\\d+$',
+    titleSelector: '.line-clamp-1',
+    priceSelector: '',
+    imageSelector: '.product-image img',
+    productIdPattern: '/products/(\\d+)$',
+    urlTemplate: 'https://www.westmonth.com/products/{id}',
+    idAttr: 'data-sensors-exposure-property-item_id',
+    nameAttr: 'data-sensors-exposure-property-item_name',
+    listUrl: 'https://www.westmonth.com/products/all?id=100225&root_id=100225'
+  },
+  {
+    // 渲染态 DOM 取证（CDP dump 2026-11-28）：卡片 div 带 data-href；匿名登录墙下价格/主图为占位
+    family: 'HAIBEI',
+    domains: ['haibeigoods.com'],
+    cardSelector: '.chw-productItem',
+    linkSelector: '',
+    productUrlPattern: '/pallet/product/\\d+',
+    titleSelector: '.chw-productItem__title',
+    priceSelector: '',
+    imageSelector: '.chw-productItem__image img',
+    productIdPattern: '/pallet/product/(\\d+)',
+    cardUrlAttr: 'data-href'
   }
 ]
 
@@ -63,7 +101,7 @@ export function adapterForCode(code: string): CollectorAdapter | null {
 
 const SCRIPT_HELPERS = String.raw`
   const textOf = node => (node?.innerText || node?.textContent || '').replace(/\s+/g,' ').trim();
-  const isRealProductImage = url => /^https?:\/\//i.test(url || '') && !/(?:product_base|placeholder|default[-_]?image|loading|lazyload|blank|transparent|no[-_]?image)/i.test(url);
+  const isRealProductImage = url => /^https?:\/\//i.test(url || '') && !/(?:product_base|placeholder|default[-_]?image|loading|lazyload|blank|transparent|no[-_]?image|hb_product_img)/i.test(url);
   const imageUrlOf = image => {
     if (!image) return '';
     const srcset = (image.getAttribute('srcset') || image.getAttribute('data-srcset') || '').split(',').map(value=>value.trim().split(/\s+/)[0]).filter(Boolean).pop() || '';
@@ -81,14 +119,19 @@ export function buildRegistryExtractScript(adapter: CollectorAdapter, platformCo
     const idRe = new RegExp(${JSON.stringify(adapter.productIdPattern)});
     const seen = new Set();
     const products = [];
+    const urlOf = card => {
+      if (adapter.cardUrlAttr) { const v = card.getAttribute(adapter.cardUrlAttr); return v ? new URL(v, location.href).href : ''; }
+      if (adapter.urlTemplate && adapter.idAttr) { const id = card.getAttribute(adapter.idAttr); return id ? adapter.urlTemplate.replace('{id}', id) : ''; }
+      const anchor = [...card.querySelectorAll(adapter.linkSelector || 'a')].find(node => linkRe.test(node.href || node.getAttribute('href') || ''));
+      return anchor ? (anchor.href || new URL(anchor.getAttribute('href') || '', location.href).href) : '';
+    };
     for (const card of document.querySelectorAll(adapter.cardSelector)) {
-      const anchor = [...card.querySelectorAll(adapter.linkSelector)].find(node => linkRe.test(node.href || node.getAttribute('href') || ''));
-      if (!anchor) continue;
-      const url = new URL(anchor.href || anchor.getAttribute('href'), location.href).href;
+      const url = urlOf(card);
+      if (!url || !linkRe.test(url)) continue;
       if (seen.has(url)) continue;
       seen.add(url);
       const titleNode = card.querySelector(adapter.titleSelector);
-      const title = textOf(titleNode) || anchor.getAttribute('title') || card.querySelector('img')?.alt || textOf(card).slice(0, 180);
+      const title = textOf(titleNode) || (adapter.nameAttr ? card.getAttribute(adapter.nameAttr) || '' : '') || card.getAttribute('alt') || card.getAttribute('title') || card.querySelector('img')?.alt || textOf(card).slice(0, 180);
       const priceText = adapter.priceSelector ? textOf(card.querySelector(adapter.priceSelector)) : '';
       const imageUrl = imageUrlOf(card.querySelector(adapter.imageSelector)) || imageUrlOf(card.querySelector('img'));
       const productId = (url.match(idRe) || [])[1] || '';
@@ -115,30 +158,34 @@ export function buildCollectorScript(adapter: CollectorAdapter, platformCode: st
     const buttonClass = 'cross-border-collector-select';
     const overlay = document.createElement('div'); overlay.id = 'cross-border-collector-overlay'; document.documentElement.appendChild(overlay);
     const entries = new Map();
-    const extractOf = (card, anchor) => {
-      const url = new URL(anchor.href || anchor.getAttribute('href'), location.href).href;
+    const extractOf = (card, url) => {
       const titleNode = card.querySelector(adapter.titleSelector);
-      const title = textOf(titleNode) || anchor.getAttribute('title') || card.querySelector('img')?.alt || textOf(card).slice(0, 180);
+      const title = textOf(titleNode) || (adapter.nameAttr ? card.getAttribute(adapter.nameAttr) || '' : '') || card.getAttribute('alt') || card.getAttribute('title') || card.querySelector('img')?.alt || textOf(card).slice(0, 180);
       const priceText = adapter.priceSelector ? textOf(card.querySelector(adapter.priceSelector)) : '';
       const imageUrl = imageUrlOf(card.querySelector(adapter.imageSelector)) || imageUrlOf(card.querySelector('img'));
       const productId = (url.match(idRe) || [])[1] || '';
       return { platformCode, productId, url, title, imageUrl, priceText, salesText: '', shippingFeeText: '', sellableInventory: null, promotionText: '', supplierName: '', gigaIndex: null, gigaIndexText: '', storeReturnRate: '', capturedFrom: 'LIST' };
     };
     const update = entry => { const isCollected = collected.has(entry.product.url); const chosen = selected.has(entry.product.url) || isCollected; entry.button.textContent = chosen ? '✓' : '🤖'; entry.button.classList.toggle('is-selected', chosen); entry.button.classList.toggle('is-collected', isCollected); entry.button.title = isCollected ? '已入库' : ''; entry.card?.classList.toggle('cross-border-collector-card-active', chosen); };
-    const toggle = entry => { if (collected.has(entry.product.url)) return; const isSelected = !selected.has(entry.product.url); if (isSelected) { entry.product = extractOf(entry.card, entry.anchor); selected.set(entry.product.url, entry.product); } else selected.delete(entry.product.url); changes.push({ selected: isSelected, product: entry.product }); update(entry); };
+    const toggle = entry => { if (collected.has(entry.product.url)) return; const isSelected = !selected.has(entry.product.url); if (isSelected) { entry.product = extractOf(entry.card, entry.product.url); selected.set(entry.product.url, entry.product); } else selected.delete(entry.product.url); changes.push({ selected: isSelected, product: entry.product }); update(entry); };
     const removeEntry = entry => { entry.card?.classList.remove('cross-border-collector-card-active'); entry.button.remove(); entries.delete(entry.product.url); };
     const position = () => { entries.forEach(entry => { if (!entry.anchor?.isConnected) { removeEntry(entry); return; } const rect = entry.target.getBoundingClientRect(); const visible = rect.width > 40 && rect.height > 40 && rect.bottom > 0 && rect.top < innerHeight && rect.right > 0 && rect.left < innerWidth; entry.button.hidden = !visible; if (!visible) return; entry.button.style.top = Math.max(6, rect.top + 8) + 'px'; entry.button.style.left = Math.min(innerWidth - 8, Math.max(rect.left + 80, rect.right - 52)) + 'px'; update(entry); }); };
     const scan = () => {
       const currentUrls = new Set();
+      const urlOf = card => {
+        if (adapter.cardUrlAttr) { const v = card.getAttribute(adapter.cardUrlAttr); return v ? new URL(v, location.href).href : ''; }
+        if (adapter.urlTemplate && adapter.idAttr) { const id = card.getAttribute(adapter.idAttr); return id ? adapter.urlTemplate.replace('{id}', id) : ''; }
+        const anchor = [...card.querySelectorAll(adapter.linkSelector || 'a')].find(node => linkRe.test(node.href || ''));
+        return anchor ? anchor.href : '';
+      };
       for (const card of document.querySelectorAll(adapter.cardSelector)) {
-        const anchor = [...card.querySelectorAll(adapter.linkSelector)].find(node => linkRe.test(node.href || ''));
-        if (!anchor) continue;
-        const url = new URL(anchor.href || anchor.getAttribute('href'), location.href).href;
+        const url = urlOf(card);
+        if (!url || !linkRe.test(url)) continue;
         currentUrls.add(url);
-        if (entries.has(url)) { const existing = entries.get(url); if (existing.anchor === anchor) { existing.target = card.querySelector(adapter.imageSelector) || anchor; continue; } removeEntry(existing); }
-        const product = extractOf(card, anchor);
+        if (entries.has(url)) { const existing = entries.get(url); if (existing.anchor === card) { existing.target = card.querySelector(adapter.imageSelector) || card; continue; } removeEntry(existing); }
+        const product = extractOf(card, url);
         const button = document.createElement('button'); button.type = 'button'; button.className = buttonClass;
-        const entry = { anchor, card, target: card.querySelector(adapter.imageSelector) || anchor, product, button };
+        const entry = { anchor: card, card, target: card.querySelector(adapter.imageSelector) || card, product, button };
         button.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); toggle(entry); });
         entries.set(url, entry); overlay.appendChild(button); update(entry);
       }

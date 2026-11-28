@@ -4603,12 +4603,17 @@ return {reviseUrl:result.url,routeKind:target.kind,routeNote:target.note,filledF
     const code = task.supplyPlatforms[0]
     const adapter = adapterForCode(code)
     if (!adapter) throw new Error(`当前供应链平台（${code}）仅完成浏览器接入，商品采集器尚未接入`)
+    const targetUrl = adapter.listUrl || PALLET_HOME_URLS[code] || `https://${adapter.domains[0]}/`
     let view = this.attached || null
     let attachedHost = ''
     try { attachedHost = view ? new URL(view.webContents.getURL()).hostname : '' } catch { attachedHost = '' }
     if (!view || adapterForHost(attachedHost)?.family !== adapter.family) {
-      const id = await this.openTab('web', PALLET_HOME_URLS[code] || `https://${adapter.domains[0]}/`, code, code)
+      const id = await this.openTab('web', targetUrl, code, code)
       view = this.detailTabs.get(id)?.view || null
+    } else if (view.webContents.getURL() !== targetUrl) {
+      // 入口首页无商品卡的平台（西之月 SPA 壳）：切到取证过的列表页再提取
+      await view.webContents.loadURL(targetUrl)
+      await this.sleep(2000)
     }
     if (!view) throw new Error('货盘浏览器尚未初始化')
     this.show('web')

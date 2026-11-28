@@ -8,12 +8,21 @@ describe('名录货盘采集适配器口径', () => {
     expect(adapterForCode('KJDS_CN')?.family).toBe('KJDS')
     expect(adapterForCode('CJDROP_AU')?.family).toBe('CJDROP')
   })
-  it('SPA 壳平台与既有平台不冒领适配器', () => {
-    expect(adapterForCode('XIZHIYUE_NA')).toBeNull()
-    expect(adapterForCode('HAIBEI')).toBeNull()
+  it('渲染态取证后 SPA 壳平台也归族，既有平台不冒领', () => {
+    expect(adapterForCode('XIZHIYUE_NA')?.family).toBe('XIZHIYUE')
+    expect(adapterForCode('XIZHIYUE_CN')?.family).toBe('XIZHIYUE')
+    expect(adapterForCode('HAIBEI')?.family).toBe('HAIBEI')
+    expect(adapterForCode('HAIBEI_EU')?.family).toBe('HAIBEI')
     expect(adapterForCode('GIGACLOUD')).toBeNull()
     expect(adapterForCode('1688')).toBeNull()
     expect(adapterForCode('NOT_A_PLATFORM')).toBeNull()
+  })
+  it('无锚点卡片的产品页解析口径（路由模板/卡片属性）', () => {
+    const wm = adapterForHost('www.westmonth.com')
+    expect(wm?.urlTemplate).toBe('https://www.westmonth.com/products/{id}')
+    expect(wm?.idAttr).toBe('data-sensors-exposure-property-item_id')
+    expect(wm?.listUrl).toContain('westmonth.com/products/all')
+    expect(adapterForHost('www.haibeigoods.com')?.cardUrlAttr).toBe('data-href')
   })
   it('子域匹配与坏域拒绝', () => {
     expect(adapterForHost('global.saleyee.com')?.family).toBe('SALEYEE')
@@ -25,7 +34,7 @@ describe('名录货盘采集适配器口径', () => {
   it('选择器均以 fixture 取证且非空', () => {
     for (const adapter of COLLECTOR_ADAPTERS) {
       expect(adapter.cardSelector, adapter.family).toBeTruthy()
-      expect(adapter.linkSelector, adapter.family).toBeTruthy()
+      if (!adapter.cardUrlAttr && !adapter.urlTemplate) expect(adapter.linkSelector, adapter.family).toBeTruthy()
       expect(adapter.imageSelector, adapter.family).toBeTruthy()
       expect(adapter.titleSelector, adapter.family).toBeTruthy()
       expect(() => new RegExp(adapter.productUrlPattern), adapter.family).not.toThrow()
