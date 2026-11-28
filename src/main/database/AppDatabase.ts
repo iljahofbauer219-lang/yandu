@@ -2109,9 +2109,15 @@ export class AppDatabase {
     return rows.map(row => ({ id: String(row.id), storeId: String(row.store_id), keyword: String(row.keyword), itemId: String(row.item_id), url: String(row.url), title: String(row.title), imageUrl: String(row.image_url), avgSoldPrice: Number(row.avg_sold_price), itemSoldCount: Number(row.item_sold_count), totalSales: Number(row.total_sales), collectedAt: String(row.collected_at) }))
   }
 
-  listCollectedCandidateUrls(platformCode: string): string[] {
-    const rows = this.database.prepare(`SELECT DISTINCT url FROM supply_candidates WHERE deleted_at IS NULL AND COALESCE(json_extract(payload, '$.platformCode'), '1688') = ?`).all(platformCode) as unknown as Array<{ url: string }>
-    return rows.map(row => row.url)
+  // 已采集标识须覆盖全部收录阶段：候选被删/优选/入库后仍算「已采集过」，只查存活候选会漏标
+  listCollectedSupplyUrls(platformCode: string): string[] {
+    const rows = this.database.prepare(`
+      SELECT url FROM supply_candidates WHERE deleted_at IS NULL AND COALESCE(json_extract(payload, '$.platformCode'), '1688') = ?
+      UNION SELECT json_extract(payload, '$.sourceUrl') FROM selection_records WHERE json_extract(payload, '$.platformCode') = ?
+      UNION SELECT source_url FROM supply_warehouse_products WHERE warehouse_code = ?
+      UNION SELECT canonical_url FROM product_intake_registry WHERE platform_code = ?
+    `).all(platformCode, platformCode, platformCode, platformCode) as unknown as Array<{ url: string | null }>
+    return rows.map(row => row.url).filter((url): url is string => Boolean(url))
   }
 
   getEbayTokenRecord(storeId:string) {

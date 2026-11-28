@@ -2150,7 +2150,7 @@ function createWindow() {
 
   workspace = new BrowserWorkspace(mainWindow, shell.webContents)
   startEbayBackgroundScheduler()
-  workspace.setCollectedUrlProvider(kind => kind === 'ebay' ? (database?.listResearchCollected().map(item => item.url) ?? []) : (database?.listCollectedCandidateUrls('GIGACLOUD') ?? []))
+  workspace.setCollectedUrlProvider(kind => kind === 'ebay' ? (database?.listResearchCollected().map(item => item.url) ?? []) : (database?.listCollectedSupplyUrls('GIGACLOUD') ?? []))
   // #6 语义兜底走既有 DeepSeek 服务；Key 缺失或调用失败时服务侧返回拒收结果，读取行为退回 C4 口径的原文案
   workspace.setSemanticFallbackRunner((digest, fields) => ebayOptimizationService.extractSemanticFallback(digest, fields))
   startFeishuBot()
