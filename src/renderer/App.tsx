@@ -1489,7 +1489,12 @@ export function App() {
   const taskSubmitRunning = useRef(false)
   const supplyActivationRequest = useRef(0)
 
+  // 采集工作台只跟随自己页签的状态：IE浏览/eBay 等他页状态推送不得劫持 platform/address（11-28 nav 串台根因）
+  const collectorActiveTabRef = useRef<BrowserTab | null>(null)
   useEffect(() => window.desktop.browser.onState(next => {
+    const own = collectorActiveTabRef.current
+    const owns = Boolean(own) && own!.platform === next.platform && own!.platform !== 'ie' && !own!.scopeId && (next.platform !== 'web' || Boolean(own!.group))
+    if (!owns) return
     setState(next)
     setPlatform(next.platform)
     const basis = collectorAddressPushedUrl.current
@@ -1497,7 +1502,7 @@ export function App() {
     setAddress(prev => addressAfterPush(prev, basis, next.url))
   }), [])
 
-  useEffect(() => window.desktop.browser.onTabs(next => setBrowserTabs(next)), [])
+  useEffect(() => window.desktop.browser.onTabs(next => { setBrowserTabs(next); collectorActiveTabRef.current = next.find(tab => tab.active) || null }), [])
 
   useEffect(() => window.desktop.tasks.onProgress(next => setProgress(next)), [])
   useEffect(() => { void window.desktop.workflow.counts().then(setWorkflowCounts) }, [products.length, supplyProducts.length])
