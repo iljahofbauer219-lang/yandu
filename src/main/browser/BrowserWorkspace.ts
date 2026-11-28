@@ -462,27 +462,53 @@ export class BrowserWorkspace {
     try {
       window.webContents.setUserAgent(window.webContents.getUserAgent().replace(/\sElectron\/[^\s]+/g, '').replace(/\scross-border-sourcing-desktop\/[^\s]+/g, ''))
       window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-      await window.webContents.loadURL(parsed.toString())
+      return await this.readSupplyProductPageOn(window.webContents, warehouseCode, parsed, name)
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('要求安全验证')) {
+        const live = await this.visibleSupplyCarrier(warehouseCode, parsed.toString())
+        if (live) return await this.readSupplyProductPageOn(live, warehouseCode, parsed, name)
+      }
+      throw error
+    } finally {
+      if (!window.isDestroyed()) window.destroy()
+    }
+  }
+
+  /** 隐藏窗报安全验证时的回落载体：同 partition 已登录的可见供应页签（原址同通道）；打不开返回 null */
+  private async visibleSupplyCarrier(warehouseCode: '1688'|'GIGACLOUD', url: string): Promise<WebContents | null> {
+    try {
+      await this.openSupplyUrl(warehouseCode, url)
+    } catch {
+      return null
+    }
+    const view = this.supplyViews.get(warehouseCode)
+    return view && !view.webContents.isDestroyed() ? view.webContents : null
+  }
+
+  private async readSupplyProductPageOn(wc: WebContents, warehouseCode: '1688'|'GIGACLOUD', parsed: URL, name: string): Promise<SupplyProductPageSnapshot> {
+      await wc.loadURL(parsed.toString())
       await this.sleep(1500)
-      const issue = await window.webContents.executeJavaScript(String.raw`(() => {
+      const issue = await wc.executeJavaScript(String.raw`(() => {
         const text=(document.body?.innerText||'').slice(0,12000), url=location.href
-        if (${challengeRegexSource('VERIFY_RATE')}.test(text+' '+url)) return 'VERIFY'
+        const challenge=${challengeRegexSource('VERIFY_RATE')}.test(text+' '+url)
+        const productData=/单价\(件\)|可售库存|产品规格|打包费|Item Code/i.test(text)
+        if (challenge&&!productData) return 'VERIFY'
         if (${loginRegexSource('SUPPLY_FULL')}.test(text+' '+url)) return 'LOGIN'
         return ''
       })()`) as string
       if (issue === 'LOGIN') throw new Error(`${name}登录状态已失效，请先在 IE浏览 中登录${name}后重试`)
       if (issue === 'VERIFY') throw new Error(`${name}要求安全验证，请先在 IE浏览 中打开该商品页人工完成验证后重试`)
       for (let index = 0; index < 5; index += 1) {
-        await window.webContents.executeJavaScript('window.scrollBy(0, Math.max(900, window.innerHeight * 1.2))')
+        await wc.executeJavaScript('window.scrollBy(0, Math.max(900, window.innerHeight * 1.2))')
         await this.sleep(350)
       }
-      await window.webContents.executeJavaScript('window.scrollTo(0, 0)')
+      await wc.executeJavaScript('window.scrollTo(0, 0)')
       await this.sleep(400)
       // 未登录闸口（仅大健云仓）：匿名实测页为英文登录壳——Item Code 有值但日期/退返品率掩码为 **、
       // 价格区「Login To See Price」，规格/费用/文件区整体缺失；旧 LOGIN 哨兵只认「请登录」会漏放，
       // 导致下载产出残缺页并覆盖线上合格页。渲染完成后再判定，防 SPA 未渲染误杀登录态
       if (warehouseCode === 'GIGACLOUD') {
-        const sessionGate = await window.webContents.executeJavaScript(String.raw`(() => {
+        const sessionGate = await wc.executeJavaScript(String.raw`(() => {
           const text=((document.body?.innerText||'')+' '+(document.body?.textContent||'')).replace(/\s+/g,' ')
           return {
             loginEntry: /登录\/注册|立即登录|请登录|sign in/i.test(text),
@@ -498,11 +524,11 @@ export class BrowserWorkspace {
           throw gateError
         }
       }
-      let html = await window.webContents.executeJavaScript('document.documentElement.outerHTML') as string
+      let html = await wc.executeJavaScript('document.documentElement.outerHTML') as string
       // 主图视频要点开「Play Video」才注入播放器，且真实播放器经 XHR/弹窗/MSE 取地址（DOM 常无 .mp4 字面量）：
       // 全通道捕获 = CDP Network（请求+响应 mime）+ 弹窗隐藏窗 DOM + 主窗 DOM/outerHTML 扫描；
       // 诊断写 /tmp/yandu-video-probe.log（与开发同机），debugger/弹窗handler 探完即还原
-      const urlBeforeProbe = window.webContents.getURL()
+      const urlBeforeProbe = wc.getURL()
       const networkVideos: string[] = []
       let debuggerAttached = false
       const onDebuggerMessage = (_event: unknown, method: string, params: { request?: { url?: string; method?: string; type?: string }; response?: { url?: string; mimeType?: string } }) => {
@@ -515,17 +541,17 @@ export class BrowserWorkspace {
         }
       }
       try {
-        window.webContents.debugger.attach('1.3')
+        wc.debugger.attach('1.3')
         debuggerAttached = true
-        window.webContents.debugger.on('message', onDebuggerMessage)
+        wc.debugger.on('message', onDebuggerMessage)
         // 播放器可能在跨进程 iframe 内：auto-attach 让其 Network 事件也汇入同一 message 通道
-        await window.webContents.debugger.sendCommand('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }).catch(() => undefined)
-        await window.webContents.debugger.sendCommand('Network.enable')
+        await wc.debugger.sendCommand('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }).catch(() => undefined)
+        await wc.debugger.sendCommand('Network.enable')
       } catch { /* debugger 不可用时仅保留 DOM 通道 */ }
       let popupUrl = ''
       let popupWindow: BrowserWindow | null = null
       const getPopup = (): BrowserWindow | null => popupWindow
-      window.webContents.setWindowOpenHandler(details => {
+      wc.setWindowOpenHandler(details => {
         popupUrl = details.url
         popupWindow = new BrowserWindow({ show: false, width: 1280, height: 800, webPreferences: { partition: `persist:supply:${warehouseCode}:default`, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } })
         popupWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
@@ -537,7 +563,7 @@ export class BrowserWorkspace {
       try {
         // 真实交互是两段：先点可见的视频缩略图把轮播切到视频页，再点显现后的主图播放遮罩；
         // 直接点隐藏 slide 在本站无效果（诊断日志证伪：clicked=true 但 videoNodes/scan/network 全 0）
-        const thumbReport = await window.webContents.executeJavaScript(String.raw`(() => {
+        const thumbReport = await wc.executeJavaScript(String.raw`(() => {
           const vis = (el) => !!(el && el.offsetParent !== null)
           const nodes = [...document.querySelectorAll('[title*="Play Video" i], .play-action')].map(el => el.closest('[title*="Play Video" i]') || el)
           const thumb = nodes.find(el => vis(el) && el.querySelector('img'))
@@ -549,7 +575,7 @@ export class BrowserWorkspace {
         clicked = thumbReport.thumb
         if (clicked) {
           await this.sleep(1500)
-          clickReport.stage = await window.webContents.executeJavaScript(String.raw`(() => {
+          clickReport.stage = await wc.executeJavaScript(String.raw`(() => {
             const vis = (el) => !!(el && el.offsetParent !== null)
             const visibles = [...document.querySelectorAll('[title*="Play Video" i]')].filter(vis)
             const stage = visibles.find(el => el.querySelector('.play-action, i[class*="play" i], svg')) || visibles[0]
@@ -560,7 +586,7 @@ export class BrowserWorkspace {
           })()`) as boolean
           // 上界沿用原 4000ms 盲等：无视频页面耗时不变，有视频页面在连续两次读到素材地址即提前取数
           const videoSettled = await pollUntil(async () => {
-            pageProbe = await window.webContents.executeJavaScript(String.raw`(() => {
+            pageProbe = await wc.executeJavaScript(String.raw`(() => {
               const vids = [...document.querySelectorAll('video, video source')].map(node => node.currentSrc || node.src || node.getAttribute('src') || '')
               const scan = (document.documentElement.outerHTML.match(/https?:\/\/[^"'\s<>\\)]+(?:\.mp4|\.m3u8|\/video\/)[^"'\s<>\\)]*/gi) || [])
               window.__yanduVideos = [...new Set([...vids.filter(u => /^https?:\/\//i.test(u)), ...scan])].slice(0, 8)
@@ -591,7 +617,7 @@ export class BrowserWorkspace {
         }
         const merged = [...new Set([...networkVideos])].filter(u => /^https?:\/\//i.test(u) && !/\.jpg|\.png|\.webp/i.test(u)).slice(0, 8)
         if (merged.length) {
-          await window.webContents.executeJavaScript(`window.__yanduVideos = [...new Set([...(window.__yanduVideos || []), ...${JSON.stringify(merged)}])].slice(0, 8)`)
+          await wc.executeJavaScript(`window.__yanduVideos = [...new Set([...(window.__yanduVideos || []), ...${JSON.stringify(merged)}])].slice(0, 8)`)
         }
         try {
           writeFileSync('/tmp/yandu-video-probe.log', JSON.stringify({ at: new Date().toISOString(), url: urlBeforeProbe, clickReport, popupUrl, pageProbe, networkVideos: [...new Set(networkVideos)].slice(0, 12), merged }, null, 2))
@@ -599,18 +625,18 @@ export class BrowserWorkspace {
       } catch { /* 视频探测失败静默降级：videos 为空时公开页不渲染视频区 */ }
       if (debuggerAttached) {
         try {
-          window.webContents.debugger.removeListener('message', onDebuggerMessage)
-          window.webContents.debugger.detach()
+          wc.debugger.removeListener('message', onDebuggerMessage)
+          wc.debugger.detach()
         } catch { /* 忽略摘除失败 */ }
       }
-      window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+      wc.setWindowOpenHandler(() => ({ action: 'deny' }))
       const leftoverPopup = getPopup()
       if (leftoverPopup && !leftoverPopup.isDestroyed()) leftoverPopup.destroy()
-      if (window.webContents.getURL() !== urlBeforeProbe) {
-        await window.webContents.loadURL(parsed.toString())
+      if (wc.getURL() !== urlBeforeProbe) {
+        await wc.loadURL(parsed.toString())
         await this.sleep(2000)
       }
-      let extracted = await window.webContents.executeJavaScript(String.raw`(() => {
+      let extracted = await wc.executeJavaScript(String.raw`(() => {
         const bodyText = document.body?.innerText || ''
         const hostScore = (u) => (/b2bfiles|gigab2b\.cn|gigab2b\.com|alicdn|cbu\d*|1688/i.test(u) ? 1 : 0)
         const entries = []
@@ -847,7 +873,10 @@ export class BrowserWorkspace {
           const liveView = this.supplyViews.get(warehouseCode)
           const liveWc = liveView && !liveView.webContents.isDestroyed() ? liveView.webContents : null
           if (liveWc) {
-            await this.sleep(4000)
+            // 上界沿用原 4000ms 盲等：可见页签渲染出商品图即提前进入 scroll 复抓（pageReadyPoll 登记第 4 处）
+            await pollUntil(async () => {
+              try { return await liveWc.executeJavaScript('document.readyState==="complete"&&document.querySelectorAll("img").length>0') as boolean } catch { return false }
+            }, { intervalMs: 400, timeoutMs: 4000, stableHits: 2 })
             for (let index = 0; index < 8; index += 1) {
               await liveWc.executeJavaScript('window.scrollBy(0, Math.max(900, window.innerHeight * 1.2))')
               await this.sleep(400)
@@ -872,7 +901,7 @@ export class BrowserWorkspace {
       // 文件/素材包签名链接发现（登录态）：站点「获取文件链接」实测只把签名地址放进 XHR JSON/剪贴板/弹窗，
       // 无下载事件也无新锚点 → 四通道并收：will-download / CDP 读 API 响应体 / 全页 x-oss-signature 扫描 / 剪贴板；
       // 签名链接仅内存瞬时供下载服务立即取字节，绝不落 meta（数小时即过期）；诊断写 /tmp/yandu-file-probe.log
-      const probeSession = window.webContents.session
+      const probeSession = wc.session
       const probeUrls: string[] = []
       const probeLog: Array<Record<string, unknown>> = []
       const onProbeDownload = (_event: Electron.Event, item: Electron.DownloadItem) => {
@@ -892,17 +921,17 @@ export class BrowserWorkspace {
       }
       let dbgOn = false
       try {
-        window.webContents.debugger.attach('1.3')
+        wc.debugger.attach('1.3')
         dbgOn = true
-        window.webContents.debugger.on('message', onDbgMessage)
-        await window.webContents.debugger.sendCommand('Network.enable')
+        wc.debugger.on('message', onDbgMessage)
+        await wc.debugger.sendCommand('Network.enable')
       } catch { dbgOn = false }
       const collectBodyUrls = async (fromIndex: number): Promise<string[]> => {
         if (!dbgOn) return []
         const out: string[] = []
         for (const entry of jsonResponses.slice(fromIndex)) {
           try {
-            const body = await window.webContents.debugger.sendCommand('Network.getResponseBody', { requestId: entry.requestId }) as { body?: string; base64Encoded?: boolean }
+            const body = await wc.debugger.sendCommand('Network.getResponseBody', { requestId: entry.requestId }) as { body?: string; base64Encoded?: boolean }
             if (body && !body.base64Encoded && body.body) out.push(...(body.body.match(/https?:\/\/[^"'\s<>\\)]+(?:x-oss-signature=|\.(?:pdf|txt|zip|rar)(?:\?|#|$))[^"'\s<>\\)]*/gi) || []))
           } catch { /* 单个响应体读取失败忽略 */ }
         }
@@ -913,7 +942,7 @@ export class BrowserWorkspace {
         const beforeJson = jsonResponses.length
         let clicked = false
         try {
-          clicked = await window.webContents.executeJavaScript(clickScript) as boolean
+          clicked = await wc.executeJavaScript(clickScript) as boolean
         } catch (error) {
           probeLog.push({ tag, stage: 'click', error: String(error && (error as Error).message) })
           return ''
@@ -925,7 +954,7 @@ export class BrowserWorkspace {
         await this.sleep(waitMs)
         let domUrls: string[] = []
         try {
-          domUrls = await window.webContents.executeJavaScript(`(() => (document.documentElement.outerHTML.match(/https?:\\/\\/[^"'\\s<>)]+(?:x-oss-signature=|\\.(?:pdf|txt|zip|rar)(?:\\?|#|$))[^"'\\s<>)]*/gi) || []).slice(0, 12)`) as string[]
+          domUrls = await wc.executeJavaScript(`(() => (document.documentElement.outerHTML.match(/https?:\\/\\/[^"'\\s<>)]+(?:x-oss-signature=|\\.(?:pdf|txt|zip|rar)(?:\\?|#|$))[^"'\\s<>)]*/gi) || []).slice(0, 12)`) as string[]
         } catch (error) {
           probeLog.push({ tag, stage: 'dom', error: String(error && (error as Error).message) })
         }
@@ -940,11 +969,11 @@ export class BrowserWorkspace {
       try {
         let triggerCount = 0
         try {
-          triggerCount = await window.webContents.executeJavaScript('document.querySelectorAll(".link-item").length') as number
+          triggerCount = await wc.executeJavaScript('document.querySelectorAll(".link-item").length') as number
         } catch (error) {
           probeLog.push({ stage: 'triggerCount', error: String(error && (error as Error).message) })
           await this.sleep(1200)
-          triggerCount = await window.webContents.executeJavaScript('document.querySelectorAll(".link-item").length') as number
+          triggerCount = await wc.executeJavaScript('document.querySelectorAll(".link-item").length') as number
         }
         const fileList = extracted.files ?? []
         probeLog.push({ stage: 'start', triggerCount, fileCount: fileList.length })
@@ -976,8 +1005,8 @@ export class BrowserWorkspace {
       }
       if (dbgOn) {
         try {
-          window.webContents.debugger.removeListener('message', onDbgMessage)
-          window.webContents.debugger.detach()
+          wc.debugger.removeListener('message', onDbgMessage)
+          wc.debugger.detach()
         } catch { /* 忽略摘除失败 */ }
       }
       probeSession.removeListener('will-download', onProbeDownload)
@@ -985,10 +1014,8 @@ export class BrowserWorkspace {
         writeFileSync('/tmp/yandu-file-probe.log', JSON.stringify({ at: new Date().toISOString(), entries: probeLog, files: (extracted.files ?? []).map(f => ({ name: f.name, url: !!f.url })), pack: !!extracted.materialPackUrl }, null, 2))
       } catch { /* 诊断落盘失败不影响采集 */ }
       return { html, extracted, scrapeNote }
-    } finally {
-      if (!window.isDestroyed()) window.destroy()
-    }
   }
+
 
   private async extractGigaFacts(wc: WebContents): Promise<Partial<CollectedSupplyProduct>> {
       const issue = await wc.executeJavaScript(String.raw`(() => {

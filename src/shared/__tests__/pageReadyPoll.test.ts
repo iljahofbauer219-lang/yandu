@@ -72,8 +72,12 @@ describe('BrowserWorkspace 轮询接线（上界=被替换掉的盲等时长，�
     expect(workspaceSource).toContain('timeoutMs: 15000')
   })
 
-  it('主进程只有这三处轮询调用，新增必须连同上界一起在此登记', () => {
-    expect(workspaceSource.split('pollUntil(').length - 1).toBe(3)
+  it('主进程只有这四处轮询调用，新增必须连同上界一起在此登记', () => {
+    expect(workspaceSource.split('pollUntil(').length - 1).toBe(4)
+  })
+
+  it('隐藏窗回落复抓前的渲染等待用上界轮询（第 4 处登记）', () => {
+    expect(workspaceSource).toContain('document.readyState==="complete"&&document.querySelectorAll("img").length>0')
   })
 
   it('被替换掉的两处固定盲等不得复活', () => {
