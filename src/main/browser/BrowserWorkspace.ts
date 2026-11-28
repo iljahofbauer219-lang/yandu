@@ -466,7 +466,18 @@ export class BrowserWorkspace {
     } catch (error) {
       if (error instanceof Error && error.message.includes('要求安全验证')) {
         const live = await this.visibleSupplyCarrier(warehouseCode, parsed.toString())
-        if (live) return await this.readSupplyProductPageOn(live, warehouseCode, parsed, name)
+        if (live) {
+          try {
+            return await this.readSupplyProductPageOn(live, warehouseCode, parsed, name)
+          } catch (liveError) {
+            if (liveError instanceof Error && liveError.message.includes('要求安全验证')) {
+              const both = new Error(`${liveError.message}；可见供应页签同样被拦截，出口 IP 可能已被风控`) as Error & { code?: string }
+              both.code = 'SUPPLY_VERIFY_REQUIRED'
+              throw both
+            }
+            throw liveError
+          }
+        }
       }
       throw error
     } finally {
@@ -497,7 +508,11 @@ export class BrowserWorkspace {
         return ''
       })()`) as string
       if (issue === 'LOGIN') throw new Error(`${name}登录状态已失效，请先在 IE浏览 中登录${name}后重试`)
-      if (issue === 'VERIFY') throw new Error(`${name}要求安全验证，请先在 IE浏览 中打开该商品页人工完成验证后重试`)
+      if (issue === 'VERIFY') {
+        const verifyError = new Error(`${name}要求安全验证，请先在 IE浏览 中打开该商品页人工完成验证后重试`) as Error & { code?: string }
+        verifyError.code = 'SUPPLY_VERIFY_REQUIRED'
+        throw verifyError
+      }
       for (let index = 0; index < 5; index += 1) {
         await wc.executeJavaScript('window.scrollBy(0, Math.max(900, window.innerHeight * 1.2))')
         await this.sleep(350)

@@ -2619,7 +2619,7 @@ export function App() {
       {createPortal(supplyErrorModal ? (
         <div className="supply-error-overlay" onClick={() => setSupplyErrorModal(null)}>
           <div className="supply-error-modal" role="dialog" aria-modal="true" onClick={event => event.stopPropagation()}>
-            <b>{supplyErrorModal.kind === 'login' ? `需要登录${supplyErrorModal.warehouse === 'GIGACLOUD' ? '大健云仓' : '1688'}` : supplyErrorModal.kind === 'network' ? '网络连接失败' : supplyErrorModal.kind === 'verify' ? '需要安全验证' : '登录会话已过期'}</b>
+            <b>{supplyErrorModal.kind === 'login' ? `需要登录${supplyErrorModal.warehouse === 'GIGACLOUD' ? '大健云仓' : '1688'}` : supplyErrorModal.kind === 'network' ? '网络连接失败' : supplyErrorModal.kind === 'verify' ? '需要安全验证' : supplyErrorModal.kind === 'server' ? '服务器处理失败' : '登录会话已过期'}</b>
             <p>{supplyErrorModal.text}</p>
             <div className="supply-error-modal-actions">
               {supplyErrorModal.kind === 'login' ? <button type="button" className="primary" onClick={() => { const target = supplyErrorModal.warehouse; setSupplyErrorModal(null); void openSupplyLogin(target) }}>去登录</button> : null}

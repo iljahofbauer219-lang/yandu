@@ -22,7 +22,7 @@ describe('隐藏窗VERIFY回落已登录可见页签', () => {
     expect(wrapperStart).toBeGreaterThan(-1)
     expect(wrapper).toContain("if (error instanceof Error && error.message.includes('要求安全验证')) {")
     expect(wrapper).toContain('const live = await this.visibleSupplyCarrier(warehouseCode, parsed.toString())')
-    expect(wrapper).toContain('if (live) return await this.readSupplyProductPageOn(live, warehouseCode, parsed, name)')
+    expect(wrapper).toContain('return await this.readSupplyProductPageOn(live, warehouseCode, parsed, name)')
     expect(wrapper).toContain('throw error')
   })
   it('wrapper 不再直接抛安全验证（判定与抛错只在 readOn）', () => {
@@ -44,7 +44,8 @@ describe('VERIFY判定加商品数据上下文', () => {
     expect(readOn).toContain("if (challenge&&!productData) return 'VERIFY'")
   })
   it('真验证页（无商品数据）仍抛原中文错不放宽', () => {
-    expect(readOn).toContain("if (issue === 'VERIFY') throw new Error(`${name}要求安全验证，请先在 IE浏览 中打开该商品页人工完成验证后重试`)")
+    expect(readOn).toContain('要求安全验证，请先在 IE浏览 中打开该商品页人工完成验证后重试')
+    expect(readOn).toContain("verifyError.code = 'SUPPLY_VERIFY_REQUIRED'")
     expect(readOn).toContain("if (issue === 'LOGIN') throw new Error(`${name}登录状态已失效，请先在 IE浏览 中登录${name}后重试`)")
   })
 })

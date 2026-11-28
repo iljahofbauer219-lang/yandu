@@ -3,7 +3,7 @@
  * （Error invoking remote method 'xxx': Error: …），原生网络错误也是英文 ERR_ 码，
  * 直接展示会让用户误以为网站坏了。这里统一剥包装并按语义映射中文文案。
  */
-export type FriendlyErrorKind = 'login' | 'network' | 'verify' | 'session' | 'other'
+export type FriendlyErrorKind = 'login' | 'network' | 'verify' | 'session' | 'server' | 'other'
 
 export interface FriendlyError {
   text: string
@@ -38,7 +38,11 @@ export function friendlySupplyError(raw: string, warehouseName = '大健云仓')
   if (/SUPPLY_LOGIN_REQUIRED|未登录态|登录后查看|登录可见|Login To See Price|登录状态已失效|请先在 IE浏览 中登录/.test(text)) {
     return { kind: 'login', brief: '需要登录才能完整下载', text: `${warehouseName}需要登录，登录后数据下载才完整。点「去登录」在供应浏览器完成登录后重试。` }
   }
-  if (/VERIFY|安全验证|滑块|验证码|访问频繁|操作异常|请求过于频繁/.test(text)) {
+  // 服务器建页/解析失败的中文指引串里含「安全验证」四字仅作建议，不得误标成浏览器风控模态（11-28 17:26 复弹根因）
+  if (/服务器建页失败|中央服务器处理请求时上游响应不是有效 JSON/.test(text)) {
+    return { kind: 'server', brief: '服务器建页失败', text }
+  }
+  if (/SUPPLY_VERIFY_REQUIRED|要求安全验证，请先在|检测到安全验证或访问频繁|要求安全验证，已打开独立验证窗口/.test(text)) {
     return { kind: 'verify', brief: '需要安全验证', text: `${warehouseName}要求安全验证，请在 IE浏览 中打开该商品页人工完成验证后重试。` }
   }
   if (NETWORK_ERROR.test(text)) {
